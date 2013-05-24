@@ -1,0 +1,19 @@
+flowlog: THEORY
+  BEGIN
+  IMPORTING netcore
+
+  flowlog_state: TYPE = 
+  network_state: TYPE = [# events: setof[event], ncore: netcore_program, flog: flowlog_state #]
+
+  fs: VAR flowlog_state
+  ns: VAR network_state
+
+  run(fs): sequence[network_state]
+  
+    
+
+  END flowlog
+
+
+
+%email arjun about properties of netcore

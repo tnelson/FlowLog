@@ -1,0 +1,70 @@
+netcore: THEORY
+  BEGIN
+  IMPORTING packet, sequences
+
+  event: TYPE = [# sw: nat, pt: nat, pk: packet #]
+
+  packet_destination?(pg: [event -> setof[event]]): bool = FORALL (e: event): sw(e) = dlDst(pk(e)) IMPLIES empty?(pg(e))
+
+  netcore_program: TYPE = (packet_destination?)
+
+  e: VAR event
+  pg, pg1, pg2: VAR netcore_program
+
+%  packet_destination: AXIOM sw(e) = dlDst(pk(e)) IMPLIES empty?(pg(e))
+
+  union(pg1, pg2): netcore_program = LAMBDA (e: event): union(pg1(e), pg2(e))
+
+  restrict(pg, (pr: pred[event])): netcore_program = LAMBDA (e: event): IF pr(e) THEN pg(e) ELSE emptyset ENDIF
+
+  netcore_run(pg): sequence[setof[event]]
+
+  run_start_packets_origin: AXIOM member(e, netcore_run(pg)(0)) IMPLIES sw(e) = dlSrc(pk(e))
+%at the first moment, packets start are at their origin locations
+  Run_start_nonempty: AXIOM nonempty?(netcore_run(pg)(0))
+%at the first moment, there is a packet
+
+  n: VAR nat
+
+  run_transition: AXIOM member(e, netcore_run(pg)(n+1)) IMPLIES
+  		  sw(e) = dlSrc(pk(e)) OR
+		  EXISTS (e1: event): member(e1, netcore_run(pg)(n)) and member(e, pg(e1))
+
+%the events at step n are either new events (packets at their origin locations)
+%or come from the program being run on an event at the (n-1)th step.
+   
+  run_packets_sent: AXIOM EXISTS (f: event): member(f, netcore_run(pg)(n)) and member(e, pg(f))
+		    IMPLIES member(e, netcore_run(pg)(n+1))
+%every event coming from an event in the previous step is in this step.
+
+
+%example with 4 hosts and a switch
+%switches 1, 2, 3, 4 are hosts, switch 5 is the switch.
+%traffic allowed between 1 and 2 and between 3 and 4 but not across
+
+  x: VAR event
+
+%this says packets from 1, 2, 3, 4 go to 5
+  pg_ex1: netcore_program = LAMBDA (e: event):
+  	  IF sw(e) >= 1 and sw(e) <= 4 and not (dlDst(pk(e)) = sw(e)) THEN {x | x = (# sw := 5, pt := sw(e), pk := pk(e) #)}
+	  ELSE emptyset ENDIF
+  
+  same_side((a: nat), (b: nat)): bool = (a >= 3 and a <= 4 and b >= 3 and b <= 4) or (a >= 1 and a <= 2 and b >= 1 and b <= 2)
+
+%this says packets at 5 go to their destinations if they don't cross the middle
+  pg_ex2: netcore_program = LAMBDA (e:event):
+  	  IF sw(e) = 5 and same_side(dlDst(pk(e)), dlSrc(pk(e))) and not (dlDst(pk(e)) = sw(e)) THEN {x | x = (# sw := dlDst(pk(e)), pt := 1, pk := pk(e) #)}
+	  ELSE emptyset ENDIF
+
+  pg_ex: netcore_program = union(pg_ex1, pg_ex2)
+
+%to test this out, prove some theorems about runs and this program
+
+  invariant((a: nat), (b: nat)): bool = a = b or same_side(a, b) or a = 5
+
+  separation_sides: PROPOSITION
+  member(e, netcore_run(pg_ex)(n)) IMPLIES invariant(sw(e), dlSrc(pk(e)))
+%proved!
+%this means packets never cross sides which was something we wanted
+
+  END netcore
