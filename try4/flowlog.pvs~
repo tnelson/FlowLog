@@ -2,7 +2,7 @@ flowlog: THEORY
   BEGIN
   IMPORTING netcore
 
-  flowlog_state: TYPE
+  flowlog_state: TYPE = 
   network_state: TYPE = [# events: setof[event], ncore: netcore_program, flog: flowlog_state #]
 
   fs: VAR flowlog_state
@@ -10,7 +10,7 @@ flowlog: THEORY
 
   run(fs): sequence[network_state]
   
-  
+    
 
   END flowlog
 

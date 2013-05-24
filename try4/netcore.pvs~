@@ -3,12 +3,15 @@ netcore: THEORY
   IMPORTING packet, sequences
 
   event: TYPE = [# sw: nat, pt: nat, pk: packet #]
-  netcore_program: TYPE = [event -> setof[event]]%set for now, really multiset
+
+  packet_destination?(pg: [event -> setof[event]]): bool = FORALL (e: event): sw(e) = dlDst(pk(e)) IMPLIES empty?(pg(e))
+
+  netcore_program: TYPE = (packet_destination?)
 
   e: VAR event
   pg, pg1, pg2: VAR netcore_program
 
-  packet_destination: AXIOM sw(e) = dlDst(pk(e)) IMPLIES empty?(pg(e))
+%  packet_destination: AXIOM sw(e) = dlDst(pk(e)) IMPLIES empty?(pg(e))
 
   union(pg1, pg2): netcore_program = LAMBDA (e: event): union(pg1(e), pg2(e))
 
@@ -18,7 +21,7 @@ netcore: THEORY
 
   run_start_packets_origin: AXIOM member(e, netcore_run(pg)(0)) IMPLIES sw(e) = dlSrc(pk(e))
 %at the first moment, packets start are at their origin locations
-  run_start_nonempty: AXIOM nonempty?(netcore_run(pg)(0))
+  Run_start_nonempty: AXIOM nonempty?(netcore_run(pg)(0))
 %at the first moment, there is a packet
 
   n: VAR nat
@@ -32,6 +35,8 @@ netcore: THEORY
    
   run_packets_sent: AXIOM EXISTS (f: event): member(f, netcore_run(pg)(n)) and member(e, pg(f))
 		    IMPLIES member(e, netcore_run(pg)(n+1))
+%every event coming from an event in the previous step is in this step.
+
 
 %example with 4 hosts and a switch
 %switches 1, 2, 3, 4 are hosts, switch 5 is the switch.

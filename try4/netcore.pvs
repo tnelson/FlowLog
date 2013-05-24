@@ -21,7 +21,7 @@ netcore: THEORY
 
   run_start_packets_origin: AXIOM member(e, netcore_run(pg)(0)) IMPLIES sw(e) = dlSrc(pk(e))
 %at the first moment, packets start are at their origin locations
-  Run_start_nonempty: AXIOM nonempty?(netcore_run(pg)(0))
+  run_start_nonempty: AXIOM nonempty?(netcore_run(pg)(0))
 %at the first moment, there is a packet
 
   n: VAR nat
