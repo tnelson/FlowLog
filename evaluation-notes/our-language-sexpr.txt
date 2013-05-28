@@ -1,0 +1,134 @@
+------------------------
+PREAMBLE
+------------------------
+
+This document describes our core language. Our core language is,
+essentially, non-recursive Datalog with negation, in which certain IDB
+predicates have special meaning in our semantics. 
+
+I've chosen to lexically distinguish variables which represent packets
+from other variables. This makes it possible to tell, in the BNF, when
+when it's appropriate to apply field modifiers. Feel free to change
+any lexical convention you wish.
+
+------------------------
+OUR CORE LANGUAGE SYNTAX
+------------------------
+
+PROGRAM ::= (<CLAUSES>)
+
+CLAUSES ::= <CLAUSE> | <CLAUSE> <CLAUSES>
+
+// The clause consists of a head and body. We're too snooty and Lisp-y
+// for a :- token.
+
+CLAUSE ::= (<LITERAL> <CLAUSE-BODY>)
+
+CLAUSE-BODY ::= (<MAYBE-NEG-LITERALS>)
+
+MAYBE-NEG-LITERALS ::= <MAYBE-NEG-LITERAL> | 
+                       <MAYBE-NEG-LITERAL> <MAYBE-NEG-LITERALS>
+
+MAYBE-NEG-LITERAL ::= <LITERAL> | (not <LITERAL>)
+
+LITERAL ::= (<relname> <TERMS>) |          
+   	    (<relname>) |  
+            (= <TERM> <TERM>)
+
+TERMS ::= <TERM> | <TERM> <TERMS>
+
+TERM ::= <packet-variable-id> . <PACKET_FIELD> | 
+     	 <packet-variable-id> |
+	 <variable-id> |
+         <ethernet-address> |
+	 <ip-address> |
+	 <natural-number> 
+
+// Packets are always "located"; i.e. they come with
+// a switch ID and a port ID tacked on. These are the
+// NetCore standard field names.
+
+<PACKET_FIELD> ::= dlSrc  | dlDst     | dlTyp | 
+	           dlVlan | dlVlanPcP | 
+	           nwSrc  | nwDst     | NwProto |
+                   nwTos  | tpSrc     | tpDst |
+		   locSw  | locPt
+
+-----------------------------------------------------------
+NON-CONSTANT TOKENS (beyond parens, dots, "dlSrc" etc.):
+-----------------------------------------------------------
+
+<ethernet-address>: A 46-bit identifier in the xx:xx:xx:xx:xx:xx
+format.
+
+<ip-address>: A 32-bit identifier in the xxx.xxx.xxx.xxx format
+  (i.e. "dotted-quad").
+
+<natural-number>: A standard numeric value between 0 and MAXINT,
+inclusive.
+
+<relname>: A string identifier, beginning with either a lowercase
+letter or "+" or "-".
+
+<variable-id>: A string identifier, beginning with an uppercase
+letter.
+
+<packet-variable-id>: A string identifier, beginning with a hash
+symbol. E.g. #newpkt. This choice of siglet was made arbitrarily. :-)
+
+-----------------------------
+RESTRICTIONS:
+-----------------------------
+
+Relation names that appear in the head of a clause (LHS) are called
+IDBs (intensional). Others are EDBs (extensional). We require that the
+dependencies between IDBs be ***NON-RECURSIVE**, i.e. there is a
+stratification of dependencies across all clauses. 
+
+A caveat that applies to all Datalog-with-negation: All variables that
+appear anywhere in a clause must appear in a non-negated body literal.
+
+-----------------------------
+QUESTIONS:
+
+- Do we want to force the programmer to declare their state relations,
+  or infer them? If declare, need another part to the <PROGRAM>
+  non-terminal above.
+
+-----------------------------
+FROM DATALOG TO PROGRAMS
+-----------------------------
+
+Let P be a program in the BNF above, and let sig(P) denote the EDB
+symbols used in P.  The following IDBs, if present, give the output
+semantics for the program.
+
+(1) { forward }, a special binary relation
+(2) { emit-from-controller }, a special binary relation
+(3) { +R | R in sig(P) }, where arity(+R) = arity(R)+1
+(4) { -R | R in sig(P) }, where arity(-R) = arity(R)+1
+
+(I removed emit-to-controller because we agreed we can infer when such
+is necessary.)
+
+All other IDBs are "helpers". For instance, to do the "not exists..."
+final rule we have in the MAC-learning policy, which *requires* a
+helper when desugared.:
+
+( (emit pkt newpkt) (Not (Exists send-to (learned pkt.loc.sw send-to
+  pkt.header.dldst))), ...)
+
+would desugar to two Datalog clauses:
+
+emit(pkt, newpkt) :- not helper(pkt.loc.sw, pkt.header.dldst).
+helper(x, y) :- learned(x, send-to, y).
+
+The helper is necessary since you can't put universal quantifiers in
+clause bodies. 
+
+--------------------
+
+If someone writes a program in this BNF that doesn't have any
+"forward" rules, it's valid! It's just that the flow tables will
+always be empty. Similarly for missing a +R: less state change, and
+for missing emit: no controller-initiated packets.

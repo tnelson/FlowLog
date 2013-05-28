@@ -1,0 +1,73 @@
+
+Our core logical language is non-recursive Datalog with
+negation. Obviously our surface syntax will be rather different.
+
+BNF for Datalog-with-negation
+-----------------------------
+
+PROGRAM ::= <CLAUSE> | <CLAUSE> <PROGRAM>
+
+CLAUSE ::= <LITERAL> :- <POSNEGLITERALS>
+
+MAYBENEGLITERALS ::= <MAYBENEGLIT> | 
+                       <MAYBENEGLIT> , <MAYBENEGLITERALS>
+
+MAYBENEGLIT ::= <LITERAL> | not <LITERAL>
+
+LITERAL ::= <relname> ( <TERMS> ) |
+            <relname> () |
+            <TERM> = <TERM>
+
+<TERMS> ::= <TERM> | <TERM> , <TERMS>
+
+<TERM> ::= <variable> | <constant>
+
+-----------------------------
+
+RESTRICTIONS TO THE ABOVE:
+
+Relation names that appear in the head of a clause (LHS) are called
+IDBs (intensional). Others are EDBs (extensional).
+
+A caveat that applies to all Datalog: All variables that appear
+anywhere in a clause must appear in a non-negated body literal; and
+
+A caveat for us: These must be NON-RECURSIVE, i.e. there is a
+stratification of dependencies across all clauses.
+
+-----------------------------
+
+Note on semantics: All variables in the body that do not appear in the
+head are implicitly existentially quantified (from the perspective of
+the body; from the clausal perspective it is universal quantification)
+
+-----------------------------
+
+Fix a set of relations sig(P).
+
+Now P is an ordinary stratifiable Datalog-with-negation program where
+the EDBs = sig(P). The following IDBs, if present, are treated
+specially by our semantics (for state change, etc.).
+
+(1) { emit }, a special binary relation
+(2) { emit-from-controller }, a special binary relation
+(3) { +R | R in sig(P) }, where arity(+R) = arity(R)+1
+(4) { -R | R in sig(P) }, where arity(-R) = arity(R)+1
+
+(I removed emit-to-controller because we agreed we can infer when such
+is necessary.)
+
+Other IDBs are "helpers". For instance, to do the "not exists..."
+final rule we have in the MAC-learning policy, which *requires* a
+helper when desugared.:
+
+( (emit pkt newpkt) (Not (Exists send-to (learned pkt.loc.sw send-to
+  pkt.header.dldst))), ...)
+
+would desugar to two Datalog clauses:
+
+emit(pkt, newpkt) :- not helper(pkt.loc.sw, pkt.header.dldst).
+helper(x, y) :- learned(x, send-to, y).
+
+The helper is necessary since you can't put universal quantifiers in
+clause bodies.

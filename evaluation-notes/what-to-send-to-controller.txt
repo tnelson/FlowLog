@@ -1,0 +1,102 @@
+
+When writing a controller in NetCore, it is imperative to properly
+state which packets get sent to the controller and which do not. This
+affects not only whether controller state and flow tables are updated,
+but the controller has the ability to emit data packets on its own,
+triggered when it is notified of packet arrival.
+
+In a static NetCore policy, if no rules are matched, the packet is
+dropped. Thus these policies have special actions (called queries) to
+govern forwarding to the controller. If the query portion of the
+static policy is not implemented properly, the wider program may not
+receive the notifications it needs to function properly.
+
+However, if state modification (and hence, flow-table update) and
+forced emission of packets are governed entirely by a declarative,
+dynamic policy, it is actually possibly to entirely eliminate these
+queries from the language and automatically compute which packets must
+be sent to the controller in each state via partial evaluation.
+
+Recall that for each controller state relation R, IDBs +R and -R
+govern which tuples should be added and removed from the state when
+packets are received (and implicitly, SEEN BY THE
+CONTROLLER). Likewise, the IDB force-emit governs when, and which,
+packets are emitted by the controller (in response to a trigger
+packet). For instance (in an s-expr version of our core language):
+
+// From MAC Learning 
+
+// Read these as "When pkt is received, add/remove <sw, pt, mac>
+// to/from R"
+
+((n_learned pkt sw pt mac) (And (= pkt.loc.sw sw)
+                           (= pkt.header.dlsrc mac)))
+
+((p_learned pkt sw pt mac) (And (= pkt.loc.sw sw)
+                           (= pkt.header.dlsrc mac)
+                           (= pkt.loc.port pt)))
+
+and
+
+// From ARP cache
+
+// Read this as "When pkt is received, issue newpkt if..."
+
+((emit-from-controller pkt newpkt)
+                     (And 
+                      (= pkt.dlTyp 0x0806)
+                      (= pkt.nwProto 1) ; request
+                      (= newpkt.dlTyp 0x0806)
+                      (= newpkt.nwProto 2) ; reply
+                      (learned pkt.ipDst newpkt.dlSrc)
+                      
+                      ; ... (more atoms omitted)
+                      ))
+
+A naive first step would be: after partially evaluating to eliminate
+state references, take the disjunction of the bodies of each +/-R and
+force-emit rule as the condition for sending packets to the
+controller. This would be sufficient: if no rule body is satisfied,
+the controller must take no action, and thus not need to be told.
+
+This is obviously a major contribution of a declarative core language
+beyond what NetCore provides, eliminating an entire class of bugs
+*WITHOUT ANY VERIFICATION NEEDED*.
+
+Unfortunately, merely taking the disjunction of rule bodies can be
+grossly inefficient, because it does not take the nature of each
+rule's IDB into account. For instance, in a +R rule, the packet need
+not actually be sent if the appropriate tuple is already in R.  This
+inefficiency may tempt users to insert "optimizations" into rule
+bodies on their own, e.g. adding the final atom in:
+
+((p_learned pkt sw pt mac) (And (= pkt.loc.sw sw)
+                           (= pkt.header.dlsrc mac)
+                           (= pkt.loc.port pt))
+		   (not (learned pkt.loc.sw pkt.loc.port pkt.header.dlsrc)))
+
+which, in fact, doesn't work properly: -R may now be triggered while
++R isn't, leading to *removal* of what ought to be a valid tuple from
+the controller state. Instead, we ought to insert these optimizations
+ourselves as guards on controller notification, *not* in the dynamic
+policy's rule bodies! Alternatively, allow the programmer to specify
+guards separately from rule bodies (and be prepared to verify that
+they are written correctly). 
+
+A safe optimization is: let the condition for controller notification
+be the disjunction of the following for each rule. 
+
+The rule body, conjoined with:
+
+  For a +R rule: If V is the variable vector denoting the tuple to be
+  added, then (not (R V)).
+
+  For a -R rule: If V is the variable vector denoting the tuple to be
+  added, then (R V).
+
+  For a force-emit rule: True. (I.e., the body is the best we can do?)
+
+(TODO: proof!)
+
+(TODO: implementation!)
+
