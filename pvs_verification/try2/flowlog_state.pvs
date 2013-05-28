@@ -1,0 +1,6 @@
+flowlog_state: THEORY
+  BEGIN
+  
+  flowlog_state: TYPE = [
+
+  END flowlog_state

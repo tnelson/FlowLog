@@ -1,0 +1,12 @@
+network_run: THEORY
+  BEGIN
+  IMPORTING netcore
+
+  run: TYPE = sequence[[multiset[event], netcore_program, flowlog_state]]%need to define flowlog_state
+  
+  r: VAR run
+
+%  run_ax: AXIOM FORALL (n:nat) nth(r, n+1) = [some function of nth(r, n)]
+  
+
+  END network_run

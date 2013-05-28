@@ -1,0 +1,15 @@
+netcore: THEORY
+  BEGIN
+  IMPORTING packet, multiset
+
+  triple: TYPE = [# sw: nat, pt: nat, pk: packet #]
+  %predicates are just pred[triple] 
+  netcore_program: TYPE = [triple -> multiset[[# pt: nat, pk: packet #]]]
+
+  pg1, pg2: VAR netcore_program
+  pr: VAR pred[triple]
+
+  union(pg1, pg2): netcore_program = LAMBDA (t: triple): union(pg1(t), pg2(t))
+
+  restrict(pg1, pr): netcore_program = LAMBDA (t: triple): IF pr(t) THEN pg1(t) ELSE emptymultiset ENDIF
+  END netcore

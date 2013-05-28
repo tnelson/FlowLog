@@ -1,0 +1,6 @@
+netcore: THEORY
+  BEGIN
+  IMPORTING packet
+    
+
+  END netcore

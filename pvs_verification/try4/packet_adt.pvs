@@ -1,0 +1,145 @@
+%%% ADT file generated from packet
+
+packet_adt: THEORY
+ BEGIN
+
+  packet: TYPE
+
+  IMPORTING network_layer
+
+  eth?: [packet -> boolean]
+
+  dlSrc: [packet -> nat]
+
+  dlDst: [packet -> nat]
+
+  dlTyp: [packet -> nat]
+
+  nwPk: [packet -> network_layer]
+
+  eth: [[nat, nat, nat, network_layer] -> (eth?)]
+
+  packet_ord: [packet -> upto(0)]
+
+  packet_ord_defaxiom: AXIOM
+    FORALL (dlSrc: nat, dlDst: nat, dlTyp: nat, nwPk: network_layer):
+      packet_ord(eth(dlSrc, dlDst, dlTyp, nwPk)) = 0;
+
+  ord(x: packet): [packet -> upto(0)] =
+      CASES x OF eth(eth1_var, eth2_var, eth3_var, eth4_var): 0 ENDCASES
+
+  packet_eth_extensionality: AXIOM
+    FORALL (eth?_var: (eth?), eth?_var2: (eth?)):
+      dlSrc(eth?_var) = dlSrc(eth?_var2) AND
+       dlDst(eth?_var) = dlDst(eth?_var2) AND
+        dlTyp(eth?_var) = dlTyp(eth?_var2) AND
+         nwPk(eth?_var) = nwPk(eth?_var2)
+       IMPLIES eth?_var = eth?_var2;
+
+  packet_eth_eta: AXIOM
+    FORALL (eth?_var: (eth?)):
+      eth(dlSrc(eth?_var), dlDst(eth?_var), dlTyp(eth?_var),
+          nwPk(eth?_var))
+       = eth?_var;
+
+  packet_dlSrc_eth: AXIOM
+    FORALL (eth1_var: nat, eth2_var: nat, eth3_var: nat,
+            eth4_var: network_layer):
+      dlSrc(eth(eth1_var, eth2_var, eth3_var, eth4_var)) = eth1_var;
+
+  packet_dlDst_eth: AXIOM
+    FORALL (eth1_var: nat, eth2_var: nat, eth3_var: nat,
+            eth4_var: network_layer):
+      dlDst(eth(eth1_var, eth2_var, eth3_var, eth4_var)) = eth2_var;
+
+  packet_dlTyp_eth: AXIOM
+    FORALL (eth1_var: nat, eth2_var: nat, eth3_var: nat,
+            eth4_var: network_layer):
+      dlTyp(eth(eth1_var, eth2_var, eth3_var, eth4_var)) = eth3_var;
+
+  packet_nwPk_eth: AXIOM
+    FORALL (eth1_var: nat, eth2_var: nat, eth3_var: nat,
+            eth4_var: network_layer):
+      nwPk(eth(eth1_var, eth2_var, eth3_var, eth4_var)) = eth4_var;
+
+  packet_inclusive: AXIOM FORALL (packet_var: packet): eth?(packet_var);
+
+  packet_induction: AXIOM
+    FORALL (p: [packet -> boolean]):
+      (FORALL (eth1_var: nat, eth2_var: nat, eth3_var: nat,
+               eth4_var: network_layer):
+         p(eth(eth1_var, eth2_var, eth3_var, eth4_var)))
+       IMPLIES (FORALL (packet_var: packet): p(packet_var));
+
+  subterm(x: packet, y: packet):  boolean = x = y;
+
+  <<:  (strict_well_founded?[packet]) = LAMBDA (x, y: packet): FALSE;
+
+  packet_well_founded: AXIOM strict_well_founded?[packet](<<);
+
+  reduce_nat(eth?_fun: [[nat, nat, nat, network_layer] -> nat]):
+        [packet -> nat] =
+      LAMBDA (packet_adtvar: packet):
+        LET red: [packet -> nat] = reduce_nat(eth?_fun) IN
+          CASES packet_adtvar
+            OF eth(eth1_var, eth2_var, eth3_var, eth4_var):
+                 eth?_fun(eth1_var, eth2_var, eth3_var, eth4_var)
+            ENDCASES;
+
+  REDUCE_nat(eth?_fun: [[nat, nat, nat, network_layer, packet] -> nat]):
+        [packet -> nat] =
+      LAMBDA (packet_adtvar: packet):
+        LET red: [packet -> nat] = REDUCE_nat(eth?_fun) IN
+          CASES packet_adtvar
+            OF eth(eth1_var, eth2_var, eth3_var, eth4_var):
+                 eth?_fun(eth1_var, eth2_var, eth3_var, eth4_var,
+                          packet_adtvar)
+            ENDCASES;
+
+  reduce_ordinal(eth?_fun: [[nat, nat, nat, network_layer] -> ordinal]):
+        [packet -> ordinal] =
+      LAMBDA (packet_adtvar: packet):
+        LET red: [packet -> ordinal] = reduce_ordinal(eth?_fun) IN
+          CASES packet_adtvar
+            OF eth(eth1_var, eth2_var, eth3_var, eth4_var):
+                 eth?_fun(eth1_var, eth2_var, eth3_var, eth4_var)
+            ENDCASES;
+
+  REDUCE_ordinal(eth?_fun:
+                   [[nat, nat, nat, network_layer, packet] -> ordinal]):
+        [packet -> ordinal] =
+      LAMBDA (packet_adtvar: packet):
+        LET red: [packet -> ordinal] = REDUCE_ordinal(eth?_fun) IN
+          CASES packet_adtvar
+            OF eth(eth1_var, eth2_var, eth3_var, eth4_var):
+                 eth?_fun(eth1_var, eth2_var, eth3_var, eth4_var,
+                          packet_adtvar)
+            ENDCASES;
+ END packet_adt
+
+packet_adt_reduce[range: TYPE]: THEORY
+ BEGIN
+
+  IMPORTING packet_adt
+
+  IMPORTING network_layer
+
+  reduce(eth?_fun: [[nat, nat, nat, network_layer] -> range]):
+        [packet -> range] =
+      LAMBDA (packet_adtvar: packet):
+        LET red: [packet -> range] = reduce(eth?_fun) IN
+          CASES packet_adtvar
+            OF eth(eth1_var, eth2_var, eth3_var, eth4_var):
+                 eth?_fun(eth1_var, eth2_var, eth3_var, eth4_var)
+            ENDCASES;
+
+  REDUCE(eth?_fun: [[nat, nat, nat, network_layer, packet] -> range]):
+        [packet -> range] =
+      LAMBDA (packet_adtvar: packet):
+        LET red: [packet -> range] = REDUCE(eth?_fun) IN
+          CASES packet_adtvar
+            OF eth(eth1_var, eth2_var, eth3_var, eth4_var):
+                 eth?_fun(eth1_var, eth2_var, eth3_var, eth4_var,
+                          packet_adtvar)
+            ENDCASES;
+ END packet_adt_reduce

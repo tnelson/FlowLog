@@ -1,0 +1,7 @@
+network_layer: DATATYPE
+  BEGIN
+  IMPORTING transport_layer
+  ip(nwSrc: nat, nwDst: nat, nwProto: nat, tpPk: transport_layer): ip?
+  nl_unknown(payload: nat): nl_unknown? % maybe payload should have its own type?
+  END network_layer
+

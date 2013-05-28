@@ -1,0 +1,17 @@
+multiset[T: TYPE]: THEORY
+  BEGIN
+
+  multiset: TYPE = [T -> nat]
+
+  x, y: VAR T
+  a, b, c: VAR multiset
+  p: VAR pred[T]
+
+  member(x, a): bool = a(x) > 0
+
+  empty?(a): bool = (FORALL x: NOT member(x, a))
+
+  emptymultiset: multiset = LAMBDA (t: T): 0
+
+  union(a, b): multiset = LAMBDA (t: T): a(t) + b(t)
+  END multiset

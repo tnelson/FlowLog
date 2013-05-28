@@ -1,0 +1,7 @@
+packet: DATATYPE
+  BEGIN
+  IMPORTING network_layer
+  eth(dlSrc: nat, dlDst: nat, dlTyp: nat, newPk: network_layer): eth?
+  END packet
+
+
