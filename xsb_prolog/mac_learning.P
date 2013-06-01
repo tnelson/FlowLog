@@ -1,5 +1,7 @@
 :- auto_table.
 
+% the rules of the program
+
 plus_learned(Pkt, Sw, Pt, Mac):-
 locSw(Pkt, Sw),
 dlSrc(Pkt, Mac),
@@ -20,7 +22,6 @@ nwDst(Pkt, NwDst),
 nwProto(Pkt, NwProto),
 learned(LocSw, LocPt, DlDst).
 
-
 emit(Pkt, LocSw, LocPt, DlSrc, DlDst, DlTyp, NwSrc, NwDst, NwProto):-
 locSw(Pkt, LocSw),
 tnot(locPt(Pkt, LocPt)),
@@ -32,12 +33,15 @@ nwDst(Pkt, NwDst),
 nwProto(Pkt, NwProto),
 tnot(learned(LocSw, Any, DlDst)).
 
-
 learned(Sw, Pt, Mac):-
 plus_learned(Any, Sw, Pt, Mac),
 tnot(minus_learned(Any, Sw, Pt, Mac)).
 
-% Incoming packets
+% current state
+
+learned(1, 5, 4).
+
+% Incoming packet
 
 locSw(pkt1, 1).
 locPt(pkt1, 2).
