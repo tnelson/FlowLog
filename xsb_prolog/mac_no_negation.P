@@ -2,35 +2,23 @@
 
 % the rules of the program
 
-plus_learned(Pkt, Sw, Pt, Mac):-
-locSw(Pkt, Sw),
-dlSrc(Pkt, Mac),
-locPt(Pkt, Pt).
+plus_learned(LocSw, LocPt, DlSrc, DlDst, DlTyp, NwSrc, NwDst, NwProto, Sw, Pt, Mac):-
+LocSw = Sw,
+DlSrc = Mac,
+LocPt = Pt.
 
-emit(Pkt, LocSw, LocPt, DlSrc, DlDst, DlTyp, NwSrc, NwDst, NwProto):-
-locSw(Pkt, LocSw),
-dlSrc(Pkt, DlSrc),
-dlDst(Pkt, DlDst),
-dlTyp(Pkt, DlTyp),
-nwSrc(Pkt, NwSrc),
-nwDst(Pkt, NwDst),
-nwProto(Pkt, NwProto),
-learned(LocSw, LocPt, DlDst).
-
-learned(Sw, Pt, Mac):-
-plus_learned(Any, Sw, Pt, Mac).
+emit(LocSw, LocPt, DlSrc, DlDst, DlTyp, NwSrc, NwDst, NwProto, LocSw2, LocPt2, DlSrc2, DlDst2, DlTyp2, NwSrc2, NwDst2, NwProto2):-
+learned(LocSw, LocPt2, DlDst),
+LocSw = LocSw2,
+DlSrc = DlSrc2,
+DlDst = DlDst2,
+DlTyl = DlTyp2,
+NwSrc = NwSrc2,
+NwDst = NwDst2,
+NwProto = NwProto2.
 
 % current state
 
 learned(1, 5, 4).
 
-% Incoming packet
 
-locSw(pkt1, 1).
-locPt(pkt1, 2).
-dlSrc(pkt1, 3).
-dlDst(pkt1, 4).
-dlTyp(pkt1, 5).
-nwSrc(pkt1, 6).
-nwDst(pkt1, 7).
-nwProto(pkt1, 8).
