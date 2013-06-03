@@ -45,7 +45,10 @@ NwDst2 = NwSrc,
 DlDst2 = DlSrc,
 NwSrc2 = NwDst,
 LocPt2 = LocPt,
-DlSrc2 = DlDst, %is this right? this seems logical but isnt really specified by newpkt.otherwise = pkt.otherwise
+DlSrc2 = DlDst,
+%is this right? this seems logical but isnt really specified by newpkt.otherwise = pkt.otherwise. In fact I'm not really sure what
+%newpkt.otherwise = pkt.otherwise is supposed to do.
+%also, notice the typo on line 21! It should be locSw not loc.
 switchHasPorts(LocSw2, LocPt2).
 
 %%%%%%%
