@@ -1,0 +1,57 @@
+:- auto_table.
+
+% the rules of the program
+
+plus_learned(LocSw, LocPt, DlSrc, DlDst, DlTyp, NwSrc, NwDst, NwProto, Ip, Mac):-
+DlTyp = 0806,
+NwProto = 2,
+Ip = NwSrc,
+Mac = DlSrc,
+not(learned(NwSrc, Any)).
+
+emit(LocSw, LocPt, DlSrc, DlDst, DlTyp, NwSrc, NwDst, NwProto, LocSw2, LocPt2, DlSrc2, DlDst2, DlTyp2, NwSrc2, NwDst2, NwProto2):-
+DlTyp = 0806,
+NwProto = 2,
+LocSw = LocSw2,
+DlSrc = DlSrc2,
+DlDst = DlDst2,
+DlTyp = DlTyp2,
+NwSrc = NwSrc2,
+NwProto = NwProto2,
+switchHasPorts(LocSw2, LocPt2),
+LocPt \= LocPt2.
+
+emit(LocSw, LocPt, DlSrc, DlDst, DlTyp, NwSrc, NwDst, NwProto, LocSw2, LocPt2, DlSrc2, DlDst2, DlTyp2, NwSrc2, NwDst2, NwProto2):-
+DlTyp = 0806,
+NwProto = 1,
+LocSw = LocSw2,
+DlSrc = DlSrc2,
+DlDst = DlDst2,
+DlTyp = DlTyp2,
+NwSrc = NwSrc2,
+NwProto = NwProto2,
+switchHasPorts(LocSw2, LocPt2),
+LocPt \= LocPt2,
+not(learned(NwSrc, Any)).
+
+emit(LocSw, LocPt, DlSrc, DlDst, DlTyp, NwSrc, NwDst, NwProto, LocSw2, LocPt2, DlSrc2, DlDst2, DlTyp2, NwSrc2, NwDst2, NwProto2):-
+DlTyp = 0806,
+NwProto = 1,
+DlTyp2 = 0806,
+NwProto2 = 2,
+learned(NwDst, DlSrc2),
+LocSw2 = LocSw,
+NwDst2 = NwSrc,
+DlDst2 = DlSrc,
+NwSrc2 = NwDst,
+LocPt2 = LocPt,
+DlSrc2 = DlDst, %is this right? this seems logical but isnt really specified by newpkt.otherwise = pkt.otherwise
+switchHasPorts(LocSw2, LocPt2).
+
+%%%%%%%
+
+learned(1, 2).
+
+switchHasPorts(1, 1).
+switchHasPorts(1, 2).
+switchHasPorts(1, 3).
