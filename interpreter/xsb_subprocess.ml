@@ -63,14 +63,21 @@ let xin_stream = line_stream_of_channel xin_channel;;
 
 (*print_endline (Stream.next xin_stream);;*)
 
-output_string xout_channel "halt.\\n";;
+output_string xout_channel "writeln(hi).\\n";;
 flush xout_channel;;
 
+
+print_char (input_char xin_channel);;
+print_char (input_char xin_channel);;
+print_char (input_char xin_channel);;
+print_char (input_char xin_channel);;
+print_char (input_char xin_channel);;
+print_char (input_char xin_channel);;
 print_char (input_char xin_channel);;
 print_char (input_char xin_channel);;
 
 
-Unix.sleep 5;;
+
 
 (*
 No need to do this: the prompt will have the streams etc. defined.
