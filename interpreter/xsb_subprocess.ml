@@ -6,9 +6,9 @@ open Unix;;
 | pid -> exit 0;;*)
 
 
-Unix.create_process "/Applications/XSB/bin/xsb" [|"xsb"|] Unix.stdout Unix.stdout Unix.stderr;;
+Unix.create_process "/Applications/XSB/bin/xsb" [|"xsb"|] Unix.stdin Unix.stdout Unix.stderr;;
 Unix.sleep 1;;
-print_endline "assert(p(1)).";;
+print_endline "assert(p(1))";;
 
 while true
 do
