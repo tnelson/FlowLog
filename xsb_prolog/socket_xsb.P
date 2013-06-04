@@ -2,13 +2,15 @@
 :- import fd2ioport/2, file_read_line_atom/2 from file_io.
 :- import spawn_process/5 from shell.
 
-socket(Sockfd, Sock_ok),
+:- socket(Sockfd, Sock_ok),
 socket_connect(Sockfd, 1234, localhost, Sock_ok),
 fd2ioport(Sockfd, SockIOport),
 file_read_line_atom(SockIOport, Line),
-spawn_process([xsb], To, From,Err,_),
+writeln(Line),
+spawn_process([xsb], To, From,_,_),
 write(To, Line),
-flush_output(To,_),
+flush_output(To),
 file_read_line_atom(From, Response),
+writeln(Response),
 file_write(SockIOport, Response),
 file_flush(SockIOport,_).

@@ -1,0 +1,8 @@
+:- import file_flush/2, file_read_line_atom/2 from file_io.
+:- import file_nl/1 , file_write/2 from xsb_writ.
+
+:-spawn_process([xsb], To, From,_,_),
+file_write(To, 'assert(p(1)).'), file_nl(To), file_flush(To, _),
+file_write(To, 'p(X), writeln(X).'), file_nl(To), file_flush(To, _),
+file_read_line_atom(From,XX),
+writeln(XX).
