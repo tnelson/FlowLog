@@ -20,7 +20,8 @@ Unix.create_process "xsb" [||] Unix.stdin Unix.stdout Unix.stderr;;
 "The first component of the result is opened for reading, that's the exit to the pipe. 
 The second component is opened for writing, that's the entrance to the pipe."
 *)
-let infromx_descr, outtox_descr = Unix.pipe();;
+let infromx_descr, child_stdout = Unix.pipe();;
+let child_stdin, outtox_descr = Unix.pipe();;
 
 (* Convert the file descriptors created to channels *)
 let xin_channel = in_channel_of_descr infromx_descr;;
@@ -34,18 +35,13 @@ set_binary_mode_in xin_channel false;;
 
 Unix.sleep 1;;
 
-
 (* Use the pipe. Can keep stderr the same so XSB errors print in interpreter.
 First: new stdin (OUT TO X)
 Second: new stdout (IN FROM X)
  *)
-(*
-but this doesnt work. it should be the other way around! confusing
 
-Unix.create_process "xsb" [||] outtox_descr infromx_descr Unix.stderr;;
-*)
-Unix.create_process "/Applications/XSB/bin/xsb" [|"xsb"|] outtox_descr infromx_descr Unix.stderr;;
-Unix.sleep 1;;
+Unix.create_process "xsb" [|"xsb"|] child_stdin child_stdout Unix.stderr;;
+Unix.sleep 3;;
 
 print_endline "Process created.";;
 
@@ -63,21 +59,24 @@ let xin_stream = line_stream_of_channel xin_channel;;
 
 (*print_endline (Stream.next xin_stream);;*)
 
-output_string xout_channel "writeln(hi).\\n";;
+print_endline "issuing halt command";;
+
+output_string xout_channel "halt.\n";;
 flush xout_channel;;
 
-
-print_char (input_char xin_channel);;
-print_char (input_char xin_channel);;
-print_char (input_char xin_channel);;
-print_char (input_char xin_channel);;
-print_char (input_char xin_channel);;
-print_char (input_char xin_channel);;
+(* don't try to get anything from the channel after xsb closes
 print_char (input_char xin_channel);;
 print_char (input_char xin_channel);;
 
+print_char (input_char xin_channel);;
+print_char (input_char xin_channel);;
+print_char (input_char xin_channel);;
+print_char (input_char xin_channel);;
+print_char (input_char xin_channel);;
+print_char (input_char xin_channel);;
+*)
 
-
+print_endline "done!";;
 
 (*
 No need to do this: the prompt will have the streams etc. defined.
