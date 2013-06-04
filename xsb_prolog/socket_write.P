@@ -1,0 +1,8 @@
+:- import socket/2, socket_connect/4 from socket.
+:- import fd2ioport/2, file_read_line_atom/2 from file_io.
+
+socket(Sockfd, Sock_ok),
+socket_connect(Sockfd, 1234, localhost, Sock_ok),
+fd2ioport(Sockfd, SockIOport),
+file_write(SockIOport, 'hi there server.'),
+file_flush(SockIOport,_).
