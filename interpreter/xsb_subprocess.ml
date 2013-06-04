@@ -44,7 +44,7 @@ but this doesnt work. it should be the other way around! confusing
 
 Unix.create_process "xsb" [||] outtox_descr infromx_descr Unix.stderr;;
 *)
-Unix.create_process "/Applications/XSB/bin/xsb" [|"xsb"|] infromx_descr outtox_descr Unix.stderr;;
+Unix.create_process "/Applications/XSB/bin/xsb" [|"xsb"|] outtox_descr infromx_descr Unix.stderr;;
 Unix.sleep 1;;
 
 print_endline "Process created.";;
