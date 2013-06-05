@@ -1,0 +1,45 @@
+
+
+Black Boxes and Events
+----------------------
+
+
+A black-box invocation can appear in the following ways:
+
+(B1) as a *predicate* in the body of a rule: 
+"if the black box returns true for <a, b, c>..."
+
+(B2) as a *term* in the body of a rule:
+"if t is a tuple in the black-box's result, and R(t)..."
+
+(B3) as the result predicate in the head of a rule;
+"if alpha is satisfied, send the following tuples to the black box."
+
+An event can appear in the following ways:
+
+(E1) in the head and body of a rule as the "trigger" for that
+rule. This is identical to the way standalone FlowLog treats
+packets.
+
+
+
+Which do our examples use?
+
+Fill in examples + detail.
+
+
+(B1): Replace the BB reference with a nullary predicate p() in the
+datalog translation. remember the original terms! at each packet
+evaluation, invoke the black-box before passing to datalog and
+assert(p()) if the BB returns true, retract(p()) otherwise. 
+
+(B2): Replace R(bbt, ...) with BB(NewVar), R(NewVar, ...). Invoke the
+black-box before passing to datalog for evaluation. Clear out the BB
+relation, then assert the tuples returned by datalog. (Even if the R
+is negated, this should be ok.)
+
+(B3): This would be a new type of result predicate, beyond
+emit/+R/-R. Just have to remember which names go to which BB callback,
+and send as appropriate after evaluation.
+
+(E1) ...
