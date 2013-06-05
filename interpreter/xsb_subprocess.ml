@@ -80,9 +80,13 @@ send_assert "assert(q(1,2))." xout_channel xin_channel;;
 List.iter (printf "%s ") (send_query "q(X, Y)." 2 xout_channel xin_channel);;
 flush Pervasives.stdout;;
 
+send_assert "[mac_learning]." xout_channel xin_channel;;
 
+(*print_string "ready for the big query";;
+flush Pervasives.stdout;;*)
 
-
+List.iter (printf "%s ") (send_query "emit(1,2,3,4,5,6,7,8, LocSw2, LocPt2, DlSrc2, DlDst2, DlTyp2, NwSrc2, NwDst2, NwProto2)." 8 xout_channel xin_channel);;
+flush Pervasives.stdout;;
 
 (*
 
