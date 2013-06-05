@@ -27,7 +27,7 @@ First: new stdin (OUT TO X)
 Second: new stdout (IN FROM X)
  *)
 
-Unix.create_process "/Applications/XSB/bin/xsb" [|"xsb"|] xsb_in xsb_out Unix.stderr;;
+Unix.create_process "xsb" [|"xsb"|] xsb_in xsb_out Unix.stderr;;
 Unix.sleep 1;;
 
 print_endline "Process created.";;
@@ -44,7 +44,7 @@ let line_stream_of_channel channel =
 (* Stream for input from xsb! [[forgetting about streams for now]]*)
 (*let xin_stream = line_stream_of_channel xin_channel;;*)
 
-output_string xout_channel "assert(p(1)).\n";;
+output_string xout_channel "assert(p(123)).\n";;
 flush xout_channel;;
 
 (* prompt? *)
@@ -57,7 +57,7 @@ flush Pervasives.stdout;
 
 
 (* can we do it again? *)
-output_string xout_channel "assert(p(2)).\n";;
+output_string xout_channel "assert(p(456)).\n";;
 flush xout_channel;;
 
 (* prompt? *)
@@ -78,6 +78,32 @@ flush Pervasives.stdout;
 print_endline (input_line xin_channel);;
 flush Pervasives.stdout;
 
+(* can we do it again? *)
+(*output_string xout_channel "p(X), writeln(X).\n";;*)
+output_string xout_channel "p(X).\n";;
+flush xout_channel;;
+
+(* need to do something different in the end. it's waiting for a semicolon
+   because the bindings hold at the end of X=...  
+   input_line will block forever in this case. *)
+
+output_string xout_channel ";\n";;
+flush xout_channel;;
+
+output_string xout_channel ";\n";;
+flush xout_channel;;
+
+
+(* prompt? *)
+print_endline (input_line xin_channel);;
+flush Pervasives.stdout;
+(* yes *)
+print_endline (input_line xin_channel);;
+flush Pervasives.stdout;
+print_endline (input_line xin_channel);;
+flush Pervasives.stdout;
+print_endline (input_line xin_channel);;
+flush Pervasives.stdout;
 
 (*without this next command the program runs fine but with it it holds. this means xsb isn't writing to the stream in response to writeln(hi).*)
 
