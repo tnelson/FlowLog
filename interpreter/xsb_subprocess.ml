@@ -27,7 +27,7 @@ First: new stdin (OUT TO X)
 Second: new stdout (IN FROM X)
  *)
 
-Unix.create_process "/Applications/XSB/bin/xsb" [|"xsb"|] xsb_in xsb_out Unix.stderr;;
+Unix.create_process "xsb" [|"xsb"|] xsb_in xsb_out Unix.stderr;;
 Unix.sleep 1;;
 
 print_endline "Process created.";;
@@ -41,31 +41,64 @@ let line_stream_of_channel channel =
     (fun _ ->
        try Some (input_line channel) with End_of_file -> None);;
 
-(* Stream for input from xsb! *)
-let xin_stream = line_stream_of_channel xin_channel;;
+(* Stream for input from xsb! [[forgetting about streams for now]]*)
+(*let xin_stream = line_stream_of_channel xin_channel;;*)
 
-
-print_char (input_char xin_channel);;
-print_char (input_char xin_channel);;
-print_char (input_char xin_channel);;
-print_char (input_char xin_channel);;
-print_char (input_char xin_channel);;
-
-output_string xout_channel "assert(p(1)). p(X).\\n";;
+output_string xout_channel "assert(p(1)).\n";;
 flush xout_channel;;
 
+(* prompt? *)
+print_endline (input_line xin_channel);;
+flush Pervasives.stdout;
+(* yes *)
+print_endline (input_line xin_channel);;
+flush Pervasives.stdout;
+
+
+
+(* can we do it again? *)
+output_string xout_channel "assert(p(2)).\n";;
+flush xout_channel;;
+
+(* prompt? *)
+print_endline (input_line xin_channel);;
+flush Pervasives.stdout;
+(* yes *)
+print_endline (input_line xin_channel);;
+flush Pervasives.stdout;
+
 (*without this next command the program runs fine but with it it holds. this means xsb isn't writing to the stream in response to writeln(hi).*)
-print_char (input_char xin_channel);;
-print_char (input_char xin_channel);;
-print_char (input_char xin_channel);;
-print_char (input_char xin_channel);;
-print_char (input_char xin_channel);;
-print_char (input_char xin_channel);;
-print_char (input_char xin_channel);;
-print_char (input_char xin_channel);;
-print_char (input_char xin_channel);;
-print_char (input_char xin_channel);;
 
 
-output_string xout_channel "halt.\\n";;
+(*output_string xout_channel "p(X).\n";;
+flush xout_channel;;
+
+(* ? *)
+print_endline (input_line xin_channel);;
+flush Pervasives.stdout;
+*)
+
+
+(*print_endline (input_line xin_channel);;
+flush Pervasives.stdout;
+*)
+
+(*
+print_string (input_line xin_channel);;
+
+print_char (input_char xin_channel);;
+print_char (input_char xin_channel);;
+print_char (input_char xin_channel);;
+print_char (input_char xin_channel);;
+print_char (input_char xin_channel);;
+print_char (input_char xin_channel);;
+print_char (input_char xin_channel);;
+print_char (input_char xin_channel);;
+print_char (input_char xin_channel);;
+print_char (input_char xin_channel);;
+*)
+
+
+Unix.sleep 1;;
+output_string xout_channel "halt.\n";;
 flush xout_channel;;
