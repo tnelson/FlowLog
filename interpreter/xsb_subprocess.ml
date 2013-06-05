@@ -88,6 +88,8 @@ flush Pervasives.stdout;;*)
 List.iter (printf "%s ") (send_query "emit(1,2,3,4,5,6,7,8, LocSw2, LocPt2, DlSrc2, DlDst2, DlTyp2, NwSrc2, NwDst2, NwProto2)." 8 xout_channel xin_channel);;
 flush Pervasives.stdout;;
 
+
+
 (*
 
 			if !next_str == "" then

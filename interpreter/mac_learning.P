@@ -45,7 +45,7 @@ not(learned(LocSw, Any, DlDst)).
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % current state
 % switch, port, mac
-learned(1, 5, 4).
+%learned(1, 5, 4).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % need this so that we can flood properly. this relation will be fixed for all time when we load.
