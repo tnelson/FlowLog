@@ -27,9 +27,9 @@ module Xsb = struct
 		flush out_ch;
 		let answer = ref "" in
 		let next_str = ref "" in
-		while (!next_str <> "yes" && !next_str <> "no") do
+		while (String.trim !next_str <> "yes" && String.trim !next_str <> "no") do
 			next_str := input_line in_ch;
-			answer := (!answer ^ "\n" ^ !next_str);
+			answer := (!answer ^ "\n" ^ String.trim !next_str);
 		done;
 		String.trim !answer;;
 
@@ -65,13 +65,13 @@ module Xsb = struct
 		let answer = ref [] in
 		let next_str = ref "" in
 		let counter = ref 0 in
-		while not (ends_with !next_str "no") do
+		while not (ends_with (String.trim !next_str) "no") do
 			if (!counter mod num_vars = 0) then
 			(output_string out_ch ";\n";
 			flush out_ch);		
 			counter := !counter + 1;
 			next_str := input_line in_ch;
-			answer := (remove_from_end !next_str "no") :: !answer;
+			answer := (remove_from_end (String.trim!next_str) "no") :: !answer;
 		done;
 		group (List.rev !answer) num_vars;;
 
