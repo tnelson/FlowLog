@@ -27,7 +27,7 @@ First: new stdin (OUT TO X)
 Second: new stdout (IN FROM X)
  *)
 
-Unix.create_process "xsb" [|"xsb"|] xsb_in xsb_out Unix.stderr;;
+Unix.create_process "/Applications/XSB/bin/xsb" [|"xsb"|] xsb_in xsb_out Unix.stderr;;
 Unix.sleep 1;;
 
 print_endline "Process created.";;
@@ -66,6 +66,18 @@ flush Pervasives.stdout;
 (* yes *)
 print_endline (input_line xin_channel);;
 flush Pervasives.stdout;
+
+(* can we do it again? *)
+output_string xout_channel "writeln(hi).\n";;
+flush xout_channel;;
+
+(* prompt? *)
+print_endline (input_line xin_channel);;
+flush Pervasives.stdout;
+(* yes *)
+print_endline (input_line xin_channel);;
+flush Pervasives.stdout;
+
 
 (*without this next command the program runs fine but with it it holds. this means xsb isn't writing to the stream in response to writeln(hi).*)
 
