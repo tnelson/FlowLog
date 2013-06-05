@@ -51,11 +51,21 @@ print_char (input_char xin_channel);;
 print_char (input_char xin_channel);;
 print_char (input_char xin_channel);;
 
-output_string xout_channel "writeln(hi).\\n";;
+output_string xout_channel "assert(p(1)). p(X).\\n";;
 flush xout_channel;;
 
 (*without this next command the program runs fine but with it it holds. this means xsb isn't writing to the stream in response to writeln(hi).*)
-(*print_char (input_char xin_channel);;*)
+print_char (input_char xin_channel);;
+print_char (input_char xin_channel);;
+print_char (input_char xin_channel);;
+print_char (input_char xin_channel);;
+print_char (input_char xin_channel);;
+print_char (input_char xin_channel);;
+print_char (input_char xin_channel);;
+print_char (input_char xin_channel);;
+print_char (input_char xin_channel);;
+print_char (input_char xin_channel);;
+
 
 output_string xout_channel "halt.\\n";;
 flush xout_channel;;
