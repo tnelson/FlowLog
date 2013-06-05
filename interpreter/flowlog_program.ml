@@ -122,6 +122,7 @@ print_endline(Program.assert_clause switch_1 out_ch in_ch);;
 print_endline(Xsb.lol_to_string (Xsb.send_query "switchHasPorts(X, Y)." 2 out_ch in_ch));;
 flush Pervasives.stdout;;
 
+Xsb.halt_xsb out_ch;;
 
 (* use ounit for testing? *)
 (*let test_fixture = "Program" >:::
