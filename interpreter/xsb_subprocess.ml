@@ -1,5 +1,6 @@
 #load "unix.cma";;
 open Unix;;
+open Printf;;
 
 
 let from_xsb, xsb_out = Unix.pipe();;
@@ -12,37 +13,19 @@ The second component is opened for writing, that's the entrance to the pipe."
 
 (* Convert the file descriptors created to channels *)
 let xin_channel = in_channel_of_descr from_xsb;;
-print_endline "Child's stdout channel created. Becomes an in channel.";;
+(*print_endline "Child's stdout channel created. Becomes an in channel.";;*)
 let xout_channel = out_channel_of_descr to_xsb;;  
-print_endline "Child's stdin channel created. Becomes an out channel.";;
+(*print_endline "Child's stdin channel created. Becomes an out channel.";;*)
 
 (* in text mode *)
 set_binary_mode_out xout_channel false;;
 set_binary_mode_in xin_channel false;;
 
-(* Use the pipe. Can keep stderr the same so XSB errors print in interpreter.
-First: new stdin (OUT TO X)
-Second: new stdout (IN FROM X)
- *)
-
 Unix.create_process "/Applications/XSB/bin/xsb" [|"xsb"|] xsb_in xsb_out Unix.stderr;;
-Unix.sleep 1;;
 
-print_endline "Process created.";;
+(*print_endline "Process created.";;*)
 
-(*let send_query str out_ch in_ch =
-	output_string out_ch (str ^ "\n");
-	flush out_ch;
-	let answer = ref "" in
-	let next_str = ref "" in
-	while (!next_str <> "yes" && !next_str <> "no") do
-		(*print_endline ("next_str " ^ !next_str);*)
-		next_str := input_line in_ch;
-		answer := (!answer ^ "\n" ^ !next_str);
-	done;
-	String.trim !answer;;*)
-
-
+(* This takes in a string command (not query, this doesn't deal with the semicolons) and two channels (to and from xsb). It writes the command to xsb and returns the resulting text.*)
 let send_assert str out_ch in_ch =
 	output_string out_ch (str ^ "\n");
 	flush out_ch;
@@ -54,32 +37,52 @@ let send_assert str out_ch in_ch =
 	done;
 	String.trim !answer;;
 
-print_endline (send_assert "assert(p(1))." xout_channel xin_channel);;
-flush Pervasives.stdout;;
+send_assert "assert(p(1))." xout_channel xin_channel;;
 
-print_endline (send_assert "assert(p(2))." xout_channel xin_channel);;
-flush Pervasives.stdout;;
+send_assert "assert(p(2))." xout_channel xin_channel;;
 
+(* True if string str1 ends with string str2 *)
 let ends_with str1 str2 = 
 	if String.length str2 > String.length str1
 	then false
 	else String.sub str1 ((String.length str1) - (String.length str2)) (String.length str2) = str2;;
 
-let send_query str out_ch in_ch =
+(* Removes str2 from the end of str1 if its there, otherwise returns str1 *)
+let remove_from_end str1 str2 = 
+	if ends_with str1 str2
+	then String.sub str1 0 ((String.length str1) - (String.length str2))
+	else str1;; 
+
+(* Takes a string query (thing with semicolon answers), the number of variables involved, and the in and out chanels.
+ It writes the query to xsb and returns an array with all of the results (array of strings). *)
+let send_query str num_vars out_ch in_ch =
 	output_string out_ch (str ^ "\n");
 	flush out_ch;
-	let answer = ref (input_line in_ch) in
+	let _ = input_line in_ch in
+	let answer = ref [] in
 	let next_str = ref "" in
-	while not (ends_with !next_str "yes") && not (ends_with !next_str "no") do
-		output_string out_ch ";\n";
-		flush out_ch;
+	let counter = ref 0 in
+	while not (ends_with !next_str "no") do
+		if (!counter mod num_vars = 0) then
+		(output_string out_ch ";\n";
+		flush out_ch);		
+		counter := !counter + 1;
 		next_str := input_line in_ch;
-		answer := (!answer ^ "\n" ^ !next_str);
+		answer := (remove_from_end !next_str "no") :: !answer;
 	done;
-	String.trim !answer;;
+	List.rev !answer;;
 
-print_endline (send_query "p(X)." xout_channel xin_channel);;
+List.iter (printf "%s ") (send_query "p(X)." 1 xout_channel xin_channel);;
 flush Pervasives.stdout;;
+
+send_assert "assert(q(1,2))." xout_channel xin_channel;;
+
+List.iter (printf "%s ") (send_query "q(X, Y)." 2 xout_channel xin_channel);;
+flush Pervasives.stdout;;
+
+
+
+
 
 (*
 
