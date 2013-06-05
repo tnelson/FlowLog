@@ -53,8 +53,17 @@ let remove_from_end str1 str2 =
 	then String.sub str1 0 ((String.length str1) - (String.length str2))
 	else str1;; 
 
+let rec group alist num = 
+	match alist with
+	| [] -> [];
+	| f :: r -> match group r num with
+		| [] -> [[f]];
+		| f1 :: r1 -> if List.length f1 < num
+					then (f :: f1) :: r1
+					else [f] :: (f1 :: r1);;
+
 (* Takes a string query (thing with semicolon answers), the number of variables involved, and the in and out chanels.
- It writes the query to xsb and returns an array with all of the results (array of strings). *)
+ It writes the query to xsb and returns a list of lists with all of the results. *)
 let send_query str num_vars out_ch in_ch =
 	output_string out_ch (str ^ "\n");
 	flush out_ch;
@@ -70,14 +79,14 @@ let send_query str num_vars out_ch in_ch =
 		next_str := input_line in_ch;
 		answer := (remove_from_end !next_str "no") :: !answer;
 	done;
-	List.rev !answer;;
+	group (List.rev !answer) num_vars;;
 
-List.iter (printf "%s ") (send_query "p(X)." 1 xout_channel xin_channel);;
+List.iter (List.iter (printf "%s ")) (send_query "p(X)." 1 xout_channel xin_channel);;
 flush Pervasives.stdout;;
 
 send_assert "assert(q(1,2))." xout_channel xin_channel;;
 
-List.iter (printf "%s ") (send_query "q(X, Y)." 2 xout_channel xin_channel);;
+List.iter (List.iter (printf "%s ")) (send_query "q(X, Y)." 2 xout_channel xin_channel);;
 flush Pervasives.stdout;;
 
 send_assert "[mac_learning]." xout_channel xin_channel;;
@@ -88,7 +97,7 @@ send_assert "assert(learned(1,5,4))." xout_channel xin_channel;;
 (*print_string "ready for the big query";;
 flush Pervasives.stdout;;*)
 
-List.iter (printf "%s ") (send_query "emit(1,2,3,4,5,6,7,8, LocSw2, LocPt2, DlSrc2, DlDst2, DlTyp2, NwSrc2, NwDst2, NwProto2)." 8 xout_channel xin_channel);;
+List.iter (List.iter (printf "%s ")) (send_query "emit(1,2,3,4,5,6,7,8, LocSw2, LocPt2, DlSrc2, DlDst2, DlTyp2, NwSrc2, NwDst2, NwProto2)." 8 xout_channel xin_channel);;
 flush Pervasives.stdout;;
 
 
