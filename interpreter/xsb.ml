@@ -16,7 +16,8 @@ module Xsb = struct
 		let _ = set_binary_mode_out xout_channel false in
 		let _ = set_binary_mode_in xin_channel false in
 		(* start xsb *)
-		let _ = Unix.create_process "/Applications/XSB/bin/xsb" [|"xsb"|] xsb_in xsb_out Unix.stderr in
+		let error_1, error_2 = Unix.pipe() in
+		let _ = Unix.create_process "/Applications/XSB/bin/xsb" [|"xsb"|] xsb_in xsb_out error_2 in
 		(xout_channel, xin_channel);;
 		
 
