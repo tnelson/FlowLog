@@ -82,6 +82,9 @@ flush Pervasives.stdout;;
 
 send_assert "[mac_learning]." xout_channel xin_channel;;
 
+send_assert "assert(learned(1,5,4))." xout_channel xin_channel;;
+
+
 (*print_string "ready for the big query";;
 flush Pervasives.stdout;;*)
 
