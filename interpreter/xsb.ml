@@ -16,9 +16,11 @@ module Xsb = struct
 		let _ = set_binary_mode_out xout_channel false in
 		let _ = set_binary_mode_in xin_channel false in
 		(* start xsb *)
-		let error_1, error_2 = Unix.pipe() in
-		let _ = Unix.create_process "/Applications/XSB/bin/xsb" [|"xsb"|] xsb_in xsb_out error_2 in
+		(*let error_1, error_2 = Unix.pipe() in*)
+		let _ = Unix.create_process "/Applications/XSB/bin/xsb" [|"xsb"|] xsb_in xsb_out Unix.stderr in
 		(xout_channel, xin_channel);;
+
+	(* error_2 needs to be periodically flushed! *)
 		
 
 	(* This takes in a string command (not query, this doesn't deal with the semicolons) and two channels (to and from xsb).
@@ -57,6 +59,10 @@ module Xsb = struct
 						then (f :: f1) :: r1
 						else [f] :: (f1 :: r1);;
 
+	let after_equals (str : string) : string =
+		let equals_index = String.index str '=' in
+		String.trim (String.sub str (equals_index + 1) (String.length str - equals_index - 1));;
+
 	(* Takes a string query (thing with semicolon answers), the number of variables involved, and the in and out chanels.
 	 It writes the query to xsb and returns a list of lists with all of the results. *)
 	let send_query (str : string) (num_vars : int) (out_ch : out_channel) (in_ch : in_channel) : (string list) list =
@@ -74,11 +80,19 @@ module Xsb = struct
 			next_str := input_line in_ch;
 			answer := (remove_from_end (String.trim!next_str) "no") :: !answer;
 		done;
-		group (List.rev !answer) num_vars;;
+		List.map (fun (l : string list) -> List.map after_equals l) (group (List.rev !answer) num_vars);;
 
 	let halt_xsb (out_ch : out_channel) : unit = 
 		output_string out_ch "halt.\n";
 		flush out_ch;;
+
+	let list_to_string (l : 'a list) (converter : 'a -> string) : string = 
+		let ans = List.fold_right (fun x st -> (converter x) ^ ", " ^ st) l "" in
+		"[" ^ String.sub ans 0 (String.length ans - 2) ^ "]";;
+
+	(* list of list of string to string conversion *)
+	let rec lol_to_string (l : (string list) list) : string = 
+		list_to_string l (fun li -> list_to_string li (fun x -> x))
 
 end
 
@@ -90,19 +104,22 @@ send_assert "assert(p(1))." xout_channel xin_channel;;
 
 send_assert "assert(p(2))." xout_channel xin_channel;;
 
-List.iter (List.iter (printf "%s ")) (send_query "p(X)." 1 xout_channel xin_channel);;
+print_endline (lol_to_string (send_query "p(X)." 1 xout_channel xin_channel));;
+print_endline "";;
 flush Pervasives.stdout;;
 
-send_assert "assert(q(1,2))." xout_channel xin_channel;;
+send_assert "assert(q(3,4))." xout_channel xin_channel;;
 
-List.iter (List.iter (printf "%s ")) (send_query "q(X, Y)." 2 xout_channel xin_channel);;
+print_endline (lol_to_string (send_query "q(X, Y)." 2 xout_channel xin_channel));;
+print_endline "";;
 flush Pervasives.stdout;;
 
 send_assert "[mac_learning]." xout_channel xin_channel;;
 
 send_assert "assert(learned(1,5,4))." xout_channel xin_channel;;
 
-List.iter (List.iter (printf "%s ")) (send_query "emit(1,2,3,4,5,6,7,8, LocSw2, LocPt2, DlSrc2, DlDst2, DlTyp2, NwSrc2, NwDst2, NwProto2)." 8 xout_channel xin_channel);;
+print_endline (lol_to_string (send_query "emit(1,2,3,4,5,6,7,8, LocSw2, LocPt2, DlSrc2, DlDst2, DlTyp2, NwSrc2, NwDst2, NwProto2)." 8 xout_channel xin_channel));;
+print_endline "";;
 flush Pervasives.stdout;;
 
 
