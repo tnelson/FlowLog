@@ -1,4 +1,4 @@
-#load "unix.cma";;
+(*#load "unix.cma";;*)
 open Unix;;
 open Printf;;
 
@@ -41,7 +41,7 @@ module Xsb = struct
 	let ends_with (str1 : string) (str2 : string) : bool = 
 		if String.length str2 > String.length str1
 		then false
-		else String.sub str1 ((String.length str1) - (String.length str2)) (String.length str2) = str2;;
+		else (String.sub str1 ((String.length str1) - (String.length str2)) (String.length str2)) = str2;;
 
 	(* Removes str2 from the end of str1 if its there, otherwise returns str1 *)
 	let remove_from_end (str1 : string) (str2 : string) : string = 
@@ -60,7 +60,7 @@ module Xsb = struct
 						else [f] :: (f1 :: r1);;
 
 	let after_equals (str : string) : string =
-		let equals_index = String.index str '=' in
+		let equals_index = try String.index str '=' with Not_found -> -1 in
 		String.trim (String.sub str (equals_index + 1) (String.length str - equals_index - 1));;
 
 	(* Takes a string query (thing with semicolon answers), the number of variables involved, and the in and out chanels.
@@ -68,9 +68,11 @@ module Xsb = struct
 	let send_query (str : string) (num_vars : int) (out_ch : out_channel) (in_ch : in_channel) : (string list) list =
 		output_string out_ch (str ^ "\n");
 		flush out_ch;
-		let _ = input_line in_ch in
+		(*let first_line = input_line in_ch in
+		if ((ends_with (String.trim first_line) "no") || (ends_with (String.trim first_line) "yes")) then [] else*)
 		let answer = ref [] in
-		let next_str = ref "" in
+		let next_str = ref (input_line in_ch) in
+		(*let _ = print_endline (string_of_bool (ends_with (String.trim !next_str) "no")) in*)
 		let counter = ref 0 in
 		while not (ends_with (String.trim !next_str) "no") do
 			if (!counter mod num_vars = 0) then
@@ -78,7 +80,7 @@ module Xsb = struct
 			flush out_ch);		
 			counter := !counter + 1;
 			next_str := input_line in_ch;
-			answer := (remove_from_end (String.trim!next_str) "no") :: !answer;
+			answer := (remove_from_end (String.trim !next_str) "no") :: !answer;
 		done;
 		List.map (fun (l : string list) -> List.map after_equals l) (group (List.rev !answer) num_vars);;
 
@@ -86,8 +88,10 @@ module Xsb = struct
 		output_string out_ch "halt.\n";
 		flush out_ch;;
 
-	let list_to_string (l : 'a list) (converter : 'a -> string) : string = 
-		let ans = List.fold_right (fun x st -> (converter x) ^ ", " ^ st) l "" in
+	let list_to_string (l : 'a list) (converter : 'a -> string) : string =
+		match l with 
+		| [] -> "[]";
+		| _ -> let ans = List.fold_right (fun x st -> (converter x) ^ ", " ^ st) l "" in
 		"[" ^ String.sub ans 0 (String.length ans - 2) ^ "]";;
 
 	(* list of list of string to string conversion *)
