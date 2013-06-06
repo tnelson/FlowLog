@@ -12,7 +12,7 @@ module Program = struct
 type term = Constant of string | Variable of string;;
 
 (* Things like A = B or R(A, B, C) *)
-type atom = Equals of term * term | Apply of relation * term list
+type atom = Equals of term * term | Apply of relation * term list | Bool of string
 and
 (* the and is for mutually recursive types *)
 (* Atoms and negations of atoms *)
@@ -44,7 +44,8 @@ let list_to_string (l : 'a list) (conversion : 'a -> string) : string =
 let atom_to_string (a : atom) : string =
 	match a with
 	| Equals(t1, t2) -> term_to_string(t1) ^ " = " ^ term_to_string(t2);
-	| Apply(rel, args) -> (relation_name rel) ^ "(" ^ (list_to_string args term_to_string) ^ ")";;
+	| Apply(rel, args) -> (relation_name rel) ^ "(" ^ (list_to_string args term_to_string) ^ ")";
+	| Bool(str) -> str;;
 
 let literal_to_string (l : literal) : string = 
 	match l with
@@ -81,7 +82,8 @@ let get_vars (cl : clause) : term list =
 		(fun (lit : literal) (acc : term list) -> 
 			match get_atom(lit) with
 			| Equals(t1, t2) -> add_unique_var t1 (add_unique_var t2 acc);
-			| Apply(_, tl) -> List.fold_right add_unique_var tl acc)
+			| Apply(_, tl) -> List.fold_right add_unique_var tl acc;
+			| Bool(str) -> acc;)
 		body
 		(List.fold_right add_unique_var args []);;
 
@@ -94,13 +96,14 @@ let assert_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): str
 
 let query_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): string =
 	let output = (clause_to_string cl) ^ "." in
-	(*let _ = print_endline output in*)
+(*	let _ = print_endline output in*)
 	let num_vars = List.length (get_vars cl) in
 	if num_vars > 0 then Xsb.lol_to_string(Xsb.send_query output (List.length (get_vars cl)) out_ch in_ch)
 	else let _ = Xsb.send_assert output out_ch in_ch in "[]";;
 
 let assert_relation (rel : relation) (out_ch : out_channel) (in_ch : in_channel) : string =
 	match rel with
+	| Relation(_, args, [], _, _) -> assert_clause (Clause(rel, args, [Pos(Bool("false"))])) out_ch in_ch;
 	| Relation(_, _, clauses, _, _) -> List.fold_right (fun cls acc -> (assert_clause cls out_ch in_ch) ^ acc) clauses "";;
 
 let start_program (prgm : program) (out_ch : out_channel) (in_ch : in_channel) : string = 
@@ -148,8 +151,7 @@ let rec emit_1 = Clause(emit_relation, packet_vars @ packet_vars_2,
 	])
 	and
 	emit_2 = Clause(emit_relation, packet_vars @ packet_vars_2,
-	[Pos(Apply(learned_relation, [Variable("LocSw"); Variable("LocPt2"); Variable("DlDst")]));
-	Pos(Equals(Variable("LocSw"), Variable("LocSw2")));
+	[Pos(Equals(Variable("LocSw"), Variable("LocSw2")));
 	Pos(Equals(Variable("DlSrc"), Variable("DlSrc2")));
 	Pos(Equals(Variable("DlDst"), Variable("DlDst2")));
 	Pos(Equals(Variable("DlTyp"), Variable("DlTyp2")));
@@ -180,7 +182,32 @@ let mac_learning_program = Program([plus_learned_relation; minus_learned_relatio
 let out_ch, in_ch = Xsb.start_xsb ();;
 (* run the program *)
 Program.start_program mac_learning_program out_ch in_ch;;
+
 print_endline(Program.query_clause (Clause(switch_has_ports_relation, [Variable("X"); Variable("Y")], [])) out_ch in_ch);;
+print_endline(Program.query_clause (Clause(emit_relation,
+	[Constant("1");
+	Constant("2");
+	Constant("3");
+	Constant("4");
+	Constant("5");
+	Constant("6");
+	Constant("7");
+	Constant("8");
+	Variable("LocSw2");
+	Variable("LocPt2");
+	Variable("DlSrc2");
+	Variable("DlDst2");
+	Variable("DlTyp2");
+	Variable("NwSrc2");
+	Variable("NwDst2");
+	Variable("NwProto2")
+	], [])) out_ch in_ch);;
+
+Xsb.halt_xsb out_ch;;
+
+(* these work! *)
+(*
+
 print_endline (list_to_string (Program.get_vars (Clause(emit_relation,
 	[Constant("1");
 	Constant("2");
@@ -199,12 +226,6 @@ print_endline (list_to_string (Program.get_vars (Clause(emit_relation,
 	Variable("NwDst2");
 	Variable("NwProto2")
 	], []))) term_to_string);;
-
-Xsb.halt_xsb out_ch;;
-
-(* these work! *)
-(*
-
 
 
 print_endline(Xsb.lol_to_string (Xsb.send_query "switchHasPorts(X, Y)." 2 out_ch in_ch));;
