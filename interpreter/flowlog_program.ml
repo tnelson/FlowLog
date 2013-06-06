@@ -21,8 +21,7 @@ and
 (* First string is name, second is list of arguments, third is body *)
 	 clause = Clause of relation * term list * literal list
 and
-(* First string is relation's name, the string list is a list of arguments
-the clauses are definitional clauses, the two options are plus_ and minus_ relations or none respectively *)
+(* name, arguments, clauses, plus, minus *)
 	 relation = Relation of string * term list * clause list * relation option * relation option;;
 
 (* list of non-emit relations, emit relation*)
@@ -87,32 +86,50 @@ let get_vars (cl : clause) : term list =
 		body
 		(List.fold_right add_unique_var args []);;
 
-let assert_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): string =
-	let output = "assert((" ^ (clause_to_string cl) ^ "))." in
+let assert_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): (term list) list =
+	let assertion = "assert((" ^ (clause_to_string cl) ^ "))." in
 	(*let _ = print_endline output in*)
 	let num_vars = List.length (get_vars cl) in
-	if num_vars > 0 then Xsb.lol_to_string(Xsb.send_query output (List.length (get_vars cl)) out_ch in_ch)
-	else let _ = Xsb.send_assert output out_ch in_ch in "[]";;
+	let answer = (if num_vars > 0 then Xsb.send_query assertion (List.length (get_vars cl)) out_ch in_ch
+	else let _ = Xsb.send_assert assertion out_ch in_ch in []) in
+	List.map (fun (l : string list) -> List.map (fun (s : string) -> Constant(s)) l) answer;;
 
-let query_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): string =
-	let output = (clause_to_string cl) ^ "." in
-(*	let _ = print_endline output in*)
+let query_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): (term list) list =
+	let assertion = (clause_to_string cl) ^ "." in
+	(*let _ = print_endline output in*)
 	let num_vars = List.length (get_vars cl) in
-	if num_vars > 0 then Xsb.lol_to_string(Xsb.send_query output (List.length (get_vars cl)) out_ch in_ch)
-	else let _ = Xsb.send_assert output out_ch in_ch in "[]";;
+	let answer = (if num_vars > 0 then Xsb.send_query assertion (List.length (get_vars cl)) out_ch in_ch
+	else let _ = Xsb.send_assert assertion out_ch in_ch in []) in
+	List.map (fun (l : string list) -> List.map (fun (s : string) -> Constant(s)) l) answer;;
 
-let assert_relation (rel : relation) (out_ch : out_channel) (in_ch : in_channel) : string =
+let assert_relation (rel : relation) (out_ch : out_channel) (in_ch : in_channel) : (term list) list =
 	match rel with
 	| Relation(_, args, [], _, _) -> assert_clause (Clause(rel, args, [Pos(Bool("false"))])) out_ch in_ch;
-	| Relation(_, _, clauses, _, _) -> List.fold_right (fun cls acc -> (assert_clause cls out_ch in_ch) ^ acc) clauses "";;
+	| Relation(_, _, clauses, _, _) -> List.fold_right (fun cls acc -> (assert_clause cls out_ch in_ch) @ acc) clauses [];;
 
-let start_program (prgm : program) (out_ch : out_channel) (in_ch : in_channel) : string = 
+let query_relation (rel : relation) (args : term list) (out_ch : out_channel) (in_ch : in_channel) : (term list) list =
+	match rel with
+	| Relation(_, _, clauses, _, _) -> List.fold_right (fun cls acc -> 
+		match cls with
+		| Clause(_, _, body) -> (query_clause (Clause(rel, args, body)) out_ch in_ch) @ acc;) clauses [];;
+
+let start_program (prgm : program) (out_ch : out_channel) (in_ch : in_channel) : (term list) list = 
 	match prgm with
-	| Program(relations, emit) -> let out = List.fold_right (fun rel acc -> (assert_relation rel out_ch in_ch) ^ acc) relations "" in
-		out ^ (assert_relation emit out_ch in_ch);;
+	| Program(relations, emit) -> let out = List.fold_right (fun rel acc -> (assert_relation rel out_ch in_ch) @ acc) relations [] in
+		out @ (assert_relation emit out_ch in_ch);;
 
-let respond_to_packet (prgm : program) : (string list) list =
-	[];;
+
+(*let respond_to_packet (prgm : program) (pkt : term list) : (string list) list =
+	match prgm with
+	| Program(relations, emit) ->
+		let _ = List.fold_right (fun (rel : relation) (acc : string) ->
+			match rel with
+			| Relation(_, args, _, plus, minus) ->
+				let to_add = match plus with
+				| None -> [];
+				| Some(p) -> 
+		) relations [] in *)
+	
 
 end
 
@@ -137,7 +154,7 @@ let rec minus_learned = Clause(minus_learned_relation, packet_vars @ learned_var
 	and
 	minus_learned_relation = Relation("minus_learned", packet_vars @ learned_vars, [minus_learned], None, None);;
 
-let learned_relation = Relation("learned", learned_vars, [], Some plus_learned_relation, Some minus_learned_relation);;
+let learned_relation = Relation("learned", learned_vars, [], Some(plus_learned_relation), Some(minus_learned_relation));;
 
 let rec emit_1 = Clause(emit_relation, packet_vars @ packet_vars_2,
 	[Pos(Apply(learned_relation, [Variable("LocSw"); Variable("LocPt2"); Variable("DlDst")]));
@@ -177,14 +194,18 @@ let mac_learning_program = Program([plus_learned_relation; minus_learned_relatio
 
 (* try out the functions *)
 
+let my_print (l : (term list) list) : unit =
+	let mapped = List.map (fun sublist -> List.map (fun t -> match t with | Constant(s) -> s; | Variable(s) -> s;) sublist) l in
+	print_endline (Xsb.lol_to_string mapped);;
+
 (*print_endline(clause_to_string switch_1);;*)
 
 let out_ch, in_ch = Xsb.start_xsb ();;
 (* run the program *)
 Program.start_program mac_learning_program out_ch in_ch;;
 
-print_endline(Program.query_clause (Clause(switch_has_ports_relation, [Variable("X"); Variable("Y")], [])) out_ch in_ch);;
-print_endline(Program.query_clause (Clause(emit_relation,
+my_print (Program.query_clause (Clause(switch_has_ports_relation, [Variable("X"); Variable("Y")], [])) out_ch in_ch);;
+my_print (Program.query_clause (Clause(emit_relation,
 	[Constant("1");
 	Constant("2");
 	Constant("3");
