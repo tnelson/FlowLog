@@ -57,10 +57,10 @@ let clause_to_string (cl : clause) : string =
 	| Clause(rel, args, body) -> (relation_name rel) ^ "(" ^ (list_to_string args term_to_string) ^ ") :- " ^
 		(list_to_string body literal_to_string);;
 
-let empty_body (cl : clause) : bool =
+(*let empty_body (cl : clause) : bool =
 	match cl with
 	| Clause(_, _, []) -> true;
-	| _ -> false;;
+	| _ -> false;;*)
 
 let get_atom (lit : literal) : atom =
 	match lit with
@@ -94,6 +94,14 @@ let assert_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): (te
 	else let _ = Xsb.send_assert assertion out_ch in_ch in []) in
 	List.map (fun (l : string list) -> List.map (fun (s : string) -> Constant(s)) l) answer;;
 
+let retract_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): (term list) list =
+	let assertion = "retract((" ^ (clause_to_string cl) ^ "))." in
+	(*let _ = print_endline output in*)
+	let num_vars = List.length (get_vars cl) in
+	let answer = (if num_vars > 0 then Xsb.send_query assertion (List.length (get_vars cl)) out_ch in_ch
+	else let _ = Xsb.send_assert assertion out_ch in_ch in []) in
+	List.map (fun (l : string list) -> List.map (fun (s : string) -> Constant(s)) l) answer;;
+
 let query_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): (term list) list =
 	let assertion = (clause_to_string cl) ^ "." in
 	(*let _ = print_endline output in*)
@@ -118,17 +126,31 @@ let start_program (prgm : program) (out_ch : out_channel) (in_ch : in_channel) :
 	| Program(relations, emit) -> let out = List.fold_right (fun rel acc -> (assert_relation rel out_ch in_ch) @ acc) relations [] in
 		out @ (assert_relation emit out_ch in_ch);;
 
+let rec drop (l : 'a list) (n : int) : 'a list = 
+	if n <= 0 then l else
+	match l with
+	| [] -> [];
+	| h :: t -> drop t (n - 1);;
 
-(*let respond_to_packet (prgm : program) (pkt : term list) : (string list) list =
+(* this isn't quite right yet *)
+let respond_to_packet (prgm : program) (pkt : term list) (out_ch : out_channel) (in_ch : in_channel) : (term list) list =
 	match prgm with
 	| Program(relations, emit) ->
-		let _ = List.fold_right (fun (rel : relation) (acc : string) ->
+		let _ = List.iter (fun rel ->
 			match rel with
-			| Relation(_, args, _, plus, minus) ->
-				let to_add = match plus with
+			| Relation(_, _, _, option_plus, option_minus) ->
+				let to_assert = (match option_plus with
 				| None -> [];
-				| Some(p) -> 
-		) relations [] in *)
+				| Some(plus) -> match plus with | Relation(_, args, _, _, _) -> 
+					query_relation plus (pkt @ (drop args (List.length pkt))) out_ch in_ch;) in
+				let to_retract = (match option_minus with
+				| None -> [];
+				| Some(minus) -> match minus with | Relation(_, args, _, _, _) -> 
+					query_relation minus (pkt @ (drop args (List.length pkt))) out_ch in_ch;) in
+				let _ = List.iter (fun args -> let _ = assert_clause (Clause(rel, args, [])) out_ch in_ch in ()) to_assert in
+				List.iter (fun args -> let _ = retract_clause (Clause(rel, args, [])) out_ch in_ch in ()) to_retract;) relations in
+		match emit with
+		| Relation(_, args, _, _, _) -> query_relation emit (pkt @ (drop args (List.length pkt))) out_ch in_ch;; 
 	
 
 end
@@ -223,6 +245,17 @@ my_print (Program.query_clause (Clause(emit_relation,
 	Variable("NwDst2");
 	Variable("NwProto2")
 	], [])) out_ch in_ch);;
+
+(*
+my_print (Program.respond_to_packet mac_learning_program
+	[Constant("1");
+	Constant("2");
+	Constant("3");
+	Constant("4");
+	Constant("5");
+	Constant("6");
+	Constant("7");
+	Constant("8")] out_ch in_ch);; *)
 
 Xsb.halt_xsb out_ch;;
 
