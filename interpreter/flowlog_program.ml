@@ -91,7 +91,7 @@ let get_vars (cl : clause) : term list =
 		(List.fold_right add_unique_var args []);;
 
 let send_clause (cl : clause) (assertion : string) (out_ch : out_channel) (in_ch : in_channel) : (term list) list =
-	let _ = print_endline assertion in
+	(*let _ = print_endline assertion in*)
 	let num_vars = List.length (get_vars cl) in
 	let answer = (if num_vars > 0 then Xsb.send_query assertion (List.length (get_vars cl)) out_ch in_ch
 	else let _ = Xsb.send_assert assertion out_ch in_ch in []) in
@@ -113,9 +113,7 @@ let assert_relation (rel : relation) (out_ch : out_channel) (in_ch : in_channel)
 	| Relation(_, _, clauses, _, _) -> List.fold_right (fun cls acc -> (assert_clause cls out_ch in_ch) @ acc) clauses [];;
 
 let query_relation (rel : relation) (args : term list) (out_ch : out_channel) (in_ch : in_channel) : (term list) list =
-	let ans = query_clause (Clause(rel, args, [])) out_ch in_ch in
-	let _ = print_term_list ans in
-	ans;;
+	query_clause (Clause(rel, args, [])) out_ch in_ch;;
 
 let start_program (prgm : program) (out_ch : out_channel) (in_ch : in_channel) : (term list) list = 
 	match prgm with
@@ -248,7 +246,7 @@ print_term_list (Program.query_clause (Clause(emit_relation,
 	Constant("7");
 	Constant("8")] @ learned_vars), [])) out_ch in_ch);;*)
 
-Program.respond_to_packet mac_learning_program
+print_term_list(Program.respond_to_packet mac_learning_program
 	[Constant("1");
 	Constant("2");
 	Constant("3");
@@ -256,9 +254,9 @@ Program.respond_to_packet mac_learning_program
 	Constant("5");
 	Constant("6");
 	Constant("7");
-	Constant("8")] out_ch in_ch;;
+	Constant("8")] out_ch in_ch);;
 
-Program.respond_to_packet mac_learning_program
+print_term_list(Program.respond_to_packet mac_learning_program
 	[Constant("1");
 	Constant("3");
 	Constant("4");
@@ -266,7 +264,9 @@ Program.respond_to_packet mac_learning_program
 	Constant("5");
 	Constant("6");
 	Constant("7");
-	Constant("8")] out_ch in_ch;;
+	Constant("8")] out_ch in_ch);;
+
+print_term_list(Program.query_relation learned_relation [Variable("X"); Variable("Y"); Variable("Z")] out_ch in_ch);;
 
 Xsb.halt_xsb out_ch;;
 
