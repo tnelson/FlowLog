@@ -12,7 +12,7 @@ module Program = struct
 type term = Constant of string | Variable of string;;
 
 (* Things like A = B or R(A, B, C) *)
-type atom = Equals of term * term | Apply of relation * term list | Bool of string
+type atom = Equals of term * term | Apply of relation * term list | Bool of bool
 and
 (* the and is for mutually recursive types *)
 (* Atoms and negations of atoms *)
@@ -27,14 +27,14 @@ and
 (* list of non-emit relations, emit relation*)
 type program = Program of relation list * relation;;
 
-let print_term_list (l : (term list) list) : unit =
-	let mapped = List.map (fun sublist -> List.map (fun t -> match t with | Constant(s) -> s; | Variable(s) -> s;) sublist) l in
-	print_endline (Xsb.lol_to_string mapped);;
-
 let term_to_string (t : term) : string = 
 	match t with
 	| Constant(c) -> c; 
 	| Variable(v) -> v;; (* v must be upper case *)
+
+let print_term_list (l : (term list) list) : unit =
+	let mapped = List.map (fun sublist -> List.map term_to_string sublist) l in
+	print_endline (Xsb.lol_to_string mapped);;
 
 let relation_name (rel : relation) : string =
 	match rel with 
@@ -48,7 +48,7 @@ let atom_to_string (a : atom) : string =
 	match a with
 	| Equals(t1, t2) -> term_to_string(t1) ^ " = " ^ term_to_string(t2);
 	| Apply(rel, args) -> (relation_name rel) ^ "(" ^ (list_to_string args term_to_string) ^ ")";
-	| Bool(str) -> str;;
+	| Bool(b) -> string_of_bool b;;
 
 let literal_to_string (l : literal) : string = 
 	match l with
@@ -86,7 +86,7 @@ let get_vars (cl : clause) : term list =
 			match get_atom(lit) with
 			| Equals(t1, t2) -> add_unique_var t1 (add_unique_var t2 acc);
 			| Apply(_, tl) -> List.fold_right add_unique_var tl acc;
-			| Bool(str) -> acc;)
+			| Bool(b) -> acc;)
 		body
 		(List.fold_right add_unique_var args []);;
 
@@ -109,7 +109,7 @@ let query_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): (ter
 
 let assert_relation (rel : relation) (out_ch : out_channel) (in_ch : in_channel) : (term list) list =
 	match rel with
-	| Relation(_, args, [], _, _) -> assert_clause (Clause(rel, args, [Pos(Bool("false"))])) out_ch in_ch;
+	| Relation(_, args, [], _, _) -> assert_clause (Clause(rel, args, [Pos(Bool(false))])) out_ch in_ch;
 	| Relation(_, _, clauses, _, _) -> List.fold_right (fun cls acc -> (assert_clause cls out_ch in_ch) @ acc) clauses [];;
 
 let query_relation (rel : relation) (args : term list) (out_ch : out_channel) (in_ch : in_channel) : (term list) list =
