@@ -153,8 +153,8 @@ let pkt_to_term_list (sw : switchId) (pk : packetIn) : term list =
 	let pkt_payload = parse_payload pk.input_payload in
 	List.map (function x -> Constant(x)) [Int64.to_string sw;
 	string_of_int pk.port;
-	string_of_mac pkt_payload.dlSrc;
-	string_of_mac pkt_payload.dlDst;
+	string_of_mac pkt_payload.Packet.dlSrc;
+	string_of_mac pkt_payload.Packet.dlDst;
 	string_of_dlTyp (dlTyp pkt_payload);
 	string_of_ip (nwSrc pkt_payload);
 	string_of_nwProto (nwProto pkt_payload)];;
@@ -170,10 +170,10 @@ let term_list_to_pkt (tl : term list) (pk : packetIn) : switchId * packetOut =
 	(*let nwProto = int_of_string (term_to_string (List.nth tl 7)) in*)
 	let in_packet = parse_payload pk.input_payload in
 	let actions_list = ref [Output(PhysicalPort(locPt))] in
-		if dlSrc <> in_packet.dlSrc then actions_list := SetDlSrc(dlSrc) :: !actions_list;
-		if dlDst <> in_packet.dlDst then actions_list := SetDlDst(dlDst) :: !actions_list;
-		if nwSrc <> in_packet.nwSrc then actions_list := SetNwSrc(nwSrc) :: !actions_list;
-		if nwDst <> in_packet.nwDst then actions_list := SetNwDst(nwDst) :: !actions_list;
+		if dlSrc <> in_packet.Packet.dlSrc then actions_list := SetDlSrc(dlSrc) :: !actions_list;
+		if dlDst <> in_packet.Packet.dlDst then actions_list := SetDlDst(dlDst) :: !actions_list;
+		if nwSrc <> Packet.nwSrc in_packet then actions_list := SetNwSrc(nwSrc) :: !actions_list;
+		if nwDst <> Packet.nwDst in_packet then actions_list := SetNwDst(nwDst) :: !actions_list;
 (* 	let out_payload = {dlSrc = input_payload.dlSrc;
 		dlDst = input_payload.dlDst;
 		dlVlan = input_payload.dlVlan;
@@ -187,11 +187,12 @@ let term_list_to_pkt (tl : term list) (pk : packetIn) : switchId * packetOut =
 	(locSw, out_packet);;
 	
 
-let respond_to_packet (prgm : program) (sw : switchId) (xid : xid) (pk : packetIn) (out_ch : out_channel) (in_ch : in_channel) : switchId * xid * packetOut = 
+let respond_to_packet (prgm : program) (sw : switchId) (xid : xid) (pk : packetIn) (out_ch : out_channel) (in_ch : in_channel) : (switchId * xid * packetOut) list= 
 	let in_tl = pkt_to_term_list sw pk in
-	let out_tl = respond_to_packet_desugared prgm in_tl out_ch in_ch in
-	let out_sw, out_pk = term_list_to_pkt out_tl pk in 
-	(out_sw, xid, out_pk);;
+	let out_tll = respond_to_packet_desugared prgm in_tl out_ch in_ch in
+	List.fold_right (fun tl acc -> let out_sw, out_pk = (term_list_to_pkt tl pk) in 
+		((out_sw, xid, out_pk) :: acc)) out_tll [];;
+
 end
 
 (* encoding of mac_learning *)
@@ -255,43 +256,11 @@ let mac_learning_program = Program([plus_learned_relation; minus_learned_relatio
 
 (* try out the functions *)
 
-(*print_endline(clause_to_string switch_1);;*)
-
 let out_ch, in_ch = Xsb.start_xsb ();;
 (* run the program *)
 Program.start_program mac_learning_program out_ch in_ch;;
 
-(*
-print_term_list (Program.query_clause (Clause(switch_has_ports_relation, [Variable("X"); Variable("Y")], [])) out_ch in_ch);;
-print_term_list (Program.query_clause (Clause(emit_relation,
-	[Constant("1");
-	Constant("2");
-	Constant("3");
-	Constant("4");
-	Constant("5");
-	Constant("6");
-	Constant("7");
-	Constant("8");
-	Variable("LocSw2");
-	Variable("LocPt2");
-	Variable("DlSrc2");
-	Variable("DlDst2");
-	Variable("DlTyp2");
-	Variable("NwSrc2");
-	Variable("NwDst2");
-	Variable("NwProto2")
-	], [])) out_ch in_ch);;*)
-
-(*print_term_list (Program.query_clause (Clause(minus_learned_relation, ([Constant("1");
-	Constant("2");
-	Constant("3");
-	Constant("4");
-	Constant("5");
-	Constant("6");
-	Constant("7");
-	Constant("8")] @ learned_vars), [])) out_ch in_ch);;*)
-
-print_term_list(Program.respond_to_packet mac_learning_program
+print_term_list(Program.respond_to_packet_desugared mac_learning_program
 	[Constant("1");
 	Constant("2");
 	Constant("3");
@@ -301,7 +270,7 @@ print_term_list(Program.respond_to_packet mac_learning_program
 	Constant("7");
 	Constant("8")] out_ch in_ch);;
 
-print_term_list(Program.respond_to_packet mac_learning_program
+print_term_list(Program.respond_to_packet_desugared mac_learning_program
 	[Constant("1");
 	Constant("3");
 	Constant("4");
@@ -314,108 +283,4 @@ print_term_list(Program.respond_to_packet mac_learning_program
 print_term_list(Program.query_relation learned_relation [Variable("X"); Variable("Y"); Variable("Z")] out_ch in_ch);;
 
 Xsb.halt_xsb out_ch;;
-
-(* these work! *)
-(*
-
-print_endline (list_to_string (Program.get_vars (Clause(emit_relation,
-	[Constant("1");
-	Constant("2");
-	Constant("3");
-	Constant("4");
-	Constant("5");
-	Constant("6");
-	Constant("7");
-	Constant("8");
-	Variable("LocSw2");
-	Variable("LocPt2");
-	Variable("DlSrc2");
-	Variable("DlDst2");
-	Variable("DlTyp2");
-	Variable("NwSrc2");
-	Variable("NwDst2");
-	Variable("NwProto2")
-	], []))) term_to_string);;
-
-
-print_endline(Xsb.lol_to_string (Xsb.send_query "switchHasPorts(X, Y)." 2 out_ch in_ch));;
-flush Pervasives.stdout;;
-*)
-(*
-print_endline(Program.assert_clause switch_2 out_ch in_ch);;
-
-print_endline(Xsb.lol_to_string (Xsb.send_query "switchHasPorts(X, Y)." 2 out_ch in_ch));;
-flush Pervasives.stdout;;
-
-print_endline(Program.assert_clause switch_3 out_ch in_ch);;
-
-print_endline(Xsb.lol_to_string (Xsb.send_query "switchHasPorts(X, Y)." 2 out_ch in_ch));;
-flush Pervasives.stdout;;
-
-print_endline(Program.assert_clause plus_learned out_ch in_ch);;
-
-print_endline(Program.assert_clause emit_2 out_ch in_ch);;
-(* THIS doesn't work because the Any variable gets assigned something so the semicolons are messed up. *)
-
-*)
-
-
-
-
-
-
-
-
-(*let packet_list (pkt : packet) : int list =
-	match pkt with
-	Packet(locSw, locPt, dlSrc, dlDst, dlTyp, nwSrc, nwDst, nwProto) ->
-	[locSw; locPt; dlSrc; dlDst; dlTyp; nwSrc; nwDst; nwProto];;
-
-
-
-
-
-let assert_relation (rel : relation) (out_ch : out_channel) (in_ch : in_channel) : string = 
-	match rel with
-	Relation(name, args, clist, plus, minus) -> List.fold_right (fun cls st -> (assert_clause cls out_ch in_ch) ^ st) clist "";;
-
-let start_program (prgm : program) (out_ch : out_channel) (in_ch : in_channel) : string = 
-	match prgm with
-	Program(rl) -> List.fold_right (fun rel st -> (assert_relation rel out_ch in_ch) ^ st) rl "";;
-
-let rec drop (l : 'a list) (n : int) : 'a list = 
-	if n <= 0 then l else
-	match l with
-	| [] -> [];
-	| h :: t -> drop t (n - 1);;
-
-let query_relation (rel : relation) (pkt : packet) (out_ch : out_channel) (in_ch : in_channel) : (string list) list =
-	match rel with
-	Relation(name, args, clist, plus, minus) -> let query_string = name ^ "(" ^ (list_to_string (packet_list pkt) string_of_int) ^ 
-		(if (List.length args = 8) then "" else "," ^ (list_to_string  (drop args 8) (fun x -> x))) ^ ")." in
-		Xsb.send_query query_string (List.length args - 8) out_ch in_ch;;
-
-(*let respond_packet (prgm : program) (pkt : packet) : packet list = 
-	match prgm with
-	Program(rl) -> *)
-end
-
-(* encoding of mac_learning *)
-
-
-(* print_endline(Program.start_program mac_learning_program out_channel in_ch);; *)
-
-(* use ounit for testing? *)
-(*let test_fixture = "Program" >:::
-[
-	"add" >:: (fun () ->
-		assert_equal 4 (add 2 2);
-	);
-	...
-]
-
-let _ = run_test_tt -verbose:true test_fixture*)
-
-*)
-
 
