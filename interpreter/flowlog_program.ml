@@ -4,6 +4,8 @@
 
 open Unix;;
 open Xsb;;
+open Packet;;
+open OpenFlow0x01_Core;;
 (*open OUnit;;*)
 
 module Program = struct
@@ -127,7 +129,7 @@ let rec drop (l : 'a list) (n : int) : 'a list =
 	| h :: t -> drop t (n - 1);;
 
 (* this isn't quite right yet *)
-let respond_to_packet (prgm : program) (pkt : term list) (out_ch : out_channel) (in_ch : in_channel) : (term list) list =
+let respond_to_packet_desugared (prgm : program) (pkt : term list) (out_ch : out_channel) (in_ch : in_channel) : (term list) list =
 	match prgm with
 	| Program(relations, emit) ->
 		let _ = List.iter (fun rel ->
@@ -147,6 +149,49 @@ let respond_to_packet (prgm : program) (pkt : term list) (out_ch : out_channel) 
 		| Relation(_, args, _, _, _) -> query_relation emit (pkt @ (drop args (List.length pkt))) out_ch in_ch;; 
 	
 
+let pkt_to_term_list (sw : switchId) (pk : packetIn) : term list = 
+	let pkt_payload = parse_payload pk.input_payload in
+	List.map (function x -> Constant(x)) [Int64.to_string sw;
+	string_of_int pk.port;
+	string_of_mac pkt_payload.dlSrc;
+	string_of_mac pkt_payload.dlDst;
+	string_of_dlTyp (dlTyp pkt_payload);
+	string_of_ip (nwSrc pkt_payload);
+	string_of_nwProto (nwProto pkt_payload)];;
+
+let term_list_to_pkt (tl : term list) (pk : packetIn) : switchId * packetOut = 
+	let locSw = Int64.of_int (int_of_string (term_to_string (List.nth tl 0))) in
+	let locPt = int_of_string (term_to_string (List.nth tl 1)) in
+	let dlSrc = Int64.of_int (int_of_string (term_to_string (List.nth tl 2))) in
+	let dlDst = Int64.of_int (int_of_string (term_to_string (List.nth tl 3))) in
+	(*let dlTyp = int_of_string (term_to_string (List.nth tl 4)) in*)
+	let nwSrc = Int32.of_int (int_of_string (term_to_string (List.nth tl 5))) in
+	let nwDst = Int32.of_int (int_of_string (term_to_string (List.nth tl 6))) in
+	(*let nwProto = int_of_string (term_to_string (List.nth tl 7)) in*)
+	let in_packet = parse_payload pk.input_payload in
+	let actions_list = ref [Output(PhysicalPort(locPt))] in
+		if dlSrc <> in_packet.dlSrc then actions_list := SetDlSrc(dlSrc) :: !actions_list;
+		if dlDst <> in_packet.dlDst then actions_list := SetDlDst(dlDst) :: !actions_list;
+		if nwSrc <> in_packet.nwSrc then actions_list := SetNwSrc(nwSrc) :: !actions_list;
+		if nwDst <> in_packet.nwDst then actions_list := SetNwDst(nwDst) :: !actions_list;
+(* 	let out_payload = {dlSrc = input_payload.dlSrc;
+		dlDst = input_payload.dlDst;
+		dlVlan = input_payload.dlVlan;
+		dlVlanPcp = input_payload.dlVlanPcp;
+		nw = input_payload.nw} in
+	let _ = setDlSrc out_payload dlSrc in
+	let _ = setDlDst out_payload dlDst in
+	let _ = setNwSrc out_payload nwSrc in
+	let _ = setNwDst out_payload nwDst in*)
+	let out_packet = {output_payload = pk.input_payload; port_id = None; apply_actions = !actions_list} in
+	(locSw, out_packet);;
+	
+
+let respond_to_packet (prgm : program) (sw : switchId) (xid : xid) (pk : packetIn) (out_ch : out_channel) (in_ch : in_channel) : switchId * xid * packetOut = 
+	let in_tl = pkt_to_term_list sw pk in
+	let out_tl = respond_to_packet_desugared prgm in_tl out_ch in_ch in
+	let out_sw, out_pk = term_list_to_pkt out_tl pk in 
+	(out_sw, xid, out_pk);;
 end
 
 (* encoding of mac_learning *)
