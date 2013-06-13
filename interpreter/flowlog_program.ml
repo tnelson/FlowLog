@@ -151,15 +151,18 @@ let respond_to_packet_desugared (prgm : program) (pkt : term list) (out_ch : out
 
 let pkt_to_term_list (sw : switchId) (pk : packetIn) : term list = 
 	let pkt_payload = parse_payload pk.input_payload in
-	List.map (function x -> Constant(x)) [Int64.to_string sw;
+	let ans = List.map (function x -> Constant(x)) [Int64.to_string sw;
 	string_of_int pk.port;
 	string_of_mac pkt_payload.Packet.dlSrc;
 	string_of_mac pkt_payload.Packet.dlDst;
 	string_of_dlTyp (dlTyp pkt_payload);
 	string_of_ip (nwSrc pkt_payload);
-	string_of_nwProto (nwProto pkt_payload)];;
+	string_of_nwProto (nwProto pkt_payload)] in
+	let _ = print_endline ("pkt to term list: " ^ (list_to_string ans term_to_string)) in
+	ans;;
 
-let term_list_to_pkt (tl : term list) (pk : packetIn) : switchId * packetOut = 
+let term_list_to_pkt (tl : term list) (pk : packetIn) : switchId * packetOut =
+	let _ = print_endline ("term list to pkt: " ^ (list_to_string tl term_to_string)) in
 	let locSw = Int64.of_int (int_of_string (term_to_string (List.nth tl 0))) in
 	let locPt = int_of_string (term_to_string (List.nth tl 1)) in
 	let dlSrc = Int64.of_int (int_of_string (term_to_string (List.nth tl 2))) in
@@ -189,18 +192,20 @@ let term_list_to_pkt (tl : term list) (pk : packetIn) : switchId * packetOut =
 
 let respond_to_packet (prgm : program) (sw : switchId) (xid : xid) (pk : packetIn) (out_ch : out_channel) (in_ch : in_channel) : (switchId * xid * packetOut) list= 
 	let in_tl = pkt_to_term_list sw pk in
+	let _ = print_endline "before respond to packet desugared" in
 	let out_tll = respond_to_packet_desugared prgm in_tl out_ch in_ch in
+	let _ = print_endline "after respond to packet desugared" in
 	List.fold_right (fun tl acc -> let out_sw, out_pk = (term_list_to_pkt tl pk) in 
 		((out_sw, xid, out_pk) :: acc)) out_tll [];;
 
 end
 
-(* encoding of mac_learning *)
-open Program;;
+open Program
+module Mac = struct
 
 let packet_vars = List.map (fun (str : string) -> Variable(str)) ["LocSw"; "LocPt"; "DlSrc"; "DlDst"; "DlTyp"; "NwSrc"; "NwDst"; "NwProto"];;
 let packet_vars_2 = List.map (fun (str : string) -> Variable(str)) ["LocSw2"; "LocPt2"; "DlSrc2"; "DlDst2"; "DlTyp2"; "NwSrc2"; "NwDst2"; "NwProto2"];;
-let learned_vars = [Variable("Sw"); Variable("Pt"); Variable("Mac")]
+let learned_vars = [Variable("Sw"); Variable("Pt"); Variable("Mac")];;
 
 let rec plus_learned = Clause(plus_learned_relation, packet_vars @ learned_vars,
 	[Pos(Equals(Variable("LocSw"), Variable("Sw")));
@@ -253,11 +258,13 @@ let rec emit_1 = Clause(emit_relation, packet_vars @ packet_vars_2,
 	switch_has_ports_relation = Relation("switchHasPorts", [Variable("Sw"); Variable("Pt")], [switch_1; switch_2; switch_3], None, None);;
 
 let mac_learning_program = Program([plus_learned_relation; minus_learned_relation; learned_relation; switch_has_ports_relation], emit_relation);;
+end
 
 (* try out the functions *)
 
-let out_ch, in_ch = Xsb.start_xsb ();;
-(* run the program *)
+(*open Mac;;*)
+
+(*let out_ch, in_ch = Xsb.start_xsb ();;
 Program.start_program mac_learning_program out_ch in_ch;;
 
 print_term_list(Program.respond_to_packet_desugared mac_learning_program
@@ -282,5 +289,64 @@ print_term_list(Program.respond_to_packet_desugared mac_learning_program
 
 print_term_list(Program.query_relation learned_relation [Variable("X"); Variable("Y"); Variable("Z")] out_ch in_ch);;
 
-Xsb.halt_xsb out_ch;;
+Xsb.halt_xsb out_ch;;*)
 
+
+open OxPlatform;;
+open OpenFlow0x01_Core;;
+module OxController = struct
+include OxStart.DefaultTutorialHandlers
+
+let ref_out_ch = ref None;;
+let ref_in_ch = ref None;;
+
+let get_ch () : out_channel * in_channel = match !ref_out_ch with
+| None -> let out_ch, in_ch = Xsb.start_xsb () in 
+let _ = ref_out_ch := Some(out_ch) in
+let _ = ref_in_ch := Some(in_ch) in
+let _ = Program.start_program Mac.mac_learning_program out_ch in_ch in
+(out_ch, in_ch);
+| Some(out_ch) -> match !ref_in_ch with
+	|Some(in_ch) -> (out_ch, in_ch);
+	| _ -> raise (Failure "ref_out_ch is some but ref_in_ch is none");;
+
+(*let out_ch, in_ch = Xsb.start_xsb ();;
+start_program mac_learning_program out_ch in_ch;;*)
+
+let switch_connected (sw : switchId) : unit =
+    Printf.printf "Switch %Ld connected.\n%!" sw
+
+
+let packet_in (sw : switchId) (xid : xid) (pk : packetIn) : unit =
+    Printf.printf "%s\n%!" (packetIn_to_string pk);
+  	let out_ch, in_ch = get_ch () in
+    let output = respond_to_packet Mac.mac_learning_program sw xid pk out_ch in_ch in
+    List.iter (fun triple -> match triple with (swOut, xOut, pkOut) -> send_packet_out swOut xOut pkOut) output;;
+end
+
+module Controller = OxStart.Make (OxController);;
+
+(*open OxPlatform
+open OpenFlow0x01_Core
+
+module MyApplication = struct
+
+  include OxStart.DefaultTutorialHandlers
+
+  let switch_connected (sw : switchId) : unit =
+    Printf.printf "Switch %Ld connected.\n%!" sw
+
+  (* [FILL] This packet_in function sends all packets out of port 1.
+     Modify it to behave like a repeater: send the packet out of all
+     ports, except its input port. *)
+  let packet_in (sw : switchId) (xid : xid) (pk : packetIn) : unit =
+    Printf.printf "%s\n%!" (packetIn_to_string pk);                                                                                                                               
+    send_packet_out sw 0l
+      { output_payload = pk.input_payload;                                                                                                                                        
+        port_id = None;                                                                                                                                                           
+        apply_actions = [Output AllPorts] (* <---- this was the edit *)
+      }
+
+end
+
+module Controller = OxStart.Make (MyApplication)*)
