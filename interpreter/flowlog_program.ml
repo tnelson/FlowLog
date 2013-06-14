@@ -44,7 +44,8 @@ let relation_name (rel : relation) : string =
 
 let list_to_string (l : 'a list) (conversion : 'a -> string) : string = 
 	let ans = List.fold_right (fun x acc -> (conversion x) ^ "," ^ acc) l "" in
-	String.sub ans 0 (String.length ans - 1);;
+	(*let _ = print_endline ("list_to_string: " ^ ans) in*)
+	if ans = "" then ans else String.sub ans 0 (String.length ans - 1);;
 
 let atom_to_string (a : atom) : string =
 	match a with
@@ -115,7 +116,7 @@ let assert_relation (rel : relation) (out_ch : out_channel) (in_ch : in_channel)
 	| Relation(_, _, clauses, _, _) -> List.fold_right (fun cls acc -> (assert_clause cls out_ch in_ch) @ acc) clauses [];;
 
 let query_relation (rel : relation) (args : term list) (out_ch : out_channel) (in_ch : in_channel) : (term list) list =
-	let _ = print_endline ("query relation: " ^ (relation_name rel) ^ (list_to_string args term_to_string)) in
+(*	let _ = print_endline ("query relation: " ^ (relation_name rel) ^ (list_to_string args term_to_string)) in *)
 	let ans = query_clause (Clause(rel, args, [])) out_ch in_ch in
 	let _ = print_endline (list_to_string ans (fun x -> list_to_string x term_to_string)) in
 	ans;;
@@ -150,20 +151,22 @@ let respond_to_packet_desugared (prgm : program) (pkt : term list) (out_ch : out
 				List.iter (fun args -> let _ = retract_clause (Clause(rel, args, [])) out_ch in_ch in ()) to_retract;) relations in
 		match emit with
 		| Relation(_, args, _, _, _) -> query_relation emit (pkt @ (drop args (List.length pkt))) out_ch in_ch;; 
-	
 
-let replace (r : char) (w : char) (st : string): string = 
-	String.map (fun c -> if (c = r) then w else c) st;;
+let rec replace (r : string) (w : string) (st : string) : string =
+	if (String.length st < String.length r || String.length st = 0) then st else
+		if String.sub st 0 (String.length r) = r then w ^ (replace r w (String.sub st (String.length r) (String.length st - String.length r))) else
+			(String.sub st 0 1) ^ (replace r w (String.sub st 1 (String.length st - 1)));;
 
 let pkt_to_term_list (sw : switchId) (pk : packetIn) : term list = 
 	let pkt_payload = parse_payload pk.input_payload in
 	let ans = List.map (function x -> Constant(x)) [Int64.to_string sw;
 	string_of_int pk.port;
-	string_of_mac pkt_payload.Packet.dlSrc;
-	string_of_mac pkt_payload.Packet.dlDst;
-	string_of_dlTyp (dlTyp pkt_payload);
-	replace '.' '-' (string_of_ip (nwSrc pkt_payload));
-	string_of_nwProto (nwProto pkt_payload)] in
+	Int64.to_string pkt_payload.Packet.dlSrc;
+	Int64.to_string pkt_payload.Packet.dlDst;
+	string_of_int (dlTyp pkt_payload);
+	Int32.to_string (nwSrc pkt_payload);
+	Int32.to_string (nwDst pkt_payload);
+	string_of_int (nwProto pkt_payload)] in
 	let _ = print_endline ("pkt to term list: " ^ (list_to_string ans term_to_string)) in
 	ans;;
 
@@ -171,10 +174,12 @@ let term_list_to_pkt (tl : term list) (pk : packetIn) : switchId * packetOut =
 	let _ = print_endline ("term list to pkt: " ^ (list_to_string tl term_to_string)) in
 	let locSw = Int64.of_int (int_of_string (term_to_string (List.nth tl 0))) in
 	let locPt = int_of_string (term_to_string (List.nth tl 1)) in
-	let dlSrc = Int64.of_int (int_of_string (term_to_string (List.nth tl 2))) in
-	let dlDst = Int64.of_int (int_of_string (term_to_string (List.nth tl 3))) in
+	let _ = print_endline ("before dlsrc: " ^ (term_to_string (List.nth tl 2))) in
+	let dlSrc = Int64.of_string (term_to_string (List.nth tl 2)) in
+	let _ = print_endline "after dlsrc" in
+	let dlDst = Int64.of_string (term_to_string (List.nth tl 3)) in
 	(*let dlTyp = int_of_string (term_to_string (List.nth tl 4)) in*)
-	let nwSrc = Int32.of_int (int_of_string (replace '-' '.' (term_to_string (List.nth tl 5)))) in
+	let nwSrc = Int32.of_int (int_of_string (term_to_string (List.nth tl 5))) in
 	let nwDst = Int32.of_int (int_of_string (term_to_string (List.nth tl 6))) in
 	(*let nwProto = int_of_string (term_to_string (List.nth tl 7)) in*)
 	let in_packet = parse_payload pk.input_payload in
@@ -328,6 +333,7 @@ let packet_in =
 	    Printf.printf "%s\n%!" (packetIn_to_string pk);
 	    let out_ch, in_ch = get_ch () in
 	    let output = respond_to_packet Mac.mac_learning_program sw xid pk out_ch in_ch in
+	    let _ = print_endline "respond_to_packet returned" in
     	List.iter (fun triple -> match triple with (swOut, xOut, pkOut) -> send_packet_out swOut xOut pkOut) output;;
 
 end
