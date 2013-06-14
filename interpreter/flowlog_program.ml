@@ -93,7 +93,7 @@ let get_vars (cl : clause) : term list =
 		(List.fold_right add_unique_var args []);;
 
 let send_clause (cl : clause) (assertion : string) (out_ch : out_channel) (in_ch : in_channel) : (term list) list =
-	(*let _ = print_endline assertion in*)
+	let _ = print_endline assertion in
 	let num_vars = List.length (get_vars cl) in
 	let answer = (if num_vars > 0 then Xsb.send_query assertion (List.length (get_vars cl)) out_ch in_ch
 	else let _ = Xsb.send_assert assertion out_ch in_ch in []) in
@@ -115,7 +115,10 @@ let assert_relation (rel : relation) (out_ch : out_channel) (in_ch : in_channel)
 	| Relation(_, _, clauses, _, _) -> List.fold_right (fun cls acc -> (assert_clause cls out_ch in_ch) @ acc) clauses [];;
 
 let query_relation (rel : relation) (args : term list) (out_ch : out_channel) (in_ch : in_channel) : (term list) list =
-	query_clause (Clause(rel, args, [])) out_ch in_ch;;
+	let _ = print_endline ("query relation: " ^ (relation_name rel) ^ (list_to_string args term_to_string)) in
+	let ans = query_clause (Clause(rel, args, [])) out_ch in_ch in
+	let _ = print_endline (list_to_string ans (fun x -> list_to_string x term_to_string)) in
+	ans;;
 
 let start_program (prgm : program) (out_ch : out_channel) (in_ch : in_channel) : (term list) list = 
 	match prgm with
@@ -297,18 +300,6 @@ open OpenFlow0x01_Core;;
 module OxController = struct
 include OxStart.DefaultTutorialHandlers
 
-let ref_out_ch = ref None;;
-let ref_in_ch = ref None;;
-
-let get_ch () : out_channel * in_channel = match !ref_out_ch with
-| None -> let out_ch, in_ch = Xsb.start_xsb () in 
-let _ = ref_out_ch := Some(out_ch) in
-let _ = ref_in_ch := Some(in_ch) in
-let _ = Program.start_program Mac.mac_learning_program out_ch in_ch in
-(out_ch, in_ch);
-| Some(out_ch) -> match !ref_in_ch with
-	|Some(in_ch) -> (out_ch, in_ch);
-	| _ -> raise (Failure "ref_out_ch is some but ref_in_ch is none");;
 
 (*let out_ch, in_ch = Xsb.start_xsb ();;
 start_program mac_learning_program out_ch in_ch;;*)
@@ -317,11 +308,25 @@ let switch_connected (sw : switchId) : unit =
     Printf.printf "Switch %Ld connected.\n%!" sw
 
 
-let packet_in (sw : switchId) (xid : xid) (pk : packetIn) : unit =
-    Printf.printf "%s\n%!" (packetIn_to_string pk);
-  	let out_ch, in_ch = get_ch () in
-    let output = respond_to_packet Mac.mac_learning_program sw xid pk out_ch in_ch in
-    List.iter (fun triple -> match triple with (swOut, xOut, pkOut) -> send_packet_out swOut xOut pkOut) output;;
+let packet_in = 
+	let ref_out_ch = ref None in
+	let ref_in_ch = ref None in
+	let get_ch = (fun () -> match !ref_out_ch with
+		| None -> let out_ch, in_ch = Xsb.start_xsb () in 
+			let _ = ref_out_ch := Some(out_ch) in
+			let _ = ref_in_ch := Some(in_ch) in
+			let _ = Program.start_program Mac.mac_learning_program out_ch in_ch in
+			let _ = print_endline "started program" in
+			(out_ch, in_ch);
+		| Some(out_ch) -> match !ref_in_ch with
+			|Some(in_ch) -> (out_ch, in_ch);
+			| _ -> raise (Failure "ref_out_ch is some but ref_in_ch is none")) in
+	fun (sw : switchId) (xid : xid) (pk : packetIn) ->
+	    Printf.printf "%s\n%!" (packetIn_to_string pk);
+	    let out_ch, in_ch = get_ch () in
+	    let output = respond_to_packet Mac.mac_learning_program sw xid pk out_ch in_ch in
+    	List.iter (fun triple -> match triple with (swOut, xOut, pkOut) -> send_packet_out swOut xOut pkOut) output;;
+
 end
 
 module Controller = OxStart.Make (OxController);;
