@@ -152,6 +152,9 @@ let respond_to_packet_desugared (prgm : program) (pkt : term list) (out_ch : out
 		| Relation(_, args, _, _, _) -> query_relation emit (pkt @ (drop args (List.length pkt))) out_ch in_ch;; 
 	
 
+let replace (r : char) (w : char) (st : string): string = 
+	String.map (fun c -> if (c = r) then w else c) st;;
+
 let pkt_to_term_list (sw : switchId) (pk : packetIn) : term list = 
 	let pkt_payload = parse_payload pk.input_payload in
 	let ans = List.map (function x -> Constant(x)) [Int64.to_string sw;
@@ -159,7 +162,7 @@ let pkt_to_term_list (sw : switchId) (pk : packetIn) : term list =
 	string_of_mac pkt_payload.Packet.dlSrc;
 	string_of_mac pkt_payload.Packet.dlDst;
 	string_of_dlTyp (dlTyp pkt_payload);
-	string_of_ip (nwSrc pkt_payload);
+	replace '.' '-' (string_of_ip (nwSrc pkt_payload));
 	string_of_nwProto (nwProto pkt_payload)] in
 	let _ = print_endline ("pkt to term list: " ^ (list_to_string ans term_to_string)) in
 	ans;;
@@ -171,7 +174,7 @@ let term_list_to_pkt (tl : term list) (pk : packetIn) : switchId * packetOut =
 	let dlSrc = Int64.of_int (int_of_string (term_to_string (List.nth tl 2))) in
 	let dlDst = Int64.of_int (int_of_string (term_to_string (List.nth tl 3))) in
 	(*let dlTyp = int_of_string (term_to_string (List.nth tl 4)) in*)
-	let nwSrc = Int32.of_int (int_of_string (term_to_string (List.nth tl 5))) in
+	let nwSrc = Int32.of_int (int_of_string (replace '-' '.' (term_to_string (List.nth tl 5)))) in
 	let nwDst = Int32.of_int (int_of_string (term_to_string (List.nth tl 6))) in
 	(*let nwProto = int_of_string (term_to_string (List.nth tl 7)) in*)
 	let in_packet = parse_payload pk.input_payload in
