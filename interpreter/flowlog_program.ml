@@ -5,6 +5,7 @@
 open Unix;;
 open Xsb;;
 open Packet;;
+open OxPlatform;;
 open OpenFlow0x01_Core;;
 (*open OUnit;;*)
 
@@ -171,7 +172,7 @@ let pkt_to_term_list (sw : switchId) (pk : packetIn) : term list =
 	ans;;
 
 let term_list_to_pkt (tl : term list) (pk : packetIn) : switchId * packetOut =
-	let _ = print_endline ("term list to pkt: " ^ (list_to_string tl term_to_string)) in
+(*	let _ = print_endline ("term list to pkt: " ^ (list_to_string tl term_to_string)) in
 	let locSw = Int64.of_int (int_of_string (term_to_string (List.nth tl 0))) in
 	let locPt = int_of_string (term_to_string (List.nth tl 1)) in
 	let _ = print_endline ("before dlsrc: " ^ (term_to_string (List.nth tl 2))) in
@@ -183,11 +184,12 @@ let term_list_to_pkt (tl : term list) (pk : packetIn) : switchId * packetOut =
 	let nwDst = Int32.of_int (int_of_string (term_to_string (List.nth tl 6))) in
 	(*let nwProto = int_of_string (term_to_string (List.nth tl 7)) in*)
 	let in_packet = parse_payload pk.input_payload in
+	let _ = print_endline ("sending out port " ^ (string_of_int locPt)) in
 	let actions_list = ref [Output(PhysicalPort(locPt))] in
-		if dlSrc <> in_packet.Packet.dlSrc then actions_list := SetDlSrc(dlSrc) :: !actions_list;
+		(*if dlSrc <> in_packet.Packet.dlSrc then actions_list := SetDlSrc(dlSrc) :: !actions_list;
 		if dlDst <> in_packet.Packet.dlDst then actions_list := SetDlDst(dlDst) :: !actions_list;
 		if nwSrc <> Packet.nwSrc in_packet then actions_list := SetNwSrc(nwSrc) :: !actions_list;
-		if nwDst <> Packet.nwDst in_packet then actions_list := SetNwDst(nwDst) :: !actions_list;
+		if nwDst <> Packet.nwDst in_packet then actions_list := SetNwDst(nwDst) :: !actions_list;*)
 (* 	let out_payload = {dlSrc = input_payload.dlSrc;
 		dlDst = input_payload.dlDst;
 		dlVlan = input_payload.dlVlan;
@@ -196,17 +198,20 @@ let term_list_to_pkt (tl : term list) (pk : packetIn) : switchId * packetOut =
 	let _ = setDlSrc out_payload dlSrc in
 	let _ = setDlDst out_payload dlDst in
 	let _ = setNwSrc out_payload nwSrc in
-	let _ = setNwDst out_payload nwDst in*)
-	let out_packet = {output_payload = pk.input_payload; port_id = None; apply_actions = !actions_list} in
+	let _ = setNwDst out_payload nwDst in*)*)
+	let locSw = Int64.of_int (int_of_string (term_to_string (List.nth tl 0))) in
+	let locPt = int_of_string (term_to_string (List.nth tl 1)) in
+	(*let _ = print_endline ("sent out port ")*)
+	let out_packet = {output_payload = pk.input_payload; port_id = None; apply_actions = [Output(PhysicalPort(locPt))]} in (* change to Output(AllPorts)) *)
 	(locSw, out_packet);;
 	
 
 let respond_to_packet (prgm : program) (sw : switchId) (xid : xid) (pk : packetIn) (out_ch : out_channel) (in_ch : in_channel) : (switchId * xid * packetOut) list= 
 	let in_tl = pkt_to_term_list sw pk in
-	let _ = print_endline "before respond to packet desugared" in
+	(*let _ = print_endline "before respond to packet desugared" in*)
 	let out_tll = respond_to_packet_desugared prgm in_tl out_ch in_ch in
-	let _ = print_endline "after respond to packet desugared" in
-	List.fold_right (fun tl acc -> let out_sw, out_pk = (term_list_to_pkt tl pk) in 
+	(*let _ = print_endline "after respond to packet desugared" in*)
+	List.fold_right (fun tl acc -> let out_sw, out_pk = (term_list_to_pkt tl pk) in
 		((out_sw, xid, out_pk) :: acc)) out_tll [];;
 
 end
@@ -303,7 +308,6 @@ print_term_list(Program.query_relation learned_relation [Variable("X"); Variable
 Xsb.halt_xsb out_ch;;*)
 
 
-open OxPlatform;;
 open OpenFlow0x01_Core;;
 module OxController = struct
 include OxStart.DefaultTutorialHandlers
@@ -334,21 +338,22 @@ let packet_in =
 	    let out_ch, in_ch = get_ch () in
 	    let output = respond_to_packet Mac.mac_learning_program sw xid pk out_ch in_ch in
 	    let _ = print_endline "respond_to_packet returned" in
-    	List.iter (fun triple -> match triple with (swOut, xOut, pkOut) -> send_packet_out swOut xOut pkOut) output;;
+    	List.iter (fun triple -> match triple with (swOut, xOut, pkOut) -> send_packet_out swOut 0l pkOut) output;
+    	print_endline ("sent " ^ (string_of_int (List.length output)) ^ "packets");
 
 end
 
 module Controller = OxStart.Make (OxController);;
 
 (*open OxPlatform
-open OpenFlow0x01_Core
+open OpenFlow0x01_Core*)
 
 module MyApplication = struct
 
-  include OxStart.DefaultTutorialHandlers
+  include OxStart.DefaultTutorialHandlers;;
 
   let switch_connected (sw : switchId) : unit =
-    Printf.printf "Switch %Ld connected.\n%!" sw
+    Printf.printf "Switch %Ld connected.\n%!" sw;;
 
   (* [FILL] This packet_in function sends all packets out of port 1.
      Modify it to behave like a repeater: send the packet out of all
@@ -358,9 +363,9 @@ module MyApplication = struct
     send_packet_out sw 0l
       { output_payload = pk.input_payload;                                                                                                                                        
         port_id = None;                                                                                                                                                           
-        apply_actions = [Output AllPorts] (* <---- this was the edit *)
-      }
+        apply_actions = if pk.port = 1 then [Output(PhysicalPort(2))] else [Output(PhysicalPort(1))]; (* <---- this was the edit *)
+      };;
 
 end
 
-module Controller = OxStart.Make (MyApplication)*)
+(*module Controller = OxStart.Make (MyApplication);;*)
