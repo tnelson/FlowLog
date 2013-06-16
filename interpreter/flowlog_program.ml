@@ -65,18 +65,12 @@ let clause_to_string (cl : clause) : string =
 	| Clause(rel, args, body) -> (relation_name rel) ^ "(" ^ (list_to_string args term_to_string) ^ ") :- " ^
 		(list_to_string body literal_to_string);;
 
-(*let empty_body (cl : clause) : bool =
-	match cl with
-	| Clause(_, _, []) -> true;
-	| _ -> false;;*)
-
 let get_atom (lit : literal) : atom =
 	match lit with
 	| Pos(a) -> a;
 	| Neg(a) -> a;;
 
-let add_unique (x : 'a) (l : 'a list) : 'a list= 
-	if List.mem x l then l else x :: l;;
+let add_unique (x : 'a) (l : 'a list) : 'a list = if List.mem x l then l else x :: l;;
 
 let add_unique_var (t : term) (acc : term list) : term list = 
 	match t with
@@ -101,15 +95,19 @@ let send_clause (cl : clause) (assertion : string) (out_ch : out_channel) (in_ch
 	else let _ = Xsb.send_assert assertion out_ch in_ch in []) in
 	List.map (fun (l : string list) -> List.map (fun (s : string) -> Constant(s)) l) answer;;
 
+let query_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): (term list) list =
+	send_clause cl (match cl with
+		| Clause(rel, args, _) -> (relation_name rel) ^ "(" ^ (list_to_string args term_to_string) ^ ").") out_ch in_ch;;
+
+(* TODO(michael): In assert_clause and retract_clause they shouldn't be sent unless they aren't already true*)
 let assert_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): (term list) list =
+	(*let _ = print_endline (list_to_string (query_clause cl out_ch in_ch) (fun l -> list_to_string l term_to_string)) in *)
 	send_clause cl ("assert((" ^ (clause_to_string cl) ^ ")).") out_ch in_ch;;	
 
 let retract_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): (term list) list =
 	send_clause cl ("retract((" ^ (clause_to_string cl) ^ ")).") out_ch in_ch;;
 
-let query_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): (term list) list =
-	send_clause cl (match cl with
-		| Clause(rel, args, _) -> (relation_name rel) ^ "(" ^ (list_to_string args term_to_string) ^ ").") out_ch in_ch;;
+
 
 let assert_relation (rel : relation) (out_ch : out_channel) (in_ch : in_channel) : (term list) list =
 	match rel with
@@ -170,7 +168,7 @@ let pkt_to_term_list (sw : switchId) (pk : packetIn) : term list =
 	string_of_int (nwProto pkt_payload)] in
 	let _ = print_endline ("pkt to term list: " ^ (list_to_string ans term_to_string)) in
 	ans;;
-
+(*
 let term_list_to_pkt (tl : term list) (pk : packetIn) : switchId * packetOut =
 (*	let _ = print_endline ("term list to pkt: " ^ (list_to_string tl term_to_string)) in
 	let locSw = Int64.of_int (int_of_string (term_to_string (List.nth tl 0))) in
@@ -203,16 +201,37 @@ let term_list_to_pkt (tl : term list) (pk : packetIn) : switchId * packetOut =
 	let locPt = int_of_string (term_to_string (List.nth tl 1)) in
 	(*let _ = print_endline ("sent out port ")*)
 	let out_packet = {output_payload = pk.input_payload; port_id = None; apply_actions = [Output(PhysicalPort(locPt))]} in (* change to Output(AllPorts)) *)
-	(locSw, out_packet);;
+	(locSw, out_packet);;*)
 	
+let emit_packets (tll : (term list) list) (sw : switchId) (pk : packetIn) : unit = 
+	let actions_list = ref [] in
+	let _ = List.iter (fun tl -> 
+		(*let locSw = Int64.of_string (term_to_string (List.nth tl 0)) in*)
+		let locPt = int_of_string (term_to_string (List.nth tl 1)) in
+		let dlSrc = Int64.of_string (term_to_string (List.nth tl 2)) in
+		let dlDst = Int64.of_string (term_to_string (List.nth tl 3)) in
+		(*let dlTyp = int_of_string (term_to_string (List.nth tl 4)) in*)
+		let nwSrc = Int32.of_int (int_of_string (term_to_string (List.nth tl 5))) in
+		let nwDst = Int32.of_int (int_of_string (term_to_string (List.nth tl 6))) in
+		(*let nwProto = int_of_string (term_to_string (List.nth tl 7)) in*)
+			actions_list := SetDlSrc(dlSrc) :: !actions_list;
+			actions_list := SetDlDst(dlDst) :: !actions_list;
+			actions_list := SetNwSrc(nwSrc) :: !actions_list;
+			actions_list := SetNwDst(nwDst) :: !actions_list;
+			actions_list := Output(PhysicalPort(locPt)) :: !actions_list;
+	) tll in
+	send_packet_out sw 0l {output_payload = pk.input_payload; port_id = None; apply_actions = !actions_list};;
 
-let respond_to_packet (prgm : program) (sw : switchId) (xid : xid) (pk : packetIn) (out_ch : out_channel) (in_ch : in_channel) : (switchId * xid * packetOut) list= 
+let respond_to_packet (prgm : program) (sw : switchId) (xid : xid) (pk : packetIn) (out_ch : out_channel) (in_ch : in_channel) : unit = 
 	let in_tl = pkt_to_term_list sw pk in
-	(*let _ = print_endline "before respond to packet desugared" in*)
+	let out_tll = respond_to_packet_desugared prgm in_tl out_ch in_ch in 
+	emit_packets out_tll sw pk;;
+
+(*(*let _ = print_endline "before respond to packet desugared" in*)
 	let out_tll = respond_to_packet_desugared prgm in_tl out_ch in_ch in
 	(*let _ = print_endline "after respond to packet desugared" in*)
 	List.fold_right (fun tl acc -> let out_sw, out_pk = (term_list_to_pkt tl pk) in
-		((out_sw, xid, out_pk) :: acc)) out_tll [];;
+		((out_sw, xid, out_pk) :: acc)) out_tll [];;*)
 
 end
 
@@ -319,27 +338,28 @@ start_program mac_learning_program out_ch in_ch;;*)
 let switch_connected (sw : switchId) : unit =
     Printf.printf "Switch %Ld connected.\n%!" sw
 
+let ref_out_ch = ref None;;
+let ref_in_ch = ref None;;
+let get_ch = (fun () -> match !ref_out_ch with
+	| None -> let out_ch, in_ch = Xsb.start_xsb () in 
+		let _ = ref_out_ch := Some(out_ch) in
+		let _ = ref_in_ch := Some(in_ch) in
+		let _ = Program.start_program Mac.mac_learning_program out_ch in_ch in
+		let _ = print_endline "started program" in
+		(out_ch, in_ch);
+	| Some(out_ch) -> match !ref_in_ch with
+		|Some(in_ch) -> (out_ch, in_ch);
+		| _ -> raise (Failure "ref_out_ch is some but ref_in_ch is none"));;
 
-let packet_in = 
-	let ref_out_ch = ref None in
-	let ref_in_ch = ref None in
-	let get_ch = (fun () -> match !ref_out_ch with
-		| None -> let out_ch, in_ch = Xsb.start_xsb () in 
-			let _ = ref_out_ch := Some(out_ch) in
-			let _ = ref_in_ch := Some(in_ch) in
-			let _ = Program.start_program Mac.mac_learning_program out_ch in_ch in
-			let _ = print_endline "started program" in
-			(out_ch, in_ch);
-		| Some(out_ch) -> match !ref_in_ch with
-			|Some(in_ch) -> (out_ch, in_ch);
-			| _ -> raise (Failure "ref_out_ch is some but ref_in_ch is none")) in
-	fun (sw : switchId) (xid : xid) (pk : packetIn) ->
-	    Printf.printf "%s\n%!" (packetIn_to_string pk);
-	    let out_ch, in_ch = get_ch () in
-	    let output = respond_to_packet Mac.mac_learning_program sw xid pk out_ch in_ch in
-	    let _ = print_endline "respond_to_packet returned" in
-    	List.iter (fun triple -> match triple with (swOut, xOut, pkOut) -> send_packet_out swOut 0l pkOut) output;
-    	print_endline ("sent " ^ (string_of_int (List.length output)) ^ "packets");
+let _ = get_ch ();;
+
+let packet_in (sw : switchId) (xid : xid) (pk : packetIn) =
+	Printf.printf "%s\n%!" (packetIn_to_string pk);
+	let out_ch, in_ch = get_ch () in
+	respond_to_packet Mac.mac_learning_program sw xid pk out_ch in_ch;;
+(*	let _ = print_endline "respond_to_packet returned" in
+	List.iteri (fun index triple -> match triple with (swOut, xOut, pkOut) -> send_packet_out swOut (Int32.of_int index) pkOut) output;
+	print_endline ("sent " ^ (string_of_int (List.length output)) ^ "packets");*)
 
 end
 
