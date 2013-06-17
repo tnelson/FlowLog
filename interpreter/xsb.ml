@@ -1,4 +1,4 @@
-(*#load "unix.cma";;*)
+#load "unix.cma";;
 open Unix;;
 open Printf;;
 
@@ -17,7 +17,7 @@ module Xsb = struct
 		let _ = set_binary_mode_in xin_channel false in
 		(* start xsb *)
 		let error_1, error_2 = Unix.pipe() in
-		let _ = Unix.create_process "xsb" [|"xsb"|] xsb_in xsb_out error_2 in
+		let _ = Unix.create_process "/Applications/XSB/bin/xsb" [|"xsb"|] xsb_in xsb_out error_2 in
 		(xout_channel, xin_channel);;
 
 	(* error_2 needs to be periodically flushed! *)
@@ -101,11 +101,17 @@ module Xsb = struct
 end
 
 (* examples *)
-(*open Xsb;;
+open Xsb;;
 let xout_channel, xin_channel = start_xsb ();;
 
-send_assert "assert(p(1))." xout_channel xin_channel;;
+print_endline "about to send retract";;
 
+print_endline (lol_to_string (send_query "retract((p(1)))." 1 xout_channel xin_channel));;
+
+print_endline "sent retract";;
+
+print_endline (lol_to_string (send_query "assert(p(1))." 1 xout_channel xin_channel));;
+(*
 send_assert "assert(p(2))." xout_channel xin_channel;;
 
 print_endline (lol_to_string (send_query "p(X)." 1 xout_channel xin_channel));;
@@ -125,7 +131,7 @@ send_assert "assert(learned(1,5,4))." xout_channel xin_channel;;
 print_endline (lol_to_string (send_query "emit(1,2,3,4,5,6,7,8, LocSw2, LocPt2, DlSrc2, DlDst2, DlTyp2, NwSrc2, NwDst2, NwProto2)." 8 xout_channel xin_channel));;
 print_endline "";;
 flush Pervasives.stdout;;
-
+*)
 
 (* always close the channel at the end *)
-halt_xsb xout_channel*)
+halt_xsb xout_channel
