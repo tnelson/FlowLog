@@ -43,14 +43,15 @@ let relation_name (rel : relation) : string =
 	match rel with 
 	| Relation(name, _, _, _, _) -> name;;
 
-let list_to_string (conversion : 'a -> string) (l : 'a list) : string = 
+let list_to_string (l : 'a list) (conversion : 'a -> string) : string = 
 	let ans = List.fold_right (fun x acc -> (conversion x) ^ "," ^ acc) l "" in
+	(*let _ = print_endline ("list_to_string: " ^ ans) in*)
 	if ans = "" then ans else String.sub ans 0 (String.length ans - 1);;
 
 let atom_to_string (a : atom) : string =
 	match a with
 	| Equals(t1, t2) -> term_to_string(t1) ^ " = " ^ term_to_string(t2);
-	| Apply(rel, args) -> (relation_name rel) ^ "(" ^ (list_to_string term_to_string args) ^ ")";
+	| Apply(rel, args) -> (relation_name rel) ^ "(" ^ (list_to_string args term_to_string) ^ ")";
 	| Bool(b) -> string_of_bool b;;
 
 let literal_to_string (l : literal) : string = 
@@ -60,9 +61,9 @@ let literal_to_string (l : literal) : string =
 
 let clause_to_string (cl : clause) : string =
 	match cl with
-	| Clause(rel, args, []) -> (relation_name rel) ^ "(" ^ (list_to_string term_to_string args) ^ ")";
-	| Clause(rel, args, body) -> (relation_name rel) ^ "(" ^ (list_to_string term_to_string args) ^ ") :- " ^
-		(list_to_string literal_to_string body);;
+	| Clause(rel, args, []) -> (relation_name rel) ^ "(" ^ (list_to_string args term_to_string) ^ ")";
+	| Clause(rel, args, body) -> (relation_name rel) ^ "(" ^ (list_to_string args term_to_string) ^ ") :- " ^
+		(list_to_string body literal_to_string);;
 
 let get_atom (lit : literal) : atom =
 	match lit with
@@ -87,22 +88,26 @@ let get_vars (cl : clause) : term list =
 		body
 		(List.fold_right add_unique_var args []);;
 
-let send_clause (cl : clause) (assertion : string) (out_ch : out_channel) (in_ch : in_channel) : (term list) list * bool =
+let send_clause (cl : clause) (assertion : string) (out_ch : out_channel) (in_ch : in_channel) : (term list) list =
 	let _ = print_endline assertion in
 	let num_vars = List.length (get_vars cl) in
-	let answer = Xsb.send assertion num_vars out_ch in_ch in
-	match answer with (sll, b) -> (List.map (fun (l : string list) -> List.map (fun (s : string) -> Constant(s)) l) sll , b);;
+	let answer = (if num_vars > 0 then Xsb.send_query assertion (List.length (get_vars cl)) out_ch in_ch
+	else let _ = Xsb.send_assert assertion out_ch in_ch in []) in
+	List.map (fun (l : string list) -> List.map (fun (s : string) -> Constant(s)) l) answer;;
 
-let query_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): (term list) list * bool =
+let query_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): (term list) list =
 	send_clause cl (match cl with
-		| Clause(rel, args, _) -> (relation_name rel) ^ "(" ^ (list_to_string term_to_string args) ^ ").") out_ch in_ch;;
+		| Clause(rel, args, _) -> (relation_name rel) ^ "(" ^ (list_to_string args term_to_string) ^ ").") out_ch in_ch;;
 
-let retract_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): (term list) list * bool=
+let retract_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): (term list) list =
 	send_clause cl ("retract((" ^ (clause_to_string cl) ^ ")).") out_ch in_ch;;
 
-let assert_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): (term list) list * bool =
-	retract_clause cl out_ch in_ch;
+let assert_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): (term list) list =
 	send_clause cl ("assert((" ^ (clause_to_string cl) ^ ")).") out_ch in_ch;;	
+
+let tentative_assert_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): (term list) list =
+	let _ = retract_clause cl out_ch in_ch in
+	send_clause cl ("assert((" ^ (clause_to_string cl) ^ ")).") out_ch in_ch;;
 
 let assert_relation (rel : relation) (out_ch : out_channel) (in_ch : in_channel) : (term list) list =
 	match rel with
@@ -110,8 +115,9 @@ let assert_relation (rel : relation) (out_ch : out_channel) (in_ch : in_channel)
 	| Relation(_, _, clauses, _, _) -> List.fold_right (fun cls acc -> (assert_clause cls out_ch in_ch) @ acc) clauses [];;
 
 let query_relation (rel : relation) (args : term list) (out_ch : out_channel) (in_ch : in_channel) : (term list) list =
+(*	let _ = print_endline ("query relation: " ^ (relation_name rel) ^ (list_to_string args term_to_string)) in *)
 	let ans = query_clause (Clause(rel, args, [])) out_ch in_ch in
-	let _ = print_endline (list_to_string (list_to_string term_to_string) ans) in
+	let _ = print_endline (list_to_string ans (fun x -> list_to_string x term_to_string)) in
 	ans;;
 
 let start_program (prgm : program) (out_ch : out_channel) (in_ch : in_channel) : (term list) list = 
@@ -140,7 +146,7 @@ let respond_to_packet_desugared (prgm : program) (pkt : term list) (out_ch : out
 				| None -> [];
 				| Some(minus) -> match minus with | Relation(_, args, _, _, _) -> 
 					query_relation minus (pkt @ (drop args (List.length pkt))) out_ch in_ch;) in
-				let _ = List.iter (fun args -> let _ = assert_clause (Clause(rel, args, [])) out_ch in_ch in ()) to_assert in
+				let _ = List.iter (fun args -> let _ = tentative_assert_clause (Clause(rel, args, [])) out_ch in_ch in ()) to_assert in
 				List.iter (fun args -> let _ = retract_clause (Clause(rel, args, [])) out_ch in_ch in ()) to_retract;) relations in
 		match emit with
 		| Relation(_, args, _, _, _) -> query_relation emit (pkt @ (drop args (List.length pkt))) out_ch in_ch;; 
@@ -160,7 +166,7 @@ let pkt_to_term_list (sw : switchId) (pk : packetIn) : term list =
 	Int32.to_string (nwSrc pkt_payload);
 	Int32.to_string (nwDst pkt_payload);
 	string_of_int (nwProto pkt_payload)] in
-	let _ = print_endline ("pkt to term list: " ^ (list_to_string term_to_string ans)) in
+	let _ = print_endline ("pkt to term list: " ^ (list_to_string ans term_to_string)) in
 	ans;;
 (*
 let term_list_to_pkt (tl : term list) (pk : packetIn) : switchId * packetOut =
