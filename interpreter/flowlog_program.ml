@@ -102,7 +102,8 @@ let query_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): (ter
 let retract_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): unit =
 	let assertion = ("retract((" ^ (clause_to_string cl) ^ ")).") in
 	let _ = print_endline assertion in 
-	let _ = Xsb.send_query assertion 1 out_ch in_ch;;
+	let _ = Xsb.send_query assertion 1 out_ch in_ch in
+	();;
 
 let assert_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): (term list) list =
 	send_clause cl ("assert((" ^ (clause_to_string cl) ^ ")).") out_ch in_ch;;	

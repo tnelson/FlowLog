@@ -1,4 +1,4 @@
-#load "unix.cma";;
+(*#load "unix.cma";;*)
 open Unix;;
 open Printf;;
 
@@ -101,7 +101,7 @@ module Xsb = struct
 end
 
 (* examples *)
-open Xsb;;
+(*open Xsb;;
 let xout_channel, xin_channel = start_xsb ();;
 
 print_endline "about to send retract";;
@@ -134,4 +134,4 @@ flush Pervasives.stdout;;
 *)
 
 (* always close the channel at the end *)
-halt_xsb xout_channel
+halt_xsb xout_channel*)
