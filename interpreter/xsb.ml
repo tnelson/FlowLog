@@ -17,11 +17,17 @@ module Xsb = struct
 		let _ = set_binary_mode_in xin_channel false in
 		(* start xsb *)
 		let error_1, error_2 = Unix.pipe() in
-		let _ = Unix.create_process "/Applications/XSB/bin/xsb" [|"xsb"|] xsb_in xsb_out error_2 in
+		let _ = Unix.create_process "xsb" [|"xsb"|] xsb_in xsb_out error_2 in
 		(xout_channel, xin_channel);;
 
 	(* error_2 needs to be periodically flushed! *)
 		
+
+(* True if string str1 ends with string str2 *)
+	let ends_with (str1 : string) (str2 : string) : bool = 
+		if String.length str2 > String.length str1
+		then false
+		else (String.sub str1 ((String.length str1) - (String.length str2)) (String.length str2)) = str2;;
 
 	(* This takes in a string command (not query, this doesn't deal with the semicolons) and two channels (to and from xsb).
 	It writes the command to xsb and returns the resulting text.*)
@@ -30,18 +36,13 @@ module Xsb = struct
 		flush out_ch;
 		let answer = ref "" in
 		let next_str = ref "" in
-		while (String.trim !next_str <> "yes" && String.trim !next_str <> "no") do
+		while (not (ends_with (String.trim !next_str) "yes") && not (ends_with (String.trim !next_str) "no")) do
 			next_str := input_line in_ch;
+            (*print_endline ("DEBUG: send_assert "^ str ^" getting response. Line was: "^(!next_str));*)
 			answer := (!answer ^ "\n" ^ String.trim !next_str);
 		done;
 		String.trim !answer;;
 
-
-	(* True if string str1 ends with string str2 *)
-	let ends_with (str1 : string) (str2 : string) : bool = 
-		if String.length str2 > String.length str1
-		then false
-		else (String.sub str1 ((String.length str1) - (String.length str2)) (String.length str2)) = str2;;
 
 	(* Removes str2 from the end of str1 if its there, otherwise returns str1 *)
 	let remove_from_end (str1 : string) (str2 : string) : string = 
@@ -101,19 +102,16 @@ module Xsb = struct
 end
 
 (* examples *)
-(*open Xsb;;
+open Xsb;;
 let xout_channel, xin_channel = start_xsb ();;
 
-print_endline "about to send retract";;
+(*send_assert "assert(p(1))." xout_channel xin_channel;;
 
-print_endline (lol_to_string (send_query "retract((p(1)))." 1 xout_channel xin_channel));;
+send_assert "assert(p(2))." xout_channel xin_channel;;*)
 
-print_endline "sent retract";;
+send_assert "retract(p(2))." xout_channel xin_channel;;
 
-print_endline (lol_to_string (send_query "assert(p(1))." 1 xout_channel xin_channel));;
 (*
-send_assert "assert(p(2))." xout_channel xin_channel;;
-
 print_endline (lol_to_string (send_query "p(X)." 1 xout_channel xin_channel));;
 print_endline "";;
 flush Pervasives.stdout;;
@@ -134,4 +132,4 @@ flush Pervasives.stdout;;
 *)
 
 (* always close the channel at the end *)
-halt_xsb xout_channel*)
+halt_xsb xout_channel
