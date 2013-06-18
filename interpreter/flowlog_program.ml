@@ -298,6 +298,78 @@ let rec emit_1 = Clause(emit_relation, packet_vars @ packet_vars_2,
 let mac_learning_program = Program([plus_learned_relation; minus_learned_relation; learned_relation; switch_has_ports_relation], emit_relation);;
 end
 
+module Arp_cache = struct
+
+let packet_vars = List.map (fun (str : string) -> Variable(str)) ["LocSw"; "LocPt"; "DlSrc"; "DlDst"; "DlTyp"; "NwSrc"; "NwDst"; "NwProto"];;
+let packet_vars_2 = List.map (fun (str : string) -> Variable(str)) ["LocSw2"; "LocPt2"; "DlSrc2"; "DlDst2"; "DlTyp2"; "NwSrc2"; "NwDst2"; "NwProto2"];;
+let learned_vars = [Variable("Ip"); Variable("Mac")];;
+
+let rec plus_learned = Clause(plus_learned_relation, packet_vars @ learned_vars,
+	[Pos(Equals(Variable("DlTyp"), Constant("0x0806")));
+	Pos(Equals(Variable("NwProto"), Constant("2")));
+	Pos(Equals(Variable("Ip"), Variable("NwSrc")));
+	Pos(Equals(Variable("Mac"), Variable("DlSrc")));
+	Neg(Apply(learned_relation, [Variable("NwSrc"); Variable("Any")]))])
+	and
+	plus_learned_relation = Relation("plus_learned", packet_vars @ learned_vars, [plus_learned], None, None)
+	and
+	learned_relation = Relation("learned", learned_vars, [], Some(plus_learned_relation), None);;
+
+let rec emit_1 = Clause(emit_relation, packet_vars @ packet_vars_2,
+	[Pos(Equals(Variable("DlTyp"), Constant("0x0806")));
+	Pos(Equals(Variable("NwProto"), Constant("2")));
+	Pos(Equals(Variable("LocSw2"), Variable("LocSw")));
+	Pos(Equals(Variable("DlSrc"), Variable("DlSrc2")));
+	Pos(Equals(Variable("DlDst"), Variable("DlDst2")));	
+	Pos(Equals(Variable("DlTyp"), Variable("DlTyp2")));
+	Pos(Equals(Variable("NwSrc"), Variable("NwSrc2")));
+	Pos(Equals(Variable("NwDst"), Variable("NwDst2")));
+	Pos(Equals(Variable("NwProto"), Variable("NwProto2")));
+	Pos(Apply(switch_has_ports_relation, [Variable("LocSw2"); Variable("LocPt2")]));
+	Neg(Equals(Variable("LocPt2"), Variable("LocPt")))])
+	and
+	emit_2 = Clause(emit_relation, packet_vars @ packet_vars_2,
+	[Pos(Equals(Variable("DlTyp"), Constant("0x0806")));
+	Pos(Equals(Variable("NwProto"), Constant("1")));
+	Pos(Equals(Variable("LocSw2"), Variable("LocSw")));
+	Pos(Equals(Variable("DlSrc"), Variable("DlSrc2")));
+	Pos(Equals(Variable("DlDst"), Variable("DlDst2")));	
+	Pos(Equals(Variable("DlTyp"), Variable("DlTyp2")));
+	Pos(Equals(Variable("NwSrc"), Variable("NwSrc2")));
+	Pos(Equals(Variable("NwDst"), Variable("NwDst2")));
+	Pos(Equals(Variable("NwProto"), Variable("NwProto2")));
+	Pos(Apply(switch_has_ports_relation, [Variable("LocSw2"); Variable("LocPt2")]));
+	Neg(Apply(learned_relation, [Variable("NwSrc"); Variable("Any")]));
+	Neg(Equals(Variable("LocPt2"), Variable("LocPt")))])
+	and
+	emit_3 = Clause(emit_relation, packet_vars @ packet_vars_2,
+	[Pos(Equals(Variable("DlTyp"), Constant("0x0806")));
+	Pos(Equals(Variable("NwProto"), Constant("1")));
+	Pos(Equals(Variable("DlTyp2"), Constant("0x0806")));
+	Pos(Equals(Variable("NwProto2"), Constant("2")));
+	Pos(Apply(learned_relation, [Variable("NwDst"); Variable("DlSrc2")]));
+	Pos(Equals(Variable("LocSw2"), Variable("LocSw")));
+	Pos(Equals(Variable("NwDst2"), Variable("NwSrc")));
+	Pos(Equals(Variable("DlDst2"), Variable("DlSrc")));
+	Pos(Equals(Variable("NwSrc2"), Variable("NwDst")));
+	Pos(Equals(Variable("DlSrc"), Variable("DlSrc2")));
+	Pos(Equals(Variable("DlTyp"), Variable("DlTyp2")));
+	Pos(Equals(Variable("NwProto"), Variable("NwProto2")));
+	Pos(Apply(switch_has_ports_relation, [Variable("LocSw2"); Variable("LocPt2")]))])
+	and
+	emit_relation = Relation("emit", packet_vars @ packet_vars_2, [emit_1; emit_2; emit_3], None, None)
+	and
+	switch_1 = Clause(switch_has_ports_relation, [Constant("1"); Constant("1")], [])
+	and
+	switch_2 = Clause(switch_has_ports_relation, [Constant("1"); Constant("2")], [])
+	and
+	switch_3 = Clause(switch_has_ports_relation, [Constant("1"); Constant("3")], [])
+	and
+	switch_has_ports_relation = Relation("switchHasPorts", [Variable("Sw"); Variable("Pt")], [switch_1; switch_2; switch_3], None, None);;
+
+let arp_cache_program = Program([plus_learned_relation; learned_relation; switch_has_ports_relation], emit_relation);;
+end
+
 (* try out the functions *)
 
 (*open Mac;;*)
@@ -335,9 +407,6 @@ module OxController = struct
 include OxStart.DefaultTutorialHandlers
 
 
-(*let out_ch, in_ch = Xsb.start_xsb ();;
-start_program mac_learning_program out_ch in_ch;;*)
-
 let switch_connected (sw : switchId) : unit =
     Printf.printf "Switch %Ld connected.\n%!" sw
 
@@ -347,7 +416,7 @@ let get_ch = (fun () -> match !ref_out_ch with
 	| None -> let out_ch, in_ch = Xsb.start_xsb () in 
 		let _ = ref_out_ch := Some(out_ch) in
 		let _ = ref_in_ch := Some(in_ch) in
-		let _ = Program.start_program Mac.mac_learning_program out_ch in_ch in
+		let _ = Program.start_program Arp_cache.arp_cache_program out_ch in_ch in
 		let _ = print_endline "started program" in
 		(out_ch, in_ch);
 	| Some(out_ch) -> match !ref_in_ch with
@@ -359,36 +428,8 @@ let _ = get_ch ();;
 let packet_in (sw : switchId) (xid : xid) (pk : packetIn) =
 	Printf.printf "%s\n%!" (packetIn_to_string pk);
 	let out_ch, in_ch = get_ch () in
-	respond_to_packet Mac.mac_learning_program sw xid pk out_ch in_ch;;
-(*	let _ = print_endline "respond_to_packet returned" in
-	List.iteri (fun index triple -> match triple with (swOut, xOut, pkOut) -> send_packet_out swOut (Int32.of_int index) pkOut) output;
-	print_endline ("sent " ^ (string_of_int (List.length output)) ^ "packets");*)
+	respond_to_packet Arp_cache.arp_cache_program sw xid pk out_ch in_ch;;
 
 end
 
 module Controller = OxStart.Make (OxController);;
-
-(*open OxPlatform
-open OpenFlow0x01_Core*)
-
-module MyApplication = struct
-
-  include OxStart.DefaultTutorialHandlers;;
-
-  let switch_connected (sw : switchId) : unit =
-    Printf.printf "Switch %Ld connected.\n%!" sw;;
-
-  (* [FILL] This packet_in function sends all packets out of port 1.
-     Modify it to behave like a repeater: send the packet out of all
-     ports, except its input port. *)
-  let packet_in (sw : switchId) (xid : xid) (pk : packetIn) : unit =
-    Printf.printf "%s\n%!" (packetIn_to_string pk);                                                                                                                               
-    send_packet_out sw 0l
-      { output_payload = pk.input_payload;                                                                                                                                        
-        port_id = None;                                                                                                                                                           
-        apply_actions = if pk.port = 1 then [Output(PhysicalPort(2))] else [Output(PhysicalPort(1))]; (* <---- this was the edit *)
-      };;
-
-end
-
-(*module Controller = OxStart.Make (MyApplication);;*)
