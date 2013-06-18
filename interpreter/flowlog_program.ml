@@ -135,6 +135,8 @@ let rec drop (l : 'a list) (n : int) : 'a list =
 let respond_to_packet_desugared (prgm : program) (pkt : term list) (out_ch : out_channel) (in_ch : in_channel) : (term list) list =
 	match prgm with
 	| Program(relations, emit) ->
+		let answer = match emit with
+		| Relation(_, args, _, _, _) -> query_relation emit (pkt @ (drop args (List.length pkt))) out_ch in_ch in
 		let _ = List.iter (fun rel ->
 			match rel with
 			| Relation(_, _, _, option_plus, option_minus) ->
@@ -148,8 +150,7 @@ let respond_to_packet_desugared (prgm : program) (pkt : term list) (out_ch : out
 					query_relation minus (pkt @ (drop args (List.length pkt))) out_ch in_ch;) in
 				let _ = List.iter (fun args -> let _ = tentative_assert_clause (Clause(rel, args, [])) out_ch in_ch in ()) to_assert in
 				List.iter (fun args -> let _ = retract_clause (Clause(rel, args, [])) out_ch in_ch in ()) to_retract;) relations in
-		match emit with
-		| Relation(_, args, _, _, _) -> query_relation emit (pkt @ (drop args (List.length pkt))) out_ch in_ch;; 
+		answer;;
 
 let rec replace (r : string) (w : string) (st : string) : string =
 	if (String.length st < String.length r || String.length st = 0) then st else
@@ -416,7 +417,7 @@ let get_ch = (fun () -> match !ref_out_ch with
 	| None -> let out_ch, in_ch = Xsb.start_xsb () in 
 		let _ = ref_out_ch := Some(out_ch) in
 		let _ = ref_in_ch := Some(in_ch) in
-		let _ = Program.start_program Arp_cache.arp_cache_program out_ch in_ch in
+		let _ = Program.start_program Mac.mac_learning_program out_ch in_ch in
 		let _ = print_endline "started program" in
 		(out_ch, in_ch);
 	| Some(out_ch) -> match !ref_in_ch with
@@ -428,7 +429,7 @@ let _ = get_ch ();;
 let packet_in (sw : switchId) (xid : xid) (pk : packetIn) =
 	Printf.printf "%s\n%!" (packetIn_to_string pk);
 	let out_ch, in_ch = get_ch () in
-	respond_to_packet Arp_cache.arp_cache_program sw xid pk out_ch in_ch;;
+	respond_to_packet Mac.mac_learning_program sw xid pk out_ch in_ch;;
 
 end
 
