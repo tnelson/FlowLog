@@ -157,7 +157,9 @@ let rec replace (r : string) (w : string) (st : string) : string =
 			(String.sub st 0 1) ^ (replace r w (String.sub st 1 (String.length st - 1)));;
 
 let pkt_to_term_list (sw : switchId) (pk : packetIn) : term list = 
+	let _ = print_endline "starting pkt_to_term_list" in
 	let pkt_payload = parse_payload pk.input_payload in
+	let isIp = ((dlTyp pkt_payload) = 0x0800) in
 	let ans = List.map (function x -> Constant(x)) [Int64.to_string sw;
 	string_of_int pk.port;
 	Int64.to_string pkt_payload.Packet.dlSrc;
@@ -165,8 +167,9 @@ let pkt_to_term_list (sw : switchId) (pk : packetIn) : term list =
 	string_of_int (dlTyp pkt_payload);
 	Int32.to_string (nwSrc pkt_payload);
 	Int32.to_string (nwDst pkt_payload);
-	string_of_int (nwProto pkt_payload)] in
+	if isIp then (string_of_int (nwProto pkt_payload)) else "arp"] in
 	let _ = print_endline ("pkt to term list: " ^ (list_to_string ans term_to_string)) in
+	let _ = print_endline ("dlTyp: " ^ (string_of_int (dlTyp pkt_payload))) in
 	ans;;
 (*
 let term_list_to_pkt (tl : term list) (pk : packetIn) : switchId * packetOut =
