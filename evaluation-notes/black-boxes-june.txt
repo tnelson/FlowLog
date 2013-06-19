@@ -15,18 +15,33 @@ A black-box invocation can appear in the following ways:
 (B3) as the result predicate in the head of a rule;
 "if alpha is satisfied, send the following tuples to the black box."
 
+-----------------------------------
+
 An event can appear in the following ways:
 
 (E1) in the head and body of a rule as the "trigger" for that
 rule. This is identical to the way standalone FlowLog treats
-packets.
+packets. For instance, to handle packets, we see:
 
++R(pkt, ...) or emit(pkt, ...)
 
+to handle events, we'd want to see the same, substituting ev for
+pkt. Semantically, packets are just one type of event. But:
 
-Which do our examples use?
+- what is their internal structure? A packet and an Apple TV request
+  may look different. In OpenFlow, can hosts send to the controller
+  directly? That's essentially what an event would be, if viewed as a
+  packet. the internal structure of events also affects how rules for
+  them are translated into datalog.
 
-Fill in examples + detail.
+- but how will events be carried concretely, if not by packets?
 
+- how will we distinguish between types of events in the language?
+  which types of event are valid?
+
+-----------------------------------
+
+Handling black-box references:
 
 (B1): Replace the BB reference with a nullary predicate p() in the
 datalog translation. remember the original terms! at each packet
@@ -42,4 +57,43 @@ is negated, this should be ok.)
 emit/+R/-R. Just have to remember which names go to which BB callback,
 and send as appropriate after evaluation.
 
-(E1) ...
+-----------------------------------
+
+The Apple TV example sketch:
+
+
+// Record that MAC address comp is requesting to see 
+// the tv with MAC address = tv.
+
++TVusage(registration_event, tv, comp) :- 
+  registration_event.tv = tv, 
+  registration_event.comp = comp.
+
+emit(p, newp) :-
+  // note: embedding in helpers makes 'otherwise' hard to implement.
+  isAppleTVBroadcast(p), 
+  TVusage(p.dlSrc, p.dlDst), 
+  newp.locSw = p.locSw,  // unnecessary if use 'forward'
+  NIB.rightPath(p.dlDst, p.locSw, newp.locPt),
+  <otherwise p = newp>.  // unnecessary if use 'forward'
+
+isAppleTVBroadcast(p) :-
+  p.nwDst = 224.0.0.251,
+  <more goes here> .
+
+
+Requirements:
+
+(1) An event for <computer> requesting access to <tv>. Presumably this
+comes from a web app.
+
+(2) Black box reference to NIB.rightPath predicate. This is an
+abstraction for the routing we want to use for the apple TV
+packets. Perhaps, for now, we could think of it as a reference to our
+MAC learning program (warning: this assumption limits us to running on
+the same ethernet etc. --- not realistic!)
+
+(3) I've abstracted out isAppleTVBroadcast. Andrew sent example
+packets, I need to understand them.
+
+
