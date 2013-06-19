@@ -224,7 +224,7 @@ let forward_packets (tll : (term list) list) (sw : switchId) (pk : packetIn) : u
 		(*let nwProto = int_of_string (term_to_string (List.nth tl 7)) in*)
 
 		let locPt_string = term_to_string (List.nth tl 1) in
-		let _ = if (begins_with locPt_string "_h") then actions_list := AllPorts :: !actions_list else actions_list := PhysicalPort(int_of_string locPt_string) :: !actions_list in
+		let _ = if (begins_with locPt_string "_h") then actions_list := Output(AllPorts) :: !actions_list else actions_list := Output(PhysicalPort(int_of_string locPt_string)) :: !actions_list in
 
 		let dlSrc_new = term_to_string (List.nth tl 2) in
 		let _ = actions_list := SetDlSrc(Int64.of_string (if (begins_with dlSrc_new "_h") then dlSrc_old else dlSrc_new)) :: !actions_list in
@@ -233,7 +233,7 @@ let forward_packets (tll : (term list) list) (sw : switchId) (pk : packetIn) : u
 		let _ = actions_list := SetDlDst(Int64.of_string (if (begins_with dlDst_new "_h") then dlDst_old else dlDst_new)) :: !actions_list in
 
 		let nwSrc_new = term_to_string (List.nth tl 5) in
-		let _ = actions_list := SetNwSrc(int_of_string (if (begins_with nwSrc_new "_h") then nwSrc_old else nwSrc_new)) :: !actions_list in
+		let _ = actions_list := SetNwSrc(Int32.of_string (if (begins_with nwSrc_new "_h") then nwSrc_old else nwSrc_new)) :: !actions_list in
 
 		let nwDst_new = term_to_string (List.nth tl 6) in
 		let _ = actions_list := SetNwDst(Int32.of_string (if (begins_with nwDst_new "_h") then nwDst_old else nwDst_new)) :: !actions_list in
