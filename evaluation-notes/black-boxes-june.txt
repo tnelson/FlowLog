@@ -57,6 +57,9 @@ is negated, this should be ok.)
 emit/+R/-R. Just have to remember which names go to which BB callback,
 and send as appropriate after evaluation.
 
+(Question): What API should programs (both flowlog non-flowlog!)
+provide to allow calls?
+
 -----------------------------------
 
 The Apple TV example sketch:
