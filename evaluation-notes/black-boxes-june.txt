@@ -6,14 +6,18 @@ Black Boxes and Events
 
 A black-box invocation can appear in the following ways:
 
-(B1) as a *predicate* in the body of a rule: 
-"if the black box returns true for <a, b, c>..."
+(B1) as a *predicate* in the body of a rule: "if the black box returns
+true for <a, b, c>..."
 
-(B2) as a *term* in the body of a rule:
-"if t is a tuple in the black-box's result, and R(t)..."
+(B2) as a *term* in the body of a rule: "if t is a tuple in the
+black-box's result, and R(t)..."  [Emulatable as B1, see below]
 
-(B3) as the result predicate in the head of a rule;
-"if alpha is satisfied, send the following tuples to the black box."
+(B3) as the result predicate in the head of a rule; "if alpha is
+satisfied, send the following tuples to the black box."  
+
+[B3 could POSSIBLY be emulatable as B1, since BB references of that
+form could have side effects, but we'd depend heavily on order of
+evaluation, and below I have B1s evaluated first.]
 
 -----------------------------------
 
@@ -48,14 +52,19 @@ datalog translation. remember the original terms! at each packet
 evaluation, invoke the black-box before passing to datalog and
 assert(p()) if the BB returns true, retract(p()) otherwise. 
 
+[Note, need to declare "dynamic(p/0)." before invoking these rules,
+otherwise XSB will choke.]
+
 (B2): Replace R(bbt, ...) with BB(NewVar), R(NewVar, ...). Invoke the
 black-box before passing to datalog for evaluation. Clear out the BB
 relation, then assert the tuples returned by datalog. (Even if the R
-is negated, this should be ok.)
+is negated, this should be ok.) [This means that B2 can be emulated as B1.]
 
 (B3): This would be a new type of result predicate, beyond
 emit/+R/-R. Just have to remember which names go to which BB callback,
-and send as appropriate after evaluation.
+and send as appropriate after evaluation. 
+
+-----------------------------------
 
 (Question): What API should programs (both flowlog non-flowlog!)
 provide to allow calls? I can see us offering an explicit standard API
