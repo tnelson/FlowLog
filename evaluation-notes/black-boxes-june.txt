@@ -58,7 +58,11 @@ emit/+R/-R. Just have to remember which names go to which BB callback,
 and send as appropriate after evaluation.
 
 (Question): What API should programs (both flowlog non-flowlog!)
-provide to allow calls?
+provide to allow calls? I can see us offering an explicit standard API
+(which would require modifying the third-party code) and an implicit
+API wrapper (which would allow unmodified third-party code to use its
+existing API. e.g. RouteFlow to support BGP with a small wrapper,
+without modifying routeflow itself).
 
 -----------------------------------
 
