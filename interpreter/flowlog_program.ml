@@ -27,7 +27,7 @@ and
 (* name, arguments, clauses, plus, minus *)
 	 relation = Relation of string * term list * clause list * relation option * relation option;;
 
-(* list of non-emit relations, emit relation*)
+(* list of non-forward relations, forward relation*)
 type program = Program of relation list * relation;;
 
 let term_to_string (t : term) : string = 
@@ -122,8 +122,8 @@ let query_relation (rel : relation) (args : term list) (out_ch : out_channel) (i
 
 let start_program (prgm : program) (out_ch : out_channel) (in_ch : in_channel) : (term list) list = 
 	match prgm with
-	| Program(relations, emit) -> let out = List.fold_right (fun rel acc -> (assert_relation rel out_ch in_ch) @ acc) relations [] in
-		out @ (assert_relation emit out_ch in_ch);;
+	| Program(relations, forward) -> let out = List.fold_right (fun rel acc -> (assert_relation rel out_ch in_ch) @ acc) relations [] in
+		out @ (assert_relation forward out_ch in_ch);;
 
 let rec drop (l : 'a list) (n : int) : 'a list = 
 	if n <= 0 then l else
@@ -134,9 +134,9 @@ let rec drop (l : 'a list) (n : int) : 'a list =
 (* this isn't quite right yet *)
 let respond_to_packet_desugared (prgm : program) (pkt : term list) (out_ch : out_channel) (in_ch : in_channel) : (term list) list =
 	match prgm with
-	| Program(relations, emit) ->
-		let answer = match emit with
-		| Relation(_, args, _, _, _) -> query_relation emit (pkt @ (drop args (List.length pkt))) out_ch in_ch in
+	| Program(relations, forward) ->
+		let answer = match forward with
+		| Relation(_, args, _, _, _) -> query_relation forward (pkt @ (drop args (List.length pkt))) out_ch in_ch in
 		let _ = List.iter (fun rel ->
 			match rel with
 			| Relation(_, _, _, option_plus, option_minus) ->
@@ -206,30 +206,44 @@ let term_list_to_pkt (tl : term list) (pk : packetIn) : switchId * packetOut =
 	(*let _ = print_endline ("sent out port ")*)
 	let out_packet = {output_payload = pk.input_payload; port_id = None; apply_actions = [Output(PhysicalPort(locPt))]} in (* change to Output(AllPorts)) *)
 	(locSw, out_packet);;*)
-	
-let emit_packets (tll : (term list) list) (sw : switchId) (pk : packetIn) : unit = 
+
+let begins_with (str1 : string) (str2 : string) : bool = 
+	if String.length str2 > String.length str1 then false else
+	(String.sub str1 0 (String.length str2)) = str2;;
+
+let forward_packets (tll : (term list) list) (sw : switchId) (pk : packetIn) : unit = 
 	let actions_list = ref [] in
+	let pk_list = pkt_to_term_list sw pk in
+	let dlSrc_old = term_to_string (List.nth pk_list 2) in
+	let dlDst_old = term_to_string (List.nth pk_list 3) in
+	let nwSrc_old = term_to_string (List.nth pk_list 5) in
+	let nwDst_old = term_to_string (List.nth pk_list 6) in
 	let _ = List.iter (fun tl -> 
 		(*let locSw = Int64.of_string (term_to_string (List.nth tl 0)) in*)
-		let locPt = int_of_string (term_to_string (List.nth tl 1)) in
-		let dlSrc = Int64.of_string (term_to_string (List.nth tl 2)) in
-		let dlDst = Int64.of_string (term_to_string (List.nth tl 3)) in
 		(*let dlTyp = int_of_string (term_to_string (List.nth tl 4)) in*)
-		let nwSrc = Int32.of_int (int_of_string (term_to_string (List.nth tl 5))) in
-		let nwDst = Int32.of_int (int_of_string (term_to_string (List.nth tl 6))) in
 		(*let nwProto = int_of_string (term_to_string (List.nth tl 7)) in*)
-			actions_list := SetDlSrc(dlSrc) :: !actions_list;
-			actions_list := SetDlDst(dlDst) :: !actions_list;
-			actions_list := SetNwSrc(nwSrc) :: !actions_list;
-			actions_list := SetNwDst(nwDst) :: !actions_list;
-			actions_list := Output(PhysicalPort(locPt)) :: !actions_list;
-	) tll in
+
+		let locPt_string = term_to_string (List.nth tl 1) in
+		let _ = if (begins_with locPt_string "_h") then actions_list := AllPorts :: !actions_list else actions_list := PhysicalPort(int_of_string locPt_string) :: !actions_list in
+
+		let dlSrc_new = term_to_string (List.nth tl 2) in
+		let _ = actions_list := SetDlSrc(Int64.of_string (if (begins_with dlSrc_new "_h") then dlSrc_old else dlSrc_new)) :: !actions_list in
+
+		let dlDst_new = term_to_string (List.nth tl 3) in
+		let _ = actions_list := SetDlDst(Int64.of_string (if (begins_with dlDst_new "_h") then dlDst_old else dlDst_new)) :: !actions_list in
+
+		let nwSrc_new = term_to_string (List.nth tl 5) in
+		let _ = actions_list := SetNwSrc(int_of_string (if (begins_with nwSrc_new "_h") then nwSrc_old else nwSrc_new)) :: !actions_list in
+
+		let nwDst_new = term_to_string (List.nth tl 6) in
+		let _ = actions_list := SetNwDst(Int32.of_string (if (begins_with nwDst_new "_h") then nwDst_old else nwDst_new)) :: !actions_list in
+		()) tll in
 	send_packet_out sw 0l {output_payload = pk.input_payload; port_id = None; apply_actions = !actions_list};;
 
 let respond_to_packet (prgm : program) (sw : switchId) (xid : xid) (pk : packetIn) (out_ch : out_channel) (in_ch : in_channel) : unit = 
 	let in_tl = pkt_to_term_list sw pk in
 	let out_tll = respond_to_packet_desugared prgm in_tl out_ch in_ch in 
-	emit_packets out_tll sw pk;;
+	forward_packets out_tll sw pk;;
 
 (*(*let _ = print_endline "before respond to packet desugared" in*)
 	let out_tll = respond_to_packet_desugared prgm in_tl out_ch in_ch in
@@ -262,43 +276,17 @@ let rec minus_learned = Clause(minus_learned_relation, packet_vars @ learned_var
 
 let learned_relation = Relation("learned", learned_vars, [], Some(plus_learned_relation), Some(minus_learned_relation));;
 
-let rec emit_1 = Clause(emit_relation, packet_vars @ packet_vars_2,
-	[Pos(Apply(learned_relation, [Variable("LocSw"); Variable("LocPt2"); Variable("DlDst")]));
-	Pos(Equals(Variable("LocSw"), Variable("LocSw2")));
-	Pos(Equals(Variable("DlSrc"), Variable("DlSrc2")));
-	Pos(Equals(Variable("DlDst"), Variable("DlDst2")));	
-	Pos(Equals(Variable("DlTyp"), Variable("DlTyp2")));
-	Pos(Equals(Variable("NwSrc"), Variable("NwSrc2")));
-	Pos(Equals(Variable("NwDst"), Variable("NwDst2")));
-	Pos(Equals(Variable("NwProto"), Variable("NwProto2")))
-	])
+let rec forward_1 = Clause(forward_relation, packet_vars @ packet_vars_2,
+	[Pos(Apply(learned_relation, [Variable("LocSw"); Variable("LocPt2"); Variable("DlDst")]))])
 	and
-	emit_2 = Clause(emit_relation, packet_vars @ packet_vars_2,
-	[Pos(Equals(Variable("LocSw"), Variable("LocSw2")));
-	Pos(Equals(Variable("DlSrc"), Variable("DlSrc2")));
-	Pos(Equals(Variable("DlDst"), Variable("DlDst2")));
-	Pos(Equals(Variable("DlTyp"), Variable("DlTyp2")));
-	Pos(Equals(Variable("NwSrc"), Variable("NwSrc2")));
-	Pos(Equals(Variable("NwDst"), Variable("NwDst2")));
-	Pos(Equals(Variable("NwProto"), Variable("NwProto2")));
-	Pos(Apply(switch_has_ports_relation, [Variable("LocSw2"); Variable("LocPt2")]));
-	Neg(Equals(Variable("LocPt"), Variable("LocPt2")));
-	Neg(Apply(learned_relation, [Variable("LocSw"); Variable("Any"); Variable("DlDst")]))
-	])
+	forward_2 = Clause(forward_relation, packet_vars @ packet_vars_2,
+	[Neg(Apply(learned_relation, [Variable("LocSw"); Variable("Any"); Variable("DlDst")]))])
 	and
-	emit_relation = Relation("emit", packet_vars @ packet_vars_2, [emit_1; emit_2], None, None)
-	and
-	switch_1 = Clause(switch_has_ports_relation, [Constant("1"); Constant("1")], [])
-	and
-	switch_2 = Clause(switch_has_ports_relation, [Constant("1"); Constant("2")], [])
-	and
-	switch_3 = Clause(switch_has_ports_relation, [Constant("1"); Constant("3")], [])
-	and
-	switch_has_ports_relation = Relation("switchHasPorts", [Variable("Sw"); Variable("Pt")], [switch_1; switch_2; switch_3], None, None);;
+	forward_relation = Relation("forward", packet_vars @ packet_vars_2, [forward_1; forward_2], None, None);;
 
-let mac_learning_program = Program([plus_learned_relation; minus_learned_relation; learned_relation; switch_has_ports_relation], emit_relation);;
+let mac_learning_program = Program([plus_learned_relation; minus_learned_relation; learned_relation], forward_relation);;
 end
-
+(*
 module Arp_cache = struct
 
 let packet_vars = List.map (fun (str : string) -> Variable(str)) ["LocSw"; "LocPt"; "DlSrc"; "DlDst"; "DlTyp"; "NwSrc"; "NwDst"; "NwProto"];;
@@ -316,7 +304,7 @@ let rec plus_learned = Clause(plus_learned_relation, packet_vars @ learned_vars,
 	and
 	learned_relation = Relation("learned", learned_vars, [], Some(plus_learned_relation), None);;
 
-let rec emit_1 = Clause(emit_relation, packet_vars @ packet_vars_2,
+let rec forward_1 = Clause(forward_relation, packet_vars @ packet_vars_2,
 	[Pos(Equals(Variable("DlTyp"), Constant("0x0806")));
 	Pos(Equals(Variable("NwProto"), Constant("2")));
 	Pos(Equals(Variable("LocSw2"), Variable("LocSw")));
@@ -329,7 +317,7 @@ let rec emit_1 = Clause(emit_relation, packet_vars @ packet_vars_2,
 	Pos(Apply(switch_has_ports_relation, [Variable("LocSw2"); Variable("LocPt2")]));
 	Neg(Equals(Variable("LocPt2"), Variable("LocPt")))])
 	and
-	emit_2 = Clause(emit_relation, packet_vars @ packet_vars_2,
+	forward_2 = Clause(forward_relation, packet_vars @ packet_vars_2,
 	[Pos(Equals(Variable("DlTyp"), Constant("0x0806")));
 	Pos(Equals(Variable("NwProto"), Constant("1")));
 	Pos(Equals(Variable("LocSw2"), Variable("LocSw")));
@@ -343,7 +331,7 @@ let rec emit_1 = Clause(emit_relation, packet_vars @ packet_vars_2,
 	Neg(Apply(learned_relation, [Variable("NwSrc"); Variable("Any")]));
 	Neg(Equals(Variable("LocPt2"), Variable("LocPt")))])
 	and
-	emit_3 = Clause(emit_relation, packet_vars @ packet_vars_2,
+	forward_3 = Clause(forward_relation, packet_vars @ packet_vars_2,
 	[Pos(Equals(Variable("DlTyp"), Constant("0x0806")));
 	Pos(Equals(Variable("NwProto"), Constant("1")));
 	Pos(Equals(Variable("DlTyp2"), Constant("0x0806")));
@@ -358,7 +346,7 @@ let rec emit_1 = Clause(emit_relation, packet_vars @ packet_vars_2,
 	Pos(Equals(Variable("NwProto"), Variable("NwProto2")));
 	Pos(Apply(switch_has_ports_relation, [Variable("LocSw2"); Variable("LocPt2")]))])
 	and
-	emit_relation = Relation("emit", packet_vars @ packet_vars_2, [emit_1; emit_2; emit_3], None, None)
+	forward_relation = Relation("forward", packet_vars @ packet_vars_2, [forward_1; forward_2; forward_3], None, None)
 	and
 	switch_1 = Clause(switch_has_ports_relation, [Constant("1"); Constant("1")], [])
 	and
@@ -368,9 +356,9 @@ let rec emit_1 = Clause(emit_relation, packet_vars @ packet_vars_2,
 	and
 	switch_has_ports_relation = Relation("switchHasPorts", [Variable("Sw"); Variable("Pt")], [switch_1; switch_2; switch_3], None, None);;
 
-let arp_cache_program = Program([plus_learned_relation; learned_relation; switch_has_ports_relation], emit_relation);;
+let arp_cache_program = Program([plus_learned_relation; learned_relation; switch_has_ports_relation], forward_relation);;
 end
-
+*)
 (* try out the functions *)
 
 (*open Mac;;*)
@@ -434,3 +422,4 @@ let packet_in (sw : switchId) (xid : xid) (pk : packetIn) =
 end
 
 module Controller = OxStart.Make (OxController);;
+
