@@ -23,6 +23,12 @@ module Xsb = struct
 	(* error_2 needs to be periodically flushed! *)
 		
 
+(* True if string str1 ends with string str2 *)
+	let ends_with (str1 : string) (str2 : string) : bool = 
+		if String.length str2 > String.length str1
+		then false
+		else (String.sub str1 ((String.length str1) - (String.length str2)) (String.length str2)) = str2;;
+
 	(* This takes in a string command (not query, this doesn't deal with the semicolons) and two channels (to and from xsb).
 	It writes the command to xsb and returns the resulting text.*)
 	let send_assert (str : string) (out_ch : out_channel) (in_ch : in_channel) : string =
@@ -30,18 +36,13 @@ module Xsb = struct
 		flush out_ch;
 		let answer = ref "" in
 		let next_str = ref "" in
-		while (String.trim !next_str <> "yes" && String.trim !next_str <> "no") do
+		while (not (ends_with (String.trim !next_str) "yes") && not (ends_with (String.trim !next_str) "no")) do
 			next_str := input_line in_ch;
+            (*print_endline ("DEBUG: send_assert "^ str ^" getting response. Line was: "^(!next_str));*)
 			answer := (!answer ^ "\n" ^ String.trim !next_str);
 		done;
 		String.trim !answer;;
 
-
-	(* True if string str1 ends with string str2 *)
-	let ends_with (str1 : string) (str2 : string) : bool = 
-		if String.length str2 > String.length str1
-		then false
-		else (String.sub str1 ((String.length str1) - (String.length str2)) (String.length str2)) = str2;;
 
 	(* Removes str2 from the end of str1 if its there, otherwise returns str1 *)
 	let remove_from_end (str1 : string) (str2 : string) : string = 
@@ -99,33 +100,3 @@ module Xsb = struct
 		list_to_string l (fun li -> list_to_string li (fun x -> x))
 
 end
-
-(* examples *)
-(*open Xsb;;
-let xout_channel, xin_channel = start_xsb ();;
-
-send_assert "assert(p(1))." xout_channel xin_channel;;
-
-send_assert "assert(p(2))." xout_channel xin_channel;;
-
-print_endline (lol_to_string (send_query "p(X)." 1 xout_channel xin_channel));;
-print_endline "";;
-flush Pervasives.stdout;;
-
-send_assert "assert(q(3,4))." xout_channel xin_channel;;
-
-print_endline (lol_to_string (send_query "q(X, Y)." 2 xout_channel xin_channel));;
-print_endline "";;
-flush Pervasives.stdout;;
-
-send_assert "[mac_learning]." xout_channel xin_channel;;
-
-send_assert "assert(learned(1,5,4))." xout_channel xin_channel;;
-
-print_endline (lol_to_string (send_query "emit(1,2,3,4,5,6,7,8, LocSw2, LocPt2, DlSrc2, DlDst2, DlTyp2, NwSrc2, NwDst2, NwProto2)." 8 xout_channel xin_channel));;
-print_endline "";;
-flush Pervasives.stdout;;
-
-
-(* always close the channel at the end *)
-halt_xsb xout_channel*)

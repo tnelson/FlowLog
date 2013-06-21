@@ -1,7 +1,0 @@
-"Rule: ocaml dependencies ml (%=xsb )": "w\138\201^\248\231\210Z\207\017\218@eq\144b"
-"Rule: ocaml: ml -> cmo & cmi (%=xsb )": "J\248]xs\2053\252\245\225C\220\021.Z\020"
-"Resource: /home/flowlog/frenetic/guide/ox-tutorial-code/FlowLog/interpreter/flowlog_program.ml": "y\1945s\139\202W7E\136\029\189nN\248%"
-"Resource: /home/flowlog/FlowLog/interpreter/flowlog_program.ml": "y\1945s\139\202W7E\136\029\189nN\248%"
-"Rule: ocaml dependencies ml (%=flowlog_program )": "5\t\168=OD0\030<H\211)A\128\255\234"
-"Resource: /home/flowlog/FlowLog/interpreter/xsb.ml": "sS\182e\201\012\169M\181\1842\197\222\147\005<"
-"Resource: /home/flowlog/frenetic/guide/ox-tutorial-code/FlowLog/interpreter/xsb.ml": "sS\182e\201\012\169M\181\1842\197\222\147\005<"
