@@ -4,6 +4,8 @@ open Packet;;
 open OxPlatform;;
 open OpenFlow0x01_Core;;
 
+let debug = true;;
+
 module type PROGRAM = sig
 	val program : Flowlog.program;;
 end
@@ -21,7 +23,7 @@ module Make_OxModule (Program : PROGRAM) = struct
 			let _ = ref_out_ch := Some(out_ch) in
 			let _ = ref_in_ch := Some(in_ch) in
 			let _ = Flowlog.start_program Program.program out_ch in_ch in
-			let _ = print_endline "started program" in
+			let _ = if debug then print_endline "started program" in
 			(out_ch, in_ch);
 		| Some(out_ch) -> match !ref_in_ch with
 			|Some(in_ch) -> (out_ch, in_ch);
@@ -30,7 +32,7 @@ module Make_OxModule (Program : PROGRAM) = struct
 	let _ = get_ch ();;
 	
 	let packet_in (sw : switchId) (xid : xid) (pk : packetIn) =
-		Printf.printf "%s\n%!" (packetIn_to_string pk);
+		if debug then Printf.printf "%s\n%!" (packetIn_to_string pk);
 		let out_ch, in_ch = get_ch () in
 		Flowlog.respond_to_packet Program.program sw xid pk out_ch in_ch;;
 
@@ -38,4 +40,5 @@ module Make_OxModule (Program : PROGRAM) = struct
 
 end
 
+(* Eventually change to MyOxStart.Make so cleanup is called on exceptions. *)
 module Make_Controller (Program : PROGRAM) = OxStart.Make (Make_OxModule (Program));;

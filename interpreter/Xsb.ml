@@ -2,7 +2,6 @@
 open Unix;;
 open Printf;;
 
-
 module Xsb = struct
 	
 	(* creates a pair channels for talking to xsb, starts xsb, and returns the channels *)

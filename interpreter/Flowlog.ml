@@ -4,6 +4,8 @@ open Packet;;
 open OxPlatform;;
 open OpenFlow0x01_Core;;
 
+let debug = false;;
+
 module Flowlog = struct
 
 	(* constants and variables (recall variables are uppercase) *)
@@ -84,7 +86,7 @@ module Flowlog = struct
 			(List.fold_right add_unique_var args []);;
 	
 	let send_clause (cl : clause) (assertion : string) (out_ch : out_channel) (in_ch : in_channel) : (term list) list =
-		let _ = print_endline assertion in
+		let _ = if debug then print_endline assertion in
 		let num_vars = List.length (get_vars cl) in
 		let answer = (if num_vars > 0 then Xsb.send_query assertion (List.length (get_vars cl)) out_ch in_ch
 		else let _ = Xsb.send_assert assertion out_ch in_ch in []) in
@@ -110,9 +112,9 @@ module Flowlog = struct
 		| Relation(_, _, clauses, _, _) -> List.fold_right (fun cls acc -> (assert_clause cls out_ch in_ch) @ acc) clauses [];;
 	
 	let query_relation (rel : relation) (args : term list) (out_ch : out_channel) (in_ch : in_channel) : (term list) list =
-	(*	let _ = print_endline ("query relation: " ^ (relation_name rel) ^ (list_to_string args term_to_string)) in *)
+		let _ = if debug then print_endline ("query relation: " ^ (relation_name rel) ^ (list_to_string args term_to_string)) in
 		let ans = query_clause (Clause(rel, args, [])) out_ch in_ch in
-		let _ = print_endline (list_to_string ans (fun x -> list_to_string x term_to_string)) in
+		let _ = if debug then print_endline (list_to_string ans (fun x -> list_to_string x term_to_string)) in
 		ans;;
 	
 	let start_program (prgm : program) (out_ch : out_channel) (in_ch : in_channel) : (term list) list = 
@@ -152,7 +154,7 @@ module Flowlog = struct
 				(String.sub st 0 1) ^ (replace r w (String.sub st 1 (String.length st - 1)));;
 	
 	let pkt_to_term_list (sw : switchId) (pk : packetIn) : term list = 
-		let _ = print_endline "starting pkt_to_term_list" in
+		let _ = if debug then print_endline "starting pkt_to_term_list" in
 		let pkt_payload = parse_payload pk.input_payload in
 		let isIp = ((dlTyp pkt_payload) = 0x0800) in
 		let ans = List.map (function x -> Constant(x)) [Int64.to_string sw;
@@ -163,8 +165,8 @@ module Flowlog = struct
 		Int32.to_string (nwSrc pkt_payload);
 		Int32.to_string (nwDst pkt_payload);
 		if isIp then (string_of_int (nwProto pkt_payload)) else "arp"] in
-		let _ = print_endline ("pkt to term list: " ^ (list_to_string ans term_to_string)) in
-		let _ = print_endline ("dlTyp: " ^ (string_of_int (dlTyp pkt_payload))) in
+		let _ = if debug then print_endline ("pkt to term list: " ^ (list_to_string ans term_to_string)) in
+		let _ = if debug then print_endline ("dlTyp: " ^ (string_of_int (dlTyp pkt_payload))) in
 		ans;;
 	
 	let begins_with (str1 : string) (str2 : string) : bool = 
@@ -195,7 +197,7 @@ module Flowlog = struct
 			let nwDst_new = term_to_string (List.nth tl 6) in
 			let _ = actions_list := SetNwDst(Int32.of_string (if (begins_with nwDst_new "_h") then nwDst_old else nwDst_new)) :: !actions_list in
 			()) tll in
-		let _ = print_endline ("print packet payload: " ^ (Packet.to_string (parse_payload pk.input_payload))) in
+		let _ = if debug then print_endline ("print packet payload: " ^ (Packet.to_string (parse_payload pk.input_payload))) in
 		send_packet_out sw 0l {output_payload = pk.input_payload; port_id = None; apply_actions = !actions_list};;
 	
 	let respond_to_packet (prgm : program) (sw : switchId) (xid : xid) (pk : packetIn) (out_ch : out_channel) (in_ch : in_channel) : unit = 
