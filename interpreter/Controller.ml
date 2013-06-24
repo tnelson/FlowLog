@@ -43,12 +43,18 @@ end
 (* Eventually change to MyOxStart.Make so cleanup is called on exceptions. *)
 module Make_Controller (Program : PROGRAM) = OxStart.Make (Make_OxModule (Program));;
 
-let append_relation_name (new_name : string) (rel : Flowlog.relation) : Flowlog.relation = 
-	match rel with Flowlog.Relation(old_name, args, clauses, plus, minus) -> Flowlog.Relation(new_name ^ "/" ^ old_name, args, clauses, plus, minus);;
+let append_relation_name (to_append : string) (rel : Flowlog.relation) : Flowlog.relation = 
+	match rel with Flowlog.Relation(old_name, args, clauses) -> 
+	let new_name = old_name ^ "/" ^ to_append in
+	let new_clauses = List.map (append_clause_name to_append) clauses in
+	Flowlog.Relation(new_name, args, new_clauses);;
+
+let append_clause_name (to_append : string) (cls : Flowlog.clause) : Flowlog.clause = 
+	
 
 module Union (Pg1 : PROGRAM) (Pg2 : PROGRAM) = struct
 let program = match Pg1.program with Flowlog.Program(name_1, rel_list_1, forward_rel_1) -> match Pg2.program with Flowlog.Program(name_2, rel_list_2, forward_rel_2) ->
-	Flowlog.Program(name_1 ^ "+" ^ name_2, List.map (append_relation_name name_1) rel_list_1 @ List.map (append_relation_name name_2) rel_list_2, 
+	Flowlog.Program(name_1 ^ "+" ^ name_2, (List.map (append_relation_name name_1) rel_list_1) @ (List.map (append_relation_name name_2) rel_list_2), 
 		Flowlog.Relation("forward", Flowlog.packet_vars @ Flowlog.packet_vars_2, 
-		(match forward_rel_1 with Flowlog.Relation(_, _, clauses, _, _) -> clauses) @ (match forward_rel_2 with Flowlog.Relation(_, _, clauses, _, _) -> clauses), None, None));;
+		(match forward_rel_1 with Flowlog.Relation(_, _, clauses) -> clauses) @ (match forward_rel_2 with Flowlog.Relation(_, _, clauses) -> clauses)));;
 end

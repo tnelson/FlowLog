@@ -6,70 +6,66 @@ open OpenFlow0x01_Core;;
 
 let debug = true;;
 
-module Flowlog = struct
-
+module Syntax = struct
 	(* constants and variables (recall variables are uppercase) *)
 	type term = Constant of string | Variable of string;;
-	
 	(* Things like A = B or R(A, B, C) *)
-	type atom = Equals of term * term | Apply of relation * term list | Bool of bool
-	and
-	(* the and is for mutually recursive types *)
+	type atom = Equals of term * term | Apply of string * term list | Bool of bool;;
 	(* Atoms and negations of atoms *)
-		literal = Pos of atom | Neg of atom
-	and
-	(* First string is name, second is list of arguments, third is body *)
-		 clause = Clause of relation * term list * literal list
-	and
+	type literal = Pos of atom | Neg of atom;;
+	(* name, arguments, body *)
+	type clause = Clause of string * term list * literal list;;
 	(* name, arguments, clauses, plus, minus *)
-		 relation = Relation of string * term list * clause list * relation option * relation option;;
-	
-	(* name, list of non-forward relations, forward relation*)
+	type relation = Relation of string * term list * clause list;;
+	(* name, relations *)
 	type program = Program of string * relation list * relation;;
-	
+
 	let packet_vars = List.map (fun (str : string) -> Variable(str)) ["LocSw"; "LocPt"; "DlSrc"; "DlDst"; "DlTyp"; "NwSrc"; "NwDst"; "NwProto"];;
 	let packet_vars_2 = List.map (fun (str : string) -> Variable(str)) ["LocSw2"; "LocPt2"; "DlSrc2"; "DlDst2"; "DlTyp2"; "NwSrc2"; "NwDst2"; "NwProto2"];;
+end
+
+module To_String = struct
+	include Syntax;;
+
+	let list_to_string (conversion : 'a -> string) (l : 'a list) : string = 
+		let ans = List.fold_right (fun x acc -> (conversion x) ^ "," ^ acc) l "" in
+		if ans = "" then ans else String.sub ans 0 (String.length ans - 1);;
 
 	let term_to_string (t : term) : string = 
 		match t with
 		| Constant(c) -> c; 
-		| Variable(v) -> v;; (* v must be upper case *)
-	
-	let print_term_list (l : (term list) list) : unit =
-		let mapped = List.map (fun sublist -> List.map term_to_string sublist) l in
-		print_endline (Xsb.lol_to_string mapped);;
-	
-	let relation_name (rel : relation) : string =
-		match rel with 
-		| Relation(name, _, _, _, _) -> name;;
-	
-	let list_to_string (l : 'a list) (conversion : 'a -> string) : string = 
-		let ans = List.fold_right (fun x acc -> (conversion x) ^ "," ^ acc) l "" in
-		(*let _ = print_endline ("list_to_string: " ^ ans) in*)
-		if ans = "" then ans else String.sub ans 0 (String.length ans - 1);;
-	
+		| Variable(v) -> v;;
+
 	let atom_to_string (a : atom) : string =
 		match a with
 		| Equals(t1, t2) -> term_to_string(t1) ^ " = " ^ term_to_string(t2);
-		| Apply(rel, args) -> (relation_name rel) ^ "(" ^ (list_to_string args term_to_string) ^ ")";
+		| Apply(str, args) -> str ^ "(" ^ (list_to_string term_to_string args) ^ ")";
 		| Bool(b) -> string_of_bool b;;
-	
+
 	let literal_to_string (l : literal) : string = 
 		match l with
 		| Pos(a) -> atom_to_string a;
 		| Neg(a) -> "not(" ^ (atom_to_string a) ^ ")";;
 	
-	let clause_to_string (cl : clause) : string =
-		match cl with
-		| Clause(rel, args, []) -> (relation_name rel) ^ "(" ^ (list_to_string args term_to_string) ^ ")";
-		| Clause(rel, args, body) -> (relation_name rel) ^ "(" ^ (list_to_string args term_to_string) ^ ") :- " ^
-			(list_to_string body literal_to_string);;
-	
 	let get_atom (lit : literal) : atom =
 		match lit with
 		| Pos(a) -> a;
 		| Neg(a) -> a;;
-	
+
+	let clause_to_string (cl : clause) : string =
+		match cl with
+		| Clause(str, args, []) -> str ^ "(" ^ (list_to_string term_to_string args) ^ ")";
+		| Clause(str, args, body) -> str ^ "(" ^ (list_to_string term_to_string args) ^ ") :- " ^
+			(list_to_string literal_to_string body);;
+
+	let relation_name (rel : relation) : string = 
+		match rel with
+		Relation(str, _, _) -> str;;
+end
+
+module Flowlog = struct	
+	include To_String;;
+
 	let add_unique (x : 'a) (l : 'a list) : 'a list = if List.mem x l then l else x :: l;;
 	
 	let add_unique_var (t : term) (acc : term list) : term list = 
@@ -97,7 +93,7 @@ module Flowlog = struct
 	
 	let query_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): (term list) list =
 		send_clause cl (match cl with
-			| Clause(rel, args, _) -> (relation_name rel) ^ "(" ^ (list_to_string args term_to_string) ^ ").") out_ch in_ch;;
+			| Clause(str, args, _) -> str ^ "(" ^ (list_to_string term_to_string args) ^ ").") out_ch in_ch;;
 	
 	let retract_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): (term list) list =
 	    send_clause cl ("retract((" ^ (clause_to_string cl) ^ ")).") out_ch in_ch;;
@@ -111,13 +107,13 @@ module Flowlog = struct
 	
 	let assert_relation (rel : relation) (out_ch : out_channel) (in_ch : in_channel) : (term list) list =
 		match rel with
-		| Relation(_, args, [], _, _) -> assert_clause (Clause(rel, args, [Pos(Bool(false))])) out_ch in_ch;
-		| Relation(_, _, clauses, _, _) -> List.fold_right (fun cls acc -> (assert_clause cls out_ch in_ch) @ acc) clauses [];;
+		| Relation(name, args, []) -> assert_clause (Clause(name, args, [Pos(Bool(false))])) out_ch in_ch;
+		| Relation(_, _, clauses) -> List.fold_right (fun cls acc -> (assert_clause cls out_ch in_ch) @ acc) clauses [];;
 	
 	let query_relation (rel : relation) (args : term list) (out_ch : out_channel) (in_ch : in_channel) : (term list) list =
-		let _ = if debug then print_endline ("query relation: " ^ (relation_name rel) ^ (list_to_string args term_to_string)) in
-		let ans = query_clause (Clause(rel, args, [])) out_ch in_ch in
-		let _ = if debug then print_endline (list_to_string ans (fun x -> list_to_string x term_to_string)) in
+		let _ = if debug then print_endline ("query relation: " ^ (relation_name rel) ^ (list_to_string term_to_string args)) in
+		let ans = query_clause (Clause((relation_name rel), args, [])) out_ch in_ch in
+		let _ = if debug then print_endline (list_to_string (list_to_string term_to_string) ans) in
 		ans;;
 	
 	let start_program (prgm : program) (out_ch : out_channel) (in_ch : in_channel) : (term list) list = 
@@ -131,24 +127,27 @@ module Flowlog = struct
 		| [] -> [];
 		| h :: t -> drop t (n - 1);;
 	
+	let find_relation_by_name (prgm : program) (name : string) : relation option = 
+		match prgm with Program(_, relations,_) -> List.fold_right (fun r acc -> if name = (relation_name r) then Some(r) else acc) relations None;;
+
 	let respond_to_packet_desugared (prgm : program) (pkt : term list) (out_ch : out_channel) (in_ch : in_channel) : (term list) list =
 		match prgm with
 		| Program(_, relations, forward) ->
 			let answer = match forward with
-			| Relation(_, args, _, _, _) -> query_relation forward (pkt @ (drop args (List.length pkt))) out_ch in_ch in
+			| Relation(_, args, _) -> query_relation forward (pkt @ (drop args (List.length pkt))) out_ch in_ch in
 			let _ = List.iter (fun rel ->
-				match rel with
-				| Relation(_, _, _, option_plus, option_minus) ->
-					let to_assert = (match option_plus with
-					| None -> [];
-					| Some(plus) -> match plus with | Relation(_, args, _, _, _) -> 
-						query_relation plus (pkt @ (drop args (List.length pkt))) out_ch in_ch;) in
-					let to_retract = (match option_minus with
-					| None -> [];
-					| Some(minus) -> match minus with | Relation(_, args, _, _, _) -> 
-						query_relation minus (pkt @ (drop args (List.length pkt))) out_ch in_ch;) in
-					let _ = List.iter (fun args -> let _ = tentative_assert_clause (Clause(rel, args, [])) out_ch in_ch in ()) to_assert in
-					List.iter (fun args -> let _ = retract_clause (Clause(rel, args, [])) out_ch in_ch in ()) to_retract;) relations in
+				let option_plus = find_relation_by_name prgm ("+" ^ (relation_name rel)) in
+				let option_minus = find_relation_by_name prgm ("-" ^ (relation_name rel)) in
+				let to_assert = (match option_plus with
+				| None -> [];
+				| Some(plus) -> match plus with | Relation(_, args, _) -> 
+					query_relation plus (pkt @ (drop args (List.length pkt))) out_ch in_ch;) in
+				let to_retract = (match option_minus with
+				| None -> [];
+				| Some(minus) -> match minus with | Relation(_, args, _) -> 
+					query_relation minus (pkt @ (drop args (List.length pkt))) out_ch in_ch;) in
+				let _ = List.iter (fun args -> let _ = tentative_assert_clause (Clause((relation_name rel), args, [])) out_ch in_ch in ()) to_assert in
+				List.iter (fun args -> let _ = retract_clause (Clause((relation_name rel), args, [])) out_ch in_ch in ()) to_retract;) relations in
 			answer;;
 	
 	let rec replace (r : string) (w : string) (st : string) : string =
@@ -168,7 +167,7 @@ module Flowlog = struct
 		Int32.to_string (nwSrc pkt_payload);
 		Int32.to_string (nwDst pkt_payload);
 		if isIp then (string_of_int (nwProto pkt_payload)) else "arp"] in
-		let _ = if debug then print_endline ("pkt to term list: " ^ (list_to_string ans term_to_string)) in
+		let _ = if debug then print_endline ("pkt to term list: " ^ (list_to_string term_to_string ans)) in
 		let _ = if debug then print_endline ("dlTyp: " ^ (string_of_int (dlTyp pkt_payload))) in
 		ans;;
 	
