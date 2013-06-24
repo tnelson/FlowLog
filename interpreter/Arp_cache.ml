@@ -4,8 +4,6 @@ open Controller;;
 module Arp_cache : PROGRAM = struct
 include Flowlog;;
 
-let packet_vars = List.map (fun (str : string) -> Variable(str)) ["LocSw"; "LocPt"; "DlSrc"; "DlDst"; "DlTyp"; "NwSrc"; "NwDst"; "NwProto"];;
-let packet_vars_2 = List.map (fun (str : string) -> Variable(str)) ["LocSw2"; "LocPt2"; "DlSrc2"; "DlDst2"; "DlTyp2"; "NwSrc2"; "NwDst2"; "NwProto2"];;
 let learned_vars = [Variable("Ip"); Variable("Mac")];;
 
 let rec plus_learned = Clause(plus_learned_relation, packet_vars @ learned_vars,
@@ -40,7 +38,7 @@ let rec forward_1 = Clause(forward_relation, packet_vars @ packet_vars_2,
 	and
 	forward_relation = Relation("forward", packet_vars @ packet_vars_2, [forward_1; forward_2; forward_3], None, None);;
 
-let program = Program([plus_learned_relation; learned_relation], forward_relation);;
+let program = Program("arp_cache", [plus_learned_relation; learned_relation], forward_relation);;
 end
 
-module Run = Controller.Make_Controller (Arp_cache);;
+(*module Run = Controller.Make_Controller (Arp_cache);;*)

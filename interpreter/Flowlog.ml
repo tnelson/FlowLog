@@ -4,7 +4,7 @@ open Packet;;
 open OxPlatform;;
 open OpenFlow0x01_Core;;
 
-let debug = false;;
+let debug = true;;
 
 module Flowlog = struct
 
@@ -24,9 +24,12 @@ module Flowlog = struct
 	(* name, arguments, clauses, plus, minus *)
 		 relation = Relation of string * term list * clause list * relation option * relation option;;
 	
-	(* list of non-forward relations, forward relation*)
-	type program = Program of relation list * relation;;
+	(* name, list of non-forward relations, forward relation*)
+	type program = Program of string * relation list * relation;;
 	
+	let packet_vars = List.map (fun (str : string) -> Variable(str)) ["LocSw"; "LocPt"; "DlSrc"; "DlDst"; "DlTyp"; "NwSrc"; "NwDst"; "NwProto"];;
+	let packet_vars_2 = List.map (fun (str : string) -> Variable(str)) ["LocSw2"; "LocPt2"; "DlSrc2"; "DlDst2"; "DlTyp2"; "NwSrc2"; "NwDst2"; "NwProto2"];;
+
 	let term_to_string (t : term) : string = 
 		match t with
 		| Constant(c) -> c; 
@@ -119,7 +122,7 @@ module Flowlog = struct
 	
 	let start_program (prgm : program) (out_ch : out_channel) (in_ch : in_channel) : (term list) list = 
 		match prgm with
-		| Program(relations, forward) -> let out = List.fold_right (fun rel acc -> (assert_relation rel out_ch in_ch) @ acc) relations [] in
+		| Program(_, relations, forward) -> let out = List.fold_right (fun rel acc -> (assert_relation rel out_ch in_ch) @ acc) relations [] in
 			out @ (assert_relation forward out_ch in_ch);;
 	
 	let rec drop (l : 'a list) (n : int) : 'a list = 
@@ -130,7 +133,7 @@ module Flowlog = struct
 	
 	let respond_to_packet_desugared (prgm : program) (pkt : term list) (out_ch : out_channel) (in_ch : in_channel) : (term list) list =
 		match prgm with
-		| Program(relations, forward) ->
+		| Program(_, relations, forward) ->
 			let answer = match forward with
 			| Relation(_, args, _, _, _) -> query_relation forward (pkt @ (drop args (List.length pkt))) out_ch in_ch in
 			let _ = List.iter (fun rel ->

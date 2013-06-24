@@ -18,9 +18,11 @@ module Flowlog : sig
 	(* name, arguments, clauses, plus, minus *)
 		 relation = Relation of string * term list * clause list * relation option * relation option;;
 	
-	(* list of non-forward relations, forward relation*)
-	type program = Program of relation list * relation;;
+	(* name, list of non-forward relations, forward relation*)
+	type program = Program of string * relation list * relation;;
 
+	val packet_vars : term list;;
+	val packet_vars_2 : term list;;
 	val start_program : program -> out_channel -> in_channel -> (term list) list;;
 	val respond_to_packet : program -> switchId -> xid -> packetIn -> out_channel -> in_channel -> unit;;
 
