@@ -15,13 +15,14 @@ module Syntax = struct
 	type literal = Pos of atom | Neg of atom;;
 	(* name, arguments, body *)
 	type clause = Clause of string * term list * literal list;;
-	(* name, arguments, clauses, plus, minus *)
+	(* name, arguments, clauses *)
 	type relation = Relation of string * term list * clause list;;
-	(* name, relations *)
+	(* name, relations, forward *)
 	type program = Program of string * relation list * relation;;
 
 	let packet_vars = List.map (fun (str : string) -> Variable(str)) ["LocSw"; "LocPt"; "DlSrc"; "DlDst"; "DlTyp"; "NwSrc"; "NwDst"; "NwProto"];;
 	let packet_vars_2 = List.map (fun (str : string) -> Variable(str)) ["LocSw2"; "LocPt2"; "DlSrc2"; "DlDst2"; "DlTyp2"; "NwSrc2"; "NwDst2"; "NwProto2"];;
+	let shp_vars = List.map (fun (str : string) -> Variable(str)) ["LocSw", "LocPt2"];;
 end
 
 module To_String = struct
@@ -61,7 +62,7 @@ module To_String = struct
 	let relation_name (rel : relation) : string = 
 		match rel with
 		Relation(str, _, _) -> str;;
-end
+end 
 
 module Flowlog = struct	
 	include To_String;;
@@ -116,25 +117,36 @@ module Flowlog = struct
 		let _ = if debug then print_endline (list_to_string (list_to_string term_to_string) ans) in
 		ans;;
 	
-	let start_program (prgm : program) (out_ch : out_channel) (in_ch : in_channel) : (term list) list = 
-		match prgm with
-		| Program(_, relations, forward) -> let out = List.fold_right (fun rel acc -> (assert_relation rel out_ch in_ch) @ acc) relations [] in
-			out @ (assert_relation forward out_ch in_ch);;
-	
 	let rec drop (l : 'a list) (n : int) : 'a list = 
 		if n <= 0 then l else
 		match l with
 		| [] -> [];
 		| h :: t -> drop t (n - 1);;
-	
+
 	let find_relation_by_name (prgm : program) (name : string) : relation option = 
 		match prgm with Program(_, relations,_) -> List.fold_right (fun r acc -> if name = (relation_name r) then Some(r) else acc) relations None;;
+
+	(* memoize this function? *)
+	let constrain_ports (forward : relation) : relation =
+		let constraint = Pos(Apply("switch_has_ports", shp_vars)) in
+		match forward with Relation(name, args, clauses) -> Relation(name, args, List.map (fun cls ->
+			match cls with Clause(name_1, args_1, body) -> Clause(name_1, args_1, constraint :: body)));;
+
+	let start_program (prgm : program) (out_ch : out_channel) (in_ch : in_channel) : (term list) list = 
+		match prgm with
+		| Program(_, relations, forward) -> let out = List.fold_right (fun rel acc -> (assert_relation rel out_ch in_ch) @ acc) relations [] in
+			out @ (assert_relation (constrain_ports forward) out_ch in_ch) @ (assert_relation Relation("switch_has_ports", shp_vars, []));;
+
+	(* memoize this function? *)
+	let update_switch_ports (sw : switchId) (port_nums : portId list) (out_ch : out_channel) (in_ch : in_channel) : unit =
+		let sw_string = Int64.to_string sw in
+		List.iter (fun port -> tentative_assert_clause (Clause("switch_has_ports", [Constant(sw_string); Constant(port)])) out_ch in_ch) (List.map string_of_int port_nums);;
 
 	let respond_to_packet_desugared (prgm : program) (pkt : term list) (out_ch : out_channel) (in_ch : in_channel) : (term list) list =
 		match prgm with
 		| Program(_, relations, forward) ->
 			let answer = match forward with
-			| Relation(_, args, _) -> query_relation forward (pkt @ (drop args (List.length pkt))) out_ch in_ch in
+			| Relation(_, args, _) -> query_relation (constrain_ports forward) (pkt @ (drop args (List.length pkt))) out_ch in_ch in
 			let _ = List.iter (fun rel ->
 				let option_plus = find_relation_by_name prgm ("+" ^ (relation_name rel)) in
 				let option_minus = find_relation_by_name prgm ("-" ^ (relation_name rel)) in

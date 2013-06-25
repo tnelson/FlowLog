@@ -3,6 +3,7 @@ open Flowlog;;
 open Packet;;
 open OxPlatform;;
 open OpenFlow0x01_Core;;
+open OpenFlow0x01;;
 
 let debug = true;;
 
@@ -12,9 +13,6 @@ end
 
 module Make_OxModule (Program : PROGRAM) = struct
 	include OxStart.DefaultTutorialHandlers;;
-
-	let switch_connected (sw : switchId) : unit =
-	    Printf.printf "Switch %Ld connected.\n%!" sw
 	
 	let ref_out_ch = ref None;;
 	let ref_in_ch = ref None;;
@@ -31,12 +29,19 @@ module Make_OxModule (Program : PROGRAM) = struct
 	
 	let _ = get_ch ();;
 	
-	let packet_in (sw : switchId) (xid : xid) (pk : packetIn) =
+	let switch_connected (sw : switchId) (feats : OpenFlow0x01.SwitchFeatures.t) : unit =
+	    Printf.printf "Switch %Ld connected.\n%!" sw;
+	    let port_nums = List.map (fun x -> x.port_no) feats.ports in
+	    let out_ch, in_ch = get_ch () in
+	    Flowlog.update_switch_ports sw port_nums out_ch in_ch;;
+	    
+
+	let packet_in (sw : switchId) (xid : xid) (pk : packetIn) : unit =
 		if debug then Printf.printf "%s\n%!" (packetIn_to_string pk);
 		let out_ch, in_ch = get_ch () in
 		Flowlog.respond_to_packet Program.program sw xid pk out_ch in_ch;;
 
-	let cleanup () = let out_ch, in_ch = get_ch () in Xsb.halt_xsb out_ch;;
+	let cleanup () : unit = let out_ch, in_ch = get_ch () in Xsb.halt_xsb out_ch;;
 
 end
 
