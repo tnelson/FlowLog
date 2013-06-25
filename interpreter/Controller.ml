@@ -43,18 +43,39 @@ end
 (* Eventually change to MyOxStart.Make so cleanup is called on exceptions. *)
 module Make_Controller (Program : PROGRAM) = OxStart.Make (Make_OxModule (Program));;
 
-let append_relation_name (to_append : string) (rel : Flowlog.relation) : Flowlog.relation = 
-	match rel with Flowlog.Relation(old_name, args, clauses) -> 
-	let new_name = old_name ^ "/" ^ to_append in
-	let new_clauses = List.map (append_clause_name to_append) clauses in
-	Flowlog.Relation(new_name, args, new_clauses);;
+let process_atom_name (fn : string -> string) (a : Flowlog.atom) : Flowlog.atom = 
+	match a with
+	| Flowlog.Apply(name, tl) -> Flowlog.Apply(fn name, tl);
+	| _ -> a;;
 
-let append_clause_name (to_append : string) (cls : Flowlog.clause) : Flowlog.clause = 
-	
+let process_literal_name (fn : string -> string) (lit : Flowlog.literal) : Flowlog.literal = 
+	match lit with
+	| Flowlog.Pos(a) -> Flowlog.Pos(process_atom_name fn a);
+	| Flowlog.Neg(a) -> Flowlog.Neg(process_atom_name fn a);;
+
+let process_clause_name (fn : string -> string) (cls : Flowlog.clause) : Flowlog.clause = 
+	match cls with Flowlog.Clause(name, args, body) ->
+	let new_body = List.map (process_literal_name fn) body in
+	Flowlog.Clause(fn name, args, new_body);;
+
+let process_relation_name (fn: string -> string) (rel : Flowlog.relation) : Flowlog.relation = 
+	match rel with Flowlog.Relation(name, args, clauses) -> 
+	let new_clauses = List.map (process_clause_name fn) clauses in
+	Flowlog.Relation(fn name, args, new_clauses);;
+
+let append_string (to_append : string) (str : string) : string =
+	if (str <> "forward") then str ^ to_append else str;;
 
 module Union (Pg1 : PROGRAM) (Pg2 : PROGRAM) = struct
-let program = match Pg1.program with Flowlog.Program(name_1, rel_list_1, forward_rel_1) -> match Pg2.program with Flowlog.Program(name_2, rel_list_2, forward_rel_2) ->
-	Flowlog.Program(name_1 ^ "+" ^ name_2, (List.map (append_relation_name name_1) rel_list_1) @ (List.map (append_relation_name name_2) rel_list_2), 
+let program = match Pg1.program with 
+	| Flowlog.Program(name_1, rel_list_1, forward_rel_1) -> 
+	match Pg2.program with 
+	| Flowlog.Program(name_2, rel_list_2, forward_rel_2) ->
+	let process_1 = process_relation_name (append_string ("/" ^ name_1)) in
+	let process_2 = process_relation_name (append_string ("/" ^ name_2)) in
+	Flowlog.Program(name_1 ^ "+" ^ name_2, 
+		(List.map process_1 rel_list_1) @ (List.map process_2 rel_list_2), 
 		Flowlog.Relation("forward", Flowlog.packet_vars @ Flowlog.packet_vars_2, 
-		(match forward_rel_1 with Flowlog.Relation(_, _, clauses) -> clauses) @ (match forward_rel_2 with Flowlog.Relation(_, _, clauses) -> clauses)));;
+		(match process_1 forward_rel_1 with Flowlog.Relation(_, _, clauses) -> clauses)
+		@ (match process_2 forward_rel_2 with Flowlog.Relation(_, _, clauses) -> clauses)));;
 end
