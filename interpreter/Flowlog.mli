@@ -19,6 +19,7 @@ module Flowlog : sig
 	val packet_vars : term list;;
 	val packet_vars_2 : term list;;
 	val shp_vars : term list;;
+	val shp_name : string;;
 	val start_program : program -> out_channel -> in_channel -> (term list) list;;
 	val update_switch_ports : switchId -> portId list -> out_channel -> in_channel -> unit;;
 	val respond_to_packet : program -> switchId -> xid -> packetIn -> out_channel -> in_channel -> unit;;

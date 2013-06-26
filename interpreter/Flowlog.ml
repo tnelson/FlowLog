@@ -23,6 +23,7 @@ module Syntax = struct
 	let packet_vars = List.map (fun (str : string) -> Variable(str)) ["LocSw"; "LocPt"; "DlSrc"; "DlDst"; "DlTyp"; "NwSrc"; "NwDst"; "NwProto"];;
 	let packet_vars_2 = List.map (fun (str : string) -> Variable(str)) ["LocSw2"; "LocPt2"; "DlSrc2"; "DlDst2"; "DlTyp2"; "NwSrc2"; "NwDst2"; "NwProto2"];;
 	let shp_vars = List.map (fun (str : string) -> Variable(str)) ["LocSw"; "LocPt2"];;
+	let shp_name = "__switch_has_ports";;
 end
 
 module To_String = struct
@@ -128,19 +129,19 @@ module Flowlog = struct
 
 	(* memoize this function? *)
 	let constrain_ports (forward : relation) : relation =
-		let constraining_literal = Pos(Apply("switch_has_ports", shp_vars)) in
+		let constraining_literal = Pos(Apply(shp_name, shp_vars)) in
 		match forward with Relation(name, args, clauses) -> Relation(name, args, List.map (fun cls ->
 			match cls with Clause(name_1, args_1, body) -> Clause(name_1, args_1, constraining_literal :: body)) clauses);;
 
 	let start_program (prgm : program) (out_ch : out_channel) (in_ch : in_channel) : (term list) list = 
 		match prgm with
 		| Program(_, relations, forward) -> let out = List.fold_right (fun rel acc -> (assert_relation rel out_ch in_ch) @ acc) relations [] in
-			out @ (assert_relation (constrain_ports forward) out_ch in_ch) @ (assert_relation (Relation("switch_has_ports", shp_vars, [])) out_ch in_ch);;
+			out @ (assert_relation (constrain_ports forward) out_ch in_ch) @ (assert_relation (Relation(shp_name, shp_vars, [])) out_ch in_ch);;
 
 	(* memoize this function? *)
 	let update_switch_ports (sw : switchId) (port_nums : portId list) (out_ch : out_channel) (in_ch : in_channel) : unit =
 		let sw_string = Int64.to_string sw in
-		List.iter (fun port -> let _ = tentative_assert_clause (Clause("switch_has_ports", [Constant(sw_string); Constant(port)], [])) out_ch in_ch in ()) 
+		List.iter (fun port -> let _ = tentative_assert_clause (Clause(shp_name, [Constant(sw_string); Constant(port)], [])) out_ch in_ch in ()) 
 		(List.map string_of_int port_nums);;
 
 	let respond_to_packet_desugared (prgm : program) (pkt : term list) (out_ch : out_channel) (in_ch : in_channel) : (term list) list =
