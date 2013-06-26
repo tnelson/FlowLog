@@ -13,14 +13,14 @@ module Flowlog : sig
 	type clause = Clause of string * term list * literal list;;
 	(* name, arguments, clauses *)
 	type relation = Relation of string * term list * clause list;;
-	(* name, relations, forward, switch_has_ports *)
-	type program = Program of string * relation list * relation * relation;;
+	(* name, relations, forward *)
+	type program = Program of string * relation list * relation;;
 
 	val packet_vars : term list;;
 	val packet_vars_2 : term list;;
 	val shp_vars : term list;;
 	val start_program : program -> out_channel -> in_channel -> (term list) list;;
-	val update_switch_ports : program -> switchId -> portId list -> out_channel -> in_channel -> unit;;
+	val update_switch_ports : switchId -> portId list -> out_channel -> in_channel -> unit;;
 	val respond_to_packet : program -> switchId -> xid -> packetIn -> out_channel -> in_channel -> unit;;
 
 end
