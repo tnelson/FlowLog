@@ -88,14 +88,4 @@ module Xsb = struct
 		output_string out_ch "halt.\n";
 		flush out_ch;;
 
-	let list_to_string (l : 'a list) (converter : 'a -> string) : string =
-		match l with 
-		| [] -> "[]";
-		| _ -> let ans = List.fold_right (fun x st -> (converter x) ^ ", " ^ st) l "" in
-		"[" ^ String.sub ans 0 (String.length ans - 2) ^ "]";;
-
-	(* list of list of string to string conversion *)
-	let rec lol_to_string (l : (string list) list) : string = 
-		list_to_string l (fun li -> list_to_string li (fun x -> x))
-
 end
