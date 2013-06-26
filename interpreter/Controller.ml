@@ -43,7 +43,7 @@ module Make_OxModule (Program : PROGRAM) = struct
 		Flowlog.respond_to_packet Program.program sw xid pk out_ch in_ch;;
 
 	let cleanup () : unit = 
-		let _ = print_endline "running cleanup" in
+		let _ = if debug then print_endline "running cleanup" in
 		let out_ch, in_ch = get_ch () in
 		Xsb.halt_xsb out_ch;;
 

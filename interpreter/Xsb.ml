@@ -6,20 +6,10 @@ module Xsb = struct
 	
 	(* creates a pair channels for talking to xsb, starts xsb, and returns the channels *)
 	let start_xsb () : out_channel * in_channel =
-		let from_xsb, xsb_out = Unix.pipe() in
-		let xsb_in, to_xsb = Unix.pipe() in
-		(* Convert the file descriptors created to channels *)
-		let xin_channel = in_channel_of_descr from_xsb in
-		let xout_channel = out_channel_of_descr to_xsb in
-		(* in text mode *)
-		let _ = set_binary_mode_out xout_channel false in
-		let _ = set_binary_mode_in xin_channel false in
-		(* start xsb *)
-		let error_1, error_2 = Unix.pipe() in
-		let _ = Unix.create_process "xsb" [|"xsb"|] xsb_in xsb_out error_2 in
+		let xin_channel, xout_channel, error_channel = Unix.open_process_full "xsb" (Unix.environment ()) in
 		(xout_channel, xin_channel);;
 
-	(* error_2 needs to be periodically flushed! *)
+	(* error_channel needs to be periodically flushed! *)
 		
 
 (* True if string str1 ends with string str2 *)
@@ -77,7 +67,7 @@ module Xsb = struct
 		while not (ends_with (String.trim !next_str) "no") do
 			if (!counter mod num_vars = 0) then
 			(output_string out_ch ";\n";
-			flush out_ch);		
+			flush out_ch);
 			counter := !counter + 1;
 			next_str := input_line in_ch;
 			answer := (remove_from_end (String.trim !next_str) "no") :: !answer;
@@ -86,6 +76,6 @@ module Xsb = struct
 
 	let halt_xsb (out_ch : out_channel) : unit = 
 		output_string out_ch "halt.\n";
-		flush out_ch;;
+		flush out_ch;
 
 end
