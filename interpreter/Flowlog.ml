@@ -128,9 +128,9 @@ module Flowlog = struct
 
 	(* memoize this function? *)
 	let constrain_ports (forward : relation) : relation =
-		let constraint = Pos(Apply("switch_has_ports", shp_vars)) in
+		let constraining_literal = Pos(Apply("switch_has_ports", shp_vars)) in
 		match forward with Relation(name, args, clauses) -> Relation(name, args, List.map (fun cls ->
-			match cls with Clause(name_1, args_1, body) -> Clause(name_1, args_1, constraint :: body)));;
+			match cls with Clause(name_1, args_1, body) -> Clause(name_1, args_1, constraining_literal :: body)));;
 
 	let start_program (prgm : program) (out_ch : out_channel) (in_ch : in_channel) : (term list) list = 
 		match prgm with
