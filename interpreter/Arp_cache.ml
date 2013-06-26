@@ -19,12 +19,14 @@ let	learned_relation = Relation("learned", learned_vars, []);;
 
 let forward_1 = Clause("forward", packet_vars @ packet_vars_2,
 	[Pos(Equals(Variable("DlTyp"), Constant("0x0806")));
-	Pos(Equals(Variable("NwProto"), Constant("2")))])
+	Pos(Equals(Variable("NwProto"), Constant("2")));
+	Neg(Equals(Variable("LocPt"), Variable("LocPt2")))]);;
 
 let	forward_2 = Clause("forward", packet_vars @ packet_vars_2,
 	[Pos(Equals(Variable("DlTyp"), Constant("0x0806")));
 	Pos(Equals(Variable("NwProto"), Constant("1")));
-	Neg(Apply("learned", [Variable("NwSrc"); Variable("Any")]))])
+	Neg(Apply("learned", [Variable("NwSrc"); Variable("Any")]));
+	Neg(Equals(Variable("LocPt"), Variable("LocPt2")))]);;
 
 let	forward_3 = Clause("forward", packet_vars @ packet_vars_2,
 	[Pos(Equals(Variable("DlTyp"), Constant("0x0806")));
@@ -32,9 +34,10 @@ let	forward_3 = Clause("forward", packet_vars @ packet_vars_2,
 	Pos(Equals(Variable("DlTyp2"), Constant("0x0806")));
 	Pos(Equals(Variable("NwProto2"), Constant("2")));
 	Pos(Apply("learned", [Variable("NwDst"); Variable("DlSrc2")]));
+	Pos(Equals(Variable("LocPt"), Variable("LocPt2")));
 	Pos(Equals(Variable("NwDst2"), Variable("NwSrc")));
 	Pos(Equals(Variable("DlDst2"), Variable("DlSrc")));
-	Pos(Equals(Variable("NwSrc2"), Variable("NwDst")))])
+	Pos(Equals(Variable("NwSrc2"), Variable("NwDst")))]);;
 
 let	forward_relation = Relation("forward", packet_vars @ packet_vars_2, [forward_1; forward_2; forward_3]);;
 
