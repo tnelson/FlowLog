@@ -32,8 +32,7 @@ module Make_OxModule (Program : PROGRAM) = struct
 	let switch_connected (sw : switchId) (feats : OpenFlow0x01.SwitchFeatures.t) : unit =
 	    Printf.printf "Switch %Ld connected.\n%!" sw;
 	    (* the next line does nothing but tests the calling of feats.ports which right now fails *)
-	    let _ = feats.ports in
-	    let port_nums = List.map (fun (x : OpenFlow0x01.PortDescription.t)-> x.port_no) feats.ports in
+	    let port_nums = List.map (fun (x : PortDescription.t)-> x.PortDescription.port_no) feats.SwitchFeatures.ports in
 	    let out_ch, in_ch = get_ch () in
 	    Flowlog.update_switch_ports sw port_nums out_ch in_ch;;
 	    

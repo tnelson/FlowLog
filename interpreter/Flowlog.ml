@@ -198,7 +198,8 @@ module Flowlog = struct
 		let nwDst_old = term_to_string (List.nth pk_list 6) in
 		let _ = List.iter (fun tl -> 
 			let locPt_string = term_to_string (List.nth tl 1) in
-			let _ = if (begins_with locPt_string "_h") then actions_list := Output(AllPorts) :: !actions_list else actions_list := Output(PhysicalPort(int_of_string locPt_string)) :: !actions_list in
+			(* if (begins_with locPt_string "_h") then actions_list := Output(AllPorts) :: !actions_list else *)
+			let _ = actions_list := Output(PhysicalPort(int_of_string locPt_string)) :: !actions_list in
 	
 			let dlSrc_new = term_to_string (List.nth tl 2) in
 			let _ = actions_list := SetDlSrc(Int64.of_string (if (begins_with dlSrc_new "_h") then dlSrc_old else dlSrc_new)) :: !actions_list in
