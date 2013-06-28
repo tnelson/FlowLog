@@ -24,6 +24,9 @@ module Syntax = struct
 	let packet_vars_2 = List.map (fun (str : string) -> Variable(str)) ["LocSw2"; "LocPt2"; "DlSrc2"; "DlDst2"; "DlTyp2"; "NwSrc2"; "NwDst2"; "NwProto2"];;
 	let shp_vars = List.map (fun (str : string) -> Variable(str)) ["LocSw"; "LocPt2"];;
 	let shp_name = "__switch_has_ports";;
+
+	open Mac_learning;;
+	let make_program (cl : clause list) : program = (* TODO *) Mac_learning.program;;
 end
 
 module To_String = struct
