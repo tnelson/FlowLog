@@ -1,0 +1,16 @@
++learned(LocSw, LocPt, DlSrc, DlDst, DlTyp, NwSrc, NwDst, NwProto, Sw, Pt, Mac) :-
+LocSw = Sw,
+DlSrc = Mac,
+LocPt = Pt;
+
+-learned(LocSw, LocPt, DlSrc, DlDst, DlTyp, NwSrc, NwDst, NwProto, Sw, Pt, Mac) :-
+LocSw = Sw,
+DlSrc = Mac,
+not LocPt = Pt;
+
+forward(LocSw, LocPt, DlSrc, DlDst, DlTyp, NwSrc, NwDst, NwProto, LocSw2, LocPt2, DlSrc2, DlDst2, DlTyp2, NwSrc2, NwDst2, NwProto2) :-
+learned(LocSw, LocPt2, DlDst);
+
+forward(LocSw, LocPt, DlSrc, DlDst, DlTyp, NwSrc, NwDst, NwProto, LocSw2, LocPt2, DlSrc2, DlDst2, DlTyp2, NwSrc2, NwDst2, NwProto2) :-
+not learned(LocSw, Any, DlDst),
+not LocPt = LocPt2;

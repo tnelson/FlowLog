@@ -31,13 +31,13 @@ module Syntax = struct
 		| h :: t -> match h with Clause(name, _, _) ->
 			List.fold_right (fun rel acc ->
 				(match rel with
-				| Relation(name, args, clauses) -> Relation(name, args, h :: clauses)
-				| _ -> rel;) :: acc) (make_relations t) [];;
+				| Relation(rel_name, args, clauses) -> if rel_name = name then Relation(name, args, h :: clauses) else rel;)
+				 :: acc) (make_relations t) [];;
 
 	let make_program (name : string) (rel_list : relation list) : program =
 		let filter_function = fun rel -> match rel with Relation(rel_name, _, _) -> rel_name = "forward" in
 		let forward_relation = List.hd (List.filter filter_function rel_list) in
-		let relations = List.filter (fun rel -> not filter_function rel) rel_list in
+		let relations = List.filter (fun rel -> not (filter_function rel)) rel_list in
 		Program(name, relations, forward_relation);;
 
 end

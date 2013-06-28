@@ -109,9 +109,9 @@ let yyact = [|
     let _1 = (Parsing.peek_val __caml_parser_env 1 : Flowlog.clause list) in
     Obj.repr(
 # 22 "parser.mly"
-                      ( Flowlog.make_program _1 )
+                      ( Flowlog.make_relations _1 )
 # 114 "parser.ml"
-               : Flowlog.program))
+               : Flowlog.relation list))
 ; (fun __caml_parser_env ->
     let _1 = (Parsing.peek_val __caml_parser_env 0 : Flowlog.clause) in
     Obj.repr(
@@ -238,4 +238,4 @@ let yytables =
     Parsing.names_const=yynames_const;
     Parsing.names_block=yynames_block }
 let main (lexfun : Lexing.lexbuf -> token) (lexbuf : Lexing.lexbuf) =
-   (Parsing.yyparse yytables 1 lexfun lexbuf : Flowlog.program)
+   (Parsing.yyparse yytables 1 lexfun lexbuf : Flowlog.relation list)

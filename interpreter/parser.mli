@@ -1,3 +1,5 @@
+open Flowlog;;
+
 type token =
   | EOF
   | CLAUSE_NAME of (string)
@@ -13,4 +15,4 @@ type token =
   | BOOLEAN of (bool)
 
 val main :
-  (Lexing.lexbuf  -> token) -> Lexing.lexbuf -> Flowlog.program
+  (Lexing.lexbuf  -> token) -> Lexing.lexbuf -> Flowlog.relation list
