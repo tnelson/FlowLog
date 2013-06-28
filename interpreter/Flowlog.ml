@@ -25,8 +25,21 @@ module Syntax = struct
 	let shp_vars = List.map (fun (str : string) -> Variable(str)) ["LocSw"; "LocPt2"];;
 	let shp_name = "__switch_has_ports";;
 
-	open Mac_learning;;
-	let make_program (cl : clause list) : program = (* TODO *) Mac_learning.program;;
+	let rec make_relations (clist : clause list) : relation list =
+		match clist with
+		| [] -> [];
+		| h :: t -> match h with Clause(name, _, _) ->
+			List.fold_right (fun rel acc ->
+				(match rel with
+				| Relation(name, args, clauses) -> Relation(name, args, h :: clauses)
+				| _ -> rel;) :: acc) (make_relations t) [];;
+
+	let make_program (name : string) (rel_list : relation list) : program =
+		let filter_function = fun rel -> match rel with Relation(rel_name, _, _) -> rel_name = "forward" in
+		let forward_relation = List.hd (List.filter filter_function rel_list) in
+		let relations = List.filter (fun rel -> not filter_function rel) rel_list in
+		Program(name, relations, forward_relation);;
+
 end
 
 module To_String = struct

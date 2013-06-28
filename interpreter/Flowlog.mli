@@ -23,7 +23,8 @@ module Flowlog : sig
 	val start_program : program -> out_channel -> in_channel -> (term list) list;;
 	val update_switch_ports : switchId -> portId list -> out_channel -> in_channel -> unit;;
 	val respond_to_packet : program -> switchId -> xid -> packetIn -> out_channel -> in_channel -> unit;;
-	val make_program : clause list -> program;;
+	val make_relations : clause list -> relation list;;
+	val make_program : string -> relation list -> program;;
 
 end
 

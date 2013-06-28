@@ -11,7 +11,7 @@
   %token EQUALS
   %token <bool> BOOLEAN
   %start main
-  %type <Flowlog.program> main
+  %type <Flowlog.relation list> main
   %type <Flowlog.clause list> clause_list
   %type <Flowlog.clause> clause
   %type <Flowlog.term list> term_list
@@ -19,7 +19,7 @@
   %type <Flowlog.atom> atom
   %%
   main:
-      clause_list EOF { Flowlog.make_program $1 }
+      clause_list EOF { Flowlog.make_relations $1 }
   ;
   clause_list:
       clause { [$1] }
