@@ -265,8 +265,8 @@ module Flowlog_Parsing = struct
 
 	let make_relations (clist : clause list) : relation list =
 		let ans = make_relations_helper_2 (make_relations_helper_1 clist) in
-		let _ = List.iter print_relation ans in
-		let _ = print_endline (string_of_int (List.length ans)) in
+		let _ = if debug then List.iter print_relation ans in
+		let _ = if debug then print_endline (string_of_int (List.length ans)) in
 		ans;;
 
 
@@ -274,6 +274,10 @@ module Flowlog_Parsing = struct
 		let filter_function = fun rel -> (relation_name rel) = "forward" in
 		let forward_relation = List.hd (List.filter filter_function rel_list) in
 		let relations = List.filter (fun rel -> not (filter_function rel)) rel_list in
-		Program(name, relations, forward_relation);;
+		let ans = Program(name, relations, forward_relation) in
+		let _ = if debug then print_endline name in
+		let _ = if debug then List.iter print_relation rel_list in
+		ans;;
+
 
 end

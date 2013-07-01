@@ -40,6 +40,8 @@ module To_String : sig
 	val clause_to_string : Flowlog.clause -> string;;
 
 	val relation_name : Flowlog.relation -> string;;
+
+	val print_relation : Flowlog.relation -> unit;;
 end
 
 module Flowlog_Parsing : sig
