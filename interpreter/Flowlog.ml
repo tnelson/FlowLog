@@ -25,21 +25,6 @@ module Syntax = struct
 	let shp_vars = List.map (fun (str : string) -> Variable(str)) ["LocSw"; "LocPt2"];;
 	let shp_name = "__switch_has_ports";;
 
-	let rec make_relations (clist : clause list) : relation list =
-		match clist with
-		| [] -> [];
-		| h :: t -> match h with Clause(name, _, _) ->
-			List.fold_right (fun rel acc ->
-				(match rel with
-				| Relation(rel_name, args, clauses) -> if rel_name = name then Relation(name, args, h :: clauses) else rel;)
-				 :: acc) (make_relations t) [];;
-
-	let make_program (name : string) (rel_list : relation list) : program =
-		let filter_function = fun rel -> match rel with Relation(rel_name, _, _) -> rel_name = "forward" in
-		let forward_relation = List.hd (List.filter filter_function rel_list) in
-		let relations = List.filter (fun rel -> not (filter_function rel)) rel_list in
-		Program(name, relations, forward_relation);;
-
 end
 
 module To_String = struct
@@ -79,6 +64,13 @@ module To_String = struct
 	let relation_name (rel : relation) : string = 
 		match rel with
 		Relation(str, _, _) -> str;;
+
+	let print_relation (rel : relation) : unit =
+		match rel with
+		Relation(name, args, clauses) -> match clauses with
+		| [] -> print_endline (clause_to_string (Clause(name, args, [])));
+		|_ -> List.iter (fun cls -> print_endline (clause_to_string cls)) clauses;;
+
 end 
 
 module Flowlog = struct	
@@ -237,5 +229,51 @@ module Flowlog = struct
 		let in_tl = pkt_to_term_list sw pk in
 		let out_tll = respond_to_packet_desugared prgm in_tl out_ch in_ch in 
 		forward_packets out_tll sw pk;;
+
+end
+
+module Flowlog_Parsing = struct
+	include Flowlog;;
+
+	(* Makes all relations except those defined implicitly by other relations starting with + or - *)
+	let rec make_relations_helper_1 (clist : clause list) : relation list =
+		match clist with
+		| [] -> [];
+		| h :: t -> match h with Clause(clause_name, clause_args, clause_body) ->
+			let recur = (make_relations_helper_1 t) in
+			let answer, same_name = List.fold_right (fun rel acc ->
+				match acc with (already_there_acc, same_name_acc) ->
+				match rel with Relation(rel_name, rel_args, rel_clauses) ->
+				if rel_name = clause_name then (Relation(rel_name, rel_args, h :: rel_clauses) :: already_there_acc, rel :: same_name_acc)
+				else (rel :: already_there_acc, same_name_acc)) recur ([],[]) in
+			match same_name with
+			| [] -> Relation(clause_name, clause_args, [h]) :: answer;
+			| _ -> answer;;
+
+	(* takes in the output of make_relations_helper_1 and makes the implicit relations *)
+	let make_relations_helper_2 (rlist : relation list) : relation list = 
+		let to_add = List.fold_right (fun rel acc ->
+			match rel with Relation(name, args, _) ->
+			if ((begins_with name "+") || (begins_with name "-")) then 
+				let new_name = String.sub name 1 (String.length name -1) in
+				let in_list_function = fun rel1 acc1 -> ((relation_name rel1) = new_name) || acc1 in
+				let in_old_list = List.fold_right in_list_function rlist false in
+				let in_acc = List.fold_right in_list_function acc false in
+				if (not in_old_list) && (not in_acc) then Relation(new_name, args, []) :: acc else acc;
+			else acc) rlist [] in
+		to_add @ rlist;;
+
+	let make_relations (clist : clause list) : relation list =
+		let ans = make_relations_helper_2 (make_relations_helper_1 clist) in
+		let _ = List.iter print_relation ans in
+		let _ = print_endline (string_of_int (List.length ans)) in
+		ans;;
+
+
+	let make_program (name : string) (rel_list : relation list) : program =
+		let filter_function = fun rel -> (relation_name rel) = "forward" in
+		let forward_relation = List.hd (List.filter filter_function rel_list) in
+		let relations = List.filter (fun rel -> not (filter_function rel)) rel_list in
+		Program(name, relations, forward_relation);;
 
 end

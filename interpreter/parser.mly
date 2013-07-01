@@ -1,5 +1,6 @@
 %{
-  open Flowlog
+  open Flowlog;;
+  open Flowlog_Parsing;;
 %}
   %token EOF
   %token <string> CLAUSE_NAME
@@ -19,7 +20,7 @@
   %type <Flowlog.atom> atom
   %%
   main:
-      clause_list EOF { Flowlog.make_relations $1 }
+      clause_list EOF { Flowlog_Parsing.make_relations $1 }
   ;
   clause_list:
       clause { [$1] }

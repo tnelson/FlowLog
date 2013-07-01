@@ -31,7 +31,7 @@ let	forward_2 = Clause("forward", packet_vars @ packet_vars_2,
 	
 let	forward_relation = Relation("forward", packet_vars @ packet_vars_2, [forward_1; forward_2]);;
 
-let program = Program("mac_learning", [plus_learned_relation; minus_learned_relation; learned_relation], forward_relation);;
+let program = Program("mac_learning", [learned_relation; plus_learned_relation; minus_learned_relation], forward_relation);;
 end
 
-(*module Run = Controller.Make_Controller (Mac_learning);;*)
+module Run = Controller.Make_Controller (Mac_learning);;
