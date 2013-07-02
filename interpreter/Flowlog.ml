@@ -259,7 +259,7 @@ module Flowlog_Parsing = struct
 				let in_list_function = fun rel1 acc1 -> ((relation_name rel1) = new_name) || acc1 in
 				let in_old_list = List.fold_right in_list_function rlist false in
 				let in_acc = List.fold_right in_list_function acc false in
-				if (not in_old_list) && (not in_acc) then Relation(new_name, args, []) :: acc else acc;
+				if (not in_old_list) && (not in_acc) then Relation(new_name, drop args (List.length packet_vars), []) :: acc else acc;
 			else acc) rlist [] in
 		to_add @ rlist;;
 
