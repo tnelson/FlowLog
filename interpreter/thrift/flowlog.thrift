@@ -4,7 +4,7 @@
  */
 
 ////////////////////////////////////////////////////// 
-// What value do constants passed back and forth have?
+// What kinds of atomic values get passed back and forth?
 // Not necessarily just numbers! An FLValue represents
 // some FlowLog term, which is a constant or a variable.
 ////////////////////////////////////////////////////// 
