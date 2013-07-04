@@ -1,3 +1,4 @@
+open Flowlog;;
 type token =
   | EOF
   | CLAUSE_NAME of (string)

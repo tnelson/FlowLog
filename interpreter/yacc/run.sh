@@ -5,3 +5,7 @@ echo "Creating lexer..."
 ocamllex -o ../lexer.ml lexer.mll
 echo "Creating parser..."
 ocamlyacc -b../parser parser.mly
+# Because ocamlyacc doesn't add the headers to .mli, 
+# add manually. DO NOT add Flowlog_Parsing.
+echo "Adding header to mli file..."
+sed -i '1iopen Flowlog;;' ../parser.mli
