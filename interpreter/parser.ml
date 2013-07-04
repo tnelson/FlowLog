@@ -17,7 +17,7 @@ let _ = parse_error;;
 # 2 "parser.mly"
   open Flowlog;;
   open Flowlog_Parsing;;
-# 21 "parser.ml"
+# 21 "../parser.ml"
 let yytransl_const = [|
     0 (* EOF *);
   258 (* LPAREN *);
@@ -111,14 +111,14 @@ let yyact = [|
     Obj.repr(
 # 23 "parser.mly"
                       ( Flowlog_Parsing.make_relations _1 )
-# 115 "parser.ml"
+# 115 "../parser.ml"
                : Flowlog.relation list))
 ; (fun __caml_parser_env ->
     let _1 = (Parsing.peek_val __caml_parser_env 0 : Flowlog.clause) in
     Obj.repr(
 # 26 "parser.mly"
              ( [_1] )
-# 122 "parser.ml"
+# 122 "../parser.ml"
                : Flowlog.clause list))
 ; (fun __caml_parser_env ->
     let _1 = (Parsing.peek_val __caml_parser_env 1 : Flowlog.clause) in
@@ -126,7 +126,7 @@ let yyact = [|
     Obj.repr(
 # 27 "parser.mly"
                          ( _1 :: _2 )
-# 130 "parser.ml"
+# 130 "../parser.ml"
                : Flowlog.clause list))
 ; (fun __caml_parser_env ->
     let _1 = (Parsing.peek_val __caml_parser_env 6 : string) in
@@ -135,14 +135,14 @@ let yyact = [|
     Obj.repr(
 # 30 "parser.mly"
                                                                               ( Flowlog.Clause(_1, _3, _6))
-# 139 "parser.ml"
+# 139 "../parser.ml"
                : Flowlog.clause))
 ; (fun __caml_parser_env ->
     let _1 = (Parsing.peek_val __caml_parser_env 0 : 'term) in
     Obj.repr(
 # 33 "parser.mly"
            ( [_1] )
-# 146 "parser.ml"
+# 146 "../parser.ml"
                : Flowlog.term list))
 ; (fun __caml_parser_env ->
     let _1 = (Parsing.peek_val __caml_parser_env 2 : 'term) in
@@ -150,14 +150,14 @@ let yyact = [|
     Obj.repr(
 # 34 "parser.mly"
                            ( _1 :: _3 )
-# 154 "parser.ml"
+# 154 "../parser.ml"
                : Flowlog.term list))
 ; (fun __caml_parser_env ->
     let _1 = (Parsing.peek_val __caml_parser_env 0 : 'literal) in
     Obj.repr(
 # 37 "parser.mly"
               ( [_1] )
-# 161 "parser.ml"
+# 161 "../parser.ml"
                : Flowlog.literal list))
 ; (fun __caml_parser_env ->
     let _1 = (Parsing.peek_val __caml_parser_env 2 : 'literal) in
@@ -165,35 +165,35 @@ let yyact = [|
     Obj.repr(
 # 38 "parser.mly"
                                  ( _1 :: _3 )
-# 169 "parser.ml"
+# 169 "../parser.ml"
                : Flowlog.literal list))
 ; (fun __caml_parser_env ->
     let _1 = (Parsing.peek_val __caml_parser_env 0 : string) in
     Obj.repr(
 # 41 "parser.mly"
                ( Flowlog.Constant(_1) )
-# 176 "parser.ml"
+# 176 "../parser.ml"
                : 'term))
 ; (fun __caml_parser_env ->
     let _1 = (Parsing.peek_val __caml_parser_env 0 : string) in
     Obj.repr(
 # 42 "parser.mly"
                ( Flowlog.Variable(_1) )
-# 183 "parser.ml"
+# 183 "../parser.ml"
                : 'term))
 ; (fun __caml_parser_env ->
     let _1 = (Parsing.peek_val __caml_parser_env 0 : Flowlog.atom) in
     Obj.repr(
 # 45 "parser.mly"
            ( Flowlog.Pos(_1) )
-# 190 "parser.ml"
+# 190 "../parser.ml"
                : 'literal))
 ; (fun __caml_parser_env ->
     let _2 = (Parsing.peek_val __caml_parser_env 0 : Flowlog.atom) in
     Obj.repr(
 # 46 "parser.mly"
                ( Flowlog.Neg(_2) )
-# 197 "parser.ml"
+# 197 "../parser.ml"
                : 'literal))
 ; (fun __caml_parser_env ->
     let _1 = (Parsing.peek_val __caml_parser_env 2 : 'term) in
@@ -201,7 +201,7 @@ let yyact = [|
     Obj.repr(
 # 49 "parser.mly"
                        ( Flowlog.Equals(_1, _3) )
-# 205 "parser.ml"
+# 205 "../parser.ml"
                : Flowlog.atom))
 ; (fun __caml_parser_env ->
     let _1 = (Parsing.peek_val __caml_parser_env 3 : string) in
@@ -209,14 +209,14 @@ let yyact = [|
     Obj.repr(
 # 50 "parser.mly"
                                           ( Flowlog.Apply(_1, _3) )
-# 213 "parser.ml"
+# 213 "../parser.ml"
                : Flowlog.atom))
 ; (fun __caml_parser_env ->
     let _1 = (Parsing.peek_val __caml_parser_env 0 : bool) in
     Obj.repr(
 # 51 "parser.mly"
               ( Flowlog.Bool(_1) )
-# 220 "parser.ml"
+# 220 "../parser.ml"
                : Flowlog.atom))
 (* Entry main *)
 ; (fun __caml_parser_env -> raise (Parsing.YYexit (Parsing.peek_val __caml_parser_env 0)))

@@ -2,7 +2,7 @@
  
 open Parser;;       (* The type token is defined in parser.mli *)
 
-# 6 "lexer.ml"
+# 6 "../lexer.ml"
 let __ocaml_lex_tables = {
   Lexing.lex_base = 
    "\000\000\080\000\155\000\165\000\245\255\246\255\001\000\248\255\
@@ -408,87 +408,87 @@ and __ocaml_lex_token_rec lexbuf __ocaml_lex_state =
       | 0 ->
 # 6 "lexer.mll"
                          ( token lexbuf )
-# 412 "lexer.ml"
+# 412 "../lexer.ml"
 
   | 1 ->
 # 7 "lexer.mll"
         ( EOF )
-# 417 "lexer.ml"
+# 417 "../lexer.ml"
 
   | 2 ->
 # 8 "lexer.mll"
           ( NOT )
-# 422 "lexer.ml"
+# 422 "../lexer.ml"
 
   | 3 ->
 let
 # 9 "lexer.mll"
                         boolean
-# 428 "lexer.ml"
+# 428 "../lexer.ml"
 = Lexing.sub_lexeme lexbuf lexbuf.Lexing.lex_start_pos lexbuf.Lexing.lex_curr_pos in
 # 9 "lexer.mll"
                                 ( BOOLEAN(boolean = "true") )
-# 432 "lexer.ml"
+# 432 "../lexer.ml"
 
   | 4 ->
 let
 # 10 "lexer.mll"
                                                              name
-# 438 "lexer.ml"
+# 438 "../lexer.ml"
 = Lexing.sub_lexeme lexbuf lexbuf.Lexing.lex_start_pos lexbuf.Lexing.lex_curr_pos in
 # 10 "lexer.mll"
                                                                   ( CLAUSE_NAME(name) )
-# 442 "lexer.ml"
+# 442 "../lexer.ml"
 
   | 5 ->
 # 11 "lexer.mll"
         ( EQUALS )
-# 447 "lexer.ml"
+# 447 "../lexer.ml"
 
   | 6 ->
 # 12 "lexer.mll"
         ( LPAREN )
-# 452 "lexer.ml"
+# 452 "../lexer.ml"
 
   | 7 ->
 # 13 "lexer.mll"
         ( RPAREN )
-# 457 "lexer.ml"
+# 457 "../lexer.ml"
 
   | 8 ->
 # 14 "lexer.mll"
          ( COLON_HYPHEN )
-# 462 "lexer.ml"
+# 462 "../lexer.ml"
 
   | 9 ->
 # 15 "lexer.mll"
         ( SEMICOLON )
-# 467 "lexer.ml"
+# 467 "../lexer.ml"
 
   | 10 ->
 # 16 "lexer.mll"
         ( COMMA )
-# 472 "lexer.ml"
+# 472 "../lexer.ml"
 
   | 11 ->
 let
 # 17 "lexer.mll"
                                        constant
-# 478 "lexer.ml"
+# 478 "../lexer.ml"
 = Lexing.sub_lexeme lexbuf lexbuf.Lexing.lex_start_pos lexbuf.Lexing.lex_curr_pos in
 # 17 "lexer.mll"
                                                 ( CONSTANT(constant) )
-# 482 "lexer.ml"
+# 482 "../lexer.ml"
 
   | 12 ->
 let
 # 18 "lexer.mll"
                              variable
-# 488 "lexer.ml"
+# 488 "../lexer.ml"
 = Lexing.sub_lexeme lexbuf lexbuf.Lexing.lex_start_pos lexbuf.Lexing.lex_curr_pos in
 # 18 "lexer.mll"
                                       ( VARIABLE(variable) )
-# 492 "lexer.ml"
+# 492 "../lexer.ml"
 
   | __ocaml_lex_state -> lexbuf.Lexing.refill_buff lexbuf; __ocaml_lex_token_rec lexbuf __ocaml_lex_state
 

@@ -1,6 +1,3 @@
-open Flowlog;;
-open Flowlog_Parsing;;
-
 type token =
   | EOF
   | CLAUSE_NAME of (string)

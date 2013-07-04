@@ -1,0 +1,2 @@
+<*.ml{,i}> : package(packet), package(openflow), package(ox)
+<*.d.byte> : package(packet), package(openflow), package(ox)
