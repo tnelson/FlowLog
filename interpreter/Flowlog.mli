@@ -13,8 +13,8 @@ module Flowlog : sig
 	type clause = Clause of string * term list * literal list;;
 	(* name, arguments, clauses *)
 	type relation = Relation of string * term list * clause list;;
-	(* name, relations, forward *)
-	type program = Program of string * relation list * relation;;
+	(* name, relations *)
+	type program = Program of string * relation list;;
 
 	val packet_vars : term list;;
 	val packet_vars_2 : term list;;

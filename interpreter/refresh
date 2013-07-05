@@ -1,7 +1,0 @@
-#!/bin/bash
-rm *.ml
-rm *.mli
-cp ../../frenetic/ox-tutorial-workspace/*.ml .
-cp ../../frenetic/ox-tutorial-workspace/*.mli .
-git add *.ml
-git add *.mli

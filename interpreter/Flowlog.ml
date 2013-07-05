@@ -17,13 +17,14 @@ module Syntax = struct
 	type clause = Clause of string * term list * literal list;;
 	(* name, arguments, clauses *)
 	type relation = Relation of string * term list * clause list;;
-	(* name, relations, forward *)
-	type program = Program of string * relation list * relation;;
+	(* name, relations *)
+	type program = Program of string * relation list;;
 
 	let packet_vars = List.map (fun (str : string) -> Variable(str)) ["LocSw"; "LocPt"; "DlSrc"; "DlDst"; "DlTyp"; "NwSrc"; "NwDst"; "NwProto"];;
 	let packet_vars_2 = List.map (fun (str : string) -> Variable(str)) ["LocSw2"; "LocPt2"; "DlSrc2"; "DlDst2"; "DlTyp2"; "NwSrc2"; "NwDst2"; "NwProto2"];;
 	let shp_vars = List.map (fun (str : string) -> Variable(str)) ["LocSw"; "LocPt2"];;
 	let shp_name = "__switch_has_ports";;
+	let forward_prexif = "forward";;
 
 end
 
@@ -133,7 +134,7 @@ module Flowlog = struct
 		| h :: t -> drop t (n - 1);;
 
 	let find_relation_by_name (prgm : program) (name : string) : relation option = 
-		match prgm with Program(_, relations,_) -> List.fold_right (fun r acc -> if name = (relation_name r) then Some(r) else acc) relations None;;
+		match prgm with Program(_, relations) -> List.fold_right (fun r acc -> if name = (relation_name r) then Some(r) else acc) relations None;;
 
 	(* memoize this function? *)
 	let constrain_ports (forward : relation) : relation =
@@ -143,8 +144,10 @@ module Flowlog = struct
 
 	let start_program (prgm : program) (out_ch : out_channel) (in_ch : in_channel) : (term list) list = 
 		match prgm with
-		| Program(_, relations, forward) -> let out = List.fold_right (fun rel acc -> (assert_relation rel out_ch in_ch) @ acc) relations [] in
-			out @ (assert_relation (constrain_ports forward) out_ch in_ch) @ (assert_relation (Relation(shp_name, shp_vars, [])) out_ch in_ch);;
+		| Program(name, relations) -> let out = List.fold_right (fun rel acc -> if (relation_name rel) = "forward/" ^ name then
+			(assert_relation (constrain_ports rel) out_ch in_ch) else
+			(assert_relation rel out_ch in_ch) @ acc) relations [] in
+			out @ (assert_relation (Relation(shp_name, shp_vars, [])) out_ch in_ch);;
 
 	(* memoize this function? *)
 	let update_switch_ports (sw : switchId) (port_nums : portId list) (out_ch : out_channel) (in_ch : in_channel) : unit =
@@ -154,7 +157,10 @@ module Flowlog = struct
 
 	let respond_to_packet_desugared (prgm : program) (pkt : term list) (out_ch : out_channel) (in_ch : in_channel) : (term list) list =
 		match prgm with
-		| Program(_, relations, forward) ->
+		| Program(name, relations) ->
+			match (find_relation_by_name prgm ("forward/" ^ name)) with
+			| None -> raise (Failure ("Program " ^ name ^ " is missing a forward relation."));
+			| Some(forward) ->
 			let answer = match forward with
 			| Relation(_, args, _) -> query_relation (constrain_ports forward) (pkt @ (drop args (List.length pkt))) out_ch in_ch in
 			let _ = List.iter (fun rel ->
@@ -270,13 +276,33 @@ module Flowlog_Parsing = struct
 		ans;;
 
 
-	let make_program (name : string) (rel_list : relation list) : program =
-		let filter_function = fun rel -> (relation_name rel) = "forward" in
-		let forward_relation = List.hd (List.filter filter_function rel_list) in
-		let relations = List.filter (fun rel -> not (filter_function rel)) rel_list in
-		let ans = Program(name, relations, forward_relation) in
+	let process_atom_name (fn : string -> string) (a : Flowlog.atom) : Flowlog.atom = 
+		match a with
+		| Flowlog.Apply(name, tl) -> Flowlog.Apply(fn name, tl);
+		| _ -> a;;
+
+	let process_literal_name (fn : string -> string) (lit : Flowlog.literal) : Flowlog.literal = 
+		match lit with
+		| Flowlog.Pos(a) -> Flowlog.Pos(process_atom_name fn a);
+		| Flowlog.Neg(a) -> Flowlog.Neg(process_atom_name fn a);;
+
+	let process_clause_name (fn : string -> string) (cls : Flowlog.clause) : Flowlog.clause = 
+		match cls with Flowlog.Clause(name, args, body) ->
+		let new_body = List.map (process_literal_name fn) body in
+		Flowlog.Clause(fn name, args, new_body);;
+
+	let process_relation_name (fn: string -> string) (rel : Flowlog.relation) : Flowlog.relation = 
+		match rel with Flowlog.Relation(name, args, clauses) -> 
+		let new_clauses = List.map (process_clause_name fn) clauses in
+		Flowlog.Relation(fn name, args, new_clauses);;
+
+	let append_name (name : string) (str : string) : string =
+		if not (String.contains str '/') then str ^ "/" ^ name else str;;
+
+	let make_program (name : string) (relations : relation list) : program =
+		let ans = Program(name, List.map (process_relation_name (append_name name)) relations) in
 		let _ = if debug then print_endline name in
-		let _ = if debug then List.iter print_relation rel_list in
+		let _ = if debug then List.iter print_relation (List.map (process_relation_name (append_name name)) relations) in
 		ans;;
 
 
