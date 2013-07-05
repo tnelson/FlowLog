@@ -25,6 +25,7 @@ module Syntax = struct
 	let shp_vars = List.map (fun (str : string) -> Variable(str)) ["LocSw"; "LocPt2"];;
 	let shp_name = "__switch_has_ports";;
 	let forward_prexif = "forward";;
+	let module_delim = ""
 
 end
 
@@ -305,5 +306,14 @@ module Flowlog_Parsing = struct
 		let _ = if debug then List.iter print_relation (List.map (process_relation_name (append_name name)) relations) in
 		ans;;
 
+	let rec remove_duplicates (l : 'a list) : 'a list =
+		match l with
+		[] -> [];
+		| h :: t -> if List.mem h t then (remove_duplicates t) else h :: (remove_duplicates t);;
+
+	let import (pg1 : program) (pg2 : program) : program = 
+		match pg1 with Program(name_1, relations_1) ->
+		match pg2 with Program(name_2, relations_2) ->
+		Program(name_1, remove_duplicates (relations_1 @ relations_2));;
 
 end
