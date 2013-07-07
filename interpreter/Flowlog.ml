@@ -7,25 +7,29 @@ open OpenFlow0x01_Core;;
 let debug = true;;
 
 module Syntax = struct
-	(* constants and variables (recall variables are uppercase) *)
-	type term = Constant of string | Variable of string;;
-	(* Things like A = B or R(A, B, C) *)
+	(* constants and variables or a field of a value (like pkt.locPt) *)
+	type term = Constant of string | Variable of string | Field of string * string;;
+	(* type name, field names*)
+	type ftype = Type of string * string_of_int list;;
+	(* type name, name, field values (all constants or all variables) *)
+	type value = Val of string * string * term list;;
+	(* things like A = B or R(A, B, C) *)
 	type atom = Equals of term * term | Apply of string * term list | Bool of bool;;
-	(* Atoms and negations of atoms *)
+	(* atoms and negations of atoms *)
 	type literal = Pos of atom | Neg of atom;;
+	(* argument to a clause is either a value or a term *)
+	type argument = Arg_value of value | Arg_term of term;;
 	(* name, arguments, body *)
-	type clause = Clause of string * term list * literal list;;
+	type clause = Clause of string * argument list * literal list;;
 	(* name, arguments, clauses *)
-	type relation = Relation of string * term list * clause list;;
+	type relation = Relation of string * argument list * clause list;;
 	(* name, relations *)
 	type program = Program of string * relation list;;
-
+	
 	let packet_vars = List.map (fun (str : string) -> Variable(str)) ["LocSw"; "LocPt"; "DlSrc"; "DlDst"; "DlTyp"; "NwSrc"; "NwDst"; "NwProto"];;
 	let packet_vars_2 = List.map (fun (str : string) -> Variable(str)) ["LocSw2"; "LocPt2"; "DlSrc2"; "DlDst2"; "DlTyp2"; "NwSrc2"; "NwDst2"; "NwProto2"];;
 	let shp_vars = List.map (fun (str : string) -> Variable(str)) ["LocSw"; "LocPt2"];;
 	let shp_name = "__switch_has_ports";;
-	let forward_prexif = "forward";;
-	let module_delim = ""
 
 end
 
