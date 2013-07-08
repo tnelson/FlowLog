@@ -18,13 +18,39 @@ let sod = function
     Some v -> v
   | None -> raise Die;;
 
+let print_notif_values tbl = 
+  Hashtbl.iter (fun k v -> 
+                Printf.printf "%s -> %s\n%!" k v) tbl 
+  
+(* TODO: Who's to say that a value must be a string? 
+   Notification cannot contain a list etc. as written. *)
 
 class fl_handler =
 object (self)
   inherit FlowLogInterpreter.iface
 
+  val mutable registered : (string, string list) Hashtbl.t = (Hashtbl.create 0)
+
   method notifyMe notif = 
-    Printf.printf "received notification\n%!"
+    let ntype = sod ((sod notif)#get_notificationType) in
+    let values = sod ((sod notif)#get_values) in
+    Printf.printf "received notification. type=%s\n%!" ntype;
+    print_notif_values values;
+
+      (* special type for blackbox registering itself. 
+         TODO: beware undocumented magic strings. *)
+      if ntype = "BB_register" then
+      begin
+         let bbid = Hashtbl.find values "id" in
+         let bbip = Hashtbl.find values "ip" in
+         let bbport = Hashtbl.find values "port" in
+         Hashtbl.add registered bbid [bbip;bbport]
+      end
+      else if ntype = "BB_unregister" then
+      begin
+         let bbid = Hashtbl.find values "id" in
+         Hashtbl.remove registered bbid
+      end
 end
 
 type connection = {
@@ -55,7 +81,8 @@ let dofl () =
 		 pf
   in
     (* first thing: listen for notifications *)
-    (Thread.create (fun x -> (server#serve)) 0);
+    (* returns handle of thread. ignore result to avoid warning *) 
+    ignore (Thread.create (fun x -> (server#serve)) 0);
 
   Printf.printf "Started to listen for notifications. Waiting 5 seconds before sending test queries.\n%!";
   Unix.sleep 10;

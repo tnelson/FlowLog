@@ -60,13 +60,27 @@ let dobb () =
 		 pf
   in
     (* Listen in a separate thread. *)
-    Thread.create (fun x -> (server#serve)) 0;
+    (* returns handle to new thread. ignore to avoid warning *)
+    ignore (Thread.create (fun x -> (server#serve)) 0);
 
     (* do whatever here *)
     (* in this case: test FL's ability to receive notifications *)
   let cli = connect ~host:"127.0.0.1" 9090 in 
   try
-    Printf.printf "sending a notification\n%!"; 
+
+    Printf.printf "sending a BB_register notification\n%!"; 
+    let notif = new notification in
+      notif#set_notificationType "BB_register";
+      let tbl = (Hashtbl.create 3) in
+        Hashtbl.add tbl "id" "test";
+        Hashtbl.add tbl "ip" "127.0.0.1";
+        Hashtbl.add tbl "port" "9091";
+        notif#set_values tbl;
+        cli.fl#notifyMe notif;
+    Printf.printf "notification sent\n%!"; 
+
+
+    Printf.printf "sending another notification\n%!"; 
     let notif = new notification in
       notif#set_notificationType "test";
       notif#set_values (Hashtbl.create 1);
