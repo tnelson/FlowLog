@@ -1,6 +1,0 @@
-### Starting build.
-# Target: Flowlog.ml.depends, tags: { extension:ml, file:Flowlog.ml, ocaml, ocamldep, package(openflow), package(ox), package(packet), quiet, traverse }
-ocamlfind ocamldep -package packet -package openflow -package ox -modules Flowlog.ml > Flowlog.ml.depends
-# Target: Flowlog.mli.depends, tags: { extension:mli, file:Flowlog.mli, ocaml, ocamldep, package(openflow), package(ox), package(packet), quiet, traverse }
-ocamlfind ocamldep -package packet -package openflow -package ox -modules Flowlog.mli > Flowlog.mli.depends
-# Compilation unsuccessful.
