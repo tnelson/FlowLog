@@ -26,8 +26,8 @@ struct Notification
 {
 	// Use a map to take field names to atomic values.
         // (The Thrift format requires we assign a number to each field.)
-        10: required string notificationType;
-        20: required map<string, FLValue> values;
+        1: required string notificationType;
+        2: required map<string, FLValue> values;
 }
 
 //////////////////////////////////////////////////////
@@ -42,8 +42,8 @@ struct Notification
 
 struct Query
 {
-	10: required string relName;
-	20: required list<FLValue> arguments;
+	1: required string relName;
+	2: required list<FLValue> arguments;
 }
 
 //////////////////////////////////////////////////////
@@ -52,7 +52,7 @@ struct Query
 
 struct QueryReply
 {
-	10: required set<list<FLValue>> result;
+	1: required set<list<FLValue>> result;
 }
 
 //////////////////////////////////////////////////////

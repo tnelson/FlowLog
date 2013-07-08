@@ -2,39 +2,30 @@ open Flowlog;;
 open Controller;;
 
 module Mac_learning : PROGRAM = struct
-include Flowlog;; 
+include Flowlog_Parsing;; 
 
-let learned_vars = [Variable("Sw"); Variable("Pt"); Variable("Mac")];;
+let packet_arg = variable_value packet_type "Pkt";;
+let packet_arg_2 = variable_value packet_type "Pkt2";;
+let learned_args = [Arg_term(Variable("Sw")); Arg_term(Variable("Pt")); Arg_term(Variable("Mac"))];;
 
-let plus_learned = Clause("+learned/mac_learning", packet_vars @ learned_vars,
-	[Pos(Equals(Variable("LocSw"), Variable("Sw")));
-	Pos(Equals(Variable("DlSrc"), Variable("Mac")));
-	Pos(Equals(Variable("LocPt"), Variable("Pt")))]);;
+let plus_learned = Clause("+learned", packet_arg :: learned_args,
+	[Pos(Equals(Field("Pkt", "LocSw"), Variable("Sw")));
+	Pos(Equals(Field("Pkt", "DlSrc"), Variable("Mac")));
+	Pos(Equals(Field("Pkt", "LocPt"), Variable("Pt")))]);;
 
-let	plus_learned_relation = Relation("+learned/mac_learning", packet_vars @ learned_vars, [plus_learned]);;
-
-let minus_learned = Clause("-learned/mac_learning", packet_vars @ learned_vars,
-	[Pos(Equals(Variable("LocSw"), Variable("Sw")));
-	Pos(Equals(Variable("DlSrc"), Variable("Mac")));
-	Neg(Equals(Variable("LocPt"), Variable("Pt")))]);;
+let minus_learned = Clause("-learned", packet_arg :: learned_args,
+	[Pos(Equals(Field("Pkt", "LocSw"), Variable("Sw")));
+	Pos(Equals(Field("Pkt", "DlSrc"), Variable("Mac")));
+	Neg(Equals(Field("Pkt", "LocPt"), Variable("Pt")))]);;
 	
-let	minus_learned_relation = Relation("-learned/mac_learning", packet_vars @ learned_vars, [minus_learned]);;
+let forward_1 = Clause("forward", [packet_arg; packet_arg_2],
+	[Pos(Apply("learned", [Field("Pkt" , "LocSw"); Field("Pkt2", "LocPt"); Field("Pkt", "DlDst")]))]);;
 
-let learned_relation = Relation("learned/mac_learning", learned_vars, []);;
-
-let forward_1 = Clause("forward/mac_learning", packet_vars @ packet_vars_2,
-	[Pos(Apply("learned/mac_learning", [Variable("LocSw"); Variable("LocPt2"); Variable("DlDst")]))]);;
-
-let	forward_2 = Clause("forward/mac_learning", packet_vars @ packet_vars_2,
-	[Neg(Apply("learned/mac_learning", [Variable("LocSw"); Variable("Any"); Variable("DlDst")]));
-	Neg(Equals(Variable("LocPt"), Variable("LocPt2")))]);;
+let	forward_2 = Clause("forward", [packet_arg; packet_arg_2],
+	[Neg(Apply("learned", [Field("Pkt", "LocSw"); Variable("Any"); Field("Pkt", "DlDst")]));
+	Neg(Equals(Field("Pkt", "LocPt"), Field("Pkt2", "LocPt")))]);;
 	
-let	forward_relation = Relation("forward/mac_learning", packet_vars @ packet_vars_2, [forward_1; forward_2]);;
-
-let program = Program("mac_learning", [learned_relation; plus_learned_relation; minus_learned_relation; forward_relation]);;
-
-let _ = print_endline "mac_learning";;
-let _ = List.iter To_String.print_relation [learned_relation; plus_learned_relation; minus_learned_relation; forward_relation];;
+let program = make_program "mac_learning" [packet_type] (make_relations [plus_learned; minus_learned; forward_1; forward_2]);;
 
 end
 

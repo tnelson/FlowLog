@@ -6,13 +6,14 @@ open OpenFlow0x01_Core;;
 
 let debug = true;;
 
+(* Defines the basic types for the Flowlog interpreter. *)
 module Syntax = struct
 	(* constants and variables or a field of a value (like pkt.locPt) *)
 	type term = Constant of string | Variable of string | Field of string * string;;
 	(* type name, field names*)
-	type ftype = Type of string * string_of_int list;;
-	(* type name, name, field values (all constants or all variables) *)
-	type value = Val of string * string * term list;;
+	type ftype = Type of string * string list;;
+	(* type, name, field values (all constants or all variables) *)
+	type value = Value of ftype * string * (term list) option;;
 	(* things like A = B or R(A, B, C) *)
 	type atom = Equals of term * term | Apply of string * term list | Bool of bool;;
 	(* atoms and negations of atoms *)
@@ -26,14 +27,16 @@ module Syntax = struct
 	(* name, relations *)
 	type program = Program of string * relation list;;
 	
-	let packet_vars = List.map (fun (str : string) -> Variable(str)) ["LocSw"; "LocPt"; "DlSrc"; "DlDst"; "DlTyp"; "NwSrc"; "NwDst"; "NwProto"];;
-	let packet_vars_2 = List.map (fun (str : string) -> Variable(str)) ["LocSw2"; "LocPt2"; "DlSrc2"; "DlDst2"; "DlTyp2"; "NwSrc2"; "NwDst2"; "NwProto2"];;
-	let shp_vars = List.map (fun (str : string) -> Variable(str)) ["LocSw"; "LocPt2"];;
-	let shp_name = "__switch_has_ports";;
+	let packet_type = Type("packet", ["LocSw"; "LocPt"; "DlSrc"; "DlDst"; "DlTyp"; "NwSrc"; "NwDst"; "NwProto"]);;
+	let switch_port_reg = Type("switch_port_reg", ["Switch"; "Port"]);;
+
+(*	let shp_vars = List.map (fun (str : string) -> Variable(str)) ["LocSw"; "LocPt2"];;
+	let shp_name = "__switch_has_ports";;*)
 
 end
 
-module To_String = struct
+(* Provides printing functions and conversion functions both for pretty printing and communication with XSB. *)
+module Type_Helpers = struct
 	include Syntax;;
 
 	let list_to_string (conversion : 'a -> string) (l : 'a list) : string = 
@@ -43,7 +46,20 @@ module To_String = struct
 	let term_to_string (t : term) : string = 
 		match t with
 		| Constant(c) -> c; 
-		| Variable(v) -> v;;
+		| Variable(v) -> v;
+		| Field(val, field) -> val ^ "_" ^ field;;
+
+	let value_to_string (val : value) : string =
+		match val with Value(t, name, val_opt) ->
+		match val_opt with
+		| None -> match t with Type(_, names) -> (list_to_string (fun str -> name ^ "_" ^ str) names);
+		| Some(fields) -> (list_to_string term_to_string fields);;
+
+	let value_to_terms (val : value) : term list =
+		match val with Value(t, name, terms_opt) ->
+		match terms_opt with
+		| None -> match t with Type(_, fields) -> List.map (fun str -> Variable(name ^ "_" ^ str)) fields;
+		| Some(terms) -> terms;;
 
 	let atom_to_string (a : atom) : string =
 		match a with
@@ -61,15 +77,57 @@ module To_String = struct
 		| Pos(a) -> a;
 		| Neg(a) -> a;;
 
+	let argument_to_string (arg : argument) : string =
+		match arg with
+		| Arg_value(v) -> value_to_string v;
+		| Arg_term(t) -> term_to_string t;;
+
+	let arguments_to_terms (args : argument list) : term list =
+		List.fold_right (fun arg acc ->
+		match arg with
+		| Arg_term(t) -> t :: acc;
+		| Arg_value(v) -> (value_to_terms v) @ acc) args;;
+
+	let rec drop (l : 'a list) (n : int) : 'a list = 
+		if n <= 0 then l else
+		match l with
+		| [] -> [];
+		| h :: t -> drop t (n - 1);;
+
+	let rec take (l : 'a list) (n : int) : 'a list =
+		if n <= 0 then [] else
+		match l with
+		| [] -> [];
+		| h :: t -> h :: take t (n-1);;
+
+	let rec terms_to_arguments (args : argument list) (terms : term list) : argument list =
+		match args with first :: rest ->
+		match first with
+		| Arg_term(t) -> Arg_term(List.hd terms) :: (terms_to_arguments rest (drop terms 1));
+		| Arg_value(Value(val_type, name, _)) -> match val_type with Type(_, field_names) ->
+			let num_terms = List.length field_names in
+			Arg_value(Value(val_type, name, Some (take terms num_terms)) :: (terms_to_arguments rest (drop terms num_terms));;
+
+	let terms_to_args_clause (cl : clause) (terms : term list) : argument list =
+		match cl with Clause(_, args, _) -> terms_to_arguments args terms;;
+
 	let clause_to_string (cl : clause) : string =
 		match cl with
-		| Clause(str, args, []) -> str ^ "(" ^ (list_to_string term_to_string args) ^ ")";
-		| Clause(str, args, body) -> str ^ "(" ^ (list_to_string term_to_string args) ^ ") :- " ^
+		| Clause(str, args, []) -> str ^ "(" ^ (list_to_string argument_to_string args) ^ ")";
+		| Clause(str, args, body) -> str ^ "(" ^ (list_to_string argument_to_string args) ^ ") :- " ^
 			(list_to_string literal_to_string body);;
 
 	let relation_name (rel : relation) : string = 
 		match rel with
 		Relation(str, _, _) -> str;;
+
+	let relation_trigger_type (rel : relation) : ftype option =
+		match rel with Relation(_, args, _) -> 
+		match args with
+		| [] -> None;
+		| h :: tail -> match h with
+			| Arg_term(_) -> None;
+			| Arg_value(v) -> match v with Value(t, _, _) -> Some t;;
 
 	let print_relation (rel : relation) : unit =
 		match rel with
@@ -79,7 +137,8 @@ module To_String = struct
 
 end 
 
-module Flowlog = struct	
+(* Provides functions for high level communication with XSB. *)
+module Flowlog_Xsb = struct	
 	include To_String;;
 
 	let add_unique (x : 'a) (l : 'a list) : 'a list = if List.mem x l then l else x :: l;;
@@ -98,24 +157,25 @@ module Flowlog = struct
 				| Apply(_, tl) -> List.fold_right add_unique_var tl acc;
 				| Bool(b) -> acc;)
 			body
-			(List.fold_right add_unique_var args []);;
-	
-	let send_clause (cl : clause) (assertion : string) (out_ch : out_channel) (in_ch : in_channel) : (term list) list =
+			(List.fold_right add_unique_var (arguments_to_terms args) []);;
+
+	let send_clause (cl : clause) (assertion : string) (conversion : term list -> 'a) (out_ch : out_channel) (in_ch : in_channel) : 'a list =
 		let _ = if debug then print_endline assertion in
 		let num_vars = List.length (get_vars cl) in
 		let answer = (if num_vars > 0 then Xsb.send_query assertion (List.length (get_vars cl)) out_ch in_ch
 		else let _ = Xsb.send_assert assertion out_ch in_ch in []) in
-		List.map (fun (l : string list) -> List.map (fun (s : string) -> Constant(s)) l) answer;;
+		List.map (fun (l : string list) -> conversion (List.map (fun (s : string) -> Constant(s)) l)) answer;;
 	
-	let query_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): (term list) list =
+	let query_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): (argument list) list =
 		send_clause cl (match cl with
-			| Clause(str, args, _) -> str ^ "(" ^ (list_to_string term_to_string args) ^ ").") out_ch in_ch;;
+			| Clause(str, args, _) -> str ^ "(" ^ (list_to_string argument_to_string args) ^ ").")
+			(terms_to_args_clause cl) out_ch in_ch;;
 	
 	let retract_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): (term list) list =
-	    send_clause cl ("retract((" ^ (clause_to_string cl) ^ ")).") out_ch in_ch;;
+	    send_clause cl ("retract((" ^ (clause_to_string cl) ^ ")).") (fun x -> x) out_ch in_ch;;
 	
 	let assert_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): (term list) list =
-		send_clause cl ("assert((" ^ (clause_to_string cl) ^ ")).") out_ch in_ch;;
+		send_clause cl ("assert((" ^ (clause_to_string cl) ^ ")).") (fun x -> x) out_ch in_ch;;
 	
 	let tentative_assert_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): (term list) list =
 		let _ = retract_clause cl out_ch in_ch in
@@ -126,20 +186,46 @@ module Flowlog = struct
 		| Relation(name, args, []) -> assert_clause (Clause(name, args, [Pos(Bool(false))])) out_ch in_ch;
 		| Relation(_, _, clauses) -> List.fold_right (fun cls acc -> (assert_clause cls out_ch in_ch) @ acc) clauses [];;
 	
-	let query_relation (rel : relation) (args : term list) (out_ch : out_channel) (in_ch : in_channel) : (term list) list =
-		let _ = if debug then print_endline ("query relation: " ^ (relation_name rel) ^ (list_to_string term_to_string args)) in
+	let query_relation (rel : relation) (args : argument list) (out_ch : out_channel) (in_ch : in_channel) : (argument list) list =
+		let _ = if debug then print_endline ("query relation: " ^ (relation_name rel) ^ (list_to_string argument_to_string args)) in
 		let ans = query_clause (Clause((relation_name rel), args, [])) out_ch in_ch in
-		let _ = if debug then print_endline (list_to_string (list_to_string term_to_string) ans) in
+		let _ = if debug then print_endline (list_to_string (list_to_string argument_to_string) ans) in
 		ans;;
 	
-	let rec drop (l : 'a list) (n : int) : 'a list = 
-		if n <= 0 then l else
-		match l with
-		| [] -> [];
-		| h :: t -> drop t (n - 1);;
+end
+
+(* Provides functions for running a Flowlog program.
+ASSUMPTIONS: We assume that programs passed into functions in this module have
+1) types included
+2) all implied relations defined (i.e. if there's +learned then there's learned)
+3) a forward relation named forward/(name of program). The arguments of this relation
+are an incoming and outgoing packet respectively.
+4) all relations have names ending in /(name of program).
+5) the name of the program is lower case.
+*)
+module Evaluation = struct
+	let fire_relation (rel : relation) (notif : value) (out_ch : out_channel) (in_ch : in_channel) : value list =
+
+
+	(* takes in a notification, fires all action rules (+..., -..., forward, ...)
+	sends the appropriate things to xsb and returns a list of notifications to be sent out (such as packets) *)
+	let respond_to_notification (notif : value) (prgm : program) (out_ch : out_channel) (in_ch : in_channel) : value list = 
+		match prgm with Program(_, relations) ->
+		match notif with Value(notif_type, _, _) -> List.fold_right (fun rel acc ->
+			match (relation_trigger_type rel) with
+			| None -> acc;
+			| Some(t) -> if t = notif_type then (fire_relation rel notif out_ch in_ch) @ acc;) relations [];;
+
+
+	
+
+end
+
+
+	
 
 	let find_relation_by_name (prgm : program) (name : string) : relation option = 
-		match prgm with Program(_, relations) -> List.fold_right (fun r acc -> if name = (relation_name r) then Some(r) else acc) relations None;;
+		match prgm with Program(_, _, relations) -> List.fold_right (fun r acc -> if name = (relation_name r) then Some(r) else acc) relations None;;
 
 	(* memoize this function? *)
 	let constrain_ports (forward : relation) : relation =
@@ -149,7 +235,7 @@ module Flowlog = struct
 
 	let start_program (prgm : program) (out_ch : out_channel) (in_ch : in_channel) : (term list) list = 
 		match prgm with
-		| Program(name, relations) -> let out = List.fold_right (fun rel acc -> if (relation_name rel) = "forward/" ^ name then
+		| Program(name, _, relations) -> let out = List.fold_right (fun rel acc -> if (relation_name rel) = "forward/" ^ name then
 			(assert_relation (constrain_ports rel) out_ch in_ch) else
 			(assert_relation rel out_ch in_ch) @ acc) relations [] in
 			out @ (assert_relation (Relation(shp_name, shp_vars, [])) out_ch in_ch);;
@@ -162,7 +248,7 @@ module Flowlog = struct
 
 	let respond_to_packet_desugared (prgm : program) (pkt : term list) (out_ch : out_channel) (in_ch : in_channel) : (term list) list =
 		match prgm with
-		| Program(name, relations) ->
+		| Program(name, _, relations) ->
 			match (find_relation_by_name prgm ("forward/" ^ name)) with
 			| None -> raise (Failure ("Program " ^ name ^ " is missing a forward relation."));
 			| Some(forward) ->
