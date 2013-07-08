@@ -1,7 +1,10 @@
 (*
   Modified from ocaml tutorial by Tim
 
-  This is a Blackbox. 
+  This is a Blackbox. Because it's a test, it handles both
+  dummy notifications and dummy queries. It sends a proper 
+  registration notification to Flowlog. It follows that up with
+  an Apple TV notification event.
 *)
 
 open Arg
@@ -29,6 +32,11 @@ let connect ~host port =
     tx#opn;
     { trans = tx ; proto = proto; fl = fl}
 ;;
+
+(* TODO: safety check. *)
+let numArgs = Array.length Sys.argv;;
+let arg1 = Sys.argv.(1);;
+let arg2 = Sys.argv.(2);;
 
 class bb_handler =
 object (self)
@@ -80,10 +88,13 @@ let dobb () =
     Printf.printf "notification sent\n%!"; 
 
 
-    Printf.printf "sending another notification\n%!"; 
+    Printf.printf "sending another notification (from cmd line)\n%!"; 
     let notif = new notification in
-      notif#set_notificationType "test";
-      notif#set_values (Hashtbl.create 1);
+      notif#set_notificationType "test_fake_appletv";
+      let tbl = (Hashtbl.create 2) in
+      Hashtbl.add tbl "req_mac" arg1;
+      Hashtbl.add tbl "tv_mac" arg2;
+      notif#set_values tbl;
       cli.fl#notifyMe notif;    
     Printf.printf "notification sent\n%!"; 
     
@@ -93,8 +104,6 @@ let dobb () =
   with Transport.E (_,what) ->
     Printf.printf "ERROR: %s\n" what ; flush stdout
 ;;
-
-(* todo: SEND notifications---how? *)
 
 dobb();;
 
