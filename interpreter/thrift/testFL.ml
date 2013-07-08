@@ -1,74 +1,127 @@
 (*
- Licensed to the Apache Software Foundation (ASF) under one
- or more contributor license agreements. See the NOTICE file
- distributed with this work for additional information
- regarding copyright ownership. The ASF licenses this file
- to you under the Apache License, Version 2.0 (the
- "License"); you may not use this file except in compliance
- with the License. You may obtain a copy of the License at
+  Modified from ocaml tutorial by Tim
 
-   http://www.apache.org/licenses/LICENSE-2.0
-
- Unless required by applicable law or agreed to in writing,
- software distributed under the License is distributed on an
- "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- KIND, either express or implied. See the License for the
- specific language governing permissions and limitations
- under the License.
+  This is the FlowLog server for catching notifications,
+    sending queries, and sending notifications.
 *)
 
+(* note to self: all open does is avoid the "module." 
+   not quite like #include or require. *)
 open Arg
 open Thrift
-open Tutorial_types
-open Shared_types
+open Flowlog_types
+open Thread
 
+(* "Die, Bart, Die!" is German for "The, Bart, The!". -- Sideshow Bob *)
 exception Die;;
 let sod = function
     Some v -> v
   | None -> raise Die;;
 
+let print_notif_values tbl = 
+  Hashtbl.iter (fun k v -> 
+                Printf.printf "%s -> %s\n%!" k v) tbl 
+  
+(* TODO: Who's to say that a value must be a string? 
+   Notification cannot contain a list etc. as written. *)
+
+class fl_handler =
+object (self)
+  inherit FlowLogInterpreter.iface
+
+  val mutable registered : (string, string list) Hashtbl.t = (Hashtbl.create 0)
+
+  method notifyMe notif = 
+    let ntype = sod ((sod notif)#get_notificationType) in
+    let values = sod ((sod notif)#get_values) in
+    Printf.printf "received notification. type=%s\n%!" ntype;
+    print_notif_values values;
+
+      (* special type for blackbox registering itself. 
+         TODO: beware undocumented magic strings. *)
+      if ntype = "BB_register" then
+      begin
+         let bbid = Hashtbl.find values "id" in
+         let bbip = Hashtbl.find values "ip" in
+         let bbport = Hashtbl.find values "port" in
+         Hashtbl.add registered bbid [bbip;bbport]
+      end
+      else if ntype = "BB_unregister" then
+      begin
+         let bbid = Hashtbl.find values "id" in
+         Hashtbl.remove registered bbid
+      end
+end
+
 type connection = {
   trans : Transport.t ;
   proto : Thrift.Protocol.t;
-  calc : Calculator.client ;
+  bb : BlackBox.client ;
 }
 
+(* The ~ denotes a keyword argument *)
 let connect ~host port =
   let tx = new TSocket.t host port in
   let proto = new TBinaryProtocol.t tx in
-  let calc = new Calculator.client proto proto in
+  let bb = new BlackBox.client proto proto in
     tx#opn;
-    { trans = tx ; proto = proto; calc = calc }
+    { trans = tx ; proto = proto; bb = bb}
 ;;
 
-let doclient () =
-  let cli = connect ~host:"127.0.0.1" 9090 in
+let dofl () =
+  let h = new fl_handler in
+  let proc = new FlowLogInterpreter.processor h in
+  let port = 9090 in (* FL listen on 9090 *)
+  let pf = new TBinaryProtocol.factory in
+  let server = new TThreadedServer.t
+		 proc
+		 (new TServerSocket.t port)
+		 (new Transport.factory)
+		 pf
+		 pf
+  in
+    (* first thing: listen for notifications *)
+    (* returns handle of thread. ignore result to avoid warning *) 
+    ignore (Thread.create (fun x -> (server#serve)) 0);
+
+  Printf.printf "Started to listen for notifications. Waiting 5 seconds before sending test queries.\n%!";
+  Unix.sleep 10;
+  Printf.printf "Beginning to test sending to BB code...";
+
+  (* Now do other stuff: test sending notifications/queries to BB *)
+  (* recall BB listens on 9091 *)
+  let cli = connect ~host:"127.0.0.1" 9091 in 
   try
-    cli.calc#ping ;
-    Printf.printf "ping()\n" ; flush stdout ;
-    (let sum = cli.calc#add (Int32.of_int 1) (Int32.of_int 1) in
-       Printf.printf "1+1=%ld\n" sum ;
-       flush stdout) ;
-    (let w = new work in
-       w#set_op Operation.DIVIDE ;
-       w#set_num1 (Int32.of_int 1) ;
-       w#set_num2 (Int32.of_int 0) ;
-       try
-	 let quotient = cli.calc#calculate (Int32.of_int 1) w in
-	   Printf.printf "Whoa? We can divide by zero!\n" ; flush stdout
-       with InvalidOperation io ->
-	 Printf.printf "InvalidOperation: %s\n" io#grab_why ; flush stdout) ;
-    (let w = new work in
-       w#set_op Operation.SUBTRACT ;
-       w#set_num1 (Int32.of_int 15) ;
-       w#set_num2 (Int32.of_int 10) ;
-       let diff = cli.calc#calculate (Int32.of_int 1) w in
-	 Printf.printf "15-10=%ld\n" diff ; flush stdout) ;
-    (let ss = cli.calc#getStruct (Int32.of_int 1) in
-       Printf.printf "Check log: %s\n" ss#grab_value ; flush stdout) ;
-    cli.trans#close
+    Printf.printf "sending a notification\n%!"; 
+    let notif = new notification in
+      notif#set_notificationType "test";
+      notif#set_values (Hashtbl.create 1);
+      cli.bb#notifyMe notif;    
+    Printf.printf "notification sent\n%!"; 
+
+    Printf.printf "querying\n%!";
+    let qry = new query in
+      qry#set_relName "testRel";
+      qry#set_arguments ["1";"2"]; 
+      let qresult = cli.bb#doQuery qry in  
+        (* currying is fun. unfortunately the types are wrong here! *)          
+        (* Hashtbl.iter (Printf.printf "result=%s\n%!") qresult#get_result; *)
+        Hashtbl.iter (fun k v -> 
+                       (Printf.printf "result contained: %s -> %s\n%!" 
+                                   (String.concat " " k) 
+                                   (string_of_bool v)))
+                     (sod qresult#get_result);    
+    Printf.printf "query done\n%!";
+
+    (* close the connection *)
+    cli.trans#close;
+
   with Transport.E (_,what) ->
-    Printf.printf "ERROR: %s\n" what ; flush stdout
+    Printf.printf "ERROR: %s\n%!" what; 
 ;;
 
-doclient();;
+(* todo: REGISTRATION? *)
+dofl();;
+
+(* Tests done, but wait in case new messages from BB. *)
+Unix.sleep 1000
