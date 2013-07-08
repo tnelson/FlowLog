@@ -8,18 +8,20 @@ let debug = true;;
 
 (* Defines the basic types for the Flowlog interpreter. *)
 module Syntax = struct
+	(* type name, field names *)
+	type notif_type = Type of string * string list;;
+	(* type, name *)
+	type notif_var = Notif_var of notif_type * string;;
 	(* constants and variables or a field of a value (like pkt.locPt) *)
-	type term = Constant of string | Variable of string | Field of string * string;;
-	(* type name, field names*)
-	type ftype = Type of string * string list;;
-	(* type, name, field values (all constants or all variables) *)
-	type value = Value of ftype * string * (term list) option;;
+	type term = Constant of string | Variable of string | Field_ref of notif_var * string;;
+	(* type of actual arriving notification. type and values *)
+	type notif_val = Notif_val of notif_type * term list;;
 	(* things like A = B or R(A, B, C) *)
 	type atom = Equals of term * term | Apply of string * term list | Bool of bool;;
 	(* atoms and negations of atoms *)
 	type literal = Pos of atom | Neg of atom;;
-	(* argument to a clause is either a value or a term *)
-	type argument = Arg_value of value | Arg_term of term;;
+	(* argument to a clause is either a notif_var or a term *)
+	type argument = Arg_notif of notif_var | Arg_term of term;;
 	(* name, arguments, body *)
 	type clause = Clause of string * argument list * literal list;;
 	(* name, arguments, clauses *)
@@ -28,7 +30,7 @@ module Syntax = struct
 	type program = Program of string * relation list;;
 	
 	let packet_type = Type("packet", ["LocSw"; "LocPt"; "DlSrc"; "DlDst"; "DlTyp"; "NwSrc"; "NwDst"; "NwProto"]);;
-	let switch_port_reg = Type("switch_port_reg", ["Switch"; "Port"]);;
+	let switch_port_type = Type("switch_port_type", ["Switch"; "Port"]);;
 
 (*	let shp_vars = List.map (fun (str : string) -> Variable(str)) ["LocSw"; "LocPt2"];;
 	let shp_name = "__switch_has_ports";;*)
@@ -43,23 +45,21 @@ module Type_Helpers = struct
 		let ans = List.fold_right (fun x acc -> (conversion x) ^ "," ^ acc) l "" in
 		if ans = "" then ans else String.sub ans 0 (String.length ans - 1);;
 
+	let notif_var_name (n : notif_var) : string =
+		match n with Notif_var(t, str) -> str;;
+
+	let notif_var_to_terms (n : notif_var) : term list =
+		match n with Notif_var(Type(_, fields), name) ->
+		List.map (fun str -> Variable(name ^ "_" ^ str)) fields;;
+
 	let term_to_string (t : term) : string = 
 		match t with
 		| Constant(c) -> c; 
 		| Variable(v) -> v;
-		| Field(val, field) -> val ^ "_" ^ field;;
+		| Field_ref(notif, field) -> (notif_var_name notif) ^ "_" ^ field;;
 
-	let value_to_string (val : value) : string =
-		match val with Value(t, name, val_opt) ->
-		match val_opt with
-		| None -> match t with Type(_, names) -> (list_to_string (fun str -> name ^ "_" ^ str) names);
-		| Some(fields) -> (list_to_string term_to_string fields);;
-
-	let value_to_terms (val : value) : term list =
-		match val with Value(t, name, terms_opt) ->
-		match terms_opt with
-		| None -> match t with Type(_, fields) -> List.map (fun str -> Variable(name ^ "_" ^ str)) fields;
-		| Some(terms) -> terms;;
+	let notif_to_string (n : notif_var) : string = 
+		list_to_string term_to_string (notif_var_to_terms n);;
 
 	let atom_to_string (a : atom) : string =
 		match a with
@@ -79,14 +79,14 @@ module Type_Helpers = struct
 
 	let argument_to_string (arg : argument) : string =
 		match arg with
-		| Arg_value(v) -> value_to_string v;
+		| Arg_notif(n) -> notif_to_string n;
 		| Arg_term(t) -> term_to_string t;;
 
 	let arguments_to_terms (args : argument list) : term list =
 		List.fold_right (fun arg acc ->
 		match arg with
 		| Arg_term(t) -> t :: acc;
-		| Arg_value(v) -> (value_to_terms v) @ acc) args;;
+		| Arg_notif(n) -> (notif_var_to_terms n) @ acc) args;;
 
 	let rec drop (l : 'a list) (n : int) : 'a list = 
 		if n <= 0 then l else
@@ -100,16 +100,11 @@ module Type_Helpers = struct
 		| [] -> [];
 		| h :: t -> h :: take t (n-1);;
 
-	let rec terms_to_arguments (args : argument list) (terms : term list) : argument list =
-		match args with first :: rest ->
-		match first with
-		| Arg_term(t) -> Arg_term(List.hd terms) :: (terms_to_arguments rest (drop terms 1));
-		| Arg_value(Value(val_type, name, _)) -> match val_type with Type(_, field_names) ->
-			let num_terms = List.length field_names in
-			Arg_value(Value(val_type, name, Some (take terms num_terms)) :: (terms_to_arguments rest (drop terms num_terms));;
-
-	let terms_to_args_clause (cl : clause) (terms : term list) : argument list =
-		match cl with Clause(_, args, _) -> terms_to_arguments args terms;;
+	let terms_to_notif_val (notif : notif_var) (terms : term list) : notif_val =
+		match notif_var with Notif_var(ntype, _) ->
+		if (List.length terms = List.length (match ntype with Type(_, names) -> names)) 
+		then Notif_val(ntype, terms) 
+		else raise (Failure "Tried to create notification with wrong number of terms.");;
 
 	let clause_to_string (cl : clause) : string =
 		match cl with
@@ -127,7 +122,7 @@ module Type_Helpers = struct
 		| [] -> None;
 		| h :: tail -> match h with
 			| Arg_term(_) -> None;
-			| Arg_value(v) -> match v with Value(t, _, _) -> Some t;;
+			| Arg_notif(n) -> match v with Notif_var(t, _) -> Some t;;
 
 	let print_relation (rel : relation) : unit =
 		match rel with
@@ -135,11 +130,24 @@ module Type_Helpers = struct
 		| [] -> print_endline (clause_to_string (Clause(name, args, [])));
 		|_ -> List.iter (fun cls -> print_endline (clause_to_string cls)) clauses;;
 
+	let find_relation_by_name (prgm : program) (name : string) : relation option = 
+		match prgm with Program(_, relations) -> List.fold_right (fun r acc -> if name = (relation_name r) then Some(r) else acc) relations None;;
+
+	let is_forward_relation (prgm : program) (rel : relation) : bool =
+		match prgm with Program(prgm_name, relations) ->
+		match rel with Relation(rel_name, _, _) ->
+		List.mem rel relations && rel_name = "forward/" ^ prgm_name;;
+
+	let forward_relation (prgm : program) : relation =
+		match find_relation_by_name prgm ("forward/" ^ name) with
+		| None -> raise (Failure "This program does not have a forward relation.");
+		| Some rel -> rel;;
+
 end 
 
 (* Provides functions for high level communication with XSB. *)
 module Flowlog_Xsb = struct	
-	include To_String;;
+	include Type_Helpers;;
 
 	let add_unique (x : 'a) (l : 'a list) : 'a list = if List.mem x l then l else x :: l;;
 	
@@ -159,23 +167,22 @@ module Flowlog_Xsb = struct
 			body
 			(List.fold_right add_unique_var (arguments_to_terms args) []);;
 
-	let send_clause (cl : clause) (assertion : string) (conversion : term list -> 'a) (out_ch : out_channel) (in_ch : in_channel) : 'a list =
+	let send_clause (cl : clause) (assertion : string) (out_ch : out_channel) (in_ch : in_channel) : 'a list =
 		let _ = if debug then print_endline assertion in
 		let num_vars = List.length (get_vars cl) in
 		let answer = (if num_vars > 0 then Xsb.send_query assertion (List.length (get_vars cl)) out_ch in_ch
 		else let _ = Xsb.send_assert assertion out_ch in_ch in []) in
-		List.map (fun (l : string list) -> conversion (List.map (fun (s : string) -> Constant(s)) l)) answer;;
+		List.map (fun (l : string list) -> List.map (fun (s : string) -> Constant(s)) l) answer;;
 	
-	let query_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): (argument list) list =
+	let query_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): (term list) list =
 		send_clause cl (match cl with
-			| Clause(str, args, _) -> str ^ "(" ^ (list_to_string argument_to_string args) ^ ").")
-			(terms_to_args_clause cl) out_ch in_ch;;
+			| Clause(str, args, _) -> str ^ "(" ^ (list_to_string argument_to_string args) ^ ").") out_ch in_ch;;
 	
 	let retract_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): (term list) list =
-	    send_clause cl ("retract((" ^ (clause_to_string cl) ^ ")).") (fun x -> x) out_ch in_ch;;
+	    send_clause cl ("retract((" ^ (clause_to_string cl) ^ ")).") out_ch in_ch;;
 	
 	let assert_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): (term list) list =
-		send_clause cl ("assert((" ^ (clause_to_string cl) ^ ")).") (fun x -> x) out_ch in_ch;;
+		send_clause cl ("assert((" ^ (clause_to_string cl) ^ ")).") out_ch in_ch;;
 	
 	let tentative_assert_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): (term list) list =
 		let _ = retract_clause cl out_ch in_ch in
@@ -186,151 +193,61 @@ module Flowlog_Xsb = struct
 		| Relation(name, args, []) -> assert_clause (Clause(name, args, [Pos(Bool(false))])) out_ch in_ch;
 		| Relation(_, _, clauses) -> List.fold_right (fun cls acc -> (assert_clause cls out_ch in_ch) @ acc) clauses [];;
 	
-	let query_relation (rel : relation) (args : argument list) (out_ch : out_channel) (in_ch : in_channel) : (argument list) list =
+	let query_relation (rel : relation) (args : argument list) (out_ch : out_channel) (in_ch : in_channel) : (term list) list =
 		let _ = if debug then print_endline ("query relation: " ^ (relation_name rel) ^ (list_to_string argument_to_string args)) in
 		let ans = query_clause (Clause((relation_name rel), args, [])) out_ch in_ch in
-		let _ = if debug then print_endline (list_to_string (list_to_string argument_to_string) ans) in
+		let _ = if debug then print_endline (list_to_string (list_to_string term_to_string) ans) in
 		ans;;
-	
+
 end
 
 (* Provides functions for running a Flowlog program.
 ASSUMPTIONS: We assume that programs passed into functions in this module have
-1) types included
-2) all implied relations defined (i.e. if there's +learned then there's learned)
-3) a forward relation named forward/(name of program). The arguments of this relation
+1) all implied relations defined (i.e. if there's +R or -R then there's R)
+2) a forward relation named forward/(name of program). The arguments of this relation
 are an incoming and outgoing packet respectively.
-4) all relations have names ending in /(name of program).
-5) the name of the program is lower case.
+3) all relations have names ending in /(name of program).
+4) the name of the program is lower case.
 *)
 module Evaluation = struct
-	let fire_relation (rel : relation) (notif : value) (out_ch : out_channel) (in_ch : in_channel) : value list =
+	include Flowlog_Xsb;;
+
+	let fire_relation (rel : relation) (notif : notif_val) (prgm : program) (out_ch : out_channel) (in_ch : in_channel) : notif_val list =
+		let results = match rel with Relation(name, args, _) -> 
+		match args with
+		| [] -> raise (Failure "called fire_relation on a relation with empty args.");
+		| head :: tail -> match notif with Notif_val(_, terms) ->
+		query_relation rel (terms :: tail) out_ch in_ch in
+		if (is_forward_relation prgm rel) then List.map (terms_to_notif_val head) results else
+		let _ = (match name with
+		| "+" ^ rest -> List.iter (fun terms -> let _ = tentative_assert_clause (Clause(rest, (List.map (fun x -> Arg_term(x)) terms), [])) out_ch in_ch in ()) results;
+		| "-" ^ rest -> List.iter (fun terms -> let _ = retract_clause (Clause(rest, (List.map (fun x -> Arg_term(x)) terms), [])) out_ch in_ch in ()) results;
+		| _ -> ())) in [];;
 
 
 	(* takes in a notification, fires all action rules (+..., -..., forward, ...)
 	sends the appropriate things to xsb and returns a list of notifications to be sent out (such as packets) *)
-	let respond_to_notification (notif : value) (prgm : program) (out_ch : out_channel) (in_ch : in_channel) : value list = 
-		match prgm with Program(_, relations) ->
-		match notif with Value(notif_type, _, _) -> List.fold_right (fun rel acc ->
-			match (relation_trigger_type rel) with
+	let respond_to_notification (notif : notif_val) (prgm : program) (out_ch : out_channel) (in_ch : in_channel) : notif_val list = 
+		match prgm with Program(name, relations) ->
+		match notif with Notif_val(ntype, _) ->
+		let forward_rel = forward_relation prgm in
+		let ans = if (relation_trigger_type forward_rel) = Some ntype then fire_relation forward_rel ntype prgm out_ch in_ch in
+		(List.fold_right (fun rel acc ->
+			if rel <> forward_rel then
+			(match (relation_trigger_type rel) with
 			| None -> acc;
-			| Some(t) -> if t = notif_type then (fire_relation rel notif out_ch in_ch) @ acc;) relations [];;
+			| Some(t) -> if t = ntype then (fire_relation rel notif prgm out_ch in_ch) @ acc;) else acc) relations []) @ ans;;
 
-
-	
-
-end
-
-
-	
-
-	let find_relation_by_name (prgm : program) (name : string) : relation option = 
-		match prgm with Program(_, _, relations) -> List.fold_right (fun r acc -> if name = (relation_name r) then Some(r) else acc) relations None;;
-
-	(* memoize this function? *)
-	let constrain_ports (forward : relation) : relation =
-		let constraining_literal = Pos(Apply(shp_name, shp_vars)) in
-		match forward with Relation(name, args, clauses) -> Relation(name, args, List.map (fun cls ->
-			match cls with Clause(name_1, args_1, body) -> Clause(name_1, args_1, constraining_literal :: body)) clauses);;
 
 	let start_program (prgm : program) (out_ch : out_channel) (in_ch : in_channel) : (term list) list = 
 		match prgm with
-		| Program(name, _, relations) -> let out = List.fold_right (fun rel acc -> if (relation_name rel) = "forward/" ^ name then
-			(assert_relation (constrain_ports rel) out_ch in_ch) else
-			(assert_relation rel out_ch in_ch) @ acc) relations [] in
-			out @ (assert_relation (Relation(shp_name, shp_vars, [])) out_ch in_ch);;
-
-	(* memoize this function? *)
-	let update_switch_ports (sw : switchId) (port_nums : portId list) (out_ch : out_channel) (in_ch : in_channel) : unit =
-		let sw_string = Int64.to_string sw in
-		List.iter (fun port -> let _ = tentative_assert_clause (Clause(shp_name, [Constant(sw_string); Constant(port)], [])) out_ch in_ch in ()) 
-		(List.map string_of_int port_nums);;
-
-	let respond_to_packet_desugared (prgm : program) (pkt : term list) (out_ch : out_channel) (in_ch : in_channel) : (term list) list =
-		match prgm with
-		| Program(name, _, relations) ->
-			match (find_relation_by_name prgm ("forward/" ^ name)) with
-			| None -> raise (Failure ("Program " ^ name ^ " is missing a forward relation."));
-			| Some(forward) ->
-			let answer = match forward with
-			| Relation(_, args, _) -> query_relation (constrain_ports forward) (pkt @ (drop args (List.length pkt))) out_ch in_ch in
-			let _ = List.iter (fun rel ->
-				let option_plus = find_relation_by_name prgm ("+" ^ (relation_name rel)) in
-				let option_minus = find_relation_by_name prgm ("-" ^ (relation_name rel)) in
-				let to_assert = (match option_plus with
-				| None -> [];
-				| Some(plus) -> match plus with | Relation(_, args, _) -> 
-					query_relation plus (pkt @ (drop args (List.length pkt))) out_ch in_ch;) in
-				let to_retract = (match option_minus with
-				| None -> [];
-				| Some(minus) -> match minus with | Relation(_, args, _) -> 
-					query_relation minus (pkt @ (drop args (List.length pkt))) out_ch in_ch;) in
-				let _ = List.iter (fun args -> let _ = tentative_assert_clause (Clause((relation_name rel), args, [])) out_ch in_ch in ()) to_assert in
-				List.iter (fun args -> let _ = retract_clause (Clause((relation_name rel), args, [])) out_ch in_ch in ()) to_retract;) relations in
-			answer;;
-	
-	let rec replace (r : string) (w : string) (st : string) : string =
-		if (String.length st < String.length r || String.length st = 0) then st else
-			if String.sub st 0 (String.length r) = r then w ^ (replace r w (String.sub st (String.length r) (String.length st - String.length r))) else
-				(String.sub st 0 1) ^ (replace r w (String.sub st 1 (String.length st - 1)));;
-	
-	let pkt_to_term_list (sw : switchId) (pk : packetIn) : term list = 
-		let _ = if debug then print_endline "starting pkt_to_term_list" in
-		let pkt_payload = parse_payload pk.input_payload in
-		let isIp = ((dlTyp pkt_payload) = 0x0800) in
-		let ans = List.map (function x -> Constant(x)) [Int64.to_string sw;
-		string_of_int pk.port;
-		Int64.to_string pkt_payload.Packet.dlSrc;
-		Int64.to_string pkt_payload.Packet.dlDst;
-		string_of_int (dlTyp pkt_payload);
-		Int32.to_string (nwSrc pkt_payload);
-		Int32.to_string (nwDst pkt_payload);
-		if isIp then (string_of_int (nwProto pkt_payload)) else "arp"] in
-		let _ = if debug then print_endline ("pkt to term list: " ^ (list_to_string term_to_string ans)) in
-		let _ = if debug then print_endline ("dlTyp: " ^ (string_of_int (dlTyp pkt_payload))) in
-		ans;;
-	
-	let begins_with (str1 : string) (str2 : string) : bool = 
-		if String.length str2 > String.length str1 then false else
-		(String.sub str1 0 (String.length str2)) = str2;;
-	
-	(* notice that the current implementation is not efficient--if its just a repeater its doing way too much work. *)
-	let forward_packets (tll : (term list) list) (sw : switchId) (pk : packetIn) : unit = 
-		let actions_list = ref [] in
-		let pk_list = pkt_to_term_list sw pk in
-		let dlSrc_old = term_to_string (List.nth pk_list 2) in
-		let dlDst_old = term_to_string (List.nth pk_list 3) in
-		let nwSrc_old = term_to_string (List.nth pk_list 5) in
-		let nwDst_old = term_to_string (List.nth pk_list 6) in
-		let _ = List.iter (fun tl -> 
-			let locPt_string = term_to_string (List.nth tl 1) in
-			(* if (begins_with locPt_string "_h") then actions_list := Output(AllPorts) :: !actions_list else *)
-			let _ = actions_list := Output(PhysicalPort(int_of_string locPt_string)) :: !actions_list in
-	
-			let dlSrc_new = term_to_string (List.nth tl 2) in
-			let _ = actions_list := SetDlSrc(Int64.of_string (if (begins_with dlSrc_new "_h") then dlSrc_old else dlSrc_new)) :: !actions_list in
-	
-			let dlDst_new = term_to_string (List.nth tl 3) in
-			let _ = actions_list := SetDlDst(Int64.of_string (if (begins_with dlDst_new "_h") then dlDst_old else dlDst_new)) :: !actions_list in
-	
-			let nwSrc_new = term_to_string (List.nth tl 5) in
-			let _ = actions_list := SetNwSrc(Int32.of_string (if (begins_with nwSrc_new "_h") then nwSrc_old else nwSrc_new)) :: !actions_list in
-	
-			let nwDst_new = term_to_string (List.nth tl 6) in
-			let _ = actions_list := SetNwDst(Int32.of_string (if (begins_with nwDst_new "_h") then nwDst_old else nwDst_new)) :: !actions_list in
-			()) tll in
-		let _ = if debug then print_endline ("print packet payload: " ^ (Packet.to_string (parse_payload pk.input_payload))) in
-		send_packet_out sw 0l {output_payload = pk.input_payload; port_id = None; apply_actions = !actions_list};;
-	
-	let respond_to_packet (prgm : program) (sw : switchId) (xid : xid) (pk : packetIn) (out_ch : out_channel) (in_ch : in_channel) : unit = 
-		let in_tl = pkt_to_term_list sw pk in
-		let out_tll = respond_to_packet_desugared prgm in_tl out_ch in_ch in 
-		forward_packets out_tll sw pk;;
+		| Program(name, _, relations) -> List.fold_right (fun rel acc -> (assert_relation rel out_ch in_ch) @ acc) relations [];;
 
 end
 
+
 module Flowlog_Parsing = struct
-	include Flowlog;;
+	include Evaluation;;
 
 	(* Makes all relations except those defined implicitly by other relations starting with + or - *)
 	let rec make_relations_helper_1 (clist : clause list) : relation list =
