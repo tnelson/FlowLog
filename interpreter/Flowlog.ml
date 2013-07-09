@@ -60,8 +60,14 @@ module Type_Helpers = struct
 		| Variable(v) -> v;
 		| Field_ref(notif, field) -> (notif_var_name notif) ^ "_" ^ field;;
 
-	let notif_to_string (n : notif_var) : string = 
+	let notif_var_to_string (n : notif_var) : string = 
 		list_to_string term_to_string (notif_var_to_terms n);;
+
+	let notif_type_to_string (ntype : notif_type) : string = 
+		match ntype with Type(name, fields) -> name ^ ": {" ^ (list_to_string (fun str -> str) fields) ^ "}";;
+
+	let notif_val_to_string (n : notif_val) : string =
+		match n with Notif_val(ntype, terms) -> (notif_type_to_string ntype) ^ " : " ^ (list_to_string term_to_string terms);;
 
 	let atom_to_string (a : atom) : string =
 		match a with
@@ -81,7 +87,7 @@ module Type_Helpers = struct
 
 	let argument_to_string (arg : argument) : string =
 		match arg with
-		| Arg_notif(n) -> notif_to_string n;
+		| Arg_notif(n) -> notif_var_to_string n;
 		| Arg_term(t) -> term_to_string t;;
 
 	let arguments_to_terms (args : argument list) : term list =
@@ -119,12 +125,14 @@ module Type_Helpers = struct
 		Relation(str, _, _) -> str;;
 
 	let relation_trigger_type (rel : relation) : notif_type option =
+		let this_debug = false in
+		let _ = if this_debug then print_endline ("relation_trigger_type: " ^ (relation_name rel) ^ ": ") in
 		match rel with Relation(_, args, _) -> 
 		match args with
 		| [] -> None;
 		| h :: tail -> match h with
-			| Arg_term(_) -> None;
-			| Arg_notif(n) -> match n with Notif_var(t, _) -> Some t;;
+			| Arg_term(_) -> let _ = if this_debug then print_endline "None" in None;
+			| Arg_notif(n) -> match n with Notif_var(t, _) -> let _ = if this_debug then print_endline (notif_type_to_string t) in Some t;;
 
 	let print_relation (rel : relation) : unit =
 		match rel with
@@ -236,6 +244,7 @@ module Evaluation = struct
   		imp 0 l;;
 
 	let fire_relation (rel : relation) (notif : notif_val) (prgm : program) (out_ch : out_channel) (in_ch : in_channel) : notif_val list =
+		let _ = if debug then print_endline ("fire_relation: " ^ (relation_name rel)) in
 		match rel with Relation(name, args, _) -> 
 		match args with
 		| [] -> raise (Failure "called fire_relation on a relation with empty args.");
@@ -252,6 +261,7 @@ module Evaluation = struct
 	(* takes in a notification, fires all action rules (+..., -..., forward, ...)
 	sends the appropriate things to xsb and returns a list of notifications to be sent out (such as packets) *)
 	let respond_to_notification (notif : notif_val) (prgm : program) (out_ch : out_channel) (in_ch : in_channel) : notif_val list = 
+		let _ = if debug then print_endline (notif_val_to_string notif) in
 		match prgm with Program(name, relations) ->
 		match notif with Notif_val(ntype, _) ->
 		let forward_rel = forward_relation prgm in

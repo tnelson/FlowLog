@@ -39,9 +39,10 @@ let plus_learned_relation = Relation("+learned/mac_learning", packet_arg :: lear
 let minus_learned_relation = Relation("-learned/mac_learning", packet_arg :: learned_args, [minus_learned]);;
 let learned_relation = Relation("learned/mac_learning", learned_args, []);;
 let forward_relation = Relation("forward/mac_learning", [packet_arg; packet_arg_2], [forward_1; forward_2]);;
+let plus_switch_port_relation = Relation("+switch_has_port/mac_learning", [switch_port_arg; Arg_term(Variable("Sw")); Arg_term(Variable("Pt"))], [plus_switch_has_port]);;
 let switch_port_relation = Relation("switch_has_port/mac_learning", [Arg_term(Variable("Sw")); Arg_term(Variable("Pt"))], []);;
 
-let program = Program("mac_learning", [plus_learned_relation; minus_learned_relation; learned_relation; forward_relation; switch_port_relation]);;
+let program = Program("mac_learning", [plus_learned_relation; minus_learned_relation; learned_relation; forward_relation; plus_switch_port_relation; switch_port_relation]);;
 
 end
 

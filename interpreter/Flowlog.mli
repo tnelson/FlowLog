@@ -36,7 +36,11 @@ module Type_Helpers : sig
 
 	val notif_var_to_terms : Syntax.notif_var -> Syntax.term list;;
 
-	val notif_to_string : Syntax.notif_var -> string;;
+	val notif_var_to_string : Syntax.notif_var -> string;;
+
+	val notif_type_to_string : Syntax.notif_type -> string;;
+
+	val notif_val_to_string : Syntax.notif_val -> string;;
 
 	val term_to_string : Syntax.term -> string;;
 
