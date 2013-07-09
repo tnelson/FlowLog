@@ -1,5 +1,4 @@
 open Xsb;;
-open Syntax;;
 open Flowlog;;
 open Packet;;
 open OxPlatform;;
@@ -9,7 +8,7 @@ open OpenFlow0x01;;
 let debug = true;;
 
 module type PROGRAM = sig
-	val program : Flowlog.program;;
+	val program : Syntax.program;;
 end
 
 module Make_OxModule (Program : PROGRAM) = struct
@@ -22,7 +21,7 @@ module Make_OxModule (Program : PROGRAM) = struct
 		| None -> let out_ch, in_ch = Xsb.start_xsb () in 
 			let _ = ref_out_ch := Some(out_ch) in
 			let _ = ref_in_ch := Some(in_ch) in
-			let _ = Flowlog.start_program Program.program out_ch in_ch in
+			let _ = Evaluation.start_program Program.program out_ch in_ch in
 			let _ = if debug then print_endline "started program" in
 			(out_ch, in_ch);
 		| Some(out_ch) -> match !ref_in_ch with
@@ -52,8 +51,8 @@ module Make_OxModule (Program : PROGRAM) = struct
 		Int32.to_string (nwSrc pkt_payload);
 		Int32.to_string (nwDst pkt_payload);
 		if isIp then (string_of_int (nwProto pkt_payload)) else "arp"] in
-		let _ = if debug then print_endline ("pkt to term list: " ^ (list_to_string term_to_string ans)) in
-		let _ = if debug then print_endline ("dlTyp: " ^ (string_of_int (dlTyp pkt_payload))) in
+		(*let _ = if debug then print_endline ("pkt to term list: " ^ (Type_Helpers.list_to_string Type_Helpers.term_to_string ans)) in
+		let _ = if debug then print_endline ("dlTyp: " ^ (string_of_int (dlTyp pkt_payload))) in*)
 		Notif_val(packet_type, terms);;
 
 	let begins_with (str1 : string) (str2 : string) : bool = 
@@ -68,25 +67,25 @@ module Make_OxModule (Program : PROGRAM) = struct
 	let forward_packets (notifs : notif_val list) (sw : switchId) (pk : packetIn) : unit = 
 		let actions_list = ref [] in
 		let pk_notif = pkt_to_notif sw pk in
-		let dlSrc_old = term_to_string (get_field pk_notif "DlSrc") in
-		let dlDst_old = term_to_string (get_field pk_notif "DlDst") in
-		let nwSrc_old = term_to_string (get_field pk_notif "NwSrc") in
-		let nwDst_old = term_to_string (get_field pk_notif "NwDst") in
+		let dlSrc_old = Type_Helpers.term_to_string (get_field pk_notif "DlSrc") in
+		let dlDst_old = Type_Helpers.term_to_string (get_field pk_notif "DlDst") in
+		let nwSrc_old = Type_Helpers.term_to_string (get_field pk_notif "NwSrc") in
+		let nwDst_old = Type_Helpers.term_to_string (get_field pk_notif "NwDst") in
 		let _ = List.iter (fun notif -> 
-			let locPt_string = term_to_string (get_field notif "LocPt") in
+			let locPt_string = Type_Helpers.term_to_string (get_field notif "LocPt") in
 			(* if (begins_with locPt_string "_h") then actions_list := Output(AllPorts) :: !actions_list else *)
 			let _ = actions_list := Output(PhysicalPort(int_of_string locPt_string)) :: !actions_list in
 	
-			let dlSrc_new = term_to_string (get_field notif "DlSrc") in
+			let dlSrc_new = Type_Helpers.term_to_string (get_field notif "DlSrc") in
 			let _ = actions_list := SetDlSrc(Int64.of_string (if (begins_with dlSrc_new "_h") then dlSrc_old else dlSrc_new)) :: !actions_list in
 	
-			let dlDst_new = term_to_string (get_field notif "DlDst") in
+			let dlDst_new = Type_Helpers.term_to_string (get_field notif "DlDst") in
 			let _ = actions_list := SetDlDst(Int64.of_string (if (begins_with dlDst_new "_h") then dlDst_old else dlDst_new)) :: !actions_list in
 	
-			let nwSrc_new = term_to_string (get_field notif "NwSrc") in
+			let nwSrc_new = Type_Helpers.term_to_string (get_field notif "NwSrc") in
 			let _ = actions_list := SetNwSrc(Int32.of_string (if (begins_with nwSrc_new "_h") then nwSrc_old else nwSrc_new)) :: !actions_list in
 	
-			let nwDst_new = term_to_string (get_field notif NwDst) in
+			let nwDst_new = Type_Helpers.term_to_string (get_field notif "NwDst") in
 			let _ = actions_list := SetNwDst(Int32.of_string (if (begins_with nwDst_new "_h") then nwDst_old else nwDst_new)) :: !actions_list in
 			()) notifs in
 		let _ = if debug then print_endline ("print packet payload: " ^ (Packet.to_string (parse_payload pk.input_payload))) in
@@ -106,7 +105,6 @@ module Make_OxModule (Program : PROGRAM) = struct
 
 end
 
-(* Eventually change to MyOxStart.Make so cleanup is called on exceptions. *)
 module Make_Controller (Program : PROGRAM) = OxStart.Make (Make_OxModule (Program));;
 
 (*module Union (Pg1 : PROGRAM) (Pg2 : PROGRAM) = struct

@@ -48,9 +48,9 @@ module Type_Helpers : sig
 
 	val argument_to_string : Syntax.argument -> string;;
 
-	val argument_to_terms : Syntax.argument -> Syntax.term list;;
+	val arguments_to_terms : Syntax.argument list -> Syntax.term list;;
 
-	val terms_to_notif_val : Syntax.term list -> Syntax.notif_val;;
+	val terms_to_notif_val : Syntax.notif_type -> Syntax.term list -> Syntax.notif_val;;
 
 	val clause_to_string : Syntax.clause -> string;;
 

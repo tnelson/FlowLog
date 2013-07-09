@@ -1,7 +1,7 @@
 open Flowlog;;
 
 module type PROGRAM = sig
-	val program : Flowlog.program;;
+	val program : Syntax.program;;
 end
 
 module Make_Controller : functor (Program : PROGRAM) -> sig end;;

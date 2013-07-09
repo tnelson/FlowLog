@@ -25,12 +25,14 @@ module Syntax = struct
 	(* name, arguments, body *)
 	type clause = Clause of string * argument list * literal list;;
 	(* name, arguments, clauses *)
+	
 	type relation = Relation of string * argument list * clause list;;
 	(* name, relations *)
+
 	type program = Program of string * relation list;;
 	
 	let packet_type = Type("packet", ["LocSw"; "LocPt"; "DlSrc"; "DlDst"; "DlTyp"; "NwSrc"; "NwDst"; "NwProto"]);;
-	let switch_port_type = Type("switch_port_type", ["Switch"; "Port"]);;
+	let switch_port_type = Type("switch_port", ["Sw"; "Pt"]);;
 
 (*	let shp_vars = List.map (fun (str : string) -> Variable(str)) ["LocSw"; "LocPt2"];;
 	let shp_name = "__switch_has_ports";;*)
@@ -50,7 +52,7 @@ module Type_Helpers = struct
 
 	let notif_var_to_terms (n : notif_var) : term list =
 		match n with Notif_var(Type(_, fields), name) ->
-		List.map (fun str -> Variable(name ^ "_" ^ str)) fields;;
+		List.map (fun field -> Field_ref(n, field)) fields;;
 
 	let term_to_string (t : term) : string = 
 		match t with
@@ -86,7 +88,7 @@ module Type_Helpers = struct
 		List.fold_right (fun arg acc ->
 		match arg with
 		| Arg_term(t) -> t :: acc;
-		| Arg_notif(n) -> (notif_var_to_terms n) @ acc) args;;
+		| Arg_notif(n) -> (notif_var_to_terms n) @ acc) args [];;
 
 	let rec drop (l : 'a list) (n : int) : 'a list = 
 		if n <= 0 then l else
@@ -100,9 +102,9 @@ module Type_Helpers = struct
 		| [] -> [];
 		| h :: t -> h :: take t (n-1);;
 
-	let terms_to_notif_val (notif : notif_var) (terms : term list) : notif_val =
-		match notif_var with Notif_var(ntype, _) ->
-		if (List.length terms = List.length (match ntype with Type(_, names) -> names)) 
+	let terms_to_notif_val (ntype : notif_type) (terms : term list) : notif_val =
+		match ntype with Type(_, names) ->
+		if (List.length terms = List.length names) 
 		then Notif_val(ntype, terms) 
 		else raise (Failure "Tried to create notification with wrong number of terms.");;
 
@@ -116,13 +118,13 @@ module Type_Helpers = struct
 		match rel with
 		Relation(str, _, _) -> str;;
 
-	let relation_trigger_type (rel : relation) : ftype option =
+	let relation_trigger_type (rel : relation) : notif_type option =
 		match rel with Relation(_, args, _) -> 
 		match args with
 		| [] -> None;
 		| h :: tail -> match h with
 			| Arg_term(_) -> None;
-			| Arg_notif(n) -> match v with Notif_var(t, _) -> Some t;;
+			| Arg_notif(n) -> match n with Notif_var(t, _) -> Some t;;
 
 	let print_relation (rel : relation) : unit =
 		match rel with
@@ -139,6 +141,7 @@ module Type_Helpers = struct
 		List.mem rel relations && rel_name = "forward/" ^ prgm_name;;
 
 	let forward_relation (prgm : program) : relation =
+		match prgm with Program(name, _) ->
 		match find_relation_by_name prgm ("forward/" ^ name) with
 		| None -> raise (Failure "This program does not have a forward relation.");
 		| Some rel -> rel;;
@@ -149,13 +152,18 @@ end
 module Flowlog_Xsb = struct	
 	include Type_Helpers;;
 
+	(* Returns x :: l if x not already in l *)
 	let add_unique (x : 'a) (l : 'a list) : 'a list = if List.mem x l then l else x :: l;;
 	
+	(* Same as add_unique but only if x is a Variable *)
 	let add_unique_var (t : term) (acc : term list) : term list = 
 		match t with
+		| Constant(_) -> acc;
 		| Variable(_) -> add_unique t acc;
-		| Constant(_) -> acc;;
+		| Field_ref(_, _) -> add_unique t acc;;
 	
+	(* Takes a desugared clause (i.e. one whose arguments are all terms and body contains no Field_refs) and
+		returns the number of variables in the clause *)
 	let get_vars (cl : clause) : term list =
 		match cl with
 		| Clause(_, args, body) -> List.fold_right 
@@ -216,8 +224,8 @@ module Evaluation = struct
 	let explode (str : string) : char list =
   		let rec expl i l =
     	if i < 0 then l else
-    	expl (i - 1) (s.[i] :: l) in
-  	expl (String.length s - 1) [];;
+    	expl (i - 1) (str.[i] :: l) in
+  	expl (String.length str - 1) [];;
 
   	(* takes a list of chars and makes a string *)
 	let implode (l : char list) : string =
@@ -228,12 +236,13 @@ module Evaluation = struct
   		imp 0 l;;
 
 	let fire_relation (rel : relation) (notif : notif_val) (prgm : program) (out_ch : out_channel) (in_ch : in_channel) : notif_val list =
-		let results = match rel with Relation(name, args, _) -> 
+		match rel with Relation(name, args, _) -> 
 		match args with
 		| [] -> raise (Failure "called fire_relation on a relation with empty args.");
 		| head :: tail -> match notif with Notif_val(_, terms) ->
-		query_relation rel (terms :: tail) out_ch in_ch in
-		if (is_forward_relation prgm rel) then List.map (terms_to_notif_val head) results else
+		let results = query_relation rel ((List.map (fun t -> Arg_term(t)) terms) @ tail) out_ch in_ch in
+		match notif with Notif_val(ntype, _) ->
+		if (is_forward_relation prgm rel) then List.map (terms_to_notif_val ntype) results else
 		let _ = (match explode name with
 		| '+' :: rest -> List.iter (fun terms -> let _ = tentative_assert_clause (Clause(implode rest, (List.map (fun x -> Arg_term(x)) terms), [])) out_ch in_ch in ()) results;
 		| '-' :: rest -> List.iter (fun terms -> let _ = retract_clause (Clause(implode rest, (List.map (fun x -> Arg_term(x)) terms), [])) out_ch in_ch in ()) results;
@@ -246,17 +255,17 @@ module Evaluation = struct
 		match prgm with Program(name, relations) ->
 		match notif with Notif_val(ntype, _) ->
 		let forward_rel = forward_relation prgm in
-		let ans = if (relation_trigger_type forward_rel) = Some ntype then fire_relation forward_rel ntype prgm out_ch in_ch in
+		let forward_ans = if ((relation_trigger_type forward_rel) = Some ntype) then fire_relation forward_rel notif prgm out_ch in_ch else [] in
 		(List.fold_right (fun rel acc ->
 			if rel <> forward_rel then
 			(match (relation_trigger_type rel) with
 			| None -> acc;
-			| Some(t) -> if t = ntype then (fire_relation rel notif prgm out_ch in_ch) @ acc;) else acc) relations []) @ ans;;
+			| Some(t) -> if t = ntype then (fire_relation rel notif prgm out_ch in_ch) @ acc else acc) else acc) relations []) @ forward_ans;;
 
 
 	let start_program (prgm : program) (out_ch : out_channel) (in_ch : in_channel) : (term list) list = 
 		match prgm with
-		| Program(name, _, relations) -> List.fold_right (fun rel acc -> (assert_relation rel out_ch in_ch) @ acc) relations [];;
+		| Program(name, relations) -> List.fold_right (fun rel acc -> (assert_relation rel out_ch in_ch) @ acc) relations [];;
 
 end
 
