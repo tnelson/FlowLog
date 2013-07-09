@@ -22,6 +22,10 @@ let print_notif_values tbl =
   Hashtbl.iter (fun k v -> 
                 Printf.printf "%s -> %s\n%!" k v) tbl 
   
+let print_registered tbl = 
+  Hashtbl.iter (fun k v -> 
+                Printf.printf "%s -> %s\n%!" k (String.concat " : " v)) tbl 
+
 (* TODO: Who's to say that a value must be a string? 
    Notification cannot contain a list etc. as written. *)
 
@@ -44,12 +48,14 @@ object (self)
          let bbid = Hashtbl.find values "id" in
          let bbip = Hashtbl.find values "ip" in
          let bbport = Hashtbl.find values "port" in
-         Hashtbl.add registered bbid [bbip;bbport]
+         Hashtbl.add registered bbid [bbip;bbport];
+         print_registered registered
       end
       else if ntype = "BB_unregister" then
       begin
          let bbid = Hashtbl.find values "id" in
-         Hashtbl.remove registered bbid
+         Hashtbl.remove registered bbid;
+         print_registered registered
       end
 end
 

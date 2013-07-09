@@ -32,49 +32,49 @@ end
 module Type_Helpers : sig
 	val list_to_string :  ('a -> string) -> ('a list) -> string;;
 
-	val notif_var_name : Flowlog.notif_var -> string;;
+	val notif_var_name : Syntax.notif_var -> string;;
 
-	val notif_var_to_terms : Flowlog.notif_var -> Flowlog.term list;;
+	val notif_var_to_terms : Syntax.notif_var -> Syntax.term list;;
 
-	val notif_to_string : Flowlog.notif_var -> string;;
+	val notif_to_string : Syntax.notif_var -> string;;
 
-	val term_to_string : Flowlog.term -> string;;
+	val term_to_string : Syntax.term -> string;;
 
-	val atom_to_string : Flowlog.atom -> string;;
+	val atom_to_string : Syntax.atom -> string;;
 
-	val literal_to_string : Flowlog.literal -> string
+	val literal_to_string : Syntax.literal -> string
 
-	val get_atom : Flowlog.literal -> Flowlog.atom;;
+	val get_atom : Syntax.literal -> Syntax.atom;;
 
-	val argument_to_string : Flowlog.argument -> string;;
+	val argument_to_string : Syntax.argument -> string;;
 
-	val argument_to_terms : Flowlog.argument -> Flowlog.term list;;
+	val argument_to_terms : Syntax.argument -> Syntax.term list;;
 
-	val terms_to_notif_val : Flowlog.term list -> Flowlog.notif_val;;
+	val terms_to_notif_val : Syntax.term list -> Syntax.notif_val;;
 
-	val clause_to_string : Flowlog.clause -> string;;
+	val clause_to_string : Syntax.clause -> string;;
 
-	val relation_name : Flowlog.relation -> string;;
+	val relation_name : Syntax.relation -> string;;
 
-	val relation_trigger_type : Flowlog.relation -> Flowlog.ftype option;;
+	val relation_trigger_type : Syntax.relation -> Syntax.notif_type option;;
 
-	val print_relation : Flowlog.relation -> unit;;
+	val print_relation : Syntax.relation -> unit;;
 
-	val find_relation_by_name : Flowlog.program -> string -> Flowlog.relation option;;
+	val find_relation_by_name : Syntax.program -> string -> Syntax.relation option;;
 
-	val is_forward_relation : Flowlog.program -> Flowlog.relation -> bool;;
+	val is_forward_relation : Syntax.program -> Syntax.relation -> bool;;
 
-	val forward_relation : Flowlog.program -> Flowlog.relation;;
+	val forward_relation : Syntax.program -> Syntax.relation;;
 end
 
 module Evaluation : sig
-	val start_program : Flowlog.program -> out_channel -> in_channel -> (term list) list;;
+	val start_program : Syntax.program -> out_channel -> in_channel -> (Syntax.term list) list;;
 
-	val respond_to_notification : Flowlog.notif_val -> Flowlog.program -> out_channel -> in_channel -> notif_val list;;
+	val respond_to_notification : Syntax.notif_val -> Syntax.program -> out_channel -> in_channel -> Syntax.notif_val list;;
 end
 
 (*module Flowlog_Parsing : sig
-	val make_relations : Flowlog.clause list -> Flowlog.relation list;;
+	val make_relations : clause list -> relation list;;
 
-	val make_program : string -> Flowlog.relation list -> Flowlog.program;;
+	val make_program : string -> relation list -> program;;
 end*)
