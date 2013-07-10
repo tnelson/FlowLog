@@ -7,29 +7,31 @@ open OpenFlow0x01_Core;;
 let debug = true;;
 
 (* Defines the basic types for the Flowlog interpreter. *)
+(* parsed! *)
 module Syntax = struct
 	(* type name, field names *)
 	type notif_type = Type of string * string list;;
-	(* type, name *)
-	type notif_var = Notif_var of notif_type * string;;
+	(* type name, variable name *)
+	type notif_var = Notif_var of string * string;;
 	(* constants and variables or a field of a value (like pkt.locPt) *)
-	type term = Constant of string | Variable of string | Field_ref of notif_var * string;;
-	(* type of actual arriving notification. type and values *)
-	type notif_val = Notif_val of notif_type * term list;;
+	type term = Constant of string | Variable of string | Field_ref of string * string;;
 	(* things like A = B or R(A, B, C) *)
 	type atom = Equals of term * term | Apply of string * term list | Bool of bool;;
 	(* atoms and negations of atoms *)
 	type literal = Pos of atom | Neg of atom;;
 	(* argument to a clause is either a notif_var or a term *)
+	(* This contains the local decl of the var, including its type, in the head *)
 	type argument = Arg_notif of notif_var | Arg_term of term;;
 	(* name, arguments, body *)
 	type clause = Clause of string * argument list * literal list;;
-	(* name, arguments, clauses *)
 	
-	type relation = Relation of string * argument list * clause list;;
-	(* name, relations *)
+clause = StateClause | HelperClause | NotifClause
 
-	type program = Program of string * relation list;;
+	(* *)
+	type rpc_decl = 
+
+	(* name, module names to be imported, notification type decls, black-box decls, clauses *)	
+	type program = Program of string * string list * notif_type list * rpc_decl list * clause list;;
 	
 	let packet_type = Type("packet", ["LocSw"; "LocPt"; "DlSrc"; "DlDst"; "DlTyp"; "NwSrc"; "NwDst"; "NwProto"]);;
 	let switch_port_type = Type("switch_port", ["Sw"; "Pt"]);;
@@ -38,6 +40,14 @@ module Syntax = struct
 	let shp_name = "__switch_has_ports";;*)
 
 end
+
+
+(* this goes in module for post-dereferencing AST *)
+	(* type of actual arriving notification. type and values *)
+	type notif_val = Notif_val of notif_type * term list;;
+	type relation = Relation of string * argument list * clause list;;
+	(* name, relations *)
+
 
 (* Provides printing functions and conversion functions both for pretty printing and communication with XSB. *)
 module Type_Helpers = struct
