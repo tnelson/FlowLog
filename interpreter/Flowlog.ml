@@ -6,8 +6,7 @@ open OpenFlow0x01_Core;;
 
 let debug = true;;
 
-(* Defines the basic types for the Flowlog interpreter. *)
-(* parsed! *)
+(* Defines the basic syntax types for the Flowlog interpreter. *)
 module Syntax = struct
 	(* type name, field names *)
 	type notif_type = Type of string * string list;;
@@ -19,34 +18,233 @@ module Syntax = struct
 	type atom = Equals of term * term | Apply of string * term list | Bool of bool;;
 	(* atoms and negations of atoms *)
 	type literal = Pos of atom | Neg of atom;;
-	(* argument to a clause is either a notif_var or a term *)
-	(* This contains the local decl of the var, including its type, in the head *)
+	(* argument to a clause is either a notif_var or a term
+	This contains the local decl of the var, including its type, in the head *)
 	type argument = Arg_notif of notif_var | Arg_term of term;;
 	(* name, arguments, body *)
-	type clause = Clause of string * argument list * literal list;;
-	
-clause = StateClause | HelperClause | NotifClause
+	type clause = 
+		(* rest of name, args, body*)
+		PlusClause of string * argument list * literal list |
+		(* rest of name, args, body *)
+		MinusClause of string * argument list * literal list |
+		(* name, args, body *)
+		HelperClause of string * argument list * literal list |
+		(* name, args (only 2 and both are Arg_notif), body *)
+		NotifClause of string * argument list * literal list;;
 
-	(* *)
-	type rpc_decl = 
+	(* name, module names to be imported, notification types, clauses *)	
+	type program = Program of string * string list * notif_type list * clause list;;
 
-	(* name, module names to be imported, notification type decls, black-box decls, clauses *)	
-	type program = Program of string * string list * notif_type list * rpc_decl list * clause list;;
-	
-	let packet_type = Type("packet", ["LocSw"; "LocPt"; "DlSrc"; "DlDst"; "DlTyp"; "NwSrc"; "NwDst"; "NwProto"]);;
-	let switch_port_type = Type("switch_port", ["Sw"; "Pt"]);;
+	(* Some helper and printing functions *)
+	let term_to_string (t : term) : string = 
+	match t with
+	| Constant(c) -> c; 
+	| Variable(v) -> v;
+	| Field_ref(notif_name, field_name) -> notif_name ^ "." ^ field_name;;
 
-(*	let shp_vars = List.map (fun (str : string) -> Variable(str)) ["LocSw"; "LocPt2"];;
-	let shp_name = "__switch_has_ports";;*)
+	let clause_name (cls : clause) : string = 
+	match cls with
+	| PlusClause(name,_, _) -> name;
+	| MinusClause(name, _, _) -> name;
+	| HelperClause(name, _, _) -> name;
+	| NotifClause(name, _, _) -> name;
+
+	let clause_arguments (cls : clause) : argument list = 
+	match cls with
+	| PlusClause(_, args, _) -> args;
+	| MinusClause(_, args, _) -> args;
+	| HelperClause(_, args, _) -> args;
+	| NotifClause(_, args, _) -> args;
+
+	let clause_body (cls : clause) : literal list = 
+	match cls with
+	| PlusClause(_, _, body) -> body;
+	| MinusClause(_, _, body) -> body;
+	| HelperClause(_, _, body) -> body;
+	| NotifClause(_, _, body) -> body;
+
+	let argument_name (arg : argument) : string =
+	match arg with
+	| Arg_notif(Notif_var(_, var_name)) -> var_name;
+	| Arg_term(t) -> term_to_string t;;
 
 end
 
-
-(* this goes in module for post-dereferencing AST *)
+module Types = struct
+	(* type name, field names *)
+	type notif_type = Type of string * string list;;
+	(* type name, variable name *)
+	type notif_var = Notif_var of notif_type * string;;
 	(* type of actual arriving notification. type and values *)
 	type notif_val = Notif_val of notif_type * term list;;
-	type relation = Relation of string * argument list * clause list;;
-	(* name, relations *)
+	(* constants and variables or a field of a value (like pkt.locPt) *)
+	type term = Constant of string | Variable of string | Field_ref of notif_var * string;;
+	(* things like A = B or R(A, B, C) *)
+	type atom = Equals of term * term | Apply of string * term list | Bool of bool;;
+	(* atoms and negations of atoms *)
+	type literal = Pos of atom | Neg of atom;;
+	(* argument to a clause is either a notif_var or a term
+	This contains the local decl of the var, including its type, in the head *)
+	type argument = Arg_notif of notif_var | Arg_term of term;;
+	(* name, arguments, body *)
+
+	type clause = 
+		(* rest of name, args, body*)
+		PlusClause of string * argument list * literal list |
+		(* rest of name, args, body *)
+		MinusClause of string * argument list * literal list |
+		(* name, args, body *)
+		HelperClause of string * argument list * literal list |
+		(* name, args (only 2 and both are Arg_notif), body *)
+		NotifClause of string * argument list * literal list;;
+
+	type relation =
+		(* rest of name, args, body*)
+		PlusRelation of string * string * argument list * clause list |
+		(* rest of name, args, body*)
+		MinusRelation of string * string * argument list * clause list |
+		(* name, args, body *)
+		HelperRelation of string * argument list * clause list |
+		(* name, args (only 2 and both are Arg_notif), body *)
+		NotifRelation of string * argument list * clause list;;
+
+	(* name, relations *)	
+	type program = Program of string * relation list;;
+
+	(* raised on errors converting from Syntax to Types. *)
+	exception Parse_error of string;;
+
+	(* Functions to turn a Syntax.program into a Types.program. *)
+
+	(* These functions assume that there are no modules to be imported in prgm. *)
+	let notif_type_convert (nt : Syntax.notif_type) : notif_type = 
+	match nt with Syntax.Notif_type(name, field_names) -> Notif_type(name, field_names);;
+
+	let notif_var_convert (prgm : Syntax.program) (cls : Syntax.clause) (nv : Syntax.notif_var) : notif_var =
+	match prgm with Syntax.Program(_, _, ntypes, _) ->
+	match nv with Syntax.Notif_var(type_name, var_name) ->
+	match List.filter (function Syntax.Type(n, _) -> type_name = n ) ntypes with
+	| [] -> raise (Parse_error "notif_var " ^ var_name ^ " in clause " ^ (Syntax.clause_name cls) ^ " has an invalid type " ^ type_name);
+	| t :: _ -> Types.Notif_var(t, var_name);;
+
+	let term_convert (prgm : Syntax.program) (cls : Syntax.clause) (t : Syntax.term) : term = 
+	match t with
+	| Syntax.Constant(str) -> Constant(str);
+	| Syntax.Variable(str) -> Variable(str);
+	| Syntax.Field_ref(var_name, field_name) ->
+	match List.filter (function 
+		| Syntax.Arg_notif(Syntax.Notif_var(_, name)) -> name = var_name;
+		| _ -> false;) (clause_arguments cls) with
+	| [] -> raise (Parse_error "the notification in " ^ (Syntax.term_to_string t) ^ " in clause " ^ (Syntax.clause_name cls) ^ " is not defined.");
+	| Syntax.Arg_notif(nv) :: _ -> Field_ref((notif_var_convert prgm cls nv), field_name);;
+
+	let atom_convert (prgm : Syntax.program) (cls : Syntax.clause) (a : Syntax.atom) : atom =
+	match a with
+	| Syntax.Equals(t1, t2) -> Equals((term_convert prgm cls t1), (term_convert prgm cls t2));
+	| Syntax.Apply(rel_name, term_list) -> Apply(rel_name, List.map (term_convert prgm cls) term_list);
+	| Syntax.Bool(b) -> Bool(b);
+
+	let literal_convert (prgm : Syntax.program) (cls : Syntax.clause) (l : Syntax.literal) : literal =
+	match l with
+	| Syntax.Pos(a) -> Pos(atom_convert prgm cls a);
+	| Syntax.Neg(a) -> Neg(atom_convert prgm cls a);;
+
+	let argument_convert (prgm : Syntax.program) (cls : Syntax.clause) (arg : Syntax.argument) : argument = 
+	match arg with
+	| Syntax.Arg_notif(nv) -> Arg_notif(notif_var_convert prgm nv);
+	| Syntax.Arg_term(t) ->
+		match t with
+		| Syntax.Constant(_) -> raise (Parse_error "argument " ^ (Syntax.argument_to_string arg) ^ " in clause " ^ (Syntax.clause_name cls) ^ " is a constant.");
+		| Syntax.Variable(str) -> Arg_term(Variable(str));
+		| Syntax.Field_ref(_, _) -> raise (Parse_error "argument " ^ (Syntax.argument_to_string arg) ^ " in clause " ^ (Syntax.clause_name cls) ^ " is a field ref.");;
+
+	let clause_convert (prgm : Syntax.program) (cls : Syntax.clause) : clause = 
+	match cls with
+	| Syntax.PlusRelation(name, args, body) -> PlusRelation(name, List.map (argument_convert prgm cls) args, List.map (literal_convert prgm cls) body);
+	| Syntax.MinusRelation(name, args, body) -> MinusRelation(name, List.map (argument_convert prgm cls) args, List.map (literal_convert prgm cls) body);
+	| Syntax.HelperRelation(name, args, body) -> HelperRelation(name, List.map (argument_convert prgm cls) args, List.map (literal_convert prgm cls) body);
+	| Syntax.NotifRelation(name, args, body) -> NotifRelation(name, List.map (argument_convert prgm cls) args, List.map (literal_convert prgm cls) body);;
+
+(*
+(* Makes all relations except those defined implicitly by other relations starting with + or - *)
+	let rec make_relations_helper_1 (clist : clause list) : relation list =
+		match clist with
+		| [] -> [];
+		| h :: t -> match h with Clause(clause_name, clause_args, clause_body) ->
+			let recur = (make_relations_helper_1 t) in
+			let answer, same_name = List.fold_right (fun rel acc ->
+				match acc with (already_there_acc, same_name_acc) ->
+				match rel with Relation(rel_name, rel_args, rel_clauses) ->
+				if rel_name = clause_name then (Relation(rel_name, rel_args, h :: rel_clauses) :: already_there_acc, rel :: same_name_acc)
+				else (rel :: already_there_acc, same_name_acc)) recur ([],[]) in
+			match same_name with
+			| [] -> Relation(clause_name, clause_args, [h]) :: answer;
+			| _ -> answer;;
+
+	(* takes in the output of make_relations_helper_1 and makes the implicit relations *)
+	let make_relations_helper_2 (rlist : relation list) : relation list = 
+		let to_add = List.fold_right (fun rel acc ->
+			match rel with Relation(name, args, _) ->
+			if ((begins_with name "+") || (begins_with name "-")) then 
+				let new_name = String.sub name 1 (String.length name -1) in
+				let in_list_function = fun rel1 acc1 -> ((relation_name rel1) = new_name) || acc1 in
+				let in_old_list = List.fold_right in_list_function rlist false in
+				let in_acc = List.fold_right in_list_function acc false in
+				if (not in_old_list) && (not in_acc) then Relation(new_name, drop args (List.length packet_vars), []) :: acc else acc;
+			else acc) rlist [] in
+		to_add @ rlist;;
+
+	let make_relations (clist : clause list) : relation list =
+		let ans = make_relations_helper_2 (make_relations_helper_1 clist) in
+		let _ = if debug then List.iter print_relation ans in
+		let _ = if debug then print_endline (string_of_int (List.length ans)) in
+		ans;;
+
+
+	let process_atom_name (fn : string -> string) (a : Flowlog.atom) : Flowlog.atom = 
+		match a with
+		| Flowlog.Apply(name, tl) -> Flowlog.Apply(fn name, tl);
+		| _ -> a;;
+
+	let process_literal_name (fn : string -> string) (lit : Flowlog.literal) : Flowlog.literal = 
+		match lit with
+		| Flowlog.Pos(a) -> Flowlog.Pos(process_atom_name fn a);
+		| Flowlog.Neg(a) -> Flowlog.Neg(process_atom_name fn a);;
+
+	let process_clause_name (fn : string -> string) (cls : Flowlog.clause) : Flowlog.clause = 
+		match cls with Flowlog.Clause(name, args, body) ->
+		let new_body = List.map (process_literal_name fn) body in
+		Flowlog.Clause(fn name, args, new_body);;
+
+	let process_relation_name (fn: string -> string) (rel : Flowlog.relation) : Flowlog.relation = 
+		match rel with Flowlog.Relation(name, args, clauses) -> 
+		let new_clauses = List.map (process_clause_name fn) clauses in
+		Flowlog.Relation(fn name, args, new_clauses);;
+
+	let append_name (name : string) (str : string) : string =
+		if not (String.contains str '/') then str ^ "/" ^ name else str;;
+
+	let make_program (name : string) (relations : relation list) : program =
+		let ans = Program(name, List.map (process_relation_name (append_name name)) relations) in
+		let _ = if debug then print_endline name in
+		let _ = if debug then List.iter print_relation (List.map (process_relation_name (append_name name)) relations) in
+		ans;;
+
+	let rec remove_duplicates (l : 'a list) : 'a list =
+		match l with
+		[] -> [];
+		| h :: t -> if List.mem h t then (remove_duplicates t) else h :: (remove_duplicates t);;
+
+	let import (pg1 : program) (pg2 : program) : program = 
+		match pg1 with Program(name_1, relations_1) ->
+		match pg2 with Program(name_2, relations_2) ->
+		Program(name_1, remove_duplicates (relations_1 @ relations_2));;
+*)
+	let program_convert (prgm : Syntax.program) : program = 
+	match prgm with Syntax.Program(name, _, _, clauses) ->
+	Program(name, make_relations (List.map (clause_convert prgm) clauses));;
+
+end
 
 
 (* Provides printing functions and conversion functions both for pretty printing and communication with XSB. *)
