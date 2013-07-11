@@ -7,6 +7,29 @@ open OpenFlow0x01_Core;;
 let debug = true;;
 
 (* Defines the basic syntax types for the Flowlog interpreter. *)
+(* File format:
+import module1.
+import module2.
+...
+import moduleN.
+
+module module_name: (* module names and all other variables are case insensitive *)
+
+type type_name_1 = { name_1,1, name_1,2, ..., name_1,M }.
+type type_name_2 = { name_2,1, name_2,2, ..., name_2,M }.
+...
+type type_name_K = { name_K,1, name_K,2, ..., name_K,M }.
+
+clause_name(arg_1 : type_name_1, ..., arg_n) :-
+line_1,
+line_2,
+...
+line_J.
+
+...
+
+During parsing, relation name rel_name in module module_name (which in flowlog is module_name.rel_name) is rewritten module_name/rel_name (all turned to lower case).
+*)
 module Syntax = struct
 	(* type name, field names *)
 	type notif_type = Type of string * string list;;
@@ -67,6 +90,35 @@ module Syntax = struct
 	match arg with
 	| Arg_notif(Notif_var(_, var_name)) -> var_name;
 	| Arg_term(t) -> term_to_string t;;
+
+	let program_name (prgm : program) : string =
+	match prgm with Program(name, _, _, _) -> name;;
+
+	(* These functions process a newly parsed program and make all relations have the module come before it. *)
+	let process_atom_name (fn : string -> string) (a : atom) : atom = 
+		match a with
+		| Apply(name, tl) -> Apply(fn name, tl);
+		| _ -> a;;
+
+	let process_literal_name (fn : string -> string) (lit : Flowlog.literal) : Flowlog.literal = 
+		match lit with
+		| Pos(a) -> Pos(process_atom_name fn a);
+		| Neg(a) -> Neg(process_atom_name fn a);;
+
+	let process_clause_name (fn : string -> string) (cls : clause) : clause = 
+		match cls with 
+		|PlusClause(name, args, body) -> PlusClause(fn name, args, List.map (process_literal_name fn) body);
+		|MinusClause(name, args, body) -> MinusClause(fn name, args, List.map (process_literal_name fn) body);
+		|HelperClause(name, args, body) -> HelperClause(fn name, args, List.map (process_literal_name fn) body);
+		|NotifClause(name, args, body) -> NotifClause(fn name, args, List.map (process_literal_name fn) body);;
+
+	let process_name (name : string) (str : string) : string =
+		if not (String.contains str '/') then name ^ "/" ^ str else str;;
+
+	let fix_names (prgm : program) : program = 
+		match prgm with Program(name, modules, ntypes, clauses) -> 
+		Program(name, modules, ntypes, List.map (process_clause_name (process_name name)) clauses);;
+
 
 end
 
@@ -141,7 +193,7 @@ module Types = struct
 	let atom_convert (prgm : Syntax.program) (cls : Syntax.clause) (a : Syntax.atom) : atom =
 	match a with
 	| Syntax.Equals(t1, t2) -> Equals((term_convert prgm cls t1), (term_convert prgm cls t2));
-	| Syntax.Apply(rel_name, term_list) -> Apply(rel_name, List.map (term_convert prgm cls) term_list);
+	| Syntax.Apply(rel_name, term_list) -> Apply(rel_name , List.map (term_convert prgm cls) term_list);
 	| Syntax.Bool(b) -> Bool(b);
 
 	let literal_convert (prgm : Syntax.program) (cls : Syntax.clause) (l : Syntax.literal) : literal =
@@ -165,7 +217,7 @@ module Types = struct
 	| Syntax.HelperRelation(name, args, body) -> HelperRelation(name, List.map (argument_convert prgm cls) args, List.map (literal_convert prgm cls) body);
 	| Syntax.NotifRelation(name, args, body) -> NotifRelation(name, List.map (argument_convert prgm cls) args, List.map (literal_convert prgm cls) body);;
 
-(*
+
 (* Makes all relations except those defined implicitly by other relations starting with + or - *)
 	let rec make_relations_helper_1 (clist : clause list) : relation list =
 		match clist with
@@ -200,7 +252,7 @@ module Types = struct
 		let _ = if debug then print_endline (string_of_int (List.length ans)) in
 		ans;;
 
-
+(*
 	let process_atom_name (fn : string -> string) (a : Flowlog.atom) : Flowlog.atom = 
 		match a with
 		| Flowlog.Apply(name, tl) -> Flowlog.Apply(fn name, tl);
