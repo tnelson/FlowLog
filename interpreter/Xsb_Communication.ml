@@ -22,7 +22,8 @@ module Xsb = struct
 			|Some(in_ch) -> (out_ch, in_ch);
 			| _ -> raise (Failure "ref_out_ch is some but ref_in_ch is none"));;
 		
-	let halt_xsb (out_ch : out_channel) : unit = 
+	let halt_xsb () : unit = 
+		let out_ch, _ = get_ch () in
 		output_string out_ch "halt.\n";
 		flush out_ch;
 
@@ -109,7 +110,8 @@ module Communication = struct
 	(* need: 
 	val query_relation : Types.relation -> Types.argument list -> (Types.term list) list;;
 	val retract_relation : Types.relation -> Types.term list -> unit;;
-	val assert_relation : Types.relation -> Types.term list -> unit;; 
+	val assert_relation : Types.relation -> Types.term list -> unit;;
+	val start_program : Types.program;; 
 	*)
 
 	(* Returns x :: l if x not already in l *)

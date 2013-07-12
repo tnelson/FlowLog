@@ -10,10 +10,10 @@ ASSUMPTIONS: We assume that programs passed into functions in this module have
 *)
 module Evaluation = struct
 
-	let send_notification (bb : Types.blackbox) (out_notif : Types.notif_val) : unit =
+	let send_notifications (bb : Types.blackbox) (out_notifs : Types.notif_val list) : unit =
 		match bb with
-		| Types.Internal_BB(name) -> if name = "forward" then Controller.Controller.sendelse raise (Failure "internal black box " ^ name ^ " is not currently supported.")
-		| _ -> Flowlog_Thrift.doBBnotify bb out_notif;;
+		| Types.Internal_BB(name) -> if name = "forward" then Controller.Controller.forward_packets out_notifs else raise (Failure "internal black box " ^ name ^ " is not currently supported.")
+		| _ -> List.iter (fun n -> Flowlog_Thrift.doBBnotify bb n) out_notifs;;
 
 
 	let fire_relation (prgm : program) (rel : relation) (notif : notif_val)  : unit =
@@ -26,7 +26,7 @@ module Evaluation = struct
 			| _ :: tail -> 
 			let out_notifs = List.map (fun (tl : Types.term list) -> Types.Notif_val(ntype, tl))
 				(Communication.query_relation rel (arg_terms @ tail) in
-			List.iter (fun out_notif -> send_notification bb out_notif) out_notifs;
+			send_notifications bb out_notifs;
 		| Types.MinusRelation(name, args, clauses) ->
 			match args with
 			| [] -> raise (Failure "minus relations always have at least one argument.");
@@ -41,7 +41,7 @@ module Evaluation = struct
 			List.iter (fun (tl : Types.term list) -> Communication.assert_relation rel tl) to_retract;;
 
 
-	let respond_to_notification (notif : Types.notif_val) (prgm : Types.program) (callback : ): unit = 
+	let respond_to_notification (notif : Types.notif_val) (prgm : Types.program) : unit = 
 		match prgm with Types.Program(name, relations) ->
 		match notif with Types.Notif_val(ntype, _) ->
 		let _ = List.iter (fun rel -> match rel with

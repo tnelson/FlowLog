@@ -1,5 +1,6 @@
-open Xsb;;
-open Flowlog;;
+open Flowlog_Types;;
+open Xsb_Communication;;
+open Evaluation;;
 open Packet;;
 open OxPlatform;;
 open OpenFlow0x01_Core;;
@@ -8,27 +9,22 @@ open OpenFlow0x01;;
 let debug = true;;
 
 module type PROGRAM = sig
-	val program : Syntax.program;;
+	val program : Types.program;;
 end
 
 module Make_OxModule (Program : PROGRAM) = struct
-	include OxStart.DefaultTutorialHandlers;;
-	include Syntax;;
+	include OxStart.DefaultTutorialHandlers;;	
 	
-	
-	
-	let _ = get_ch ();;
-	
+	let _ = Communication.start_program Program.program;;
+
 	let switch_connected (sw : switchId) (feats : OpenFlow0x01.SwitchFeatures.t) : unit =
 	    Printf.printf "Switch %Ld connected.\n%!" sw;
-	    (* the next line does nothing but tests the calling of feats.ports which right now fails *)
 	    let port_nums = List.map (fun (x : PortDescription.t)-> x.PortDescription.port_no) feats.SwitchFeatures.ports in
-	    let out_ch, in_ch = get_ch () in
 	    let sw_string = Int64.to_string sw in
-	    let notifs = List.map (fun portid -> Notif_val(switch_port_type, [Constant(sw_string); Constant(string_of_int portid)])) port_nums in
-	    List.iter (fun notif -> let _ = Evaluation.respond_to_notification notif Program.program out_ch in_ch in ()) notifs;;
+	    let notifs = List.map (fun portid -> Types.Notif_val(switch_port_type, [Types.Constant(sw_string); Types.Constant(string_of_int portid)])) port_nums in
+	    List.iter (fun notif -> Evaluation.respond_to_notification notif Program.program) notifs;;
 
-	let pkt_to_notif (sw : switchId) (pk : packetIn) : notif_val = 
+	let pkt_to_notif (sw : switchId) (pk : packetIn) : Types.notif_val = 
 		let _ = if debug then print_endline "starting pkt_to_notif" in
 		let pkt_payload = parse_payload pk.input_payload in
 		let isIp = ((dlTyp pkt_payload) = 0x0800) in
@@ -42,18 +38,24 @@ module Make_OxModule (Program : PROGRAM) = struct
 		if isIp then (string_of_int (nwProto pkt_payload)) else "arp"] in
 		(*let _ = if debug then print_endline ("pkt to term list: " ^ (Type_Helpers.list_to_string Type_Helpers.term_to_string ans)) in
 		let _ = if debug then print_endline ("dlTyp: " ^ (string_of_int (dlTyp pkt_payload))) in*)
-		Notif_val(packet_type, terms);;
+		Types.Notif_val(packet_type, terms);;
 
 	let begins_with (str1 : string) (str2 : string) : bool = 
 		if String.length str2 > String.length str1 then false else
 		(String.sub str1 0 (String.length str2)) = str2;;
 
-	let get_field (notif : notif_val) (str : string) : term = 
+	let get_field (notif : Types.notif_val) (str : string) : term = 
 		match notif with Notif_val(Type(_, fields), terms) ->
 		List.assoc str (List.combine fields terms);;
 
+	let buffer = ref None;;
+
 	(* notice that the current implementation is not efficient--if its just a repeater its doing way too much work. *)
-	let forward_packets (notifs : notif_val list) (sw : switchId) (pk : packetIn) : unit = 
+	let forward_packets (notifs : Types.notif_val list) : unit =
+		match !buffer with
+		| None -> raise (Failure "forward packets called before packet arrived.");
+		| Some(sw, pk) ->
+		let _ = buffer := None in
 		let actions_list = ref [] in
 		let pk_notif = pkt_to_notif sw pk in
 		let dlSrc_old = Type_Helpers.term_to_string (get_field pk_notif "DlSrc") in
@@ -82,30 +84,14 @@ module Make_OxModule (Program : PROGRAM) = struct
 
 	let packet_in (sw : switchId) (xid : xid) (pk : packetIn) : unit =
 		if debug then Printf.printf "%s\n%!" (packetIn_to_string pk);
-		let out_ch, in_ch = get_ch () in
-		let outpackets = Evaluation.respond_to_notification (pkt_to_notif sw pk) Program.program out_ch in_ch in
-		forward_packets outpackets sw pk;;
+		buffer := Some (sw, pk);
+		Evaluation.respond_to_notification (pkt_to_notif sw pk) Program.program;
 
 		
 	let cleanup () : unit = 
 		let _ = if debug then print_endline "running cleanup" in
-		let out_ch, in_ch = get_ch () in
-		Xsb.halt_xsb out_ch;;
+		Xsb.halt_xsb;;
 
 end
 
 module Make_Controller (Program : PROGRAM) = OxStart.Make (Make_OxModule (Program));;
-
-(*module Union (Pg1 : PROGRAM) (Pg2 : PROGRAM) = struct
-let program = match Pg1.program with 
-	| Flowlog.Program(name_1, rel_list_1, forward_rel_1) -> 
-	match Pg2.program with 
-	| Flowlog.Program(name_2, rel_list_2, forward_rel_2) ->
-	let process_1 = process_relation_name (append_string ("/" ^ name_1)) in
-	let process_2 = process_relation_name (append_string ("/" ^ name_2)) in
-	Flowlog.Program(name_1 ^ "+" ^ name_2, 
-		(List.map process_1 rel_list_1) @ (List.map process_2 rel_list_2), 
-		Flowlog.Relation("forward", Flowlog.packet_vars @ Flowlog.packet_vars_2, 
-		(match process_1 forward_rel_1 with Flowlog.Relation(_, _, clauses) -> clauses)
-		@ (match process_2 forward_rel_2 with Flowlog.Relation(_, _, clauses) -> clauses)));;
-end*)
