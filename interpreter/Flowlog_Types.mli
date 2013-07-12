@@ -43,10 +43,10 @@ module Types : sig
 	type blackbox = Internal_BB of string | External_BB of string * string * int;;
 	(* type name, variable name *)
 	type notif_var = Notif_var of notif_type * string;;
-	(* type of actual arriving notification. type and values *)
-	type notif_val = Notif_val of notif_type * term list;;
 	(* constants and variables or a field of a value (like pkt.locPt) *)
 	type term = Constant of string | Variable of string | Field_ref of notif_var * string;;
+	(* type of actual arriving notification. type and values *)
+	type notif_val = Notif_val of notif_type * term list;;
 	(* things like A = B or R(A, B, C) *)
 	type atom = Equals of term * term | Apply of string * term list | Query of blackbox * string * term list | Bool of bool;;
 	(* atoms and negations of atoms *)
