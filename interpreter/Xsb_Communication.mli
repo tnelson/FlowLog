@@ -7,6 +7,9 @@ module Xsb : sig
 	val halt_xsb : unit -> unit;;
 end
 
-module Communications : sig
-	
+module Communication : sig
+	val query_relation : Types.relation -> Types.argument list -> (Types.term list) list;;
+	val retract_relation : Types.relation -> Types.term list -> unit;;
+	val assert_relation : Types.relation -> Types.term list -> unit;;
+	val start_program : Types.program;; 
 end

@@ -86,44 +86,40 @@ module Types : sig
 	val program_convert : Syntax.program -> program;;
 end
 
-(*module Type_Helpers : sig
+module Type_Helpers : sig
 	val list_to_string :  ('a -> string) -> ('a list) -> string;;
 
-	val notif_var_name : Syntax.notif_var -> string;;
+	val notif_var_name : Types.notif_var -> string;;
 
-	val notif_var_to_terms : Syntax.notif_var -> Syntax.term list;;
+	val notif_var_to_terms : Types.notif_var -> Types.term list;;
 
-	val notif_var_to_string : Syntax.notif_var -> string;;
+	val notif_var_to_string : Types.notif_var -> string;;
 
-	val notif_type_to_string : Syntax.notif_type -> string;;
+	val notif_type_to_string : Types.notif_type -> string;;
 
-	val notif_val_to_string : Syntax.notif_val -> string;;
+	val notif_val_to_string : Types.notif_val -> string;;
 
-	val term_to_string : Syntax.term -> string;;
+	val term_to_string : Types.term -> string;;
 
-	val atom_to_string : Syntax.atom -> string;;
+	val atom_to_string : Types.atom -> string;;
 
-	val literal_to_string : Syntax.literal -> string
+	val literal_to_string : Types.literal -> string
 
-	val get_atom : Syntax.literal -> Syntax.atom;;
+	val get_atom : Types.literal -> Types.atom;;
 
-	val argument_to_string : Syntax.argument -> string;;
+	val argument_to_string : Types.argument -> string;;
 
-	val arguments_to_terms : Syntax.argument list -> Syntax.term list;;
+	val arguments_to_terms : Types.argument list -> Types.term list;;
 
-	val terms_to_notif_val : Syntax.notif_type -> Syntax.term list -> Syntax.notif_val;;
+	val terms_to_notif_val : Types.notif_type -> Types.term list -> Types.notif_val;;
 
-	val clause_to_string : Syntax.clause -> string;;
+	val clause_name : Types.clause -> string;;
 
-	val relation_name : Syntax.relation -> string;;
+	val clause_arguments : Types.clause -> Types.argument list;;
 
-	val relation_trigger_type : Syntax.relation -> Syntax.notif_type option;;
+	val clause_body : Types.clause -> Types.literal list;;
 
-	val print_relation : Syntax.relation -> unit;;
+	val clause_to_string : Types.clause -> string;;
 
-	val find_relation_by_name : Syntax.program -> string -> Syntax.relation option;;
-
-	val is_forward_relation : Syntax.program -> Syntax.relation -> bool;;
-
-	val forward_relation : Syntax.program -> Syntax.relation;;
-end*)
+	val relation_name : Types.relation -> string;;
+end

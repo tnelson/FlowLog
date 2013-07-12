@@ -333,7 +333,80 @@ module Types = struct
 
 end
 
+(* Provides printing functions and conversion functions both for pretty printing and communication with XSB. *)
 module Type_Helpers = struct
+
+	let list_to_string (conversion : 'a -> string) (l : 'a list) : string = 
+		let ans = List.fold_right (fun x acc -> (conversion x) ^ "," ^ acc) l "" in
+		if ans = "" then ans else String.sub ans 0 (String.length ans - 1);;
+
+	let notif_var_name (n : Types.notif_var) : string =
+		match n with Types.Notif_var(_, str) -> str;;
+
+	let notif_var_to_terms (n : Types.notif_var) : Types.term list =
+		match n with Types.Notif_var(Types.Type(_, fields), _) ->
+		List.map (fun field -> Types.Field_ref(n, field)) fields;;
+
+	let term_to_string (t : Types.term) : string = 
+		match t with
+		| Types.Constant(c) -> c; 
+		| Types.Variable(v) -> v;
+		| Types.Field_ref(notif, field) -> (notif_var_name notif) ^ "_" ^ field;;
+
+	let notif_var_to_string (n : Types.notif_var) : string = 
+		list_to_string term_to_string (notif_var_to_terms n);;
+
+	let notif_type_to_string (ntype : Types.notif_type) : string = 
+		match ntype with Types.Type(name, fields) -> name ^ ": {" ^ (list_to_string (fun str -> str) fields) ^ "}";;
+
+	let notif_val_to_string (n : Types.notif_val) : string =
+		match n with Types.Notif_val(ntype, terms) -> (notif_type_to_string ntype) ^ " : " ^ (list_to_string term_to_string terms);;
+
+	let atom_to_string (a : Types.atom) : string =
+		match a with
+		| Types.Equals(t1, t2) -> (term_to_string t1) ^ " = " ^ (term_to_string t2);
+		| Types.Apply(str, tl) -> str ^ "(" ^ (list_to_string term_to_string tl) ^ ")";
+		| Types.Query(bb, name, tl) -> (Types.blackbox_name bb) ^ "_" ^ name ^ "(" ^ (list_to_string term_to_string tl) ^ ")";
+		| Types.Bool(b) -> string_of_bool b;;
+
+	let literal_to_string (l : Types.literal) : string = 
+		match l with
+		| Types.Pos(a) -> atom_to_string a;
+		| Types.Neg(a) -> "not(" ^ (atom_to_string a) ^ ")";;
+	
+	let get_atom (lit : Types.literal) : Types.atom =
+		match lit with
+		| Types.Pos(a) -> a;
+		| Types.Neg(a) -> a;;
+
+	let argument_to_string (arg : Types.argument) : string =
+		match arg with
+		| Types.Arg_notif(n) -> notif_var_to_string n;
+		| Types.Arg_term(t) -> term_to_string t;;
+
+	let arguments_to_terms (args : Types.argument list) : Types.term list =
+		List.fold_right (fun arg acc ->
+		match arg with
+		| Types.Arg_term(t) -> t :: acc;
+		| Types.Arg_notif(n) -> (notif_var_to_terms n) @ acc) args [];;
+
+	let rec drop (l : 'a list) (n : int) : 'a list = 
+		if n <= 0 then l else
+		match l with
+		| [] -> [];
+		| h :: t -> drop t (n - 1);;
+
+	let rec take (l : 'a list) (n : int) : 'a list =
+		if n <= 0 then [] else
+		match l with
+		| [] -> [];
+		| h :: t -> h :: take t (n-1);;
+
+	let terms_to_notif_val (ntype : Types.notif_type) (terms : Types.term list) : Types.notif_val =
+		match ntype with Types.Type(_, fields) ->
+		if (List.length terms = List.length fields) 
+		then Types.Notif_val(ntype, terms) 
+		else raise (Failure "Tried to create notification with wrong number of terms.");;
 
 	let clause_name (cls : Types.clause) : string = 
 		match cls with
@@ -355,122 +428,15 @@ module Type_Helpers = struct
 		| Types.MinusClause(_, _, body) -> body;
 		| Types.HelperClause(_, _, body) -> body;
 		| Types.NotifClause(_, _, body) -> body;
-end
 
-(*
-(* Provides printing functions and conversion functions both for pretty printing and communication with XSB. *)
-module Type_Helpers = struct
-	include Types;;
-
-	let list_to_string (conversion : 'a -> string) (l : 'a list) : string = 
-		let ans = List.fold_right (fun x acc -> (conversion x) ^ "," ^ acc) l "" in
-		if ans = "" then ans else String.sub ans 0 (String.length ans - 1);;
-
-	let notif_var_name (n : notif_var) : string =
-		match n with Notif_var(t, str) -> str;;
-
-	let notif_var_to_terms (n : notif_var) : term list =
-		match n with Notif_var(Type(_, fields), name) ->
-		List.map (fun field -> Field_ref(n, field)) fields;;
-
-	let term_to_string (t : term) : string = 
-		match t with
-		| Constant(c) -> c; 
-		| Variable(v) -> v;
-		| Field_ref(notif, field) -> (notif_var_name notif) ^ "_" ^ field;;
-
-	let notif_var_to_string (n : notif_var) : string = 
-		list_to_string term_to_string (notif_var_to_terms n);;
-
-	let notif_type_to_string (ntype : notif_type) : string = 
-		match ntype with Type(name, fields) -> name ^ ": {" ^ (list_to_string (fun str -> str) fields) ^ "}";;
-
-	let notif_val_to_string (n : notif_val) : string =
-		match n with Notif_val(ntype, terms) -> (notif_type_to_string ntype) ^ " : " ^ (list_to_string term_to_string terms);;
-
-	let atom_to_string (a : atom) : string =
-		match a with
-		| Equals(t1, t2) -> term_to_string(t1) ^ " = " ^ term_to_string(t2);
-		| Apply(str, args) -> str ^ "(" ^ (list_to_string term_to_string args) ^ ")";
-		| Bool(b) -> string_of_bool b;;
-
-	let literal_to_string (l : literal) : string = 
-		match l with
-		| Pos(a) -> atom_to_string a;
-		| Neg(a) -> "not(" ^ (atom_to_string a) ^ ")";;
-	
-	let get_atom (lit : literal) : atom =
-		match lit with
-		| Pos(a) -> a;
-		| Neg(a) -> a;;
-
-	let argument_to_string (arg : argument) : string =
-		match arg with
-		| Arg_notif(n) -> notif_var_to_string n;
-		| Arg_term(t) -> term_to_string t;;
-
-	let arguments_to_terms (args : argument list) : term list =
-		List.fold_right (fun arg acc ->
-		match arg with
-		| Arg_term(t) -> t :: acc;
-		| Arg_notif(n) -> (notif_var_to_terms n) @ acc) args [];;
-
-	let rec drop (l : 'a list) (n : int) : 'a list = 
-		if n <= 0 then l else
-		match l with
-		| [] -> [];
-		| h :: t -> drop t (n - 1);;
-
-	let rec take (l : 'a list) (n : int) : 'a list =
-		if n <= 0 then [] else
-		match l with
-		| [] -> [];
-		| h :: t -> h :: take t (n-1);;
-
-	let terms_to_notif_val (ntype : notif_type) (terms : term list) : notif_val =
-		match ntype with Type(_, names) ->
-		if (List.length terms = List.length names) 
-		then Notif_val(ntype, terms) 
-		else raise (Failure "Tried to create notification with wrong number of terms.");;
-
-	let clause_to_string (cl : clause) : string =
-		match cl with
-		| Clause(str, args, []) -> str ^ "(" ^ (list_to_string argument_to_string args) ^ ")";
-		| Clause(str, args, body) -> str ^ "(" ^ (list_to_string argument_to_string args) ^ ") :- " ^
+	let clause_to_string (cls : Types.clause) : string =
+		let name, args, body = (clause_name cls, clause_arguments cls, clause_body cls) in
+		if body = [] then name ^ "(" ^ (list_to_string argument_to_string args) ^ ")"
+		else name ^ "(" ^ (list_to_string argument_to_string args) ^ ") :- " ^
 			(list_to_string literal_to_string body);;
 
-	let relation_name (rel : relation) : string = 
+	let relation_name (rel : Types.relation) : string = 
 		match rel with
-		Relation(str, _, _) -> str;;
+		Relation(name, _, _) -> name;;
 
-	let relation_trigger_type (rel : relation) : notif_type option =
-		let this_debug = false in
-		let _ = if this_debug then print_endline ("relation_trigger_type: " ^ (relation_name rel) ^ ": ") in
-		match rel with Relation(_, args, _) -> 
-		match args with
-		| [] -> None;
-		| h :: tail -> match h with
-			| Arg_term(_) -> let _ = if this_debug then print_endline "None" in None;
-			| Arg_notif(n) -> match n with Notif_var(t, _) -> let _ = if this_debug then print_endline (notif_type_to_string t) in Some t;;
-
-	let print_relation (rel : relation) : unit =
-		match rel with
-		Relation(name, args, clauses) -> match clauses with
-		| [] -> print_endline (clause_to_string (Clause(name, args, [])));
-		|_ -> List.iter (fun cls -> print_endline (clause_to_string cls)) clauses;;
-
-	let find_relation_by_name (prgm : program) (name : string) : relation option = 
-		match prgm with Program(_, relations) -> List.fold_right (fun r acc -> if name = (relation_name r) then Some(r) else acc) relations None;;
-
-	let is_forward_relation (prgm : program) (rel : relation) : bool =
-		match prgm with Program(prgm_name, relations) ->
-		match rel with Relation(rel_name, _, _) ->
-		List.mem rel relations && rel_name = "forward/" ^ prgm_name;;
-
-	let forward_relation (prgm : program) : relation =
-		match prgm with Program(name, _) ->
-		match find_relation_by_name prgm ("forward/" ^ name) with
-		| None -> raise (Failure "This program does not have a forward relation.");
-		| Some rel -> rel;;
-
-end*)
+end

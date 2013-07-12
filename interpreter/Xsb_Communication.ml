@@ -98,6 +98,12 @@ end
 (* Provides functions for high level communication with XSB. *)
 (* Right now ignoring queries. *)
 module Communication = struct
+(* need: 
+	val query_relation : Types.relation -> Types.argument list -> (Types.term list) list;;
+	val retract_relation : Types.relation -> Types.term list -> unit;;
+	val assert_relation : Types.relation -> Types.term list -> unit;;
+	val start_program : Types.program;; 
+	*)
 
 	(* assertion, number of answers to expect (number of variables in clause) *)
 	type message = Message of string * int;;
@@ -107,22 +113,15 @@ module Communication = struct
 		let answer = (if num_vars > 0 then Xsb.send_query assertion num_vars else let _ = Xsb.send_assert assertion in []) in
 		List.map (fun (l : string list) -> List.map (fun str -> Types.Constant(str)) l) answer;;
 
-	(* need: 
-	val query_relation : Types.relation -> Types.argument list -> (Types.term list) list;;
-	val retract_relation : Types.relation -> Types.term list -> unit;;
-	val assert_relation : Types.relation -> Types.term list -> unit;;
-	val start_program : Types.program;; 
-	*)
-
 	(* Returns x :: l if x not already in l *)
 	let add_unique (x : 'a) (l : 'a list) : 'a list = if List.mem x l then l else x :: l;;
 	
 	(* Same as add_unique but only if x is a Variable *)
-	let add_unique_var (t : term) (acc : term list) : term list = 
+	let add_unique_var (t : Types.term) (acc : Types.term list) : Types.term list = 
 		match t with
-		| Constant(_) -> acc;
-		| Variable(_) -> add_unique t acc;
-		| Field_ref(_, _) -> add_unique t acc;;
+		| Types.Constant(_) -> acc;
+		| Types.Variable(_) -> add_unique t acc;
+		| Types.Field_ref(_, _) -> add_unique t acc;;
 	
 	(* Takes a desugared clause (i.e. one whose arguments are all terms and body contains no Field_refs) and
 		returns the number of variables in the clause *)
@@ -136,6 +135,13 @@ module Communication = struct
 				| Bool(b) -> acc;)
 			body
 			(List.fold_right add_unique_var (arguments_to_terms args) []);;
+
+	let query_relation (rel : Types.relation) (args : Types.argument list) : (Types.term list) list =
+
+
+
+
+	
 
 	let send_clause (cl : clause) (assertion : string) (out_ch : out_channel) (in_ch : in_channel) : (term list) list =
 		let _ = if debug then print_endline assertion in
