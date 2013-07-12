@@ -1,6 +1,6 @@
 .PHONY: dummy all clean .force
 
-OCAMLBUILD = ocamlbuild -use-ocamlfind
+OCAMLBUILD = ocamlbuild -use-ocamlfind -I thrift -I thrift/gen-ocaml
 
 dummy:
 	@echo "To compile foo.ml, type:"
