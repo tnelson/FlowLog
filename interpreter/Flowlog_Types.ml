@@ -37,7 +37,7 @@ During parsing, relation name rel_name in module module_name (which in flowlog i
 *)
 module Syntax = struct
 	(* type name, field names *)
-	type notif_type = Type of string * string list
+	type notif_type = Type of string * string list;;
 	(* type of black boxes. name, ip, port. *)
 	type blackbox = Internal_BB of string | External_BB of string * string * int;;
 	(* type name, variable name *)
