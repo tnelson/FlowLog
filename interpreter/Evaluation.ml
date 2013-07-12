@@ -1,5 +1,6 @@
 open Flowlog_Types;;
-open Xsb;;
+open Xsb_Communication;;
+open Flowlog_Thrift;;
 
 (* Provides functions for running a Flowlog program.
 ASSUMPTIONS: We assume that programs passed into functions in this module have
@@ -9,24 +10,35 @@ ASSUMPTIONS: We assume that programs passed into functions in this module have
 *)
 module Evaluation = struct
 
-	let fire_relation (prgm : program) (rel : relation) (notif : notif_val)  : unit =
-		match rel with
-		| Types.NotifRelation(Types.BlackBox(bbname, ip, port), args, clauses) -> print_endline "fire notif relation";
-		| Types.MinusRelation(name, args, clauses) -> print_endline "fire minus relation";
-		| Types.PlusRelation(name, args, clauses) -> print_endline "fire plus relation";
-		| _ -> raise (Failure "fire_relation called on a helper relation");;
+	let send_notification (bb : Types.blackbox) (out_notif : Types.notif_val) : unit =
+		match bb with
+		| Types.Internal_BB(name) -> ...
+		| _ -> ...
 
-		(*match rel with Relation(name, args, _) -> 
-		match args with
-		| [] -> raise (Failure "called fire_relation on a relation with empty args.");
-		| head :: tail -> match notif with Notif_val(_, terms) ->
-		let results = query_relation rel ((List.map (fun t -> Arg_term(t)) terms) @ tail) out_ch in_ch in
-		match notif with Notif_val(ntype, _) ->
-		if (is_forward_relation prgm rel) then List.map (terms_to_notif_val ntype) results else
-		let _ = (match explode name with
-		| '+' :: rest -> List.iter (fun terms -> let _ = tentative_assert_clause (Clause(implode rest, (List.map (fun x -> Arg_term(x)) terms), [])) out_ch in_ch in ()) results;
-		| '-' :: rest -> List.iter (fun terms -> let _ = retract_clause (Clause(implode rest, (List.map (fun x -> Arg_term(x)) terms), [])) out_ch in_ch in ()) results;
-		| _ -> ()) in [];;*)
+
+	let fire_relation (prgm : program) (rel : relation) (notif : notif_val)  : unit =
+		match notif with Types.Notif_val(ntype, terms) ->
+		let arg_terms = List.map (fun t -> Types.Arg_term(t)) terms in
+		match rel with
+		| Types.NotifRelation(bb, args, clauses) ->
+			match args with
+			| [] -> raise (Failure "notif relations always have two arguments.");
+			| _ :: tail -> 
+			let out_notifs = List.map (fun (tl : Types.term list) -> Types.Notif_val(ntype, tl))
+				(Communication.query_relation rel (arg_terms @ tail) in
+			List.iter (fun out_notif -> send_notification bb out_notif) out_notifs;
+		| Types.MinusRelation(name, args, clauses) ->
+			match args with
+			| [] -> raise (Failure "minus relations always have at least one argument.");
+			| _ :: tail ->
+			let to_retract = Communication.query_relation rel (arg_terms @ tail) in
+			List.iter (fun (tl : Types.term list) -> Communication.retract_relation rel tl) to_retract;
+		| Types.PlusRelation(name, args, clauses) ->
+			match args with
+			| [] -> raise (Failure "plus relations always have at least one argument.");
+			| _ :: tail ->
+			let to_assert = Communication.query_relation rel (arg_terms @ tail) in
+			List.iter (fun (tl : Types.term list) -> Communication.assert_relation rel tl) to_retract;;
 
 
 	let respond_to_notification (notif : Types.notif_val) (prgm : Types.program) : unit = 

@@ -1,5 +1,6 @@
 open Unix;;
 open Printf;;
+open Flowlog_Types;;
 
 module Xsb = struct
 	
@@ -8,8 +9,23 @@ module Xsb = struct
 		let xin_channel, xout_channel, error_channel = Unix.open_process_full "xsb" (Unix.environment ()) in
 		(xout_channel, xin_channel);;
 
-	(* error_channel needs to be periodically flushed! *)
+	let ref_out_ch = ref None;;
+	let ref_in_ch = ref None;;
+	
+	let get_ch () : out_channel * in_channel = 
+		match !ref_out_ch with
+		| None -> let out_ch, in_ch = start_xsb () in 
+			let _ = ref_out_ch := Some(out_ch) in
+			let _ = ref_in_ch := Some(in_ch) in
+			(out_ch, in_ch);
+		| Some(out_ch) -> match !ref_in_ch with
+			|Some(in_ch) -> (out_ch, in_ch);
+			| _ -> raise (Failure "ref_out_ch is some but ref_in_ch is none"));;
 		
+	let halt_xsb (out_ch : out_channel) : unit = 
+		output_string out_ch "halt.\n";
+		flush out_ch;
+
 
 	(* True if string str1 ends with string str2 *)
 	let ends_with (str1 : string) (str2 : string) : bool = 
@@ -17,9 +33,10 @@ module Xsb = struct
 		then false
 		else (String.sub str1 ((String.length str1) - (String.length str2)) (String.length str2)) = str2;;
 
-	(* This takes in a string command (not query, this doesn't deal with the semicolons) and two channels (to and from xsb).
-	It writes the command to xsb and returns the resulting text.*)
-	let send_assert (str : string) (out_ch : out_channel) (in_ch : in_channel) : string =
+	(* This takes in a string command (not query, this doesn't deal with the semicolons).
+	It writes the command to xsb and returns the resulting text. *)
+	let send_assert (str : string) : string =
+		let out_ch, in_ch = get_ch () in
 		output_string out_ch (str ^ "\n");
 		flush out_ch;
 		let answer = ref "" in
@@ -52,9 +69,10 @@ module Xsb = struct
 		let equals_index = try String.index str '=' with Not_found -> -1 in
 		String.trim (String.sub str (equals_index + 1) (String.length str - equals_index - 1));;
 
-	(* Takes a string query (thing with semicolon answers), the number of variables involved, and the in and out chanels.
+	(* Takes a string query (thing with semicolon answers), the number of variables involved.
 	 It writes the query to xsb and returns a list of lists with all of the results. *)
-	let send_query (str : string) (num_vars : int) (out_ch : out_channel) (in_ch : in_channel) : (string list) list =
+	let send_query (str : string) (num_vars : int) : (string list) list =
+		let out_ch, in_ch = get_ch () in
 		output_string out_ch (str ^ "\n");
 		flush out_ch;
 		(*let first_line = input_line in_ch in
@@ -73,15 +91,26 @@ module Xsb = struct
 		done;
 		List.map (fun (l : string list) -> List.map after_equals l) (group (List.rev !answer) num_vars);;
 
-	let halt_xsb (out_ch : out_channel) : unit = 
-		output_string out_ch "halt.\n";
-		flush out_ch;
-
 end
 
 
 (* Provides functions for high level communication with XSB. *)
+(* Right now ignoring queries. *)
 module Communication = struct
+
+	(* assertion, number of answers to expect (number of variables in clause) *)
+	type message = Message of string * int;;
+
+	let send_message (mes : message) : (Types.term list) list =
+		match mes with Message(assertion, num_vars) ->
+		let answer = (if num_vars > 0 then Xsb.send_query assertion num_vars else let _ = Xsb.send_assert assertion in []) in
+		List.map (fun (l : string list) -> List.map (fun str -> Types.Constant(str)) l) answer;;
+
+	(* need: 
+	val query_relation : Types.relation -> Types.argument list -> (Types.term list) list;;
+	val retract_relation : Types.relation -> Types.term list -> unit;;
+	val assert_relation : Types.relation -> Types.term list -> unit;; 
+	*)
 
 	(* Returns x :: l if x not already in l *)
 	let add_unique (x : 'a) (l : 'a list) : 'a list = if List.mem x l then l else x :: l;;
@@ -106,7 +135,7 @@ module Communication = struct
 			body
 			(List.fold_right add_unique_var (arguments_to_terms args) []);;
 
-	let send_clause (cl : clause) (assertion : string) (out_ch : out_channel) (in_ch : in_channel) : 'a list =
+	let send_clause (cl : clause) (assertion : string) (out_ch : out_channel) (in_ch : in_channel) : (term list) list =
 		let _ = if debug then print_endline assertion in
 		let num_vars = List.length (get_vars cl) in
 		let answer = (if num_vars > 0 then Xsb.send_query assertion (List.length (get_vars cl)) out_ch in_ch

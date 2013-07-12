@@ -39,7 +39,7 @@ module Syntax = struct
 	(* type name, field names *)
 	type notif_type = Type of string * string list
 	(* type of black boxes. name, ip, port. *)
-	type blackbox = BlackBox of string * string * string;;
+	type blackbox = Internal_BB of string | External_BB of string * string * string;;
 	(* type name, variable name *)
 	type notif_var = Notif_var of string * string;;
 	(* constants and variables or a field of a value (like pkt.locPt) *)
@@ -92,6 +92,11 @@ module Syntax = struct
 		| MinusClause(_, _, body) -> body;
 		| HelperClause(_, _, body) -> body;
 		| NotifClause(_, _, body) -> body;
+
+	let blackbox_name (bb : blackbox) : string =
+		match bb with
+		| Internal_BB(name) -> name;
+		| External_BB(name, _, _) -> name;;
 
 	let argument_name (arg : argument) : string =
 		match arg with
@@ -161,7 +166,7 @@ module Types = struct
 	(* type name, field names *)
 	type notif_type = Type of string * string list;;
 	(* type of black boxes. name, ip, port. *)
-	type blackbox = BlackBox of string * string * string;;
+	type blackbox = Internal_BB of string | External_BB of string * string * string;;
 	(* type name, variable name *)
 	type notif_var = Notif_var of notif_type * string;;
 	(* type of actual arriving notification. type and values *)
@@ -234,7 +239,7 @@ module Types = struct
 		| Syntax.Bool(b) -> Bool(b);
 		| Syntax.Query(bbname, rel_name, terms) ->
 			match prgm with Syntax.Program(_, _, blackboxes, _, _) ->
-			match List.filter (function Syntax.BlackBox(n, _, _) -> bbname = n) blackboxes with
+			match List.filter (fun bb -> Syntax.blackbox_name bb = n) blackboxes with
 			| [] -> raise (Parse_error "black box " ^ bbname ^ " in clause " ^ (Syntax.clause_name cls) ^ " does not exist.");
 			| bb :: _ -> Query(bb, rel_name, List.map (term_convert prgm cls) terms);;
 
@@ -259,7 +264,7 @@ module Types = struct
 		| Syntax.HelperRelation(name, args, body) -> HelperRelation(name, List.map (argument_convert prgm cls) args, List.map (literal_convert prgm cls) body);
 		| Syntax.NotifRelation(Syntax.BlackBox(name, _, _), args, body) ->
 			match prgm with Syntax.Program(_, _, blackboxes, _, _) ->
-			match List.filter (function Syntax.BlackBox(n, _, _) -> name = n) blackboxes with
+			match List.filter (fun bb -> Syntax.blackbox_name bb = n) blackboxes with
 			| [] -> raise (Parse_error "black box " ^ name ^ " in clause " ^ (Syntax.clause_name cls) ^ " does not exist.");
 			| bb :: _ -> NotifRelation(bb, List.map (argument_convert prgm cls) args, List.map (literal_convert prgm cls) body);;
 
@@ -269,12 +274,17 @@ module Types = struct
 		| [] -> [];
 		| h :: t -> drop t (n - 1);;
 
+	let blackbox_name (bb : blackbox) =
+		match bb with
+		| Internal_BB(name) -> name;
+		| External_BB(name, _, _) -> name;
+
 	let clause_key (cls : clause) : string =
 		match cls with
-		| PlusClause(name, args, _) -> "plus" ^ " name " ^ (args_to_string args);
-		| MinusClause(name, args, _) -> "minus" ^ " name " ^ (args_to_string args);
-		| HelperClause(name, args, _) -> "helper" ^ " name " ^ (args_to_string args);
-		| NotifClause(BlackBox(name, _, _), args, _) -> "notif" ^ " name " ^ (args_to_string args);;
+		| PlusClause(name, args, _) -> "plus " ^ name ^ " " ^ (args_to_string args);
+		| MinusClause(name, args, _) -> "minus " ^ name " " ^ (args_to_string args);
+		| HelperClause(name, args, _) -> "helper " ^ name ^ " " ^ (args_to_string args);
+		| NotifClause(bb, args, _) -> "notif" ^ (blackbox_name bb) ^ " " ^ (args_to_string args);;
 
 	let helper_relation_key (cls : clause) : string =
 		match cls with
@@ -315,6 +325,30 @@ module Types = struct
 		match prgm with Syntax.Program(name, _, _, _, clauses) ->
 		Program(name, make_relations (List.map (clause_convert prgm) clauses));;
 
+end
+
+module Type_Helpers = struct
+
+	let clause_name (cls : Types.clause) : string = 
+		match cls with
+		| Types.PlusClause(name,_, _) -> name;
+		| Types.MinusClause(name, _, _) -> name;
+		| Types.HelperClause(name, _, _) -> name;
+		| Types.NotifClause(name, _, _) -> name;
+
+	let clause_arguments (cls : Types.clause) : Types.argument list = 
+		match cls with
+		| Types.PlusClause(_, args, _) -> args;
+		| Types.MinusClause(_, args, _) -> args;
+		| Types.HelperClause(_, args, _) -> args;
+		| Types.NotifClause(_, args, _) -> args;
+
+	let clause_body (cls : Types.clause) : Types.literal list = 
+		match cls with
+		| Types.PlusClause(_, _, body) -> body;
+		| Types.MinusClause(_, _, body) -> body;
+		| Types.HelperClause(_, _, body) -> body;
+		| Types.NotifClause(_, _, body) -> body;
 end
 
 (*

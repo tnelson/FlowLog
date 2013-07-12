@@ -15,18 +15,7 @@ module Make_OxModule (Program : PROGRAM) = struct
 	include OxStart.DefaultTutorialHandlers;;
 	include Syntax;;
 	
-	let ref_out_ch = ref None;;
-	let ref_in_ch = ref None;;
-	let get_ch = (fun () -> match !ref_out_ch with
-		| None -> let out_ch, in_ch = Xsb.start_xsb () in 
-			let _ = ref_out_ch := Some(out_ch) in
-			let _ = ref_in_ch := Some(in_ch) in
-			let _ = Evaluation.start_program Program.program out_ch in_ch in
-			let _ = if debug then print_endline "started program" in
-			(out_ch, in_ch);
-		| Some(out_ch) -> match !ref_in_ch with
-			|Some(in_ch) -> (out_ch, in_ch);
-			| _ -> raise (Failure "ref_out_ch is some but ref_in_ch is none"));;
+	
 	
 	let _ = get_ch ();;
 	
