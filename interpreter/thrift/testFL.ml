@@ -140,7 +140,7 @@ Unix.sleep 1000
 	(* type name, field names *)
 	type notif_type = Type of string * string list;;
 	(* type of black boxes. name, ip, port. *)
-	type blackbox = BlackBox of string * string * int;;
+	type blackbox = Internal_BB of string | External_BB of string * string * int;;
 	(* type name, variable name *)
 	type notif_var = Notif_var of string * string;;
 	(* constants and variables or a field of a value (like pkt.locPt) *)
@@ -172,7 +172,8 @@ Unix.sleep 1000
 *)
 let dobbquery bbdecl bbatom = 
   match bbdecl with
-    BlackBox(_, bbip, bbport) -> 
+    Internal_BB(_) -> raise (Failure "dobbquery passed internal BB.")
+    | External_BB(_, bbip, bbport) -> 
       let cli = connect ~host:bbip bbport in 
       try
 
@@ -208,7 +209,8 @@ let dobbquery bbdecl bbatom =
 
 let dobbnotify bbdecl nvalue =
   match bbdecl with
-    BlackBox(_, bbip, bbport) -> 
+    Internal_BB(_) -> raise (Failure "dobbnotify passed internal BB.")
+    | External_BB(_, bbip, bbport) -> 
       match nvalue with
         Notif_val(ntype, termlist) -> 
           match ntype with
