@@ -5,4 +5,4 @@
 *)
 
 open Thrift
-open Flowlog_types
+open Flowlog_rpc_types
