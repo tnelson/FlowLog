@@ -45,7 +45,7 @@ module Syntax = struct
 	(* constants and variables or a field of a value (like pkt.locPt) *)
 	type term = Constant of string | Variable of string | Field_ref of string * string;;
 	(* things like A = B or R(A, B, C) *)
-	type atom = Equals of term * term | Apply of string * term list | Query string * string * term list | Bool of bool;;
+	type atom = Equals of term * term | Apply of string * term list | Query of string * string * term list | Bool of bool;;
 	(* atoms and negations of atoms *)
 	type literal = Pos of atom | Neg of atom;;
 	(* argument to a clause is either a notif_var or a term
