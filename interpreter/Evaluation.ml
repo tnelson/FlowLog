@@ -12,7 +12,7 @@ module Evaluation = struct
 
 	let send_notifications (bb : Types.blackbox) (out_notifs : Types.notif_val list) : unit =
 		match bb with
-		| Types.Internal_BB(name) -> if name = "forward" then Controller.Make_OxModule.forward_packets out_notifs else raise (Failure "internal black box " ^ name ^ " is not currently supported.")
+		| Types.Internal_BB(name) -> if name = "forward" then Controller.Controller.forward_packets out_notifs else raise (Failure "internal black box " ^ name ^ " is not currently supported.")
 		| _ -> List.iter (fun n -> Flowlog_Thrift.doBBnotify bb n) out_notifs;;
 
 

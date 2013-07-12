@@ -138,6 +138,11 @@ module Communication = struct
 
 	let query_relation (rel : Types.relation) (args : Types.argument list) : (Types.term list) list =
 
+(*
+TODO: Make Evaluations.respond_to_notification return something for the internal black boxes.
+Finish Communications module (this one).
+Debug and run / write mac learning for this. Later we'll do the parser.
+*)
 
 
 
