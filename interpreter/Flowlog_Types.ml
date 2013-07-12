@@ -39,7 +39,7 @@ module Syntax = struct
 	(* type name, field names *)
 	type notif_type = Type of string * string list
 	(* type of black boxes. name, ip, port. *)
-	type blackbox = Internal_BB of string | External_BB of string * string * string;;
+	type blackbox = Internal_BB of string | External_BB of string * string * int;;
 	(* type name, variable name *)
 	type notif_var = Notif_var of string * string;;
 	(* constants and variables or a field of a value (like pkt.locPt) *)
@@ -166,7 +166,7 @@ module Types = struct
 	(* type name, field names *)
 	type notif_type = Type of string * string list;;
 	(* type of black boxes. name, ip, port. *)
-	type blackbox = Internal_BB of string | External_BB of string * string * string;;
+	type blackbox = Internal_BB of string | External_BB of string * string * int;;
 	(* type name, variable name *)
 	type notif_var = Notif_var of notif_type * string;;
 	(* type of actual arriving notification. type and values *)
@@ -232,6 +232,11 @@ module Types = struct
 		| [] -> raise (Parse_error "the notification in " ^ (Syntax.term_to_string t) ^ " in clause " ^ (Syntax.clause_name cls) ^ " is not defined.");
 		| Syntax.Arg_notif(nv) :: _ -> Field_ref((notif_var_convert prgm cls nv), field_name);;
 
+	let blackbox_convert (bb : Syntax.blackbox) : blackbox =
+		match bb with
+		| Syntax.Internal_BB(n) -> Internal_BB(n);
+		| Syntax.External_BB(n, ip, port) -> External_BB(n, ip, port);;
+
 	let atom_convert (prgm : Syntax.program) (cls : Syntax.clause) (a : Syntax.atom) : atom =
 		match a with
 		| Syntax.Equals(t1, t2) -> Equals((term_convert prgm cls t1), (term_convert prgm cls t2));
@@ -241,7 +246,7 @@ module Types = struct
 			match prgm with Syntax.Program(_, _, blackboxes, _, _) ->
 			match List.filter (fun bb -> Syntax.blackbox_name bb = n) blackboxes with
 			| [] -> raise (Parse_error "black box " ^ bbname ^ " in clause " ^ (Syntax.clause_name cls) ^ " does not exist.");
-			| bb :: _ -> Query(bb, rel_name, List.map (term_convert prgm cls) terms);;
+			| bb :: _ -> Query(blackbox_convert bb, rel_name, List.map (term_convert prgm cls) terms);;
 
 	let literal_convert (prgm : Syntax.program) (cls : Syntax.clause) (l : Syntax.literal) : literal =
 		match l with
@@ -262,11 +267,12 @@ module Types = struct
 		| Syntax.PlusRelation(name, args, body) -> PlusRelation(name, List.map (argument_convert prgm cls) args, List.map (literal_convert prgm cls) body);
 		| Syntax.MinusRelation(name, args, body) -> MinusRelation(name, List.map (argument_convert prgm cls) args, List.map (literal_convert prgm cls) body);
 		| Syntax.HelperRelation(name, args, body) -> HelperRelation(name, List.map (argument_convert prgm cls) args, List.map (literal_convert prgm cls) body);
-		| Syntax.NotifRelation(Syntax.BlackBox(name, _, _), args, body) ->
+		| Syntax.NotifRelation(bb, args, body) ->
+			let name = Syntax.blackbox_name bb in
 			match prgm with Syntax.Program(_, _, blackboxes, _, _) ->
-			match List.filter (fun bb -> Syntax.blackbox_name bb = n) blackboxes with
+			match List.filter (fun bbox -> Syntax.blackbox_name bbox = n) blackboxes with
 			| [] -> raise (Parse_error "black box " ^ name ^ " in clause " ^ (Syntax.clause_name cls) ^ " does not exist.");
-			| bb :: _ -> NotifRelation(bb, List.map (argument_convert prgm cls) args, List.map (literal_convert prgm cls) body);;
+			| bb :: _ -> NotifRelation(blackbox_convert bb, List.map (argument_convert prgm cls) args, List.map (literal_convert prgm cls) body);;
 
 	let rec drop (l : 'a list) (n : int) : 'a list = 
 		if n <= 0 then l else

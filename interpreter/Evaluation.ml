@@ -12,8 +12,8 @@ module Evaluation = struct
 
 	let send_notification (bb : Types.blackbox) (out_notif : Types.notif_val) : unit =
 		match bb with
-		| Types.Internal_BB(name) -> ...
-		| _ -> ...
+		| Types.Internal_BB(name) -> if name = "forward" then Controller.Controller.sendelse raise (Failure "internal black box " ^ name ^ " is not currently supported.")
+		| _ -> Flowlog_Thrift.doBBnotify bb out_notif;;
 
 
 	let fire_relation (prgm : program) (rel : relation) (notif : notif_val)  : unit =
@@ -41,7 +41,7 @@ module Evaluation = struct
 			List.iter (fun (tl : Types.term list) -> Communication.assert_relation rel tl) to_retract;;
 
 
-	let respond_to_notification (notif : Types.notif_val) (prgm : Types.program) : unit = 
+	let respond_to_notification (notif : Types.notif_val) (prgm : Types.program) (callback : ): unit = 
 		match prgm with Types.Program(name, relations) ->
 		match notif with Types.Notif_val(ntype, _) ->
 		let _ = List.iter (fun rel -> match rel with
