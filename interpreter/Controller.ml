@@ -85,7 +85,7 @@ module Make_OxModule (Program : PROGRAM) = struct
 	let packet_in (sw : switchId) (xid : xid) (pk : packetIn) : unit =
 		if debug then Printf.printf "%s\n%!" (packetIn_to_string pk);
 		buffer := Some (sw, pk);
-		Evaluation.respond_to_notification (pkt_to_notif sw pk) Program.program;
+		Evaluation.respond_to_notification (pkt_to_notif sw pk) Program.program;;
 
 		
 	let cleanup () : unit = 

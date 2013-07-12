@@ -25,7 +25,7 @@ module Evaluation = struct
 			| [] -> raise (Failure "notif relations always have two arguments.");
 			| _ :: tail -> 
 			let out_notifs = List.map (fun (tl : Types.term list) -> Types.Notif_val(ntype, tl))
-				(Communication.query_relation rel (arg_terms @ tail) in
+				(Communication.query_relation rel (arg_terms @ tail)) in
 			send_notifications bb out_notifs;
 		| Types.MinusRelation(name, args, clauses) ->
 			match args with
