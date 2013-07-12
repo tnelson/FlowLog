@@ -1,9 +1,12 @@
-open Unix;;
-open Printf;;
+open Evaluation;;
 
 module Xsb : sig
 	val start_xsb : unit -> out_channel * in_channel;;
-	val send_assert : string -> out_channel -> in_channel -> string;;
-	val send_query : string -> int -> out_channel -> in_channel -> (string list) list;;
-	val halt_xsb : out_channel -> unit;;
+	val send_assert : string -> string;;
+	val send_query : string -> int -> (string list) list;;
+	val halt_xsb : unit -> unit;;
+end
+
+module Communications : sig
+	
 end

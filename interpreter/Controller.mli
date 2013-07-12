@@ -1,9 +1,7 @@
-open Flowlog;;
+open Flowlog_Types;;
 
 module type PROGRAM = sig
-	val program : Syntax.program;;
+	val program : Types.program;;
 end
 
 module Make_Controller : functor (Program : PROGRAM) -> sig end;;
-
-(*module Union: functor (Pg1 : PROGRAM) -> functor (Pg2 : PROGRAM) -> PROGRAM;;*)
