@@ -86,7 +86,7 @@ module Types : sig
 	val program_convert : Syntax.program -> program;;
 end
 
-module Type_Helpers : sig
+(*module Type_Helpers : sig
 	val list_to_string :  ('a -> string) -> ('a list) -> string;;
 
 	val notif_var_name : Syntax.notif_var -> string;;
@@ -126,4 +126,4 @@ module Type_Helpers : sig
 	val is_forward_relation : Syntax.program -> Syntax.relation -> bool;;
 
 	val forward_relation : Syntax.program -> Syntax.relation;;
-end
+end*)
