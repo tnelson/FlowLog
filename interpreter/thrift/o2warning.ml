@@ -4,13 +4,7 @@
 
 open Arg
 open Thrift
-open Flowlog_types
-
-(* "Die, Bart, Die!" is German for "The, Bart, The!". -- Sideshow Bob *)
-exception Die;;
-let sod = function
-    Some v -> v
-  | None -> raise Die;;
+open Flowlog_rpc_types
 
 type connection = {
   trans : Transport.t ;

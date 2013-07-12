@@ -14,7 +14,7 @@ Library flowlog_thrift
   FindlibName: flowlog_thrift
   buildTools: ocamlbuild
   BuildDepends: threads,thrift
-  Modules: Flowlog_consts,BlackBox,FlowLogInterpreter
+  Modules: Flowlog_rpc_consts,BlackBox,FlowLogInterpreter
   XMETARequires: threads
 
 Executable TestBB

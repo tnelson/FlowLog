@@ -9,7 +9,7 @@
    not quite like #include or require. *)
 open Arg
 open Thrift
-open Flowlog_types
+open Flowlog_rpc_types
 open Thread
 
 (* "Die, Bart, Die!" is German for "The, Bart, The!". -- Sideshow Bob *)
