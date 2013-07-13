@@ -194,9 +194,9 @@ module Types = struct
 
 	type relation =
 		(* rest of name, args, body*)
-		PlusRelation of string * string * argument list * clause list |
+		PlusRelation of string * argument list * clause list |
 		(* rest of name, args, body*)
-		MinusRelation of string * string * argument list * clause list |
+		MinusRelation of string * argument list * clause list |
 		(* name, args, body *)
 		HelperRelation of string * argument list * clause list |
 		(* name, args (only 2 and both are Arg_notif), body *)
