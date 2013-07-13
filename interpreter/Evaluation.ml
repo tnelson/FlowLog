@@ -2,6 +2,7 @@ open Flowlog_Types;;
 open Xsb_Communication;;
 open Flowlog_Thrift;;
 
+
 (* Provides functions for running a Flowlog program.
 ASSUMPTIONS: We assume that programs passed into functions in this module have
 1) all implied relations defined (i.e. if there's +R or -R then there's R)
@@ -12,9 +13,8 @@ module Evaluation = struct
 
 	let send_notifications (bb : Types.blackbox) (out_notifs : Types.notif_val list) : unit =
 		match bb with
-		| Types.Internal_BB(name) -> if name = "forward" then Controller.Controller.forward_packets out_notifs else raise (Failure "internal black box " ^ name ^ " is not currently supported.")
+		| Types.Internal_BB(name) -> if name = "forward" then Controller.Forwarding.forward_packets out_notifs else raise (Failure "internal black box " ^ name ^ " is not currently supported.")
 		| _ -> List.iter (fun n -> Flowlog_Thrift.doBBnotify bb n) out_notifs;;
-
 
 	let fire_relation (prgm : program) (rel : relation) (notif : notif_val)  : unit =
 		match notif with Types.Notif_val(ntype, terms) ->
@@ -40,8 +40,9 @@ module Evaluation = struct
 			let to_assert = Communication.query_relation rel (arg_terms @ tail) in
 			List.iter (fun (tl : Types.term list) -> Communication.assert_relation rel tl) to_retract;;
 
-
-	let respond_to_notification (notif : Types.notif_val) (prgm : Types.program) : unit = 
+	(* pkt_info is an optional argument. If it's left out (i.e. only two arguments are given), 
+	it just becomes None which is fine. *)
+	let respond_to_notification (notif : Types.notif_val) (prgm : Types.program) : unit =
 		match prgm with Types.Program(name, relations) ->
 		match notif with Types.Notif_val(ntype, _) ->
 		let _ = List.iter (fun rel -> match rel with
