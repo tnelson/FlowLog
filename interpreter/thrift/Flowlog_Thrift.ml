@@ -23,7 +23,15 @@ let sod = function
 let print_notif_values tbl = 
   Hashtbl.iter (fun k v -> 
                 Printf.printf "%s -> %s\n%!" k v) tbl 
-  
+
+let get_ntype_from_list ntypename thelist =
+  let filtered = (List.filter (fun ntype -> match ntype with Type(aname, _) -> ntypename = aname)
+                              thelist) in
+  if (List.length filtered) = 0 then
+    raise (Failure "Unknown notif type");
+  List.hd filtered
+    
+
 class fl_handler (a_program : program) (the_notif_types : notif_type list) =
 object (self)
   inherit FlowLogInterpreter.iface
@@ -33,22 +41,17 @@ object (self)
   val notif_types : notif_type list = the_notif_types;
 
   method notifyMe notif = 
-    let ntype = sod ((sod notif)#get_notificationType) in
+    let ntypestr = sod ((sod notif)#get_notificationType) in
     let values = sod ((sod notif)#get_values) in
-    Printf.printf "received notification. type=%s\n%!" ntype;
+    Printf.printf "received notification. type=%s\n%!" ntypestr;
     print_notif_values values;
-    (*let conc_ntype = get-ntype-from-list in *)
-
-  (* TODO --- *)
-
-
-    (*notif_val -- notif_type, term list *)
-    (* string * string_list *)
-
-    let bbid = Hashtbl.find values "id" in
-       Printf.printf "TODO: notify!\n%!";
-
-    Evaluation.respond_to_notification a_notif_val the_program;
+    let ntype = get_ntype_from_list ntypestr notif_types in
+    match ntype with
+      Type(_, fieldnames) ->        
+      (* construct a list of terms from the hashtbl in values. use the type as an index *)
+      let theterms = (List.map (fun fieldname -> (Constant (Hashtbl.find values fieldname)))
+                               fieldnames) in     
+    Evaluation.respond_to_notification (terms_to_notif_val ntype theterms) the_program;
 
 end
 
