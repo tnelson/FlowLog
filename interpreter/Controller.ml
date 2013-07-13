@@ -1,4 +1,5 @@
 open Flowlog_Types;;
+open Type_Helpers;;
 open Xsb_Communication;;
 open Evaluation;;
 open Packet;;

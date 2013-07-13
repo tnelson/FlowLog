@@ -1,6 +1,7 @@
 open Unix;;
 open Printf;;
 open Flowlog_Types;;
+open Type_Helpers;;
 
 module Xsb = struct
 	
@@ -98,20 +99,36 @@ end
 (* Provides functions for high level communication with XSB. *)
 (* Right now ignoring queries. *)
 module Communication = struct
-(* need: 
-	val query_relation : Types.relation -> Types.argument list -> (Types.term list) list;;
-	val retract_relation : Types.relation -> Types.term list -> unit;;
-	val assert_relation : Types.relation -> Types.term list -> unit;;
-	val start_program : Types.program;; 
-	*)
 
 	(* assertion, number of answers to expect (number of variables in clause) *)
-	type message = Message of string * int;;
-
-	let send_message (mes : message) : (Types.term list) list =
-		match mes with Message(assertion, num_vars) ->
-		let answer = (if num_vars > 0 then Xsb.send_query assertion num_vars else let _ = Xsb.send_assert assertion in []) in
+	let send_message (message : string) (num_ans : int) : (Types.term list) list =
+		let answer = (if num_ans > 0 then Xsb.send_query message num_ans else let _ = Xsb.send_assert message in []) in
 		List.map (fun (l : string list) -> List.map (fun str -> Types.Constant(str)) l) answer;;
+
+	let send_relation (rel : Types.relation) (args : Types.term list) (process : string -> string -> string) : (Types.term list) list =
+		let vars = List.filter (function 
+			| Types.Variable(_) -> true;
+			| Types.Field_ref(_, _) -> true;
+			| Types.Constant(_) -> false;) args in
+		let args_string = (Type_Helpers.list_to_string Type_Helpers.term_to_string args)  in
+		let str = (match rel with
+		| Types.PlusRelation(name, _, _) -> process ("+" ^ name) args_string;
+		| Types.MinusRelation(name, _, _) -> process ("-" ^ name) args_string;
+		| Types.HelperRelation(name, _, _) -> process name args_string;
+		| Types.NotifRelation(bb, _, _) -> process (Type_Helpers.blackbox_name bb) args_string;) in
+		send_message str (List.length vars);;
+
+	let query_relation (rel : Types.relation) (args : Types.argument list) : (Types.term list) list =
+		send_relation rel (Type_Helpers.arguments_to_terms args) (fun name args_string -> name ^ "(" ^ args_string ^ ").");;
+
+	let retract_relation (rel : Types.relation) (args : Types.term list) : unit =
+		let _ = send_relation rel args (fun name args_string -> 
+			"retract((" ^ name ^ "(" ^ args_string ^ "))).") in ();;
+
+	let assert_relation (rel : Types.relation) (args : Types.term list) : unit =
+		let _ = retract_relation rel args in
+		let _ = send_relation rel args (fun name args_string -> 
+			"assert((" ^ name ^ "(" ^ args_string ^ "))).") in ();;
 
 	(* Returns x :: l if x not already in l *)
 	let add_unique (x : 'a) (l : 'a list) : 'a list = if List.mem x l then l else x :: l;;
@@ -125,65 +142,23 @@ module Communication = struct
 	
 	(* Takes a desugared clause (i.e. one whose arguments are all terms and body contains no Field_refs) and
 		returns the number of variables in the clause *)
-	let get_vars (cl : clause) : term list =
-		match cl with
-		| Clause(_, args, body) -> List.fold_right 
-			(fun (lit : literal) (acc : term list) -> 
-				match get_atom(lit) with
-				| Equals(t1, t2) -> add_unique_var t1 (add_unique_var t2 acc);
-				| Apply(_, tl) -> List.fold_right add_unique_var tl acc;
-				| Bool(b) -> acc;)
-			body
-			(List.fold_right add_unique_var (arguments_to_terms args) []);;
+	let get_vars (cls : Types.clause) : Types.term list =
+		let args, body = (Type_Helpers.clause_arguments cls, Type_Helpers.clause_body cls) in
+		List.fold_right (fun (lit : Types.literal) (acc : Types.term list) -> 
+				match Type_Helpers.get_atom(lit) with
+				| Types.Equals(t1, t2) -> add_unique_var t1 (add_unique_var t2 acc);
+				| Types.Apply(_, tl) -> List.fold_right add_unique_var tl acc;
+				| Types.Query(_, _, tl) -> List.fold_right add_unique_var tl acc; 
+				| Types.Bool(_) -> acc;) body (List.fold_right add_unique_var (Type_Helpers.arguments_to_terms args) []);;
 
-	let query_relation (rel : Types.relation) (args : Types.argument list) : (Types.term list) list =
+	let start_clause (cls : Types.clause) : unit =
+		let _ = send_message ("assert((" ^ (Type_Helpers.clause_to_string cls) ^ ")).") (List.length (get_vars cls)) in ();;
 
-(*
-TODO: Make Evaluations.respond_to_notification return something for the internal black boxes.
-Finish Communications module (this one).
-Debug and run / write mac learning for this. Later we'll do the parser.
+	let start_relation (rel : Types.relation) : unit =
+		List.iter start_clause (Type_Helpers.relation_body rel);;
 
-THIS PART ISN'T DONE YET
-*)
-
-
-
-	
-
-	let send_clause (cl : clause) (assertion : string) (out_ch : out_channel) (in_ch : in_channel) : (term list) list =
-		let _ = if debug then print_endline assertion in
-		let num_vars = List.length (get_vars cl) in
-		let answer = (if num_vars > 0 then Xsb.send_query assertion (List.length (get_vars cl)) out_ch in_ch
-		else let _ = Xsb.send_assert assertion out_ch in_ch in []) in
-		List.map (fun (l : string list) -> List.map (fun (s : string) -> Constant(s)) l) answer;;
-	
-	let query_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): (term list) list =
-		send_clause cl (match cl with
-			| Clause(str, args, _) -> str ^ "(" ^ (list_to_string argument_to_string args) ^ ").") out_ch in_ch;;
-	
-	let retract_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): (term list) list =
-	    send_clause cl ("retract((" ^ (clause_to_string cl) ^ ")).") out_ch in_ch;;
-	
-	let assert_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): (term list) list =
-		send_clause cl ("assert((" ^ (clause_to_string cl) ^ ")).") out_ch in_ch;;
-	
-	let tentative_assert_clause (cl : clause) (out_ch : out_channel) (in_ch : in_channel): (term list) list =
-		let _ = retract_clause cl out_ch in_ch in
-		assert_clause cl out_ch in_ch;;
-	
-	let assert_relation (rel : relation) (out_ch : out_channel) (in_ch : in_channel) : (term list) list =
-		match rel with
-		| Relation(name, args, []) -> assert_clause (Clause(name, args, [Pos(Bool(false))])) out_ch in_ch;
-		| Relation(_, _, clauses) -> List.fold_right (fun cls acc -> (assert_clause cls out_ch in_ch) @ acc) clauses [];;
-	
-	let query_relation (rel : relation) (args : argument list) (out_ch : out_channel) (in_ch : in_channel) : (term list) list =
-		let _ = if debug then print_endline ("query relation: " ^ (relation_name rel) ^ (list_to_string argument_to_string args)) in
-		let ans = query_clause (Clause((relation_name rel), args, [])) out_ch in_ch in
-		let _ = if debug then print_endline (list_to_string (list_to_string term_to_string) ans) in
-		ans;;
-
-let start_program (prgm : Types.program) (out_ch : out_channel) (in_ch : in_channel) : unit = 
-		match prgm with
-		| Types.Program(name, relations) -> List.iter (fun rel -> Communication.assert_relation rel out_ch in_ch) relations;;
+	let start_program (prgm : Types.program) : unit =
+		match prgm with Types.Program(_, relations) ->
+		List.iter start_relation relations;;
 
 end
