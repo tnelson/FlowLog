@@ -24,25 +24,31 @@ let print_notif_values tbl =
   Hashtbl.iter (fun k v -> 
                 Printf.printf "%s -> %s\n%!" k v) tbl 
   
-class fl_handler =
+class fl_handler (a_program : program) (the_notif_types : notif_type list) =
 object (self)
   inherit FlowLogInterpreter.iface
   
+  (* Always created within a program context, with some set of notif types *)
+  val the_program : program = a_program;
+  val notif_types : notif_type list = the_notif_types;
+
   method notifyMe notif = 
     let ntype = sod ((sod notif)#get_notificationType) in
     let values = sod ((sod notif)#get_values) in
     Printf.printf "received notification. type=%s\n%!" ntype;
     print_notif_values values;
-    let conc_ntype = Flowlog_Types.Types.notif_type ntype 
+    (*let conc_ntype = get-ntype-from-list in *)
 
   (* TODO --- *)
-    (* Evaluation.respond_to_notification nval PROGRAM ;*)
+
 
     (*notif_val -- notif_type, term list *)
     (* string * string_list *)
 
     let bbid = Hashtbl.find values "id" in
        Printf.printf "TODO: notify!\n%!";
+
+    Evaluation.respond_to_notification a_notif_val the_program;
 
 end
 
@@ -61,7 +67,7 @@ let connect ~host port =
     { trans = tx ; proto = proto; bb = bb}
 ;;
 
-let do_fl_listen () =
+let start_listening (a_program : program) (the_notif_types : notif_type list) : unit =
   let h = new fl_handler in
   let proc = new FlowLogInterpreter.processor h in
   let port = 9090 in (* FL listen on 9090 *)
@@ -79,8 +85,6 @@ let do_fl_listen () =
 
   Printf.printf "Started to listen for notifications.\n%!";;
 
-do_fl_listen();;
-
 (* dobbquery: atom * blackbox -> string list list
     The resulting list contains all the tuples (as string lists) returned.  
 
@@ -89,7 +93,7 @@ do_fl_listen();;
 
     Note: each query opens a separate, new connection to the black-box.
 *)
-let dobbquery bbdecl bbatom = 
+let doBBquery bbdecl bbatom = 
   match bbdecl with
     Internal_BB(_) -> raise (Failure "dobbquery passed internal BB.")
     | External_BB(_, bbip, bbport) -> 
@@ -126,7 +130,7 @@ let dobbquery bbdecl bbatom =
    Each notification opens a separate, new connection to the black-box.
 *)
 
-let dobbnotify bbdecl nvalue =
+let doBBnotify bbdecl nvalue =
   match bbdecl with
     Internal_BB(_) -> raise (Failure "dobbnotify passed internal BB.")
     | External_BB(_, bbip, bbport) -> 
