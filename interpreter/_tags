@@ -1,1 +1,1 @@
-true : package(packet), package(openflow), package(ox), thread
+true : package(packet), package(openflow), package(ox), package(thrift), thread

@@ -1,4 +1,3 @@
-open Evaluation;;
 open Flowlog_Types;;
 
 module Xsb : sig
