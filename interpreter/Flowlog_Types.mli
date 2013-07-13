@@ -82,6 +82,9 @@ module Types : sig
 	(* raised on errors converting from Syntax to Types. *)
 	exception Parse_error of string;;
 
+	val packet_type : notif_type;;
+	val switch_port_type : notif_type;;
+
 	(* turns a Syntax.program into a Types.program *)
 	val program_convert : Syntax.program -> program;;
 end

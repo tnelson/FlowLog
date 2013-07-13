@@ -4,12 +4,12 @@ open OxPlatform;;
 open OpenFlow0x01_Core;;
 open OpenFlow0x01;;
 
-module type PROGRAM : sig
+module type PROGRAM = sig
 	val program : Types.program;;
 end
 
 module Forwarding : sig
-	val update_buffer : switchId * packetIn option -> unit;;
+	val update_buffer : (switchId * packetIn) option -> unit;;
 	val forward_packets : Types.notif_val list -> unit;;
 end
 

@@ -77,21 +77,21 @@ module Syntax = struct
 		| PlusClause(name,_, _) -> name;
 		| MinusClause(name, _, _) -> name;
 		| HelperClause(name, _, _) -> name;
-		| NotifClause(name, _, _) -> name;
+		| NotifClause(name, _, _) -> name;;
 
 	let clause_arguments (cls : clause) : argument list = 
 		match cls with
 		| PlusClause(_, args, _) -> args;
 		| MinusClause(_, args, _) -> args;
 		| HelperClause(_, args, _) -> args;
-		| NotifClause(_, args, _) -> args;
+		| NotifClause(_, args, _) -> args;;
 
 	let clause_body (cls : clause) : literal list = 
 		match cls with
 		| PlusClause(_, _, body) -> body;
 		| MinusClause(_, _, body) -> body;
 		| HelperClause(_, _, body) -> body;
-		| NotifClause(_, _, body) -> body;
+		| NotifClause(_, _, body) -> body;;
 
 	let blackbox_name (bb : blackbox) : string =
 		match bb with
@@ -208,6 +208,9 @@ module Types = struct
 	(* raised on errors converting from Syntax to Types. *)
 	exception Parse_error of string;;
 
+	let packet_type = Type("packet", ["LocSw"; "LocPt"; "DlSrc"; "DlDst"; "DlTyp"; "NwSrc"; "NwDst"; "NwProto"]);;
+	let switch_port_type = Type("switch_port_type", ["Switch"; "Port"]);;
+
 	(* Functions to turn a Syntax.program into a Types.program. *)
 
 	(* These functions assume that there are no modules to be imported in prgm. *)
@@ -283,7 +286,7 @@ module Types = struct
 	let blackbox_name (bb : blackbox) =
 		match bb with
 		| Internal_BB(name) -> name;
-		| External_BB(name, _, _) -> name;
+		| External_BB(name, _, _) -> name;;
 
 	let clause_key (cls : clause) : string =
 		match cls with
@@ -307,22 +310,22 @@ module Types = struct
 				Hashtbl.replace tbl key PlusRelation(name, args, cls :: clauses))
 			with Not_found -> Hashtbl.add tbl key PlusRelation(name, args, [cls]) in
 			let helper_key = helper_relation_key cls in
-			let _ = if not Hashtbl.mem tbl helper_key then Hashtbl.add tbl helper_key HelperRelation(name, drop args 1, []);
+			if not Hashtbl.mem tbl helper_key then Hashtbl.add tbl helper_key HelperRelation(name, drop args 1, []);
 		| MinusClause(_, _, _) ->
 			let key = clause_key cls in
 			let _ = try (match Hashtbl.find tbl key with MinusRelation(name, args, clauses) ->
 				Hashtbl.replace tbl key MinusRelation(name, args, cls :: clauses))
 			with Not_found -> Hashtbl.add tbl key PlusRelation(name, args, [cls]) in
 			let helper_key = helper_relation_key cls in
-			let _ = if not Hashtbl.mem tbl helper_key then Hashtbl.add tbl helper_key HelperRelation(name, drop args 1, []);
+			if not Hashtbl.mem tbl helper_key then Hashtbl.add tbl helper_key HelperRelation(name, drop args 1, []);
 		| HelperClause(_, _, _) ->
 			let key = clause_key cls in
-			let _ = try (match Hashtbl.find tbl key with HelperRelation(name, args, clauses) ->
+			try (match Hashtbl.find tbl key with HelperRelation(name, args, clauses) ->
 				Hashtbl.replace tbl key HelperRelation(name, args, cls :: clauses))
 			with Not_found -> Hashtbl.add tbl key HelperRelation(name, args, [cls]);
 		| NotifClause(_, _, _) ->
 			let key = clause_key cls in
-			let _ = try (match Hashtbl.find tbl key with NotifRelation(bb, args, clauses) ->
+			try (match Hashtbl.find tbl key with NotifRelation(bb, args, clauses) ->
 				Hashtbl.replace tbl key NotifRelation(bb, args, cls :: clauses))
 			with Not_found -> Hashtbl.add tbl key PlusRelation(bb, args, [cls]);) clauses in
 		Hashtbl.fold (fun key_str rel acc -> rel :: acc) tbl [];;
@@ -413,21 +416,21 @@ module Type_Helpers = struct
 		| Types.PlusClause(name,_, _) -> name;
 		| Types.MinusClause(name, _, _) -> name;
 		| Types.HelperClause(name, _, _) -> name;
-		| Types.NotifClause(name, _, _) -> name;
+		| Types.NotifClause(name, _, _) -> name;;
 
 	let clause_arguments (cls : Types.clause) : Types.argument list = 
 		match cls with
 		| Types.PlusClause(_, args, _) -> args;
 		| Types.MinusClause(_, args, _) -> args;
 		| Types.HelperClause(_, args, _) -> args;
-		| Types.NotifClause(_, args, _) -> args;
+		| Types.NotifClause(_, args, _) -> args;;
 
 	let clause_body (cls : Types.clause) : Types.literal list = 
 		match cls with
 		| Types.PlusClause(_, _, body) -> body;
 		| Types.MinusClause(_, _, body) -> body;
 		| Types.HelperClause(_, _, body) -> body;
-		| Types.NotifClause(_, _, body) -> body;
+		| Types.NotifClause(_, _, body) -> body;;
 
 	let clause_to_string (cls : Types.clause) : string =
 		let name, args, body = (clause_name cls, clause_arguments cls, clause_body cls) in

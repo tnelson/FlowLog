@@ -18,14 +18,14 @@ module Xsb = struct
 			let _ = ref_out_ch := Some(out_ch) in
 			let _ = ref_in_ch := Some(in_ch) in
 			(out_ch, in_ch);
-		| Some(out_ch) -> match !ref_in_ch with
+		| Some(out_ch) -> (match !ref_in_ch with
 			|Some(in_ch) -> (out_ch, in_ch);
-			| _ -> raise (Failure "ref_out_ch is some but ref_in_ch is none"));;
+			| _ -> raise (Failure "ref_out_ch is some but ref_in_ch is none"););;
 		
 	let halt_xsb () : unit = 
 		let out_ch, _ = get_ch () in
 		output_string out_ch "halt.\n";
-		flush out_ch;
+		flush out_ch;;
 
 
 	(* True if string str1 ends with string str2 *)
@@ -142,6 +142,8 @@ module Communication = struct
 TODO: Make Evaluations.respond_to_notification return something for the internal black boxes.
 Finish Communications module (this one).
 Debug and run / write mac learning for this. Later we'll do the parser.
+
+THIS PART ISN'T DONE YET
 *)
 
 
