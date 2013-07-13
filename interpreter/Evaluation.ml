@@ -1,4 +1,5 @@
 open Flowlog_Types;;
+open Controller_Forwarding;;
 open Xsb_Communication;;
 (*open Flowlog_Thrift;;*)
 
@@ -13,7 +14,8 @@ module Evaluation = struct
 
 	let send_notifications (bb : Types.blackbox) (out_notifs : Types.notif_val list) : unit =
 		match bb with
-		| Types.Internal_BB(name) -> if name = "forward" then Controller.Forwarding.forward_packets out_notifs else raise (Failure ("internal black box " ^ name ^ " is not currently supported."))
+		| Types.Internal_BB(name) -> if name = "forward" then Controller_Forwarding.forward_packets out_notifs 
+                                             else raise (Failure ("internal black box " ^ name ^ " is not currently supported.")) 
 		| _ -> List.iter (fun n -> (*Flowlog_Thrift.doBBnotify bb n*) ()) out_notifs;;
 
 	let fire_relation (prgm : Types.program) (rel : Types.relation) (notif : Types.notif_val)  : unit =

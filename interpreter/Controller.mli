@@ -8,9 +8,4 @@ module type PROGRAM = sig
 	val program : Types.program;;
 end
 
-module Forwarding : sig
-	val update_buffer : (switchId * packetIn) option -> unit;;
-	val forward_packets : Types.notif_val list -> unit;;
-end
-
 module Make_Controller : functor (Program : PROGRAM) -> sig end;;
