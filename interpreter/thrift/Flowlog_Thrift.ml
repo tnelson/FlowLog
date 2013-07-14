@@ -12,8 +12,11 @@ open Thrift;;
 open Flowlog_rpc_types;;
 open Thread;;
 open Flowlog_Types.Types;;
-open Type_Helpers.Type_Helpers;;
+open Type_Helpers;;
 open Evaluation;;
+
+
+module Flowlog_Thrift = struct
 
 (* "Die, Bart, Die!" is German for "The, Bart, The!". -- Sideshow Bob *)
 exception Die;;
@@ -52,7 +55,7 @@ object (self)
       (* construct a list of terms from the hashtbl in values. use the type as an index *)
       let theterms = (List.map (fun fieldname -> (Constant (Hashtbl.find values fieldname)))
                                fieldnames) in     
-    Evaluation.respond_to_notification (terms_to_notif_val ntype theterms) the_program;
+    Evaluation.respond_to_notification (Type_Helpers.terms_to_notif_val ntype theterms) the_program;
 
 end
 
@@ -72,7 +75,7 @@ let connect ~host port =
 ;;
 
 let start_listening (a_program : program) (the_notif_types : notif_type list) : unit =
-  let h = new fl_handler in
+  let h = new fl_handler a_program the_notif_types in
   let proc = new FlowLogInterpreter.processor h in
   let port = 9090 in (* FL listen on 9090 *)
   let pf = new TBinaryProtocol.factory in
@@ -115,7 +118,7 @@ let doBBquery bbdecl bbatom =
         Printf.printf "querying...\n%!";
         let qry = new query in
         qry#set_relName bbrel;
-        qry#set_arguments (List.map Flowlog_Types.Type_Helpers.term_to_string tlist); 
+        qry#set_arguments (List.map Type_Helpers.term_to_string tlist); 
         let qresult = cli.bb#doQuery qry in          
           let result = Hashtbl.fold (fun k v sofar -> k :: sofar)                     
                                     (sod qresult#get_result)
@@ -157,7 +160,7 @@ let doBBnotify bbdecl nvalue =
               (* need to lock-step iter over the field names and the params *)
               List.iter2 (fun ele1 ele2 -> 
                               Hashtbl.add tbl ele1 ele2)
-                         fieldnames (List.map term_to_string termlist);
+                         fieldnames (List.map Type_Helpers.term_to_string termlist);
               cli.bb#notifyMe notif;      
               cli.trans#close
 
@@ -166,4 +169,4 @@ let doBBnotify bbdecl nvalue =
               raise (Failure what);
 ;;
   
-
+end
