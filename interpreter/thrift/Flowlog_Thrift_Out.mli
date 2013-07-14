@@ -11,6 +11,3 @@ module Flowlog_Thrift_Out : sig
         val doBBquery : blackbox -> atom -> string list list;;
 end
 
-module Flowlog_Thrift_In : sig
-        val start_listening : program -> notif_type list -> unit;;
-end
