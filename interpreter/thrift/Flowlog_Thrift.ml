@@ -7,12 +7,13 @@
 
 (* note to self: all open does is avoid the "module." 
    not quite like #include or require. *)
-open Arg
-open Thrift
-open Flowlog_rpc_types
-open Thread
-open Flowlog_Types.Types
-open Flowlog_Types.Type_Helpers
+open Arg;;
+open Thrift;;
+open Flowlog_rpc_types;;
+open Thread;;
+open Flowlog_Types.Types;;
+open Type_Helpers.Type_Helpers;;
+open Evaluation;;
 
 (* "Die, Bart, Die!" is German for "The, Bart, The!". -- Sideshow Bob *)
 exception Die;;
