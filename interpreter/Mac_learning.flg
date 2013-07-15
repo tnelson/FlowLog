@@ -1,24 +1,28 @@
-packet = {LocSw, LocPt, DlSrc, DlDst, DlTyp, NwSrc, NwDst, NwProto};
-switch_port = {Sw, Pt};
+blackbox forward.
 
-+learned(Pkt : packet, Sw, Pt, Mac) :-
-Pkt.LocSw = Sw,
-Pkt.DlSrc = Mac,
-Pkt.LocPt = Pt;
+module mac_learning:
 
--learned(Pkt : packet, Sw, Pt, Mac) :-
-Pkt.LocSw = Sw,
-Pkt.DlSrc = Mac,
-not Pkt.LocPt = Pt;
+type packet = {locSw, locPt, dlSrc, dlDst, dlTyp, nwSrc, nwDst, nwProto}.
+type switch_port = {switch, port}.
 
-forward(Pkt : packet, Nwpkt : packet) :-
-learned(Pkt.LocSw, Nwpkt.LocPt, Pkt.DlDst);
++learned(pkt : packet, sw, pt, mac) :-
+pkt.locSw = sw,
+pkt.dlSrc = mac,
+pkt.locPt = pt.
 
-+switch_has_port(Sw_pt : switch_port, Sw, Pt) :-
-Sw_pt.Sw = Sw,
-Sw_pt.Pt = Pt;
+-learned(pkt : packet, sw, pt, mac) :-
+pkt.locSw = sw,
+pkt.dlSrc = mac,
+not pkt.locPt = pt.
 
-forward(Pkt : packet, Nwpkt : packet) :-
-switch_has_port(Pkt.LocSw, Nwpkt.LocPt),
-not learned(Pkt.LocSw, Any, Pkt.DlDst),
-not Pkt.LocPt = Nwpkt.LocPt;
+forward(pkt : packet, nwpkt : packet) :-
+learned(pkt.locSw, nwpkt.locPt, pkt.dlDst).
+
++switch_has_port(sw_pt : switch_port, sw, pt) :-
+sw_pt.switch = sw,
+sw_pt.port = pt.
+
+forward(pkt : packet, nwpkt : packet) :-
+switch_has_port(pkt.locSw, nwpkt.locPt),
+not learned(pkt.locSw, any, pkt.dlDst),
+not pkt.locPt = nwpkt.locPt.
