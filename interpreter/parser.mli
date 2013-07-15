@@ -3,6 +3,7 @@ open Type_Helpers.Parsing;;
 type token =
   | EOF
   | IMPORT
+  | SEMICOLON
   | NAME of (string)
   | PERIOD
   | BLACKBOX
