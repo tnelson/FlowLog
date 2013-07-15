@@ -28,12 +28,6 @@ module Syntax : sig
 	(* name, module names to be imported, black boxes, notification types, clauses *)	
 	type program = Program of string * string list * blackbox list * notif_type list * clause list;;
 	
-	(* appends name of module to relation names besides black boxes *)
-	val fix_names : program -> program;;
-
-	(* imports the second argument into the first argument to make a new program *)
-	val import : program -> program list -> program;;
-
 	(* some helper functions *)
 	val term_to_string : term -> string;;
 

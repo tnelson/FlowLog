@@ -116,6 +116,133 @@ module Type_Helpers = struct
 
 end
 
+module Parsing = struct
+	(* raised on errors in parsing or converting from Syntax to Types. *)
+	exception Parse_error of string;;
+
+	(* These functions process a newly parsed program and make all relations have the module come before it. *)
+	let process_notif_type_name (fn : string -> string) (nt : Syntax.notif_type) : Syntax.notif_type =
+		match nt with Syntax.Type(name, fields) -> Syntax.Type(fn name, fields);;
+
+	let process_notif_var_name (fn : string -> string) (nv : Syntax.notif_var) : Syntax.notif_var = 
+		match nv with Syntax.Notif_var(type_name, var_name) -> Syntax.Notif_var(fn type_name, var_name);;
+
+	let process_atom_name (fn : string -> string) (a : Syntax.atom) : Syntax.atom = 
+		match a with
+		| Syntax.Apply(name, tl) -> Syntax.Apply(fn name, tl);
+		| _ -> a;;
+
+	let process_literal_name (fn : string -> string) (lit : Syntax.literal) : Syntax.literal = 
+		match lit with
+		| Syntax.Pos(a) -> Syntax.Pos(process_atom_name fn a);
+		| Syntax.Neg(a) -> Syntax.Neg(process_atom_name fn a);;
+
+	let process_argument_name (fn : string -> string) (arg : Syntax.argument) : Syntax.argument =
+		match arg with
+		| Syntax.Arg_notif(nv) -> Syntax.Arg_notif(process_notif_var_name fn nv);
+		| _ -> arg;;
+
+	(* Notice that NotifClauses don't get their names changed. *)
+	let process_clause_name (fn : string -> string) (cls : Syntax.clause) : Syntax.clause = 
+		match cls with 
+		|Syntax.PlusClause(name, args, body) -> Syntax.PlusClause(fn name, List.map (process_argument_name fn) args, List.map (process_literal_name fn) body);
+		|Syntax.MinusClause(name, args, body) -> Syntax.MinusClause(fn name, List.map (process_argument_name fn) args, List.map (process_literal_name fn) body);
+		|Syntax.HelperClause(name, args, body) -> Syntax.HelperClause(fn name, List.map (process_argument_name fn) args, List.map (process_literal_name fn) body);
+		|Syntax.NotifClause(name, args, body) -> Syntax.NotifClause(name, List.map (process_argument_name fn) args, List.map (process_literal_name fn) body);;
+
+	let process_name (name : string) (str : string) : string =
+		if not (String.contains str '/') then str ^ "/" ^ name else str;;
+
+	let make_Program (name : string) (modules : string list) (blackboxes : Syntax.blackbox list) (ntypes : Syntax.notif_type list) (clauses : Syntax.clause list) : Syntax.Program =
+		Syntax.Program(name, modules, blackboxes, List.map (process_notif_type_name (process_name name)) ntypes, List.map (process_clause_name (process_name name)) clauses)
+
+	let rec remove_duplicates (l : 'a list) : 'a list =
+		match l with
+		[] -> [];
+		| h :: t -> if List.mem h t then (remove_duplicates t) else h :: (remove_duplicates t);;
+
+	let import (main : Syntax.program) (imports : Syntax.program list) : Syntax.program =
+		List.fold_right (fun prgm acc -> 
+		match acc with Syntax.Program(acc_name, acc_modules, acc_blackboxes, acc_ntypes, acc_clauses) ->
+		match prgm with Syntax.Program(prgm_name, prgm_modules, prgm_blackboxes, prgm_ntypes, prgm_clauses) ->
+		let modules = remove_duplicates (prgm_modules @ acc_modules) in
+		let blackboxes = prgm_blackboxes @ acc_blackboxes in
+		let ntypes = prgm_ntypes @ acc_ntypes in
+		let clauses = (List.map (fun cls -> match cls with
+			| Syntax.NotifClause(cls_name, cls_args, cls_body) -> Syntax.HelperClause(process_name prgm_name cls_name, cls_args, cls_body);
+			| _ -> cls;) prgm_clauses) @ acc_clauses in
+		Syntax.Program(acc_name, modules, blackboxes, ntypes, clauses)) imports main;;
+
+	(* true if str1 begins with str2 *)
+	let begins_with (str1 : string) (str2 : string) : bool = 
+		if String.length str2 > String.length str1 then false else
+		(String.sub str1 0 (String.length str2)) = str2;;
+
+	let plus_name (name : string) : bool = begins_with name "+";;
+
+	let minus_name (name : string) : bool = begins_with name "-";;
+
+	let bb_name (name : string) : bool = begins_with name "bb";;
+
+	let normal_name (str : string) : bool = not (plus_name name || minus_name name || bb_name name);;
+
+	let make_External_BB (name : string) (ip : string) (port : int) : Syntax.blackbox =
+		if bb_name name then Syntax.External_BB(name, ip, port) else
+		raise (Parse_error ("external blackbox name " ^ name ^ " does not start with BB."));;
+
+	let make_Internal_BB (name : string) : Syntax.blackbox = 
+		if name = "forward" then Syntax.Internal_BB(name) else
+		raise (Parse_error ("internal blackbox " ^ name ^ " is not supported."));;
+
+	let make_Type (name : string) (fields : string list) : Syntax.notif_type = 
+		if normal_name name && List.fold_right (fun str acc -> (normal_name str) && acc) fields true then
+		Syntax.Type(name, fields) else
+		raise (Parse_error ("type names and type fields cannot start with +, -, or bb. This is violated in type " ^ name));;
+
+	let make_Plus_Minus_Clause (name : string) (args : Syntax.argument list) (body : Syntax.literal list) : Syntax.clause = 
+		if plus_name name then Syntax.PlusClause(name, args, body) else
+		if minus_name name then Syntax.MinusClause(name, args, body) else
+		raise (Parse_error ("if a clause's arguments starts with a notification variable then it must be a plus or minus clause. This is violated by clause " ^ name));;
+
+	let make_HelperClause (name : string) (args : Syntax.argument list) (body : Syntax.literal list) : Syntax.clause = 
+		if normal_name name then Syntax.Helper_Clause(name, args, body) else
+		raise (Parse_error ("if a clause has no notification arguments then it must be a helper clause and its name cannot start with +, -, or BB. This is violated in clause " ^ name));;
+
+	let make_NotifClause (name : string) (args : Syntax.argument list) (body : Syntax.literal list) : Syntax.clause = 
+		if bb_name name then Syntax.NotifClause(name, args, body) else
+		raise (Parse_error ("if a clause has two arguments which are both notification variables then it must be a notification clause and its name must start with BB. This is violated in clause " ^ name));;
+
+	let make_Arg_term (t : Syntax.term) : Syntax.argument =
+		match t with
+		| Variable(_) -> Syntax.Arg_term(t);
+		| _ -> raise (Parse_error ("argument terms must be variables."));;
+
+	let make_Variable (str : string) : Syntax.term =
+		if normal_name str then Syntax.Variable(str) else
+		raise (Parse_error ("variable names cannot begin with +, -, or BB. This is violated by " ^ str));;
+
+	let make_Arg_notif (nv : Syntax.notif_var) : Syntax.argument =
+		Syntax.Notif_var(nv);;
+
+	let make_Notif_var (type_name : string) (var_name : string) : Syntax.notif_var =
+		if normal_name var_name then Syntax.Notif_var(type_name, var_name) else
+		raise (Parse_error ("notification variable names cannot begin with +, -, or BB. This is violated by " ^ var_name));;
+
+	let make_Apply (rel_name : string) (tl : Syntax.term list) : Syntax.atom = Syntax.Apply(rel_name, tl);;
+
+	let make_Query (bbname : string) (field_name : string) (tl : Syntax.term list) : Syntax.atom =
+		if bb_name bbname then Syntax.Query(bbname, field_name, tl) else
+		raise (Parse_error ("queries must be to external blackboxes, whose names begin with BB. This is violated by blackbox " ^ bbname));;
+
+	let make_Constant_Variable (str : string) : Syntax.term =
+		try Syntax.Constant(int_of_string str) with exn -> Syntax.Variable(str);;
+
+	let make_Field_ref (var_name : string) (field_name : string) : Syntax.term =
+		if normal_name var_name then Syntax.Field_ref(var_name, field_name) else
+		raise (Parse_error ("notification variable names cannot begin with +, -, or BB. This is violated by " ^ var_name));;
+
+end
+
 module Conversion = struct
 	(* Functions to turn a Syntax.program into a Types.program. *)
 
@@ -127,7 +254,7 @@ module Conversion = struct
 		match prgm with Syntax.Program(_, _, _, ntypes, _) ->
 		match nv with Syntax.Notif_var(type_name, var_name) ->
 		match List.filter (function Syntax.Type(n, _) -> type_name = n ) ntypes with
-		| [] -> raise (Types.Parse_error ("notif_var " ^ var_name ^ " in clause " ^ (Syntax.clause_name cls) ^ " has an invalid type " ^ type_name));
+		| [] -> raise (Parsing.Parse_error ("notif_var " ^ var_name ^ " in clause " ^ (Syntax.clause_name cls) ^ " has an invalid type " ^ type_name));
 		| t :: _ -> Types.Notif_var(notif_type_convert t, var_name);;
 
 	let term_convert (prgm : Syntax.program) (cls : Syntax.clause) (t : Syntax.term) : Types.term = 
@@ -139,7 +266,7 @@ module Conversion = struct
 			| Syntax.Arg_notif(Syntax.Notif_var(_, name)) -> name = var_name;
 			| _ -> false;) (Syntax.clause_arguments cls) with
 		| Syntax.Arg_notif(nv) :: _ -> Types.Field_ref((notif_var_convert prgm cls nv), field_name);
-		| _ -> raise (Types.Parse_error ("the notification in " ^ (Syntax.term_to_string t) ^ " in clause " ^ (Syntax.clause_name cls) ^ " is not defined."));;
+		| _ -> raise (Parsing.Parse_error ("the notification in " ^ (Syntax.term_to_string t) ^ " in clause " ^ (Syntax.clause_name cls) ^ " is not defined."));;
 
 	let blackbox_convert (bb : Syntax.blackbox) : Types.blackbox =
 		match bb with
@@ -154,7 +281,7 @@ module Conversion = struct
 		| Syntax.Query(bbname, rel_name, terms) ->
 			match prgm with Syntax.Program(_, _, blackboxes, _, _) ->
 			match List.filter (fun bb -> Syntax.blackbox_name bb = bbname) blackboxes with
-			| [] -> raise (Types.Parse_error ("black box " ^ bbname ^ " in clause " ^ (Syntax.clause_name cls) ^ " does not exist."));
+			| [] -> raise (Parsing.Parse_error ("black box " ^ bbname ^ " in clause " ^ (Syntax.clause_name cls) ^ " does not exist."));
 			| bb :: _ -> Types.Query(blackbox_convert bb, rel_name, List.map (term_convert prgm cls) terms);;
 
 	let literal_convert (prgm : Syntax.program) (cls : Syntax.clause) (l : Syntax.literal) : Types.literal =
@@ -167,9 +294,9 @@ module Conversion = struct
 		| Syntax.Arg_notif(nv) -> Types.Arg_notif(notif_var_convert prgm cls nv);
 		| Syntax.Arg_term(t) ->
 			match t with
-			| Syntax.Constant(_) -> raise (Types.Parse_error ("argument " ^ (Syntax.argument_name arg) ^ " in clause " ^ (Syntax.clause_name cls) ^ " is a constant."));
+			| Syntax.Constant(_) -> raise (Parsing.Parse_error ("argument " ^ (Syntax.argument_name arg) ^ " in clause " ^ (Syntax.clause_name cls) ^ " is a constant."));
 			| Syntax.Variable(str) -> Types.Arg_term(Types.Variable(str));
-			| Syntax.Field_ref(_, _) -> raise (Types.Parse_error ("argument " ^ (Syntax.argument_name arg) ^ " in clause " ^ (Syntax.clause_name cls) ^ " is a field ref."));;
+			| Syntax.Field_ref(_, _) -> raise (Parsing.Parse_error ("argument " ^ (Syntax.argument_name arg) ^ " in clause " ^ (Syntax.clause_name cls) ^ " is a field ref."));;
 
 	let clause_convert (prgm : Syntax.program) (cls : Syntax.clause) : Types.clause = 
 		match cls with
@@ -179,7 +306,7 @@ module Conversion = struct
 		| Syntax.NotifClause(bbname, args, body) ->
 			match prgm with Syntax.Program(_, _, blackboxes, _, _) ->
 			match List.filter (fun bbox -> Syntax.blackbox_name bbox = bbname) blackboxes with
-			| [] -> raise (Types.Parse_error ("black box " ^ bbname ^ " in clause " ^ (Syntax.clause_name cls) ^ " does not exist."));
+			| [] -> raise (Parsing.Parse_error ("black box " ^ bbname ^ " in clause " ^ (Syntax.clause_name cls) ^ " does not exist."));
 			| bb :: _ -> Types.NotifClause(blackbox_convert bb, List.map (argument_convert prgm cls) args, List.map (literal_convert prgm cls) body);;
 
 	let rec drop (l : 'a list) (n : int) : 'a list = 

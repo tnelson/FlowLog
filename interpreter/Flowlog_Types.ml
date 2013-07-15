@@ -100,64 +100,7 @@ module Syntax = struct
 	let argument_name (arg : argument) : string =
 		match arg with
 		| Arg_notif(Notif_var(_, var_name)) -> var_name;
-		| Arg_term(t) -> term_to_string t;;
-
-	let program_name (prgm : program) : string =
-		match prgm with Program(name, _, _, _, _) -> name;;
-
-	(* These functions process a newly parsed program and make all relations have the module come before it. *)
-	let process_notif_type_name (fn : string -> string) (nt : notif_type) : notif_type =
-		match nt with Type(name, fields) -> Type(fn name, fields);;
-
-	let process_notif_var_name (fn : string -> string) (nv : notif_var) : notif_var = 
-		match nv with Notif_var(type_name, var_name) -> Notif_var(fn type_name, var_name);;
-
-	let process_atom_name (fn : string -> string) (a : atom) : atom = 
-		match a with
-		| Apply(name, tl) -> Apply(fn name, tl);
-		| _ -> a;;
-
-	let process_literal_name (fn : string -> string) (lit : literal) : literal = 
-		match lit with
-		| Pos(a) -> Pos(process_atom_name fn a);
-		| Neg(a) -> Neg(process_atom_name fn a);;
-
-	let process_argument_name (fn : string -> string) (arg : argument) : argument =
-		match arg with
-		| Arg_notif(nv) -> Arg_notif(process_notif_var_name fn nv);
-		| _ -> arg;;
-
-	(* Notice that NotifClauses don't get their names changed. *)
-	let process_clause_name (fn : string -> string) (cls : clause) : clause = 
-		match cls with 
-		|PlusClause(name, args, body) -> PlusClause(fn name, List.map (process_argument_name fn) args, List.map (process_literal_name fn) body);
-		|MinusClause(name, args, body) -> MinusClause(fn name, List.map (process_argument_name fn) args, List.map (process_literal_name fn) body);
-		|HelperClause(name, args, body) -> HelperClause(fn name, List.map (process_argument_name fn) args, List.map (process_literal_name fn) body);
-		|NotifClause(name, args, body) -> NotifClause(name, List.map (process_argument_name fn) args, List.map (process_literal_name fn) body);;
-
-	let process_name (name : string) (str : string) : string =
-		if not (String.contains str '/') then str ^ "/" ^ name else str;;
-
-	let fix_names (prgm : program) : program = 
-		match prgm with Program(name, modules, blackboxes, ntypes, clauses) -> 
-		Program(name, modules, blackboxes, List.map (process_notif_type_name (process_name name)) ntypes, List.map (process_clause_name (process_name name)) clauses);;
-
-	let rec remove_duplicates (l : 'a list) : 'a list =
-		match l with
-		[] -> [];
-		| h :: t -> if List.mem h t then (remove_duplicates t) else h :: (remove_duplicates t);;
-
-	let import (main : program) (imports : program list) : program =
-		List.fold_right (fun prgm acc -> 
-		match acc with Program(acc_name, acc_modules, acc_blackboxes, acc_ntypes, acc_clauses) ->
-		match prgm with Program(prgm_name, prgm_modules, prgm_blackboxes, prgm_ntypes, prgm_clauses) ->
-		let modules = remove_duplicates (prgm_modules @ acc_modules) in
-		let blackboxes = prgm_blackboxes @ acc_blackboxes in
-		let ntypes = prgm_ntypes @ acc_ntypes in
-		let clauses = (List.map (fun cls -> match cls with
-			| NotifClause(cls_name, cls_args, cls_body) -> HelperClause(process_name prgm_name cls_name, cls_args, cls_body);
-			| _ -> cls;) prgm_clauses) @ acc_clauses in
-		Program(acc_name, modules, blackboxes, ntypes, clauses)) imports main;;
+		| Arg_term(t) -> term_to_string t;;	
 	
 end
 
@@ -204,11 +147,7 @@ module Types = struct
 	(* name, relations *)	
 	type program = Program of string * relation list;;
 
-	(* raised on errors converting from Syntax to Types. *)
-	exception Parse_error of string;;
-
 	let packet_type = Type("packet", ["LocSw"; "LocPt"; "DlSrc"; "DlDst"; "DlTyp"; "NwSrc"; "NwDst"; "NwProto"]);;
 	let switch_port_type = Type("switch_port_type", ["Switch"; "Port"]);;
 
 end
-
