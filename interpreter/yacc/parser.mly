@@ -79,7 +79,7 @@
       NAME LPAREN notif_term_arg_list RPAREN COLON_HYPHEN literal_list SEMICOLON { make_Plus_Minus_Clause $1 $3 $6 }
     | NAME LPAREN name_list RPAREN COLON_HYPHEN literal_list SEMICOLON { make_HelperClause $1 (List.map (fun str -> make_Arg_term(make_Variable(str))) $3) $6 }
     | NAME LPAREN RPAREN COLON_HYPHEN literal_list SEMICOLON { make_HelperClause $1 [] $5 }
-    | NAME LPAREN notif_arg notif_arg RPAREN COLON_HYPHEN literal_list SEMICOLON { make_NotifClause $1 [$3; $4] $7 }
+    | NAME LPAREN notif_arg COMMA notif_arg RPAREN COLON_HYPHEN literal_list SEMICOLON { make_NotifClause $1 [$3; $5] $8 }
   ;
   notif_term_arg_list:
       notif_arg { [$1] }
