@@ -209,9 +209,8 @@ module Parsing = struct
 		raise (Parse_error ("if a clause has no notification arguments then it must be a helper clause and its name cannot start with +, -, or BB. This is violated in clause " ^ name));;
 
 	let make_NotifClause (name : string) (args : Syntax.argument list) (body : Syntax.literal list) : Syntax.clause = 
-		if bb_name name then Syntax.NotifClause(name, args, body) else
-		raise (Parse_error ("if a clause has two arguments which are both notification variables then it must be a notification clause and its name must start with BB. This is violated in clause " ^ name));;
-
+		Syntax.NotifClause(name, args, body);;
+		
 	let make_Arg_term (t : Syntax.term) : Syntax.argument =
 		match t with
 		| Syntax.Variable(_) -> Syntax.Arg_term(t);
