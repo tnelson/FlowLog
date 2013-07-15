@@ -46,16 +46,14 @@
       import_list blackbox_list module_decl type_decl_list clause_list EOF { make_Program $3 $1 $2 $4 $5 }
   ;
   import_list:
-      { [] }
-    | import { [$1] }
+      import { [$1] }
     | import import_list { $1 :: $2 }
   ;
   import:
       IMPORT NAME PERIOD { $2 }
   ;
   blackbox_list:
-      { [] }
-    | blackbox { [$1] }
+      blackbox { [$1] }
     | blackbox blackbox_list { $1 :: $2 }
   ;
   blackbox:
@@ -66,21 +64,18 @@
       MODULE NAME COLON { $2 }
   ;
   type_decl_list:
-      { [] }
-    | type_decl { [$1] }
+      type_decl { [$1] }
     | type_decl type_decl_list { $1 :: $2 }
   ;
   type_decl:
     TYPE NAME EQUALS LCURLY name_list RCURLY PERIOD { make_Type $2 $5 }
   ;
   name_list:
-      { [] }
-    | NAME { [$1] }
+      NAME { [$1] }
     | NAME COMMA name_list { $1 :: $3 }
   ;
   clause_list:
-      { [] }
-    | clause { [$1] }
+      clause { [$1] }
     | clause clause_list { $1 :: $2 }
   ;
   clause:
@@ -114,7 +109,6 @@
     | NAME PERIOD NAME { make_Field_ref $1 $3 }
   ;
   term_list:
-      { [] }
-    |  term { [$1] }
+      term { [$1] }
     | term COMMA term_list { $1 :: $3 }
   ;
