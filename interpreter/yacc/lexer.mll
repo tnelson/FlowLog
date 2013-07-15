@@ -11,6 +11,7 @@ rule token = parse
   | "module" { MODULE }
   | ":-" { COLON_HYPHEN }
   | ':' { COLON }
+  | ';' { SEMICOLON }
   | "type" { TYPE }
   | '=' { EQUALS }
   | '{' { LCURLY }

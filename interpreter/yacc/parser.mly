@@ -4,6 +4,7 @@
 %}
   %token EOF
   %token IMPORT
+  %token SEMICOLON
   %token <string> NAME
   %token PERIOD
   %token BLACKBOX
@@ -50,15 +51,15 @@
     | import import_list { $1 :: $2 }
   ;
   import:
-      IMPORT NAME PERIOD { $2 }
+      IMPORT NAME SEMICOLON { $2 }
   ;
   blackbox_list:
       blackbox { [$1] }
     | blackbox blackbox_list { $1 :: $2 }
   ;
   blackbox:
-      BLACKBOX NAME AMPERSAND NUMBER NUMBER PERIOD { make_External_BB $2 $4 (int_of_string $5) }
-    | BLACKBOX NAME PERIOD { make_Internal_BB $2 }
+      BLACKBOX NAME AMPERSAND NUMBER NUMBER SEMICOLON { make_External_BB $2 $4 (int_of_string $5) }
+    | BLACKBOX NAME SEMICOLON { make_Internal_BB $2 }
   ;
   module_decl:
       MODULE NAME COLON { $2 }
@@ -68,7 +69,7 @@
     | type_decl type_decl_list { $1 :: $2 }
   ;
   type_decl:
-    TYPE NAME EQUALS LCURLY name_list RCURLY PERIOD { make_Type $2 $5 }
+    TYPE NAME EQUALS LCURLY name_list RCURLY SEMICOLON { make_Type $2 $5 }
   ;
   name_list:
       NAME { [$1] }
@@ -79,9 +80,9 @@
     | clause clause_list { $1 :: $2 }
   ;
   clause:
-      NAME LPAREN notif_term_arg_list RPAREN COLON_HYPHEN literal_list PERIOD { make_Plus_Minus_Clause $1 $3 $6 }
-    | NAME LPAREN name_list RPAREN COLON_HYPHEN literal_list PERIOD { make_HelperClause $1 (List.map (fun str -> make_Arg_term(make_Variable(str))) $3) $6 }
-    | NAME LPAREN notif_arg notif_arg RPAREN COLON_HYPHEN literal_list PERIOD { make_NotifClause $1 [$3; $4] $7 }
+      NAME LPAREN notif_term_arg_list RPAREN COLON_HYPHEN literal_list SEMICOLON { make_Plus_Minus_Clause $1 $3 $6 }
+    | NAME LPAREN name_list RPAREN COLON_HYPHEN literal_list SEMICOLON { make_HelperClause $1 (List.map (fun str -> make_Arg_term(make_Variable(str))) $3) $6 }
+    | NAME LPAREN notif_arg notif_arg RPAREN COLON_HYPHEN literal_list SEMICOLON { make_NotifClause $1 [$3; $4] $7 }
   ;
   notif_term_arg_list:
       notif_arg { [$1] }
