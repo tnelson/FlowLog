@@ -7,6 +7,9 @@
   - Responds to requests for the current time. 
 *)
 
+(* TODO: Michael points out that we ought to have a Black-box functor, to aid in abstraction and avoid code-reuse.
+    Much of this is boilerplate... *)
+
 open Arg
 open Thrift
 open Flowlog_rpc_types
@@ -35,33 +38,86 @@ let connect ~host port =
     { trans = tx ; proto = proto; fl = fl}
 ;;
 
+let send_notif notif = 
+    let cli = connect ~host:"127.0.0.1" 9090 in 
+    try
+      cli.fl#notifyMe notif;
+      cli.trans#close;
+    with Transport.E (_,what) ->
+      Printf.printf "ERROR: %s\n" what ; flush stdout
+
 class bb_handler =
 object (self)
   inherit BlackBox.iface
 
   method notifyMe notif = 
-    Printf.printf "notified()\n%!"
-
+    let ntype = sod ((sod notif)#get_notificationType) in
+    let values = sod ((sod notif)#get_values) in
+      Printf.printf "received notification. type=%s\n%!" ntype;
+      if ntype != "start_timer" then
+      begin
+        let reply = new notification in
+        let tbl = (Hashtbl.create 2) in
+        (* TODO: abstract this out *) 
+          reply#set_notificationType "exception";          
+          Hashtbl.add tbl "sender" "Timer";
+          Hashtbl.add tbl "message" "Timer supports only start_timer notifications.";
+          reply#set_values tbl;
+          send_notif reply;
+          Printf.printf "Sent exception.\n%!";
+      end
+      else
+      begin
+        (* TODO: need to check for valid fields *)
+        let timer_id = (Hashtbl.find values "id") in
+        let seconds = int_of_string (Hashtbl.find values "seconds") in
+        ignore (Thread.create (fun x ->                                  
+                                  Printf.printf "Starting timer for id=%s. seconds=%d.\n%!" timer_id seconds;
+                                  Unix.sleep seconds;
+                                  let reply = new notification in
+                                  let tbl = (Hashtbl.create 2) in
+                                  reply#set_notificationType "timer_expired";                                            
+                                  Hashtbl.add tbl "id" timer_id;
+                                  reply#set_values tbl;
+                                  send_notif reply;
+                                  Printf.printf "Sent timer for id=%s.\n%!" timer_id) 0);
+      end
+  
+  
   method doQuery qry =
-    let relname = (sod qry#get_relName()) in
-    let args = (sod qry#get_arguments()) in
+    let relname = (sod (sod qry)#get_relName) in
+    let args = (sod (sod qry)#get_arguments) in
+
+    let rep = new queryReply in
+    let tbl = (Hashtbl.create 1) in
     if relname = "time" then
     begin
       Printf.printf "handling time() query\n%!";
       (* need to return a QueryReply. s/b only one argument. if it's a variable,
          return the value. if it's a constant, compare. e.g. if time=10,
          time(X) should return {[10]}. But time(3) should return {}. time(10) would return {[10]}.
-         In this BB, time(10) is supremely unlikely to ever be called, but doing the check anyway. *)
-      let rep = new queryReply in
-        let tbl = (Hashtbl.create 1) in
-        (* Can't use Sys.time because that's proc. seconds used by THIS process.
-           Instead, use Unix.time(), which is seconds since epoch. *)
-        let thetime = Unix.time() in
-	(* If malformed query, flag an exception. *)
+         In this BB, time(10) is supremely unlikely to ever be called, but doing the check anyway. *)          
+      (* Can't use Sys.time because that's proc. seconds used by THIS process.
+         Instead, use Unix.time(), which is seconds since epoch. *)
+      let thetime = string_of_int(int_of_float(Unix.time())) in
+     	(* If malformed query, flag an exception. *)
+        if (List.length args) != 1 then
+        begin
+          rep#set_exception_code "1";
+          rep#set_exception_message "Timer.time expects a single argument."
+        end;
 
-          Hashtbl.add tbl [thetime] true; 
-          rep#set_result tbl;
-          rep
+        Hashtbl.add tbl [thetime] true; 
+        rep#set_result tbl;
+        rep
+    end
+    else 
+    begin
+      Printf.printf "invalid query relation %s\n%!" relname;
+      rep#set_exception_code "2";
+      rep#set_exception_message "Timer only supports a single query relation: 'time'.";
+      rep#set_result tbl;
+      rep
     end
 end
 
@@ -79,25 +135,19 @@ let dobb () =
   in
     (* Listen in a separate thread. *)
     (* returns handle to new thread. ignore to avoid warning *)
-    ignore (Thread.create (fun x -> (server#serve)) 0);
+    Printf.printf "Starting listener (in main thread; this should block)...\n%!";
+    server#serve;
 ;;
 
 let timer_expire id  = 
     Printf.printf "timer expired. sending notification\n%!"; 
-    let cli = connect ~host:"127.0.0.1" 9090 in 
-    try
-
-      let notif = new notification in
-        notif#set_notificationType "timer";
-        let tbl = (Hashtbl.create 1) in
-          Hashtbl.add tbl "id" id;
-          notif#set_values tbl;
-          cli.fl#notifyMe notif;
-      cli.trans#close;
-
-    with Transport.E (_,what) ->
-      Printf.printf "ERROR: %s\n" what ; flush stdout
-    Printf.printf "notification sent\n%!";; 
+    let notif = new notification in
+      notif#set_notificationType "timer";
+      let tbl = (Hashtbl.create 1) in
+        Hashtbl.add tbl "id" id;
+        notif#set_values tbl;
+        send_notif notif;
+        Printf.printf "notification sent\n%!";; 
 
 
 dobb();;

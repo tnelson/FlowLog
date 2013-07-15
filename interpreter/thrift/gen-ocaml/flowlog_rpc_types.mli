@@ -44,6 +44,16 @@ object ('a)
   method set_result : (string list,bool) Hashtbl.t -> unit
   method unset_result : unit
   method reset_result : unit
+  method get_exception_code : string option
+  method grab_exception_code : string
+  method set_exception_code : string -> unit
+  method unset_exception_code : unit
+  method reset_exception_code : unit
+  method get_exception_message : string option
+  method grab_exception_message : string
+  method set_exception_message : string -> unit
+  method unset_exception_message : unit
+  method reset_exception_message : unit
   method copy : 'a
   method write : Protocol.t -> unit
 end

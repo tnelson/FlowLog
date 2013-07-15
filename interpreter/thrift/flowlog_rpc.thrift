@@ -53,6 +53,8 @@ struct Query
 struct QueryReply
 {
 	1: required set<list<FLValue>> result;
+	2: optional string exception_code;
+	3: optional string exception_message;
 }
 
 //////////////////////////////////////////////////////

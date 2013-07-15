@@ -13,8 +13,8 @@ class doQuery_args =
 object (self)
   val mutable _q : query option = None
   method get_q = _q
-  method grab_q = match _q with None->raise (Field_empty "doQuery_args.q") | Some _x59 -> _x59
-  method set_q _x59 = _q <- Some _x59
+  method grab_q = match _q with None->raise (Field_empty "doQuery_args.q") | Some _x61 -> _x61
+  method set_q _x61 = _q <- Some _x61
   method unset_q = _q <- None
   method reset_q = _q <- None
 
@@ -34,31 +34,31 @@ object (self)
     oprot#writeStructEnd
 end
 let rec read_doQuery_args (iprot : Protocol.t) =
-  let _str62 = new doQuery_args in
+  let _str64 = new doQuery_args in
     ignore(iprot#readStructBegin);
     (try while true do
-        let (_,_t63,_id64) = iprot#readFieldBegin in
-        if _t63 = Protocol.T_STOP then
+        let (_,_t65,_id66) = iprot#readFieldBegin in
+        if _t65 = Protocol.T_STOP then
           raise Break
         else ();
-        (match _id64 with 
-          | 1 -> (if _t63 = Protocol.T_STRUCT then
-              _str62#set_q (read_query iprot)
+        (match _id66 with 
+          | 1 -> (if _t65 = Protocol.T_STRUCT then
+              _str64#set_q (read_query iprot)
             else
-              iprot#skip _t63)
-          | _ -> iprot#skip _t63);
+              iprot#skip _t65)
+          | _ -> iprot#skip _t65);
         iprot#readFieldEnd;
       done; ()
     with Break -> ());
     iprot#readStructEnd;
-    _str62
+    _str64
 
 class doQuery_result =
 object (self)
   val mutable _success : queryReply option = None
   method get_success = _success
-  method grab_success = match _success with None->raise (Field_empty "doQuery_result.success") | Some _x65 -> _x65
-  method set_success _x65 = _success <- Some _x65
+  method grab_success = match _success with None->raise (Field_empty "doQuery_result.success") | Some _x67 -> _x67
+  method set_success _x67 = _success <- Some _x67
   method unset_success = _success <- None
   method reset_success = _success <- None
 
@@ -78,31 +78,31 @@ object (self)
     oprot#writeStructEnd
 end
 let rec read_doQuery_result (iprot : Protocol.t) =
-  let _str68 = new doQuery_result in
+  let _str70 = new doQuery_result in
     ignore(iprot#readStructBegin);
     (try while true do
-        let (_,_t69,_id70) = iprot#readFieldBegin in
-        if _t69 = Protocol.T_STOP then
+        let (_,_t71,_id72) = iprot#readFieldBegin in
+        if _t71 = Protocol.T_STOP then
           raise Break
         else ();
-        (match _id70 with 
-          | 0 -> (if _t69 = Protocol.T_STRUCT then
-              _str68#set_success (read_queryReply iprot)
+        (match _id72 with 
+          | 0 -> (if _t71 = Protocol.T_STRUCT then
+              _str70#set_success (read_queryReply iprot)
             else
-              iprot#skip _t69)
-          | _ -> iprot#skip _t69);
+              iprot#skip _t71)
+          | _ -> iprot#skip _t71);
         iprot#readFieldEnd;
       done; ()
     with Break -> ());
     iprot#readStructEnd;
-    _str68
+    _str70
 
 class notifyMe_args =
 object (self)
   val mutable _notify : notification option = None
   method get_notify = _notify
-  method grab_notify = match _notify with None->raise (Field_empty "notifyMe_args.notify") | Some _x71 -> _x71
-  method set_notify _x71 = _notify <- Some _x71
+  method grab_notify = match _notify with None->raise (Field_empty "notifyMe_args.notify") | Some _x73 -> _x73
+  method set_notify _x73 = _notify <- Some _x73
   method unset_notify = _notify <- None
   method reset_notify = _notify <- None
 
@@ -122,24 +122,24 @@ object (self)
     oprot#writeStructEnd
 end
 let rec read_notifyMe_args (iprot : Protocol.t) =
-  let _str74 = new notifyMe_args in
+  let _str76 = new notifyMe_args in
     ignore(iprot#readStructBegin);
     (try while true do
-        let (_,_t75,_id76) = iprot#readFieldBegin in
-        if _t75 = Protocol.T_STOP then
+        let (_,_t77,_id78) = iprot#readFieldBegin in
+        if _t77 = Protocol.T_STOP then
           raise Break
         else ();
-        (match _id76 with 
-          | 1 -> (if _t75 = Protocol.T_STRUCT then
-              _str74#set_notify (read_notification iprot)
+        (match _id78 with 
+          | 1 -> (if _t77 = Protocol.T_STRUCT then
+              _str76#set_notify (read_notification iprot)
             else
-              iprot#skip _t75)
-          | _ -> iprot#skip _t75);
+              iprot#skip _t77)
+          | _ -> iprot#skip _t77);
         iprot#readFieldEnd;
       done; ()
     with Break -> ());
     iprot#readStructEnd;
-    _str74
+    _str76
 
 class notifyMe_result =
 object (self)
@@ -152,20 +152,20 @@ object (self)
     oprot#writeStructEnd
 end
 let rec read_notifyMe_result (iprot : Protocol.t) =
-  let _str79 = new notifyMe_result in
+  let _str81 = new notifyMe_result in
     ignore(iprot#readStructBegin);
     (try while true do
-        let (_,_t80,_id81) = iprot#readFieldBegin in
-        if _t80 = Protocol.T_STOP then
+        let (_,_t82,_id83) = iprot#readFieldBegin in
+        if _t82 = Protocol.T_STOP then
           raise Break
         else ();
-        (match _id81 with 
-          | _ -> iprot#skip _t80);
+        (match _id83 with 
+          | _ -> iprot#skip _t82);
         iprot#readFieldEnd;
       done; ()
     with Break -> ());
     iprot#readStructEnd;
-    _str79
+    _str81
 
 class virtual iface =
 object (self)

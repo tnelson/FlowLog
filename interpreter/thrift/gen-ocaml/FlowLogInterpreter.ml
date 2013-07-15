@@ -13,8 +13,8 @@ class notifyMe_args =
 object (self)
   val mutable _notify : notification option = None
   method get_notify = _notify
-  method grab_notify = match _notify with None->raise (Field_empty "notifyMe_args.notify") | Some _x48 -> _x48
-  method set_notify _x48 = _notify <- Some _x48
+  method grab_notify = match _notify with None->raise (Field_empty "notifyMe_args.notify") | Some _x50 -> _x50
+  method set_notify _x50 = _notify <- Some _x50
   method unset_notify = _notify <- None
   method reset_notify = _notify <- None
 
@@ -34,24 +34,24 @@ object (self)
     oprot#writeStructEnd
 end
 let rec read_notifyMe_args (iprot : Protocol.t) =
-  let _str51 = new notifyMe_args in
+  let _str53 = new notifyMe_args in
     ignore(iprot#readStructBegin);
     (try while true do
-        let (_,_t52,_id53) = iprot#readFieldBegin in
-        if _t52 = Protocol.T_STOP then
+        let (_,_t54,_id55) = iprot#readFieldBegin in
+        if _t54 = Protocol.T_STOP then
           raise Break
         else ();
-        (match _id53 with 
-          | 1 -> (if _t52 = Protocol.T_STRUCT then
-              _str51#set_notify (read_notification iprot)
+        (match _id55 with 
+          | 1 -> (if _t54 = Protocol.T_STRUCT then
+              _str53#set_notify (read_notification iprot)
             else
-              iprot#skip _t52)
-          | _ -> iprot#skip _t52);
+              iprot#skip _t54)
+          | _ -> iprot#skip _t54);
         iprot#readFieldEnd;
       done; ()
     with Break -> ());
     iprot#readStructEnd;
-    _str51
+    _str53
 
 class notifyMe_result =
 object (self)
@@ -64,20 +64,20 @@ object (self)
     oprot#writeStructEnd
 end
 let rec read_notifyMe_result (iprot : Protocol.t) =
-  let _str56 = new notifyMe_result in
+  let _str58 = new notifyMe_result in
     ignore(iprot#readStructBegin);
     (try while true do
-        let (_,_t57,_id58) = iprot#readFieldBegin in
-        if _t57 = Protocol.T_STOP then
+        let (_,_t59,_id60) = iprot#readFieldBegin in
+        if _t59 = Protocol.T_STOP then
           raise Break
         else ();
-        (match _id58 with 
-          | _ -> iprot#skip _t57);
+        (match _id60 with 
+          | _ -> iprot#skip _t59);
         iprot#readFieldEnd;
       done; ()
     with Break -> ());
     iprot#readStructEnd;
-    _str56
+    _str58
 
 class virtual iface =
 object (self)
