@@ -5,10 +5,9 @@ open OxPlatform;;
 open OpenFlow0x01_Core;;
 open OpenFlow0x01;;
 
+let debug = true;;
 
 module Controller_Forwarding = struct
-
-        let debug = true;;
 
 	let pkt_buffer = ref None;;
 
@@ -24,7 +23,7 @@ module Controller_Forwarding = struct
 		List.assoc str (List.combine fields terms);;
 
 	let pkt_to_notif (sw : switchId) (pk : packetIn) : Types.notif_val = 
-		let _ = if debug then print_endline "starting pkt_to_notif" in
+		if debug then print_endline "starting pkt_to_notif";
 		let pkt_payload = parse_payload pk.input_payload in
 		let isIp = ((dlTyp pkt_payload) = 0x0800) in
 		let terms = List.map (function x -> Types.Constant(x)) [Int64.to_string sw;

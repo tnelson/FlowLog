@@ -3,8 +3,6 @@ open Packet;;
 open OxPlatform;;
 open OpenFlow0x01_Core;;
 
-let debug = true;;
-
 (* Defines the basic syntax types for the Flowlog interpreter. *)
 (* File format:
 import module1.
@@ -147,7 +145,7 @@ module Types = struct
 	(* name, relations *)	
 	type program = Program of string * relation list;;
 
-	let packet_type = Type("packet", ["LocSw"; "LocPt"; "DlSrc"; "DlDst"; "DlTyp"; "NwSrc"; "NwDst"; "NwProto"]);;
-	let switch_port_type = Type("switch_port_type", ["Switch"; "Port"]);;
+	let packet_type = Type("packet", ["LOCSW"; "LOCPT"; "DLSRC"; "DLDST"; "DLTYP"; "NWSRC"; "NWDST"; "NWPROTO"]);;
+	let switch_port_type = Type("switch_port", ["SWITCH"; "PORT"]);;
 
 end

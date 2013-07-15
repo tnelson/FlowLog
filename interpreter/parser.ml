@@ -288,7 +288,7 @@ let yyact = [|
     let _1 = (Parsing.peek_val __caml_parser_env 0 : string) in
     Obj.repr(
 # 75 "parser.mly"
-           ( [_1] )
+           ( [String.uppercase _1] )
 # 293 "../parser.ml"
                : string list))
 ; (fun __caml_parser_env ->
@@ -296,7 +296,7 @@ let yyact = [|
     let _3 = (Parsing.peek_val __caml_parser_env 0 : string list) in
     Obj.repr(
 # 76 "parser.mly"
-                           ( _1 :: _3 )
+                           ( (String.uppercase _1) :: _3 )
 # 301 "../parser.ml"
                : string list))
 ; (fun __caml_parser_env ->
@@ -355,7 +355,7 @@ let yyact = [|
     let _3 = (Parsing.peek_val __caml_parser_env 0 : string) in
     Obj.repr(
 # 89 "parser.mly"
-                      ( make_Arg_notif (make_Notif_var _3 _1) )
+                      ( make_Arg_notif (make_Notif_var _3 (String.uppercase _1)) )
 # 360 "../parser.ml"
                : argument))
 ; (fun __caml_parser_env ->
@@ -438,7 +438,7 @@ let yyact = [|
     let _1 = (Parsing.peek_val __caml_parser_env 0 : string) in
     Obj.repr(
 # 108 "parser.mly"
-           ( make_Constant_Variable _1 )
+           ( make_Constant_Variable (String.uppercase _1) )
 # 443 "../parser.ml"
                : term))
 ; (fun __caml_parser_env ->
@@ -446,7 +446,7 @@ let yyact = [|
     let _3 = (Parsing.peek_val __caml_parser_env 0 : string) in
     Obj.repr(
 # 109 "parser.mly"
-                       ( make_Field_ref _1 _3 )
+                       ( make_Field_ref (String.uppercase _1) (String.uppercase _3) )
 # 451 "../parser.ml"
                : term))
 ; (fun __caml_parser_env ->

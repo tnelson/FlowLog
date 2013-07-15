@@ -82,8 +82,8 @@ module Type_Helpers = struct
 
 	let clause_name (cls : Types.clause) : string = 
 		match cls with
-		| Types.PlusClause(name,_, _) -> name;
-		| Types.MinusClause(name, _, _) -> name;
+		| Types.PlusClause(name,_, _) -> "+" ^ name;
+		| Types.MinusClause(name, _, _) -> "-" ^ name;
 		| Types.HelperClause(name, _, _) -> name;
 		| Types.NotifClause(bb, _, _) -> blackbox_name bb;;
 
@@ -114,6 +114,13 @@ module Type_Helpers = struct
 		| Types.HelperRelation(_, _, body) -> body;
 		| Types.NotifRelation(_, _, body) -> body;;
 
+	let relation_name (rel : Types.relation) : string =
+		match rel with
+		| Types.PlusRelation(name, _, _) -> name;
+		| Types.MinusRelation(name, _, _) -> name;
+		| Types.HelperRelation(name, _, _) -> name;
+		| Types.NotifRelation(bb, _, _) -> blackbox_name bb;;
+
 end
 
 module Parsing = struct
@@ -121,40 +128,44 @@ module Parsing = struct
 	exception Parse_error of string;;
 
 	(* These functions process a newly parsed program and make all relations have the module come before it. *)
-	let process_notif_type_name (fn : string -> string) (nt : Syntax.notif_type) : Syntax.notif_type =
-		match nt with Syntax.Type(name, fields) -> Syntax.Type(fn name, fields);;
+	(*let process_notif_type_name (fn : string -> string) (nt : Syntax.notif_type) : Syntax.notif_type =
+		match nt with Syntax.Type(name, fields) -> Syntax.Type(fn name, fields);;*)
 
-	let process_notif_var_name (fn : string -> string) (nv : Syntax.notif_var) : Syntax.notif_var = 
-		match nv with Syntax.Notif_var(type_name, var_name) -> Syntax.Notif_var(fn type_name, var_name);;
+	(*let process_notif_var_name (fn : string -> string) (nv : Syntax.notif_var) : Syntax.notif_var = 
+		match nv with Syntax.Notif_var(type_name, var_name) -> Syntax.Notif_var(fn type_name, var_name);;*)
 
-	let process_atom_name (fn : string -> string) (a : Syntax.atom) : Syntax.atom = 
+	let process_atom_name (fn : string -> string) (clauses : Syntax.clause list) (a : Syntax.atom) : Syntax.atom = 
 		match a with
-		| Syntax.Apply(name, tl) -> Syntax.Apply(fn name, tl);
+		| Syntax.Apply(name, tl) -> (match List.filter (fun cls -> List.mem (Syntax.clause_name cls) [name; "+" ^ name; "-" ^ name]) clauses with
+			| [] -> a;
+			| cls :: _ -> (match cls with
+				| Syntax.NotifClause(_, _, _) -> a;
+				| _ -> Syntax.Apply(fn name, tl);););
 		| _ -> a;;
 
-	let process_literal_name (fn : string -> string) (lit : Syntax.literal) : Syntax.literal = 
+	let process_literal_name (fn : string -> string) (clauses : Syntax.clause list) (lit : Syntax.literal) : Syntax.literal = 
 		match lit with
-		| Syntax.Pos(a) -> Syntax.Pos(process_atom_name fn a);
-		| Syntax.Neg(a) -> Syntax.Neg(process_atom_name fn a);;
+		| Syntax.Pos(a) -> Syntax.Pos(process_atom_name fn clauses a);
+		| Syntax.Neg(a) -> Syntax.Neg(process_atom_name fn clauses a);;
 
-	let process_argument_name (fn : string -> string) (arg : Syntax.argument) : Syntax.argument =
+	(*let process_argument_name (fn : string -> string) (arg : Syntax.argument) : Syntax.argument =
 		match arg with
 		| Syntax.Arg_notif(nv) -> Syntax.Arg_notif(process_notif_var_name fn nv);
-		| _ -> arg;;
+		| _ -> arg;;*)
 
 	(* Notice that NotifClauses don't get their names changed. *)
-	let process_clause_name (fn : string -> string) (cls : Syntax.clause) : Syntax.clause = 
+	let process_clause_name (fn : string -> string) (clauses : Syntax.clause list) (cls : Syntax.clause) : Syntax.clause = 
 		match cls with 
-		|Syntax.PlusClause(name, args, body) -> Syntax.PlusClause(fn name, List.map (process_argument_name fn) args, List.map (process_literal_name fn) body);
-		|Syntax.MinusClause(name, args, body) -> Syntax.MinusClause(fn name, List.map (process_argument_name fn) args, List.map (process_literal_name fn) body);
-		|Syntax.HelperClause(name, args, body) -> Syntax.HelperClause(fn name, List.map (process_argument_name fn) args, List.map (process_literal_name fn) body);
-		|Syntax.NotifClause(name, args, body) -> Syntax.NotifClause(name, List.map (process_argument_name fn) args, List.map (process_literal_name fn) body);;
+		|Syntax.PlusClause(name, args, body) -> Syntax.PlusClause(fn name, (*List.map (process_argument_name fn)*) args, List.map (process_literal_name fn clauses) body);
+		|Syntax.MinusClause(name, args, body) -> Syntax.MinusClause(fn name, (*List.map (process_argument_name fn)*) args, List.map (process_literal_name fn clauses) body);
+		|Syntax.HelperClause(name, args, body) -> Syntax.HelperClause(fn name, (*List.map (process_argument_name fn)*) args, List.map (process_literal_name fn clauses) body);
+		|Syntax.NotifClause(name, args, body) -> Syntax.NotifClause(name, (*List.map (process_argument_name fn)*) args, List.map (process_literal_name fn clauses) body);;
 
 	let process_name (name : string) (str : string) : string =
 		if not (String.contains str '/') then str ^ "/" ^ name else str;;
 
 	let make_Program (name : string) (modules : string list) (blackboxes : Syntax.blackbox list) (ntypes : Syntax.notif_type list) (clauses : Syntax.clause list) : Syntax.program =
-		Syntax.Program(name, modules, blackboxes, List.map (process_notif_type_name (process_name name)) ntypes, List.map (process_clause_name (process_name name)) clauses)
+		Syntax.Program(name, modules, blackboxes, (*List.map (process_notif_type_name (process_name name))*) ntypes, List.map (process_clause_name (process_name name) clauses) clauses)
 
 	let rec remove_duplicates (l : 'a list) : 'a list =
 		match l with
@@ -200,8 +211,8 @@ module Parsing = struct
 		raise (Parse_error ("type names and type fields cannot start with +, -, or bb. This is violated in type " ^ name));;
 
 	let make_Plus_Minus_Clause (name : string) (args : Syntax.argument list) (body : Syntax.literal list) : Syntax.clause = 
-		if plus_name name then Syntax.PlusClause(name, args, body) else
-		if minus_name name then Syntax.MinusClause(name, args, body) else
+		if plus_name name then Syntax.PlusClause(String.sub name 1 (String.length name - 1), args, body) else
+		if minus_name name then Syntax.MinusClause(String.sub name 1 (String.length name - 1), args, body) else
 		raise (Parse_error ("if a clause's arguments starts with a notification variable then it must be a plus or minus clause. This is violated by clause " ^ name));;
 
 	let make_HelperClause (name : string) (args : Syntax.argument list) (body : Syntax.literal list) : Syntax.clause = 

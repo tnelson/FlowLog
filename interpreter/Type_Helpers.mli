@@ -39,6 +39,8 @@ module Type_Helpers : sig
 
 	val relation_body : Types.relation -> Types.clause list;;
 
+	val relation_name : Types.relation -> string;;
+
 end
 
 module Parsing : sig

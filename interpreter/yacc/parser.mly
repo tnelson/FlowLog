@@ -72,8 +72,8 @@
     TYPE NAME EQUALS LCURLY name_list RCURLY SEMICOLON { make_Type $2 $5 }
   ;
   name_list:
-      NAME { [$1] }
-    | NAME COMMA name_list { $1 :: $3 }
+      NAME { [String.uppercase $1] }
+    | NAME COMMA name_list { (String.uppercase $1) :: $3 }
   ;
   clause:
       NAME LPAREN notif_term_arg_list RPAREN COLON_HYPHEN literal_list SEMICOLON { make_Plus_Minus_Clause $1 $3 $6 }
@@ -86,7 +86,7 @@
     | notif_arg COMMA name_list { $1 :: List.map (fun str -> make_Arg_term (make_Variable str)) $3 }
   ;
   notif_arg:
-      NAME COLON NAME { make_Arg_notif (make_Notif_var $3 $1) }
+      NAME COLON NAME { make_Arg_notif (make_Notif_var $3 (String.uppercase $1)) }
   ;
   literal_list:
       literal { [$1] }
@@ -105,8 +105,8 @@
     | BOOLEAN { Bool($1) }
   ;
   term:
-      NAME { make_Constant_Variable $1 }
-    | NAME PERIOD NAME { make_Field_ref $1 $3 }
+      NAME { make_Constant_Variable (String.uppercase $1) }
+    | NAME PERIOD NAME { make_Field_ref (String.uppercase $1) (String.uppercase $3) }
   ;
   term_list:
       term { [$1] }

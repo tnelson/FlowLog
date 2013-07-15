@@ -3,6 +3,8 @@ open Printf;;
 open Flowlog_Types;;
 open Type_Helpers;;
 
+let debug = true;;
+
 module Xsb = struct
 	
 	(* creates a pair channels for talking to xsb, starts xsb, and returns the channels *)
@@ -152,12 +154,15 @@ module Communication = struct
 				| Types.Bool(_) -> acc;) body (List.fold_right add_unique_var (Type_Helpers.arguments_to_terms args) []);;
 
 	let start_clause (cls : Types.clause) : unit =
+		if debug then print_endline ("assert((" ^ (Type_Helpers.clause_to_string cls) ^ ")).");
 		let _ = send_message ("assert((" ^ (Type_Helpers.clause_to_string cls) ^ ")).") (List.length (get_vars cls)) in ();;
+		
 
 	let start_relation (rel : Types.relation) : unit =
 		List.iter start_clause (Type_Helpers.relation_body rel);;
 
 	let start_program (prgm : Types.program) : unit =
+		print_endline "starting program.";
 		match prgm with Types.Program(_, relations) ->
 		List.iter start_relation relations;;
 
