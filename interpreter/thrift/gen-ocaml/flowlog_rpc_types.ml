@@ -158,6 +158,20 @@ object (self)
   method unset_result = _result <- None
   method reset_result = _result <- None
 
+  val mutable _exception_code : string option = None
+  method get_exception_code = _exception_code
+  method grab_exception_code = match _exception_code with None->raise (Field_empty "queryReply.exception_code") | Some _x30 -> _x30
+  method set_exception_code _x30 = _exception_code <- Some _x30
+  method unset_exception_code = _exception_code <- None
+  method reset_exception_code = _exception_code <- None
+
+  val mutable _exception_message : string option = None
+  method get_exception_message = _exception_message
+  method grab_exception_message = match _exception_message with None->raise (Field_empty "queryReply.exception_message") | Some _x31 -> _x31
+  method set_exception_message _x31 = _exception_message <- Some _x31
+  method unset_exception_message = _exception_message <- None
+  method reset_exception_message = _exception_message <- None
+
   method copy =
       let _new = Oo.copy self in
       if _result <> None then
@@ -170,44 +184,62 @@ object (self)
     | Some _v -> 
       oprot#writeFieldBegin("result",Protocol.T_SET,1);
       oprot#writeSetBegin(Protocol.T_LIST,Hashtbl.length _v);
-      Hashtbl.iter (fun _iter32 -> fun _ ->         oprot#writeListBegin(Protocol.T_STRING,List.length _iter32);
-        List.iter (fun _iter33 ->           oprot#writeString(_iter33);
-        ) _iter32;
+      Hashtbl.iter (fun _iter34 -> fun _ ->         oprot#writeListBegin(Protocol.T_STRING,List.length _iter34);
+        List.iter (fun _iter35 ->           oprot#writeString(_iter35);
+        ) _iter34;
         oprot#writeListEnd;
       ) _v;
       oprot#writeSetEnd;
+      oprot#writeFieldEnd
+    );
+    (match _exception_code with None -> () | Some _v -> 
+      oprot#writeFieldBegin("exception_code",Protocol.T_STRING,2);
+      oprot#writeString(_v);
+      oprot#writeFieldEnd
+    );
+    (match _exception_message with None -> () | Some _v -> 
+      oprot#writeFieldBegin("exception_message",Protocol.T_STRING,3);
+      oprot#writeString(_v);
       oprot#writeFieldEnd
     );
     oprot#writeFieldStop;
     oprot#writeStructEnd
 end
 let rec read_queryReply (iprot : Protocol.t) =
-  let _str34 = new queryReply in
+  let _str36 = new queryReply in
     ignore(iprot#readStructBegin);
     (try while true do
-        let (_,_t35,_id36) = iprot#readFieldBegin in
-        if _t35 = Protocol.T_STOP then
+        let (_,_t37,_id38) = iprot#readFieldBegin in
+        if _t37 = Protocol.T_STOP then
           raise Break
         else ();
-        (match _id36 with 
-          | 1 -> (if _t35 = Protocol.T_SET then
-              _str34#set_result 
-                (let (_etype40,_size37) = iprot#readSetBegin in
-                let _con41 = Hashtbl.create _size37 in
-                  for i = 1 to _size37 do
-                    Hashtbl.add _con41 
-                      (let (_etype45,_size42) = iprot#readListBegin in
-                        let _con46 = (Array.to_list (Array.init _size42 (fun _ -> iprot#readString))) in
-                          iprot#readListEnd; _con46) true
-                  done; iprot#readSetEnd; _con41)
+        (match _id38 with 
+          | 1 -> (if _t37 = Protocol.T_SET then
+              _str36#set_result 
+                (let (_etype42,_size39) = iprot#readSetBegin in
+                let _con43 = Hashtbl.create _size39 in
+                  for i = 1 to _size39 do
+                    Hashtbl.add _con43 
+                      (let (_etype47,_size44) = iprot#readListBegin in
+                        let _con48 = (Array.to_list (Array.init _size44 (fun _ -> iprot#readString))) in
+                          iprot#readListEnd; _con48) true
+                  done; iprot#readSetEnd; _con43)
             else
-              iprot#skip _t35)
-          | _ -> iprot#skip _t35);
+              iprot#skip _t37)
+          | 2 -> (if _t37 = Protocol.T_STRING then
+              _str36#set_exception_code iprot#readString
+            else
+              iprot#skip _t37)
+          | 3 -> (if _t37 = Protocol.T_STRING then
+              _str36#set_exception_message iprot#readString
+            else
+              iprot#skip _t37)
+          | _ -> iprot#skip _t37);
         iprot#readFieldEnd;
       done; ()
     with Break -> ());
     iprot#readStructEnd;
-    _str34
+    _str36
 
 type fLValue = string
 
