@@ -26,12 +26,13 @@ let print_notif_values tbl =
   Hashtbl.iter (fun k v -> 
                 Printf.printf "%s -> %s\n%!" k v) tbl 
 
-let get_ntype_from_list ntypename thelist =
-  let filtered = (List.filter (fun ntype -> match ntype with Type(aname, _) -> ntypename = aname)
-                              thelist) in
-  if (List.length filtered) = 0 then
-    raise (Failure "Unknown notif type");
-  List.hd filtered
+let get_ntype_from_list (ntypename : string) (thelist : notif_type list) : notif_type =
+  let filtered = (List.filter (fun ntype -> (Type_Helpers.notif_type_to_string ntype) = ntypename)
+                              thelist) in  
+  if (List.length filtered) = 0 then     
+    raise (Failure "Unknown notif type")  
+  else
+    List.hd filtered
 
 
 module Flowlog_Thrift_In = struct
@@ -44,18 +45,20 @@ object (self)
   val the_program : program = a_program;
   val notif_types : notif_type list = the_notif_types;
 
-  method notifyMe notif = 
+  method notifyMe notif : unit = 
     let ntypestr = sod ((sod notif)#get_notificationType) in
     let values = sod ((sod notif)#get_values) in
     Printf.printf "received notification. type=%s\n%!" ntypestr;
-    print_notif_values values;
-    let ntype = get_ntype_from_list ntypestr notif_types in
-    match ntype with
-      Type(_, fieldnames) ->        
-      (* construct a list of terms from the hashtbl in values. use the type as an index *)
-      let theterms = (List.map (fun fieldname -> (Constant (Hashtbl.find values fieldname)))
-                               fieldnames) in     
-    Evaluation.respond_to_notification (Type_Helpers.terms_to_notif_val ntype theterms) the_program;
+    print_notif_values values;   
+    try           
+      let ntype = get_ntype_from_list ntypestr notif_types in    
+      match ntype with
+        Type(_, fieldnames) ->        
+        (* construct a list of terms from the hashtbl in values. use the type as an index *)      
+        let theterms = (List.map (fun fieldname -> (Constant (Hashtbl.find values fieldname)))
+                                 fieldnames) in             
+          Evaluation.respond_to_notification (Type_Helpers.terms_to_notif_val ntype theterms) the_program;      
+    with Failure(_) ->  Printf.printf "Unknown notification type. IGNORING! Type was: %s\n%!" ntypestr; 
 
 end
 
