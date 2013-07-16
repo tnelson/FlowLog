@@ -1116,7 +1116,7 @@ let
 # 1117 "../lexer.ml"
 = Lexing.sub_lexeme lexbuf lexbuf.Lexing.lex_start_pos lexbuf.Lexing.lex_curr_pos in
 # 27 "lexer.mll"
-                                              ( NAME(String.lowercase name) )
+                                              ( NAME(name) )
 # 1121 "../lexer.ml"
 
   | __ocaml_lex_state -> lexbuf.Lexing.refill_buff lexbuf; __ocaml_lex_token_rec lexbuf __ocaml_lex_state

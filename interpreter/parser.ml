@@ -262,21 +262,21 @@ let yyact = [|
     let _5 = (Parsing.peek_val __caml_parser_env 1 : string) in
     Obj.repr(
 # 66 "parser.mly"
-                                                         ( make_External_BB _2 _4 (int_of_string _5) )
+                                                         ( make_External_BB (String.lowercase _2) _4 (int_of_string _5) )
 # 267 "../parser.ml"
                : blackbox))
 ; (fun __caml_parser_env ->
     let _2 = (Parsing.peek_val __caml_parser_env 1 : string) in
     Obj.repr(
 # 67 "parser.mly"
-                              ( make_Internal_BB _2 )
+                              ( make_Internal_BB (String.lowercase _2) )
 # 274 "../parser.ml"
                : blackbox))
 ; (fun __caml_parser_env ->
     let _2 = (Parsing.peek_val __caml_parser_env 1 : string) in
     Obj.repr(
 # 70 "parser.mly"
-                        ( _2 )
+                        ( String.lowercase _2 )
 # 281 "../parser.ml"
                : string))
 ; (fun __caml_parser_env ->
@@ -284,7 +284,7 @@ let yyact = [|
     let _5 = (Parsing.peek_val __caml_parser_env 2 : string list) in
     Obj.repr(
 # 73 "parser.mly"
-                                                       ( make_Type _2 _5 )
+                                                       ( make_Type (String.lowercase _2) _5 )
 # 289 "../parser.ml"
                : notif_type))
 ; (fun __caml_parser_env ->
@@ -308,7 +308,7 @@ let yyact = [|
     let _6 = (Parsing.peek_val __caml_parser_env 1 : literal list) in
     Obj.repr(
 # 80 "parser.mly"
-                                                                                 ( make_Plus_Minus_Clause _1 _3 _6 )
+                                                                                 ( make_Plus_Minus_Clause (String.lowercase _1) _3 _6 )
 # 313 "../parser.ml"
                : clause))
 ; (fun __caml_parser_env ->
@@ -317,7 +317,7 @@ let yyact = [|
     let _6 = (Parsing.peek_val __caml_parser_env 1 : literal list) in
     Obj.repr(
 # 81 "parser.mly"
-                                                                       ( make_HelperClause _1 (List.map (fun str -> make_Arg_term(make_Variable(str))) _3) _6 )
+                                                                       ( make_HelperClause (String.lowercase _1) (List.map (fun str -> make_Arg_term(make_Variable(str))) _3) _6 )
 # 322 "../parser.ml"
                : clause))
 ; (fun __caml_parser_env ->
@@ -325,7 +325,7 @@ let yyact = [|
     let _5 = (Parsing.peek_val __caml_parser_env 1 : literal list) in
     Obj.repr(
 # 82 "parser.mly"
-                                                             ( make_HelperClause _1 [] _5 )
+                                                             ( make_HelperClause (String.lowercase _1) [] _5 )
 # 330 "../parser.ml"
                : clause))
 ; (fun __caml_parser_env ->
@@ -335,7 +335,7 @@ let yyact = [|
     let _8 = (Parsing.peek_val __caml_parser_env 1 : literal list) in
     Obj.repr(
 # 83 "parser.mly"
-                                                                                       ( make_NotifClause _1 [_3; _5] _8 )
+                                                                                       ( make_NotifClause (String.lowercase _1) [_3; _5] _8 )
 # 340 "../parser.ml"
                : clause))
 ; (fun __caml_parser_env ->
@@ -358,7 +358,7 @@ let yyact = [|
     let _3 = (Parsing.peek_val __caml_parser_env 0 : string) in
     Obj.repr(
 # 90 "parser.mly"
-                      ( make_Arg_notif (make_Notif_var _3 (String.uppercase _1)) )
+                      ( make_Arg_notif (make_Notif_var (String.lowercase _3) (String.uppercase _1)) )
 # 363 "../parser.ml"
                : argument))
 ; (fun __caml_parser_env ->
@@ -403,14 +403,14 @@ let yyact = [|
     let _3 = (Parsing.peek_val __caml_parser_env 1 : term list) in
     Obj.repr(
 # 102 "parser.mly"
-                                   ( make_Apply _1 _3 )
+                                   ( make_Apply (String.lowercase _1) _3 )
 # 408 "../parser.ml"
                : atom))
 ; (fun __caml_parser_env ->
     let _1 = (Parsing.peek_val __caml_parser_env 2 : string) in
     Obj.repr(
 # 103 "parser.mly"
-                         ( make_Apply _1 [] )
+                         ( make_Apply (String.lowercase _1) [] )
 # 415 "../parser.ml"
                : atom))
 ; (fun __caml_parser_env ->
@@ -419,7 +419,7 @@ let yyact = [|
     let _5 = (Parsing.peek_val __caml_parser_env 1 : term list) in
     Obj.repr(
 # 104 "parser.mly"
-                                               ( make_Apply_Query _1 _3 _5 )
+                                               ( make_Apply_Query (String.lowercase _1) _3 _5 )
 # 424 "../parser.ml"
                : atom))
 ; (fun __caml_parser_env ->
@@ -427,7 +427,7 @@ let yyact = [|
     let _3 = (Parsing.peek_val __caml_parser_env 2 : string) in
     Obj.repr(
 # 105 "parser.mly"
-                                     ( make_Apply_Query _1 _3 [] )
+                                     ( make_Apply_Query (String.lowercase _1) _3 [] )
 # 432 "../parser.ml"
                : atom))
 ; (fun __caml_parser_env ->
