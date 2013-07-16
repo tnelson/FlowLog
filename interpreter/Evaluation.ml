@@ -53,7 +53,7 @@ module Evaluation = struct
 
 	let respond_to_notification (notif : Types.notif_val) (prgm : Types.program) : unit =
 		if debug1 then print_endline ("incoming notif: " ^ Type_Helpers.notif_val_to_string notif);
-		match prgm with Types.Program(name, relations) ->
+		match prgm with Types.Program(name, _, relations) ->
 		match notif with Types.Notif_val(ntype, _) ->
 		if debug1 then print_endline "starting NotifRelations.";
 		let _ = List.iter (fun rel -> match rel with

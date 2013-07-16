@@ -82,7 +82,7 @@ module Types : sig
 		NotifRelation of blackbox * argument list * clause list;;
 
 	(* name, relations *)	
-	type program = Program of string * relation list;;
+	type program = Program of string * notif_type list * relation list;;
 
 	val packet_type : notif_type;;
 	val switch_port_type : notif_type;;

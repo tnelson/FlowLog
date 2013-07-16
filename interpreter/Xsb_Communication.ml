@@ -187,7 +187,7 @@ module Communication = struct
 
 	let start_program (prgm : Types.program) : unit =
 		print_endline "starting program.";
-		match prgm with Types.Program(_, relations) ->
+		match prgm with Types.Program(_, _, relations) ->
 		List.iter start_relation relations;;
 
 end

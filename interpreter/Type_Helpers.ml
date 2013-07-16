@@ -146,7 +146,7 @@ module Type_Helpers = struct
 		| h :: t -> drop t (n - 1);;
 
 	let helper_relation (prgm : Types.program) (rel : Types.relation) : Types.relation =
-		match prgm with Types.Program(_, relations) ->
+		match prgm with Types.Program(_, _, relations) ->
 		match rel with
 		| Types.HelperRelation(_, _, _) -> rel;
 		| Types.NotifRelation(_, _, _) -> raise (Failure "notif relations don't have associated helper relations");
@@ -426,7 +426,7 @@ module Conversion = struct
 		ans;;
 	
 	let program_convert (prgm : Syntax.program) : Types.program = 
-		match prgm with Syntax.Program(name, _, _, _, clauses) ->
-		Types.Program(name, make_relations (List.map (clause_convert prgm) clauses));;
+		match prgm with Syntax.Program(name, _, _, ntypes, clauses) ->
+		Types.Program(name, List.map notif_type_convert ntypes, make_relations (List.map (clause_convert prgm) clauses));;
 
 end
