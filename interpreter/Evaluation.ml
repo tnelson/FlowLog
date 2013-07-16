@@ -38,13 +38,15 @@ module Evaluation = struct
 			| [] -> raise (Failure "minus relations always have at least one argument.");
 			| _ :: tail ->
 			let to_retract = Communication.query_relation rel (arg_terms @ tail) in
-			List.iter (fun (tl : Types.term list) -> Communication.retract_relation rel tl) to_retract;);
+			let helper_rel = Type_Helpers.helper_relation prgm rel in
+			List.iter (fun (tl : Types.term list) -> Communication.retract_relation helper_rel tl) to_retract;);
 		| Types.PlusRelation(_, args, _) ->
 			(match args with
 			| [] -> raise (Failure "plus relations always have at least one argument.");
 			| _ :: tail ->
 			let to_assert = Communication.query_relation rel (arg_terms @ tail) in
-			List.iter (fun (tl : Types.term list) -> Communication.assert_relation rel tl) to_assert;);
+			let helper_rel = Type_Helpers.helper_relation prgm rel in
+			List.iter (fun (tl : Types.term list) -> Communication.assert_relation helper_rel tl) to_assert;);
 		| Types.HelperRelation(_, _, _) -> raise (Failure "helper relations cannot be fired.");;
 
 	let debug1 = false;;

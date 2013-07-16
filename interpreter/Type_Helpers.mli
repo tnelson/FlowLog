@@ -43,6 +43,8 @@ module Type_Helpers : sig
 
 	val relation_arguments : Types.relation -> Types.argument list;;
 
+	val helper_relation : Types.program -> Types.relation -> Types.relation;;
+
 end
 
 module Parsing : sig

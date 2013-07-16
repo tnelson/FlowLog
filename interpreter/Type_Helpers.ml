@@ -130,6 +130,28 @@ module Type_Helpers = struct
 		| Types.HelperRelation(_, args, _) -> args;
 		| Types.NotifRelation(_, args, _) -> args;;
 
+	let rec drop (l : 'a list) (n : int) : 'a list = 
+		if n <= 0 then l else
+		match l with
+		| [] -> [];
+		| h :: t -> drop t (n - 1);;
+
+	let helper_relation (prgm : Types.program) (rel : Types.relation) : Types.relation =
+		match prgm with Types.Program(_, relations) ->
+		match rel with
+		| Types.HelperRelation(_, _, _) -> rel;
+		| Types.NotifRelation(_, _, _) -> raise (Failure "notif relations don't have associated helper relations");
+		| Types.PlusRelation(name, args, _) -> (match List.filter (function 
+			| Types.HelperRelation(n, a, c) -> (name = n && a = drop args 1);
+			| _ -> false;) relations with
+				| [] -> raise (Failure ("plus relation " ^ (relation_name rel) ^ " does not have a helper relation."));
+				| h :: _ -> h;);
+		| Types.MinusRelation(name, args, _) -> (match List.filter (function 
+			| Types.HelperRelation(n, a, c) -> (name = n && a = drop args 1);
+			| _ -> false;) relations with
+				| [] -> raise (Failure ("minus relation " ^ (relation_name rel) ^ " does not have a helper relation."));
+				| h :: _ -> h;);;
+
 
 end
 
