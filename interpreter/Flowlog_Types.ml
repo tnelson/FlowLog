@@ -142,7 +142,7 @@ module Types = struct
 		(* name, args (only 2 and both are Arg_notif), body *)
 		NotifRelation of blackbox * argument list * clause list;;
 
-	(* name, relations *)	
+	(* name, types, relations *)	
 	type program = Program of string * notif_type list * relation list;;
 
 	let packet_type = Type("packet", ["LOCSW"; "LOCPT"; "DLSRC"; "DLDST"; "DLTYP"; "NWSRC"; "NWDST"; "NWPROTO"]);;
