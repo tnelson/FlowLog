@@ -5,6 +5,6 @@ module canary:
 
 type OxygenLow = {seconds};
 
-forward(pkt : packet, newpkt : packet) :- Mac_Learning.forward(pkt, newpkt), not(unconscious());
+forward(pkt : packet, newpkt : packet) :- Mac_Learning.forward(pkt, newpkt), not unconscious();
 
 +unconscious(ev : OxygenLow) :- true;
