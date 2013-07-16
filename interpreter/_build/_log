@@ -1,0 +1,7 @@
+### Starting build.
+# Target: Flowlog_Types.ml.depends, tags: { extension:ml, file:Flowlog_Types.ml, ocaml, ocamldep, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamldep -package packet -package openflow -package ox -package thrift -modules Flowlog_Types.ml > Flowlog_Types.ml.depends
++ ocamlfind ocamldep -package packet -package openflow -package ox -package thrift -modules Flowlog_Types.ml > Flowlog_Types.ml.depends
+ocamlfind: Package `packet' not found
+Command exited with code 2.
+# Compilation unsuccessful.
