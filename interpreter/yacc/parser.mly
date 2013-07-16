@@ -10,6 +10,7 @@
   %token BLACKBOX
   %token AMPERSAND
   %token <string> NUMBER
+  %token <string> DOTTED_IP
   %token MODULE
   %token COLON
   %token TYPE
@@ -62,7 +63,7 @@
       IMPORT NAME SEMICOLON { $2 }
   ;
   blackbox:
-      BLACKBOX NAME AMPERSAND NUMBER NUMBER SEMICOLON { make_External_BB $2 $4 (int_of_string $5) }
+      BLACKBOX NAME AMPERSAND DOTTED_IP NUMBER SEMICOLON { make_External_BB $2 $4 (int_of_string $5) }
     | BLACKBOX NAME SEMICOLON { make_Internal_BB $2 }
   ;
   module_decl:

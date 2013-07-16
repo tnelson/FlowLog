@@ -9,6 +9,7 @@ type token =
   | BLACKBOX
   | AMPERSAND
   | NUMBER of (string)
+  | DOTTED_IP of (string)
   | MODULE
   | COLON
   | TYPE
