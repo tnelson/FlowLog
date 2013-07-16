@@ -277,7 +277,7 @@ module Parsing = struct
 	let make_Apply (rel_name : string) (tl : Syntax.term list) : Syntax.atom = Syntax.Apply(rel_name, tl);;
 
 	let make_Apply_Query (name1 : string) (name2 : string) (tl : Syntax.term list) : Syntax.atom =
-		if bb_name name then Syntax.Query(name1, name2, tl) else
+		if bb_name name1 then Syntax.Query(name1, name2, tl) else
 		make_Apply (name2 ^ "/" ^ name1) tl;;
 
 	let make_Constant_Variable (str : string) : Syntax.term =
