@@ -150,7 +150,7 @@ module Communication = struct
 			"retract((" ^ name ^ "(" ^ args_string ^ "))).") in ();;
 
 	let assert_relation (rel : Types.relation) (args : Types.term list) : unit =
-		let _ = retract_relation rel args in
+		retract_relation rel args;
 		let _ = send_relation rel args (fun name args_string -> 
 			"assert((" ^ name ^ "(" ^ args_string ^ "))).") in ();;
 
