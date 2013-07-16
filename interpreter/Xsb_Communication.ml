@@ -40,7 +40,7 @@ module Xsb = struct
 
 	(* Prints the XSB listings currently asserted to stdout.
 	   This function is useful for confirming that XSB knows what we think it knows. *)
-	let debug_print_listings() =
+	let debug_print_listings () : unit =
 	    Printf.printf "---------------- PRINTING LISTINGS ----------------\n%!";
 		let out_ch, in_ch = get_ch () in
 		output_string out_ch ("listing.\n"); flush out_ch;
