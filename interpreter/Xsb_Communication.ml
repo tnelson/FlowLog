@@ -3,7 +3,7 @@ open Printf;;
 open Flowlog_Types;;
 open Type_Helpers;;
 
-let debug = false;;
+let debug = true;;
 
 module Xsb = struct
 	

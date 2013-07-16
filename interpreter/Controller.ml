@@ -8,7 +8,7 @@ open OpenFlow0x01_Core;;
 open OpenFlow0x01;;
 open Controller_Forwarding;;
 
-let debug = false;;
+let debug = true;;
 
 module type PROGRAM = sig
 	val program : Types.program;;

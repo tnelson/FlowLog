@@ -5,7 +5,7 @@ open OxPlatform;;
 open OpenFlow0x01_Core;;
 open OpenFlow0x01;;
 
-let debug = false;;
+let debug = true;;
 
 module Controller_Forwarding = struct
 

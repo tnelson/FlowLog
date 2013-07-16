@@ -4,7 +4,7 @@ open Xsb_Communication;;
 open Flowlog_Thrift_Out;;
 open Type_Helpers;;
 
-let debug = false;;
+let debug = true;;
 
 (* Provides functions for running a Flowlog program.
 ASSUMPTIONS: We assume that programs passed into functions in this module have

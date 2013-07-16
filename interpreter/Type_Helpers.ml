@@ -1,6 +1,6 @@
 open Flowlog_Types;;
 
-let debug = false;;
+let debug = true;;
 
 (* Provides printing functions and conversion functions both for pretty printing and communication with XSB. *)
 module Type_Helpers = struct
