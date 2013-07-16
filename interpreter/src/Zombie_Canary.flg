@@ -1,4 +1,4 @@
-// Should get all BBs and notifs declared in Canary.
+// Should get all BBs and notifs declared in Canary (and in Mac_Learning since Canary imports Mac_Learning)
 import Canary;
 
 module Zombie_Canary:
@@ -9,7 +9,7 @@ type timer_expired = {id};
 forward(pkt : packet, newpkt : packet) :- Canary.forward(pkt, newpkt);
 forward(pkt : packet, newpkt : packet) :- Mac_learning.forward(pkt, newpkt), risen();
 
-BBtimer(lo : low_oxygen, timer: timer_start) :- timer.seconds = lo.seconds, timer.id = "zombie_canary";
+BBtimer(lo : low_oxygen, timer : timer_start) :- timer.seconds = lo.seconds, timer.id = "zombie_canary";
 
 +risen(timer : timer_expired) :- timer.id = "zombie_canary";
 -risen(lo : low_oxygen) :- true;
