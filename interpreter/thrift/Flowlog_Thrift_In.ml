@@ -22,20 +22,36 @@ let sod = function
     Some v -> v
   | None -> raise Die;;
 
-let print_notif_values tbl = 
-  Hashtbl.iter (fun k v -> 
-                Printf.printf "%s -> %s\n%!" k v) tbl 
-
-let get_ntype_from_list (ntypename : string) (thelist : notif_type list) : notif_type =
-  let filtered = (List.filter (fun ntype -> (Type_Helpers.notif_type_to_string ntype) = ntypename)
-                              thelist) in  
-  if (List.length filtered) = 0 then     
-    raise (Failure "Unknown notif type")  
-  else
-    List.hd filtered
+let lowercase_notif_values tbl = 
+  Hashtbl.iter (fun k v ->                 
+                  (* newbie ocaml note: <> is structural inequality, != is physical *)
+                  if (String.lowercase k) <> k then 
+                  begin
+                    Hashtbl.add tbl (String.lowercase k) v;
+                    Hashtbl.remove tbl k;
+                    Printf.printf "Replacing %s key with lowercase: %s -> %s\n%!" k (String.lowercase k) v;
+                  end;
+                  Printf.printf "%s -> %s\n%!" k v) tbl;
+                
 
 
 module Flowlog_Thrift_In = struct
+
+  (* not to be confused with Types_Helper.notif_type_to_string *)
+  let notif_type_to_name (n : notif_type ) : string = 
+    match n with
+      Type(myname, _) -> myname
+
+  let get_ntype_from_list (ntypename : string) (notif_types : notif_type list) : notif_type =
+    let filtered = (List.filter (fun ntype -> (String.lowercase (notif_type_to_name ntype)) = 
+                                              (String.lowercase ntypename))
+                                notif_types) in          
+    if (List.length filtered) = 0 then      
+      raise (Failure ("Unknown notification type. Type was: "^ntypename^". Known types were: "^
+                        (String.concat "; " (List.map notif_type_to_name notif_types)))) 
+    else
+      List.hd filtered
+
    
 class fl_handler (a_program : program) (the_notif_types : notif_type list) =
 object (self)
@@ -44,21 +60,24 @@ object (self)
   (* Always created within a program context, with some set of notif types *)
   val the_program : program = a_program;
   val notif_types : notif_type list = the_notif_types;
-
+    
   method notifyMe notif : unit = 
     let ntypestr = sod ((sod notif)#get_notificationType) in
     let values = sod ((sod notif)#get_values) in
     Printf.printf "received notification. type=%s\n%!" ntypestr;
-    print_notif_values values;   
+    lowercase_notif_values values;  (* case insensitive field names *)
     try           
-      let ntype = get_ntype_from_list ntypestr notif_types in    
+      let ntype = get_ntype_from_list ntypestr notif_types in          
       match ntype with
-        Type(_, fieldnames) ->        
+        Type(_, fieldnames) ->                
         (* construct a list of terms from the hashtbl in values. use the type as an index *)      
-        let theterms = (List.map (fun fieldname -> (Constant (Hashtbl.find values fieldname)))
-                                 fieldnames) in             
+        let theterms = (List.map (fun fieldname -> 
+                          if (not (Hashtbl.mem values (String.lowercase fieldname))) then
+                            raise (Failure ("Field "^fieldname^" was not included in the notification of type: "^ntypestr));
+                            (Constant (Hashtbl.find values (String.lowercase fieldname))))
+                                 fieldnames) in                       
           Evaluation.respond_to_notification (Type_Helpers.terms_to_notif_val ntype theterms) the_program;      
-    with Failure(_) ->  Printf.printf "Unknown notification type. IGNORING! Type was: %s\n%!" ntypestr; 
+    with Failure(msg) ->  Printf.printf "   *** ERROR! Ignoring notification for reason: %s\n%!" msg;     
 
 end
 

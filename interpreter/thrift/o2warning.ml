@@ -36,7 +36,7 @@ let dobb () =
     let notif = new notification in
       notif#set_notificationType "low_oxygen";
       let tbl = (Hashtbl.create 3) in
-        Hashtbl.add tbl "time" arg1;
+        Hashtbl.add tbl "seconds" arg1;
         notif#set_values tbl;
         cli.fl#notifyMe notif;
     cli.trans#close;
