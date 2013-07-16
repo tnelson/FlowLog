@@ -36,17 +36,33 @@ module Type_Helpers = struct
 		| Types.Internal_BB(name) -> name;
 		| Types.External_BB(name, _, _) -> name;;
 
-	let atom_to_string (a : Types.atom) : string =
+	let clause_arguments (cls : Types.clause) : Types.argument list = 
+		match cls with
+		| Types.PlusClause(_, args, _) -> args;
+		| Types.MinusClause(_, args, _) -> args;
+		| Types.HelperClause(_, args, _) -> args;
+		| Types.NotifClause(_, args, _) -> args;;
+
+	let term_notif_to_string (cls : Types.clause) (t : Types.term) : string =
+		match t with
+		| Types.Variable(str) -> (match List.filter (fun arg -> match arg with
+			| Types.Arg_notif(Types.Notif_var(_, name)) -> name = str;
+			| _ -> false;) (clause_arguments cls) with
+				| Types.Arg_notif(nv) :: _ -> notif_var_to_string nv;
+				| _ -> term_to_string t;);
+		| _ -> term_to_string t;;
+
+	let atom_to_string (cls : Types.clause) (a : Types.atom) : string =
 		match a with
 		| Types.Equals(t1, t2) -> (term_to_string t1) ^ " = " ^ (term_to_string t2);
-		| Types.Apply(str, tl) -> str ^ "(" ^ (list_to_string term_to_string tl) ^ ")";
-		| Types.Query(bb, name, tl) -> (blackbox_name bb) ^ "_" ^ name ^ "(" ^ (list_to_string term_to_string tl) ^ ")";
+		| Types.Apply(str, tl) -> str ^ "(" ^ (list_to_string (term_notif_to_string cls) tl) ^ ")";
+		| Types.Query(bb, name, tl) -> (blackbox_name bb) ^ "_" ^ name ^ "(" ^ (list_to_string (term_notif_to_string cls) tl) ^ ")";
 		| Types.Bool(b) -> string_of_bool b;;
 
-	let literal_to_string (l : Types.literal) : string = 
+	let literal_to_string (cls : Types.clause)(l : Types.literal) : string = 
 		match l with
-		| Types.Pos(a) -> atom_to_string a;
-		| Types.Neg(a) -> "not(" ^ (atom_to_string a) ^ ")";;
+		| Types.Pos(a) -> atom_to_string cls a;
+		| Types.Neg(a) -> "not(" ^ (atom_to_string cls a) ^ ")";;
 	
 	let get_atom (lit : Types.literal) : Types.atom =
 		match lit with
@@ -89,13 +105,6 @@ module Type_Helpers = struct
 		| Types.HelperClause(name, _, _) -> name;
 		| Types.NotifClause(bb, _, _) -> blackbox_name bb;;
 
-	let clause_arguments (cls : Types.clause) : Types.argument list = 
-		match cls with
-		| Types.PlusClause(_, args, _) -> args;
-		| Types.MinusClause(_, args, _) -> args;
-		| Types.HelperClause(_, args, _) -> args;
-		| Types.NotifClause(_, args, _) -> args;;
-
 	let clause_body (cls : Types.clause) : Types.literal list = 
 		match cls with
 		| Types.PlusClause(_, _, body) -> body;
@@ -107,7 +116,7 @@ module Type_Helpers = struct
 		let name, args, body = (clause_name cls, clause_arguments cls, clause_body cls) in
 		if body = [] then name ^ "(" ^ (list_to_string argument_to_string args) ^ ") :- false"
 		else name ^ "(" ^ (list_to_string argument_to_string args) ^ ") :- " ^
-			(list_to_string literal_to_string body);;
+			(list_to_string (literal_to_string cls) body);;
 
 	let relation_body (rel : Types.relation) : Types.clause list =
 		match rel with

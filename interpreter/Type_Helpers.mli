@@ -17,9 +17,9 @@ module Type_Helpers : sig
 
 	val blackbox_name : Types.blackbox -> string;;
 
-	val atom_to_string : Types.atom -> string;;
+	val atom_to_string : Types.clause -> Types.atom -> string;;
 
-	val literal_to_string : Types.literal -> string;;
+	val literal_to_string : Types.clause -> Types.literal -> string;;
 
 	val get_atom : Types.literal -> Types.atom;;
 
