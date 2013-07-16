@@ -24,7 +24,8 @@ module Xsb = struct
 		| Some(out_ch) -> (match !ref_in_ch with
 			|Some(in_ch) -> (out_ch, in_ch);
 			| _ -> raise (Failure "ref_out_ch is some but ref_in_ch is none"););;
-		
+
+
 	let halt_xsb () : unit = 
 		let out_ch, _ = get_ch () in
 		output_string out_ch "halt.\n";
@@ -36,6 +37,25 @@ module Xsb = struct
 		if String.length str2 > String.length str1
 		then false
 		else (String.sub str1 ((String.length str1) - (String.length str2)) (String.length str2)) = str2;;
+
+	(* Prints the XSB listings currently asserted to stdout.
+	   This function is useful for confirming that XSB knows what we think it knows. *)
+	let debug_print_listings() =
+	    Printf.printf "---------------- PRINTING LISTINGS ----------------\n%!";
+		let out_ch, in_ch = get_ch () in
+		output_string out_ch ("listing.\n"); flush out_ch;
+
+		let next_str = ref (input_line in_ch) in
+		let results = ref [!next_str] in
+		  Printf.printf "starting to read... started with NEXT STR: %s \n%!" !next_str;
+		  while not (ends_with (String.trim !next_str) "yes") do
+			next_str := input_line in_ch;
+			Printf.printf "NEXT STR: %s\n%!" !next_str;
+			results := !next_str :: !results;
+		  done;
+		  Printf.printf "Result:\n%s\n%!" (String.concat "\n" (!results));
+		  Printf.printf "-------------------------------------------------\n%!";;
+
 
 	(* This takes in a string command (not query, this doesn't deal with the semicolons).
 	It writes the command to xsb and returns the resulting text. *)
