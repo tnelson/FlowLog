@@ -2,7 +2,8 @@
 open Parser;;       (* The type token is defined in parser.mli *)
 }
 rule token = parse
-    [' ' '\t' '\n' '\r'] { token lexbuf }
+    [' ' '\t' '\n' '\r'] { token lexbuf }    
+  | "//" [^ '\n']* { token lexbuf }
   | eof { EOF }
   | "import" { IMPORT }
   | '.' { PERIOD }

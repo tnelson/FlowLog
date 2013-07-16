@@ -1,4 +1,7 @@
-blackbox forward;
+
+// Testing comments
+
+blackbox forward; // comments here
 
 module mac_learning:
 
@@ -26,3 +29,5 @@ forward(pkt : packet, nwpkt : packet) :-
 switch_has_port(pkt.locSw, nwpkt.locPt),
 not learned(pkt.locSw, any, pkt.dlDst),
 not pkt.locPt = nwpkt.locPt;
+
+// end of file without newline?
