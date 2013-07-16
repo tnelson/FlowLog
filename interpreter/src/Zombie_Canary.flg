@@ -3,7 +3,7 @@ import Canary;
 
 type timer_expired = {id};
 
-module ZombieCanary:
+module Zombie_Canary:
 
 // Note: if we left Canary's 2 rules here, it'd work, but we'd be declaring
 // 2 separate state propositions: Canary.unconscious() and ZombieCanary.unconscious()
