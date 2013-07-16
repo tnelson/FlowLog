@@ -24,4 +24,4 @@ rule token = parse
   | "true" | "false" as boolean { BOOLEAN(boolean = "true") }
   | ['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9'] as dotted_ip { DOTTED_IP(dotted_ip)}
   | ['0'-'9']+ | '0''x'(['0'-'9']+) as number { NUMBER(number) }
-  | ['a'-'z''A'-'Z''_''+''-''0'-'9']+ as name { NAME(String.lowercase name) }
+  | ['a'-'z''A'-'Z''_''+''-''0'-'9']+ as name { NAME(name) }

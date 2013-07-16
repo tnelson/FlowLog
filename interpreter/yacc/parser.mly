@@ -63,31 +63,31 @@
       IMPORT NAME SEMICOLON { make_import $2 }
   ;
   blackbox:
-      BLACKBOX NAME AMPERSAND DOTTED_IP NUMBER SEMICOLON { make_External_BB $2 $4 (int_of_string $5) }
-    | BLACKBOX NAME SEMICOLON { make_Internal_BB $2 }
+      BLACKBOX NAME AMPERSAND DOTTED_IP NUMBER SEMICOLON { make_External_BB (String.lowercase $2) $4 (int_of_string $5) }
+    | BLACKBOX NAME SEMICOLON { make_Internal_BB (String.lowercase $2) }
   ;
   module_decl:
-      MODULE NAME COLON { $2 }
+      MODULE NAME COLON { String.lowercase $2 }
   ;
   type_decl:
-    TYPE NAME EQUALS LCURLY name_list RCURLY SEMICOLON { make_Type $2 $5 }
+    TYPE NAME EQUALS LCURLY name_list RCURLY SEMICOLON { make_Type (String.lowercase $2) $5 }
   ;
   name_list:
       NAME { [String.uppercase $1] }
     | NAME COMMA name_list { (String.uppercase $1) :: $3 }
   ;
   clause:
-      NAME LPAREN notif_term_arg_list RPAREN COLON_HYPHEN literal_list SEMICOLON { make_Plus_Minus_Clause $1 $3 $6 }
-    | NAME LPAREN name_list RPAREN COLON_HYPHEN literal_list SEMICOLON { make_HelperClause $1 (List.map (fun str -> make_Arg_term(make_Variable(str))) $3) $6 }
-    | NAME LPAREN RPAREN COLON_HYPHEN literal_list SEMICOLON { make_HelperClause $1 [] $5 }
-    | NAME LPAREN notif_arg COMMA notif_arg RPAREN COLON_HYPHEN literal_list SEMICOLON { make_NotifClause $1 [$3; $5] $8 }
+      NAME LPAREN notif_term_arg_list RPAREN COLON_HYPHEN literal_list SEMICOLON { make_Plus_Minus_Clause (String.lowercase $1) $3 $6 }
+    | NAME LPAREN name_list RPAREN COLON_HYPHEN literal_list SEMICOLON { make_HelperClause (String.lowercase $1) (List.map (fun str -> make_Arg_term(make_Variable(str))) $3) $6 }
+    | NAME LPAREN RPAREN COLON_HYPHEN literal_list SEMICOLON { make_HelperClause (String.lowercase $1) [] $5 }
+    | NAME LPAREN notif_arg COMMA notif_arg RPAREN COLON_HYPHEN literal_list SEMICOLON { make_NotifClause (String.lowercase $1) [$3; $5] $8 }
   ;
   notif_term_arg_list:
       notif_arg { [$1] }
     | notif_arg COMMA name_list { $1 :: List.map (fun str -> make_Arg_term (make_Variable str)) $3 }
   ;
   notif_arg:
-      NAME COLON NAME { make_Arg_notif (make_Notif_var $3 (String.uppercase $1)) }
+      NAME COLON NAME { make_Arg_notif (make_Notif_var (String.lowercase $3) (String.uppercase $1)) }
   ;
   literal_list:
       literal { [$1] }
@@ -99,10 +99,10 @@
   ;
   atom:
       term EQUALS term { Equals($1, $3) }
-    | NAME LPAREN term_list RPAREN { make_Apply $1 $3 }
-    | NAME LPAREN RPAREN { make_Apply $1 [] }
-    | NAME PERIOD NAME LPAREN term_list RPAREN { make_Apply_Query $1 $3 $5 }
-    | NAME PERIOD NAME LPAREN RPAREN { make_Apply_Query $1 $3 [] }
+    | NAME LPAREN term_list RPAREN { make_Apply (String.lowercase $1) $3 }
+    | NAME LPAREN RPAREN { make_Apply (String.lowercase $1) [] }
+    | NAME PERIOD NAME LPAREN term_list RPAREN { make_Apply_Query (String.lowercase $1) $3 $5 }
+    | NAME PERIOD NAME LPAREN RPAREN { make_Apply_Query (String.lowercase $1) $3 [] }
     | BOOLEAN { Bool($1) }
   ;
   term:
