@@ -52,7 +52,7 @@ let get_ntype_from_list ntypename thelist =
 
     Note: each query opens a separate, new connection to the black-box.
 *)
-let doBBquery bbdecl bbatom = 
+let doBBquery (bbdecl : blackbox) (bbatom : atom) = 
   match bbdecl with
     Internal_BB(_) -> raise (Failure "dobbquery passed internal BB.")
     | External_BB(_, bbip, bbport) -> 
@@ -89,7 +89,7 @@ let doBBquery bbdecl bbatom =
    Each notification opens a separate, new connection to the black-box.
 *)
 
-let doBBnotify bbdecl nvalue =
+let doBBnotify (bbdecl : blackbox) (nvalue : notif_val) =
   match bbdecl with
     Internal_BB(_) -> raise (Failure "dobbnotify passed internal BB.")
     | External_BB(_, bbip, bbport) -> 
