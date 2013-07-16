@@ -46,14 +46,11 @@ module Xsb = struct
 		output_string out_ch ("listing.\n"); flush out_ch;
 
 		let next_str = ref (input_line in_ch) in
-		let results = ref [!next_str] in
-		  Printf.printf "starting to read... started with NEXT STR: %s \n%!" !next_str;
+		  Printf.printf "%s\n%!" !next_str;
 		  while not (ends_with (String.trim !next_str) "yes") do
 			next_str := input_line in_ch;
-			Printf.printf "NEXT STR: %s\n%!" !next_str;
-			results := !next_str :: !results;
+			Printf.printf "%s\n%!" !next_str;
 		  done;
-		  Printf.printf "Result:\n%s\n%!" (String.concat "\n" (!results));
 		  Printf.printf "-------------------------------------------------\n%!";;
 
 
