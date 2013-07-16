@@ -71,8 +71,8 @@ module Syntax = struct
 
 	let clause_name (cls : clause) : string = 
 		match cls with
-		| PlusClause(name,_, _) -> name;
-		| MinusClause(name, _, _) -> name;
+		| PlusClause(name,_, _) -> "+" ^ name;
+		| MinusClause(name, _, _) -> "-" ^ name;
 		| HelperClause(name, _, _) -> name;
 		| NotifClause(name, _, _) -> name;;
 

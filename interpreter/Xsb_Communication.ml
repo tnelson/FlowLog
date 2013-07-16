@@ -121,7 +121,12 @@ module Communication = struct
 		send_message str (List.length vars);;
 
 	let query_relation (rel : Types.relation) (args : Types.argument list) : (Types.term list) list =
-		send_relation rel (Type_Helpers.arguments_to_terms args) (fun name args_string -> name ^ "(" ^ args_string ^ ").");;
+		if debug then print_endline ("query relation: " ^ (Type_Helpers.relation_name rel) ^ "(" ^ 
+			(Type_Helpers.list_to_string Type_Helpers.argument_to_string args) ^ ")");
+		let ans = send_relation rel (Type_Helpers.arguments_to_terms args) (fun name args_string -> name ^ "(" ^ args_string ^ ").") in
+		if debug then List.iter (fun tl -> print_endline (Type_Helpers.list_to_string Type_Helpers.term_to_string tl)) ans;
+		ans;;
+
 
 	let retract_relation (rel : Types.relation) (args : Types.term list) : unit =
 		let _ = send_relation rel args (fun name args_string -> 
@@ -159,7 +164,9 @@ module Communication = struct
 		
 
 	let start_relation (rel : Types.relation) : unit =
-		List.iter start_clause (Type_Helpers.relation_body rel);;
+		match Type_Helpers.relation_body rel with
+		| [] -> start_clause (Types.HelperClause(Type_Helpers.relation_name rel, Type_Helpers.relation_arguments rel, []));
+		| body -> List.iter start_clause body;;
 
 	let start_program (prgm : Types.program) : unit =
 		print_endline "starting program.";

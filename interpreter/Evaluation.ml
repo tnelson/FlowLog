@@ -47,31 +47,33 @@ module Evaluation = struct
 			List.iter (fun (tl : Types.term list) -> Communication.assert_relation rel tl) to_assert;);
 		| Types.HelperRelation(_, _, _) -> raise (Failure "helper relations cannot be fired.");;
 
+	let debug1 = false;;
+
 	let respond_to_notification (notif : Types.notif_val) (prgm : Types.program) : unit =
-		if debug then print_endline ("incoming notif: " ^ Type_Helpers.notif_val_to_string notif);
+		if debug1 then print_endline ("incoming notif: " ^ Type_Helpers.notif_val_to_string notif);
 		match prgm with Types.Program(name, relations) ->
 		match notif with Types.Notif_val(ntype, _) ->
-		if debug then print_endline "starting NotifRelations.";
+		if debug1 then print_endline "starting NotifRelations.";
 		let _ = List.iter (fun rel -> match rel with
 			| Types.NotifRelation(bb, args, _) -> (match args with
 				| [] -> raise (Failure "NotifRelations always have two arguments");
-				| Types.Arg_notif(Types.Notif_var(nt, _)) :: _ -> if debug then print_endline ((Type_Helpers.blackbox_name bb) ^ ": " ^ Type_Helpers.notif_type_to_string nt);
+				| Types.Arg_notif(Types.Notif_var(nt, _)) :: _ -> if debug1 then print_endline ((Type_Helpers.blackbox_name bb) ^ ": " ^ Type_Helpers.notif_type_to_string nt);
 					if nt = ntype then fire_relation prgm rel notif;
 				| _ -> raise (Failure "NotifRelations always have an Arg_notif as their first argument"););
 			| _ -> ();) relations in
-		if debug then print_endline "starting MinusRelations.";
+		if debug1 then print_endline "starting MinusRelations.";
 		let _ = List.iter (fun rel -> match rel with
 			| Types.MinusRelation(name, args, _) -> (match args with
 				| [] -> raise (Failure "MinusRelations always have at least two arguments");
-				| Types.Arg_notif(Types.Notif_var(nt, _)) :: _ -> if debug then print_endline ("-" ^ name ^ ": " ^ Type_Helpers.notif_type_to_string nt);
+				| Types.Arg_notif(Types.Notif_var(nt, _)) :: _ -> if debug1 then print_endline ("-" ^ name ^ ": " ^ Type_Helpers.notif_type_to_string nt);
 					if nt = ntype then fire_relation prgm rel notif;
 				| _ -> raise (Failure "MinusRelations always have an Arg_notif as their first argument"););
 			| _ -> ();) relations in
-		if debug then print_endline "starting PlusRelations.";
+		if debug1 then print_endline "starting PlusRelations.";
 		let _ = List.iter (fun rel -> match rel with
 			| Types.PlusRelation(name, args, _) -> (match args with
 				| [] -> raise (Failure "PlusRelations always have at least two arguments");
-				| Types.Arg_notif(Types.Notif_var(nt, _)) :: _ -> if debug then print_endline ("+" ^ name ^ ": " ^ Type_Helpers.notif_type_to_string nt);
+				| Types.Arg_notif(Types.Notif_var(nt, _)) :: _ -> if debug1 then print_endline ("+" ^ name ^ ": " ^ Type_Helpers.notif_type_to_string nt);
 					if nt = ntype then fire_relation prgm rel notif;
 				| _ -> raise (Failure "PlusRelations always have an Arg_notif as their first argument"););
 			| _ -> ();) relations in ();;

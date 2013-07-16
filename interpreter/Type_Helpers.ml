@@ -1,5 +1,7 @@
 open Flowlog_Types;;
 
+let debug = false;;
+
 (* Provides printing functions and conversion functions both for pretty printing and communication with XSB. *)
 module Type_Helpers = struct
 
@@ -116,10 +118,18 @@ module Type_Helpers = struct
 
 	let relation_name (rel : Types.relation) : string =
 		match rel with
-		| Types.PlusRelation(name, _, _) -> name;
-		| Types.MinusRelation(name, _, _) -> name;
+		| Types.PlusRelation(name, _, _) -> "+" ^ name;
+		| Types.MinusRelation(name, _, _) -> "-" ^ name;
 		| Types.HelperRelation(name, _, _) -> name;
 		| Types.NotifRelation(bb, _, _) -> blackbox_name bb;;
+
+	let relation_arguments (rel : Types.relation) : Types.argument list =
+		match rel with
+		| Types.PlusRelation(_, args, _) -> args;
+		| Types.MinusRelation(_, args, _) -> args;
+		| Types.HelperRelation(_, args, _) -> args;
+		| Types.NotifRelation(_, args, _) -> args;;
+
 
 end
 
@@ -330,7 +340,7 @@ module Conversion = struct
 		| Types.PlusClause(name, args, _) -> "plus " ^ name ^ " " ^ (Type_Helpers.list_to_string Type_Helpers.argument_to_string args);
 		| Types.MinusClause(name, args, _) -> "minus " ^ name ^ " " ^ (Type_Helpers.list_to_string Type_Helpers.argument_to_string args);
 		| Types.HelperClause(name, args, _) -> "helper " ^ name ^ " " ^ (Type_Helpers.list_to_string Type_Helpers.argument_to_string args);
-		| Types.NotifClause(bb, args, _) -> "notif" ^ (Type_Helpers.blackbox_name bb) ^ " " ^ (Type_Helpers.list_to_string Type_Helpers.argument_to_string args);;
+		| Types.NotifClause(bb, args, _) -> "notif " ^ (Type_Helpers.blackbox_name bb) ^ " " ^ (Type_Helpers.list_to_string Type_Helpers.argument_to_string args);;
 
 	let helper_relation_key (cls : Types.clause) : string =
 		match cls with
@@ -340,7 +350,8 @@ module Conversion = struct
 
 	let make_relations (clauses : Types.clause list) : Types.relation list =
 		let tbl = Hashtbl.create (List.length clauses) in
-		let _ = List.iter (fun cls -> match cls with
+		let _ = List.iter (fun cls -> if debug then print_endline (Type_Helpers.clause_to_string cls);
+		match cls with
 		| Types.PlusClause(name, args, _) ->
 			let key = clause_key cls in
 			let _ = try (match Hashtbl.find tbl key with 
@@ -351,10 +362,11 @@ module Conversion = struct
 			if not (Hashtbl.mem tbl helper_key) then Hashtbl.add tbl helper_key (Types.HelperRelation(name, drop args 1, []));
 		| Types.MinusClause(name, args, _) ->
 			let key = clause_key cls in
+			if debug then print_endline key;
 			let _ = try (match Hashtbl.find tbl key with 
 				| Types.MinusRelation(name, args, clauses) -> Hashtbl.replace tbl key (Types.MinusRelation(name, args, cls :: clauses));
 				| _ -> ();)
-			with Not_found -> Hashtbl.add tbl key (Types.PlusRelation(name, args, [cls])) in
+			with Not_found -> Hashtbl.add tbl key (Types.MinusRelation(name, args, [cls])) in
 			let helper_key = helper_relation_key cls in
 			if not (Hashtbl.mem tbl helper_key) then Hashtbl.add tbl helper_key (Types.HelperRelation(name, drop args 1, []));
 		| Types.HelperClause(name, args, _) ->
@@ -369,7 +381,14 @@ module Conversion = struct
 				| Types.NotifRelation(bb, args, clauses) -> Hashtbl.replace tbl key (Types.NotifRelation(bb, args, cls :: clauses));
 				| _ -> ();)
 			with Not_found -> Hashtbl.add tbl key (Types.NotifRelation(bb, args, [cls]));) clauses in
-		Hashtbl.fold (fun key_str rel acc -> rel :: acc) tbl [];;
+		let ans = Hashtbl.fold (fun key_str rel acc -> rel :: acc) tbl [] in
+		if debug then (print_endline "relations: ");
+		if debug then List.iter (fun rel -> print_endline (match rel with
+			| Types.PlusRelation(_, _, _) -> "plus " ^ (Type_Helpers.relation_name rel);
+			| Types.MinusRelation(_, _, _) -> "minus " ^ (Type_Helpers.relation_name rel);
+			| Types.HelperRelation(_, _, _) -> "helper " ^ (Type_Helpers.relation_name rel);
+			| Types.NotifRelation(_, _, _) -> "notif " ^ (Type_Helpers.relation_name rel);)) ans;
+		ans;;
 	
 	let program_convert (prgm : Syntax.program) : Types.program = 
 		match prgm with Syntax.Program(name, _, _, _, clauses) ->
