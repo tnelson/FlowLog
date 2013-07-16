@@ -60,7 +60,7 @@
     | clause bottom { match $2 with (types, clauses) -> (types, $1 :: clauses) }
   ;
   import:
-      IMPORT NAME SEMICOLON { $2 }
+      IMPORT NAME SEMICOLON { make_import $2 }
   ;
   blackbox:
       BLACKBOX NAME AMPERSAND DOTTED_IP NUMBER SEMICOLON { make_External_BB $2 $4 (int_of_string $5) }
@@ -101,8 +101,8 @@
       term EQUALS term { Equals($1, $3) }
     | NAME LPAREN term_list RPAREN { make_Apply $1 $3 }
     | NAME LPAREN RPAREN { make_Apply $1 [] }
-    | NAME PERIOD NAME LPAREN term_list RPAREN { make_Query $1 $3 $5 }
-    | NAME PERIOD NAME LPAREN RPAREN { make_Query $1 $3 [] }
+    | NAME PERIOD NAME LPAREN term_list RPAREN { make_Apply_Query $1 $3 $5 }
+    | NAME PERIOD NAME LPAREN RPAREN { make_Apply_Query $1 $3 [] }
     | BOOLEAN { Bool($1) }
   ;
   term:

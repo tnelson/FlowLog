@@ -55,6 +55,8 @@ module Parsing : sig
 
 	val import : Syntax.program -> Syntax.program list -> Syntax.program;;
 
+	val make_import : string -> string;;
+
 	val make_External_BB : string -> string -> int -> Syntax.blackbox;;
 
 	val make_Internal_BB : string -> Syntax.blackbox;;
@@ -77,7 +79,7 @@ module Parsing : sig
 
 	val make_Apply : string -> Syntax.term list -> Syntax.atom;;
 
-	val make_Query : string -> string -> Syntax.term list -> Syntax.atom;;
+	val make_Apply_Query : string -> string -> Syntax.term list -> Syntax.atom;;
 
 	val make_Constant_Variable : string -> Syntax.term;;
 

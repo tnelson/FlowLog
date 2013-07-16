@@ -229,6 +229,10 @@ module Parsing = struct
 
 	let normal_name (name : string) : bool = not (plus_name name || minus_name name || bb_name name);;
 
+	let make_import (name : string) : string =
+		if normal_name name then name else
+		raise (Parse_error ("module names cannot start with +, -, or bb. This is violated by import " ^ name));;
+
 	let make_External_BB (name : string) (ip : string) (port : int) : Syntax.blackbox =
 		if bb_name name then Syntax.External_BB(name, ip, port) else
 		raise (Parse_error ("external blackbox name " ^ name ^ " does not start with BB."));;
@@ -272,9 +276,9 @@ module Parsing = struct
 
 	let make_Apply (rel_name : string) (tl : Syntax.term list) : Syntax.atom = Syntax.Apply(rel_name, tl);;
 
-	let make_Query (bbname : string) (field_name : string) (tl : Syntax.term list) : Syntax.atom =
-		if bb_name bbname then Syntax.Query(bbname, field_name, tl) else
-		raise (Parse_error ("queries must be to external blackboxes, whose names begin with BB. This is violated by blackbox " ^ bbname));;
+	let make_Apply_Query (name1 : string) (name2 : string) (tl : Syntax.term list) : Syntax.atom =
+		if bb_name name then Syntax.Query(name1, name2, tl) else
+		make_Apply (name2 ^ "/" ^ name1) tl;;
 
 	let make_Constant_Variable (str : string) : Syntax.term =
 		try let _ = int_of_string str in Syntax.Constant(str) with exn -> Syntax.Variable(str);;
