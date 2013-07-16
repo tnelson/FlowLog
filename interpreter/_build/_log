@@ -1,0 +1,96 @@
+### Starting build.
+# Target: Run_Flowlog.ml.depends, tags: { extension:ml, file:Run_Flowlog.ml, ocaml, ocamldep, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamldep -package packet -package openflow -package ox -package thrift -modules Run_Flowlog.ml > Run_Flowlog.ml.depends # cached
+# Target: Controller.mli.depends, tags: { extension:mli, file:Controller.mli, ocaml, ocamldep, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamldep -package packet -package openflow -package ox -package thrift -modules Controller.mli > Controller.mli.depends # cached
+# Target: Flowlog_Types.mli.depends, tags: { extension:mli, file:Flowlog_Types.mli, ocaml, ocamldep, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamldep -package packet -package openflow -package ox -package thrift -modules Flowlog_Types.mli > Flowlog_Types.mli.depends # cached
+# Target: Flowlog_Types.cmi, tags: { byte, compile, extension:mli, file:Flowlog_Types.mli, interf, ocaml, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamlc -c -ppopt -lwt-debug -thread -package packet -package openflow -package ox -package thrift -I thrift -I thrift/gen-ocaml -o Flowlog_Types.cmi Flowlog_Types.mli # cached
+# Target: Controller.cmi, tags: { byte, compile, extension:mli, file:Controller.mli, interf, ocaml, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamlc -c -ppopt -lwt-debug -thread -package packet -package openflow -package ox -package thrift -I thrift -I thrift/gen-ocaml -o Controller.cmi Controller.mli # cached
+# Target: lexer.ml.depends, tags: { extension:ml, file:lexer.ml, ocaml, ocamldep, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamldep -package packet -package openflow -package ox -package thrift -modules lexer.ml > lexer.ml.depends # cached
+# Target: parser.mli.depends, tags: { extension:mli, file:parser.mli, ocaml, ocamldep, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamldep -package packet -package openflow -package ox -package thrift -modules parser.mli > parser.mli.depends # cached
+# Target: Type_Helpers.mli.depends, tags: { extension:mli, file:Type_Helpers.mli, ocaml, ocamldep, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamldep -package packet -package openflow -package ox -package thrift -modules Type_Helpers.mli > Type_Helpers.mli.depends # cached
+# Target: Type_Helpers.cmi, tags: { byte, compile, extension:mli, file:Type_Helpers.mli, interf, ocaml, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamlc -c -ppopt -lwt-debug -thread -package packet -package openflow -package ox -package thrift -I thrift -I thrift/gen-ocaml -o Type_Helpers.cmi Type_Helpers.mli # cached
+# Target: parser.cmi, tags: { byte, compile, extension:mli, file:parser.mli, interf, ocaml, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamlc -c -ppopt -lwt-debug -thread -package packet -package openflow -package ox -package thrift -I thrift -I thrift/gen-ocaml -o parser.cmi parser.mli # cached
+# Target: lexer.cmo, tags: { byte, compile, extension:cmo, extension:ml, file:lexer.cmo, file:lexer.ml, implem, ocaml, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamlc -c -ppopt -lwt-debug -thread -package packet -package openflow -package ox -package thrift -I thrift -I thrift/gen-ocaml -o lexer.cmo lexer.ml # cached
+# Target: Run_Flowlog.cmo, tags: { byte, compile, extension:cmo, extension:ml, file:Run_Flowlog.cmo, file:Run_Flowlog.ml, implem, ocaml, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamlc -c -ppopt -lwt-debug -thread -package packet -package openflow -package ox -package thrift -I thrift -I thrift/gen-ocaml -o Run_Flowlog.cmo Run_Flowlog.ml # cached
+# Target: Run_Flowlog.d.cmo, tags: { byte, compile, debug, extension:cmo, extension:ml, file:Run_Flowlog.d.cmo, file:Run_Flowlog.ml, implem, ocaml, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamlc -c -ppopt -lwt-debug -g -thread -package packet -package openflow -package ox -package thrift -I thrift -I thrift/gen-ocaml -o Run_Flowlog.d.cmo Run_Flowlog.ml # cached
+# Target: Controller.ml.depends, tags: { extension:ml, file:Controller.ml, ocaml, ocamldep, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamldep -package packet -package openflow -package ox -package thrift -modules Controller.ml > Controller.ml.depends
+# Target: Controller_Forwarding.mli.depends, tags: { extension:mli, file:Controller_Forwarding.mli, ocaml, ocamldep, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamldep -package packet -package openflow -package ox -package thrift -modules Controller_Forwarding.mli > Controller_Forwarding.mli.depends # cached
+# Target: Controller_Forwarding.cmi, tags: { byte, compile, extension:mli, file:Controller_Forwarding.mli, interf, ocaml, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamlc -c -ppopt -lwt-debug -thread -package packet -package openflow -package ox -package thrift -I thrift -I thrift/gen-ocaml -o Controller_Forwarding.cmi Controller_Forwarding.mli # cached
+# Target: Evaluation.mli.depends, tags: { extension:mli, file:Evaluation.mli, ocaml, ocamldep, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamldep -package packet -package openflow -package ox -package thrift -modules Evaluation.mli > Evaluation.mli.depends # cached
+# Target: Evaluation.cmi, tags: { byte, compile, extension:mli, file:Evaluation.mli, interf, ocaml, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamlc -c -ppopt -lwt-debug -thread -package packet -package openflow -package ox -package thrift -I thrift -I thrift/gen-ocaml -o Evaluation.cmi Evaluation.mli # cached
+# Target: Xsb_Communication.mli.depends, tags: { extension:mli, file:Xsb_Communication.mli, ocaml, ocamldep, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamldep -package packet -package openflow -package ox -package thrift -modules Xsb_Communication.mli > Xsb_Communication.mli.depends # cached
+# Target: Xsb_Communication.cmi, tags: { byte, compile, extension:mli, file:Xsb_Communication.mli, interf, ocaml, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamlc -c -ppopt -lwt-debug -thread -package packet -package openflow -package ox -package thrift -I thrift -I thrift/gen-ocaml -o Xsb_Communication.cmi Xsb_Communication.mli # cached
+# Target: lexer.d.cmo, tags: { byte, compile, debug, extension:cmo, extension:ml, file:lexer.d.cmo, file:lexer.ml, implem, ocaml, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamlc -c -ppopt -lwt-debug -g -thread -package packet -package openflow -package ox -package thrift -I thrift -I thrift/gen-ocaml -o lexer.d.cmo lexer.ml # cached
+# Target: parser.ml.depends, tags: { extension:ml, file:parser.ml, ocaml, ocamldep, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamldep -package packet -package openflow -package ox -package thrift -modules parser.ml > parser.ml.depends # cached
+# Target: parser.d.cmo, tags: { byte, compile, debug, extension:cmo, extension:ml, file:parser.d.cmo, file:parser.ml, implem, ocaml, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamlc -c -ppopt -lwt-debug -g -thread -package packet -package openflow -package ox -package thrift -I thrift -I thrift/gen-ocaml -o parser.d.cmo parser.ml # cached
+# Target: Type_Helpers.ml.depends, tags: { extension:ml, file:Type_Helpers.ml, ocaml, ocamldep, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamldep -package packet -package openflow -package ox -package thrift -modules Type_Helpers.ml > Type_Helpers.ml.depends # cached
+# Target: Type_Helpers.d.cmo, tags: { byte, compile, debug, extension:cmo, extension:ml, file:Type_Helpers.d.cmo, file:Type_Helpers.ml, implem, ocaml, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamlc -c -ppopt -lwt-debug -g -thread -package packet -package openflow -package ox -package thrift -I thrift -I thrift/gen-ocaml -o Type_Helpers.d.cmo Type_Helpers.ml # cached
+# Target: Controller.d.cmo, tags: { byte, compile, debug, extension:cmo, extension:ml, file:Controller.d.cmo, file:Controller.ml, implem, ocaml, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamlc -c -ppopt -lwt-debug -g -thread -package packet -package openflow -package ox -package thrift -I thrift -I thrift/gen-ocaml -o Controller.d.cmo Controller.ml
+# Target: Controller_Forwarding.ml.depends, tags: { extension:ml, file:Controller_Forwarding.ml, ocaml, ocamldep, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamldep -package packet -package openflow -package ox -package thrift -modules Controller_Forwarding.ml > Controller_Forwarding.ml.depends # cached
+# Target: Controller_Forwarding.d.cmo, tags: { byte, compile, debug, extension:cmo, extension:ml, file:Controller_Forwarding.d.cmo, file:Controller_Forwarding.ml, implem, ocaml, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamlc -c -ppopt -lwt-debug -g -thread -package packet -package openflow -package ox -package thrift -I thrift -I thrift/gen-ocaml -o Controller_Forwarding.d.cmo Controller_Forwarding.ml # cached
+# Target: Evaluation.ml.depends, tags: { extension:ml, file:Evaluation.ml, ocaml, ocamldep, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamldep -package packet -package openflow -package ox -package thrift -modules Evaluation.ml > Evaluation.ml.depends # cached
+# Target: thrift/Flowlog_Thrift_Out.mli.depends, tags: { extension:mli, file:thrift/Flowlog_Thrift_Out.mli, ocaml, ocamldep, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamldep -package packet -package openflow -package ox -package thrift -modules thrift/Flowlog_Thrift_Out.mli > thrift/Flowlog_Thrift_Out.mli.depends # cached
+# Target: thrift/gen-ocaml/flowlog_rpc_types.mli.depends, tags: { extension:mli, file:thrift/gen-ocaml/flowlog_rpc_types.mli, ocaml, ocamldep, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamldep -package packet -package openflow -package ox -package thrift -modules thrift/gen-ocaml/flowlog_rpc_types.mli > thrift/gen-ocaml/flowlog_rpc_types.mli.depends # cached
+# Target: thrift/gen-ocaml/flowlog_rpc_types.cmi, tags: { byte, compile, extension:mli, file:thrift/gen-ocaml/flowlog_rpc_types.mli, interf, ocaml, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamlc -c -ppopt -lwt-debug -thread -package packet -package openflow -package ox -package thrift -I thrift/gen-ocaml -I thrift -o thrift/gen-ocaml/flowlog_rpc_types.cmi thrift/gen-ocaml/flowlog_rpc_types.mli # cached
+# Target: thrift/Flowlog_Thrift_Out.cmi, tags: { byte, compile, extension:mli, file:thrift/Flowlog_Thrift_Out.mli, interf, ocaml, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamlc -c -ppopt -lwt-debug -thread -package packet -package openflow -package ox -package thrift -I thrift -I thrift/gen-ocaml -o thrift/Flowlog_Thrift_Out.cmi thrift/Flowlog_Thrift_Out.mli # cached
+# Target: Evaluation.d.cmo, tags: { byte, compile, debug, extension:cmo, extension:ml, file:Evaluation.d.cmo, file:Evaluation.ml, implem, ocaml, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamlc -c -ppopt -lwt-debug -g -thread -package packet -package openflow -package ox -package thrift -I thrift -I thrift/gen-ocaml -o Evaluation.d.cmo Evaluation.ml # cached
+# Target: Flowlog_Types.ml.depends, tags: { extension:ml, file:Flowlog_Types.ml, ocaml, ocamldep, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamldep -package packet -package openflow -package ox -package thrift -modules Flowlog_Types.ml > Flowlog_Types.ml.depends # cached
+# Target: Flowlog_Types.d.cmo, tags: { byte, compile, debug, extension:cmo, extension:ml, file:Flowlog_Types.d.cmo, file:Flowlog_Types.ml, implem, ocaml, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamlc -c -ppopt -lwt-debug -g -thread -package packet -package openflow -package ox -package thrift -I thrift -I thrift/gen-ocaml -o Flowlog_Types.d.cmo Flowlog_Types.ml # cached
+# Target: Xsb_Communication.ml.depends, tags: { extension:ml, file:Xsb_Communication.ml, ocaml, ocamldep, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamldep -package packet -package openflow -package ox -package thrift -modules Xsb_Communication.ml > Xsb_Communication.ml.depends # cached
+# Target: Xsb_Communication.d.cmo, tags: { byte, compile, debug, extension:cmo, extension:ml, file:Xsb_Communication.d.cmo, file:Xsb_Communication.ml, implem, ocaml, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamlc -c -ppopt -lwt-debug -g -thread -package packet -package openflow -package ox -package thrift -I thrift -I thrift/gen-ocaml -o Xsb_Communication.d.cmo Xsb_Communication.ml # cached
+# Target: thrift/Flowlog_Thrift_Out.ml.depends, tags: { extension:ml, file:thrift/Flowlog_Thrift_Out.ml, ocaml, ocamldep, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamldep -package packet -package openflow -package ox -package thrift -modules thrift/Flowlog_Thrift_Out.ml > thrift/Flowlog_Thrift_Out.ml.depends # cached
+# Target: thrift/gen-ocaml/BlackBox.mli.depends, tags: { extension:mli, file:thrift/gen-ocaml/BlackBox.mli, ocaml, ocamldep, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamldep -package packet -package openflow -package ox -package thrift -modules thrift/gen-ocaml/BlackBox.mli > thrift/gen-ocaml/BlackBox.mli.depends # cached
+# Target: thrift/gen-ocaml/BlackBox.cmi, tags: { byte, compile, extension:mli, file:thrift/gen-ocaml/BlackBox.mli, interf, ocaml, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamlc -c -ppopt -lwt-debug -thread -package packet -package openflow -package ox -package thrift -I thrift/gen-ocaml -I thrift -o thrift/gen-ocaml/BlackBox.cmi thrift/gen-ocaml/BlackBox.mli # cached
+# Target: thrift/Flowlog_Thrift_Out.d.cmo, tags: { byte, compile, debug, extension:cmo, extension:ml, file:thrift/Flowlog_Thrift_Out.d.cmo, file:thrift/Flowlog_Thrift_Out.ml, implem, ocaml, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamlc -c -ppopt -lwt-debug -g -thread -package packet -package openflow -package ox -package thrift -I thrift -I thrift/gen-ocaml -o thrift/Flowlog_Thrift_Out.d.cmo thrift/Flowlog_Thrift_Out.ml # cached
+# Target: thrift/gen-ocaml/BlackBox.ml.depends, tags: { extension:ml, file:thrift/gen-ocaml/BlackBox.ml, ocaml, ocamldep, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamldep -package packet -package openflow -package ox -package thrift -modules thrift/gen-ocaml/BlackBox.ml > thrift/gen-ocaml/BlackBox.ml.depends # cached
+# Target: thrift/gen-ocaml/BlackBox.d.cmo, tags: { byte, compile, debug, extension:cmo, extension:ml, file:thrift/gen-ocaml/BlackBox.d.cmo, file:thrift/gen-ocaml/BlackBox.ml, implem, ocaml, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamlc -c -ppopt -lwt-debug -g -thread -package packet -package openflow -package ox -package thrift -I thrift/gen-ocaml -I thrift -o thrift/gen-ocaml/BlackBox.d.cmo thrift/gen-ocaml/BlackBox.ml # cached
+# Target: thrift/gen-ocaml/flowlog_rpc_types.ml.depends, tags: { extension:ml, file:thrift/gen-ocaml/flowlog_rpc_types.ml, ocaml, ocamldep, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamldep -package packet -package openflow -package ox -package thrift -modules thrift/gen-ocaml/flowlog_rpc_types.ml > thrift/gen-ocaml/flowlog_rpc_types.ml.depends # cached
+# Target: thrift/gen-ocaml/flowlog_rpc_types.d.cmo, tags: { byte, compile, debug, extension:cmo, extension:ml, file:thrift/gen-ocaml/flowlog_rpc_types.d.cmo, file:thrift/gen-ocaml/flowlog_rpc_types.ml, implem, ocaml, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamlc -c -ppopt -lwt-debug -g -thread -package packet -package openflow -package ox -package thrift -I thrift/gen-ocaml -I thrift -o thrift/gen-ocaml/flowlog_rpc_types.d.cmo thrift/gen-ocaml/flowlog_rpc_types.ml # cached
+# Target: Run_Flowlog.d.byte, tags: { byte, debug, dont_link_with, extension:byte, file:Run_Flowlog.d.byte, link, ocaml, package(openflow), package(ox), package(packet), package(thrift), program, quiet, thread, traverse }
+ocamlfind ocamlc -linkpkg -g -thread -package packet -package openflow -package ox -package thrift Flowlog_Types.d.cmo Type_Helpers.d.cmo Controller_Forwarding.d.cmo Xsb_Communication.d.cmo thrift/gen-ocaml/flowlog_rpc_types.d.cmo thrift/gen-ocaml/BlackBox.d.cmo thrift/Flowlog_Thrift_Out.d.cmo Evaluation.d.cmo Controller.d.cmo parser.d.cmo lexer.d.cmo Run_Flowlog.d.cmo -o Run_Flowlog.d.byte
+# Compilation successful.
