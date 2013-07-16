@@ -135,14 +135,14 @@ module Communication = struct
 		| Types.MinusRelation(name, _, _) -> process ("-" ^ name) args_string;
 		| Types.HelperRelation(name, _, _) -> process name args_string;
 		| Types.NotifRelation(bb, _, _) -> process (Type_Helpers.blackbox_name bb) args_string;) in
-		if debug then print_endline str;
+		if debug then print_endline ("sending: "^str);
 		send_message str (List.length vars);;
 
 	let query_relation (rel : Types.relation) (args : Types.argument list) : (Types.term list) list =
 		if debug then print_endline ("query relation: " ^ (Type_Helpers.relation_name rel) ^ "(" ^ 
 			(Type_Helpers.list_to_string Type_Helpers.argument_to_string args) ^ ")");
 		let ans = send_relation rel (Type_Helpers.arguments_to_terms args) (fun name args_string -> name ^ "(" ^ args_string ^ ").") in
-		if debug then List.iter (fun tl -> print_endline (Type_Helpers.list_to_string Type_Helpers.term_to_string tl)) ans;
+		if debug then List.iter (fun tl -> Printf.printf "query answer: %s\n%!" (Type_Helpers.list_to_string Type_Helpers.term_to_string tl)) ans;
 		ans;;
 
 	let retract_relation (rel : Types.relation) (args : Types.term list) : unit =
