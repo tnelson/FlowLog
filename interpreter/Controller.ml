@@ -7,6 +7,7 @@ open OxPlatform;;
 open OpenFlow0x01_Core;;
 open OpenFlow0x01;;
 open Controller_Forwarding;;
+open Flowlog_Thrift_In;;
 
 let debug = true;;
 
@@ -19,6 +20,8 @@ module Make_OxModule (Program : PROGRAM) = struct
 	include OxStart.DefaultTutorialHandlers;;	
 	
 	Communication.start_program Program.program;;
+   
+    Flowlog_Thrift_In.start_listening(Program.program);;
 
 	let switch_connected (sw : switchId) (feats : OpenFlow0x01.SwitchFeatures.t) : unit =
 	    Printf.printf "Switch %Ld connected.\n%!" sw;

@@ -74,7 +74,9 @@ let connect ~host port =
     { trans = tx ; proto = proto; bb = bb}
 ;;
 
-let start_listening (a_program : program) (the_notif_types : notif_type list) : unit =
+let start_listening (a_program : program) : unit =
+  match a_program with
+    Program(_, the_notif_types,_) -> 
   let h = new fl_handler a_program the_notif_types in
   let proc = new FlowLogInterpreter.processor h in
   let port = 9090 in (* FL listen on 9090 *)

@@ -7,5 +7,5 @@ open Type_Helpers
 
 
 module Flowlog_Thrift_In : sig
-        val start_listening : program -> notif_type list -> unit;;
+        val start_listening : program -> unit;;
 end

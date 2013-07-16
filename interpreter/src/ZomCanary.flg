@@ -1,0 +1,22 @@
+// Should get all BBs and notifs declared in Canary.
+import Canary;
+
+type timer_expired = {id};
+
+module ZombieCanary:
+
+// Note: if we left Canary's 2 rules here, it'd work, but we'd be declaring
+// 2 separate state propositions: Canary.unconscious() and ZombieCanary.unconscious()
+
+forward(pkt : packet, newpkt : packet) :- Canary.forward(pkt, newpkt);
+
+// cannot do this at the moment:
+// -Canary.Unconscious(timer: timer_expired)
+// Instead:
+
++risen(timer: timer_expired) :- timer.id = "zombie_canary";
+// Test: output event, fields with string values.
+Timer(ev : OxygenLow, timer: timer_start) :- timer.seconds = 10, timer.id = "zombie_canary";
+
+// This is necessary to cover the zombie case.
+forward(pkt : packet, newpkt : packet) :- Mac_learning.forward(pkt, newpkt), risen();
