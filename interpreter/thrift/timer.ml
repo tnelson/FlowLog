@@ -100,14 +100,21 @@ object (self)
       (* Can't use Sys.time because that's proc. seconds used by THIS process.
          Instead, use Unix.time(), which is seconds since epoch. *)
       let thetime = string_of_int(int_of_float(Unix.time())) in
-     	(* If malformed query, flag an exception. *)
         if (List.length args) != 1 then
         begin
           rep#set_exception_code "1";
           rep#set_exception_message "Timer.time expects a single argument."
+        end 
+        else if (List.hd args) = (String.capitalize (List.hd args)) then
+        begin
+          Hashtbl.add tbl [thetime] true
+        end
+        else if (List.hd args) = thetime then
+        begin
+          (* for constant, only return a tuple of it's equal to the current time. *)
+          Hashtbl.add tbl [thetime] true 
         end;
 
-        Hashtbl.add tbl [thetime] true; 
         rep#set_result tbl;
         rep
     end
