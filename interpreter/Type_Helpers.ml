@@ -230,6 +230,12 @@ module Parsing = struct
 		if String.length str2 > String.length str1 then false else
 		(String.sub str1 0 (String.length str2)) = str2;;
 
+	(* true if str1 ends with str2 *)
+	let ends_with (str1 : string) (str2 : string) : bool = 
+		if String.length str2 > String.length str1
+		then false
+		else (String.sub str1 ((String.length str1) - (String.length str2)) (String.length str2)) = str2;;
+
 	let plus_name (name : string) : bool = begins_with name "+";;
 
 	let minus_name (name : string) : bool = begins_with name "-";;
@@ -290,7 +296,8 @@ module Parsing = struct
 		make_Apply (name2 ^ "/" ^ name1) tl;;
 
 	let make_Constant_Variable (str : string) : Syntax.term =
-		try let _ = int_of_string str in Syntax.Constant(str) with exn -> Syntax.Variable(str);;
+		try let _ = int_of_string str in Syntax.Constant(str) with exn -> 
+		if begins_with str "\"" && ends_with str "\"" then Syntax.Constant(str) else Syntax.Variable(str);;
 
 	let make_Field_ref (var_name : string) (field_name : string) : Syntax.term =
 		if normal_name var_name then Syntax.Field_ref(var_name, field_name) else

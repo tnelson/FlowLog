@@ -1,10 +1,10 @@
 blackbox BBtimer @ 127.0.0.1 9091;
 import Mac_Learning;
 
-module canary:
+module Canary:
 
-type OxygenLow = {};
+type low_oxygen = {seconds};
 
 forward(pkt : packet, newpkt : packet) :- Mac_Learning.forward(pkt, newpkt), not unconscious();
 
-+unconscious(ev : OxygenLow) :- true;
++unconscious(lo : low_oxygen) :- true;
