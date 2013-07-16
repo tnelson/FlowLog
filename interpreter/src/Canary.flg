@@ -3,7 +3,7 @@ import Mac_Learning;
 
 module canary:
 
-type OxygenLow = {seconds};
+type OxygenLow = {};
 
 forward(pkt : packet, newpkt : packet) :- Mac_Learning.forward(pkt, newpkt), not unconscious();
 
