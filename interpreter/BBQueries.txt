@@ -1,0 +1,3 @@
+Examples illustrating how queries will be evalutated.
+
+Suppose there's a 
