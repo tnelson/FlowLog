@@ -70,8 +70,9 @@ object (self)
       else
       begin
         (* TODO: need to check for valid fields *)
-        let timer_id = (Hashtbl.find values "id") in
-        let seconds = int_of_string (Hashtbl.find values "seconds") in
+        (* note: needs to be upcase or made case-insensitive *)
+        let timer_id = (Hashtbl.find values "ID") in
+        let seconds = int_of_string (Hashtbl.find values "SECONDS") in
         ignore (Thread.create (fun x ->                                  
                                   Printf.printf "Starting timer for id=%s. seconds=%d.\n%!" timer_id seconds;
                                   Unix.sleep seconds;
