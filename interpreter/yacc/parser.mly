@@ -6,6 +6,7 @@
   %token IMPORT
   %token SEMICOLON
   %token <string> NAME
+  %token DOUBLEQUOTE
   %token PERIOD
   %token BLACKBOX
   %token AMPERSAND
@@ -106,7 +107,9 @@
     | BOOLEAN { Bool($1) }
   ;
   term:
-      NAME { make_Constant_Variable (String.uppercase $1) }
+      NAME { make_Constant_or_Variable (String.uppercase $1) }
+    | NUMBER { Constant($1) }
+    | DOUBLEQUOTE NAME DOUBLEQUOTE { Constant( (String.uppercase $2) ) } 
     | NAME PERIOD NAME { make_Field_ref (String.uppercase $1) (String.uppercase $3) }
   ;
   term_list:

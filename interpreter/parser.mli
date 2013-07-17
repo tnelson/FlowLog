@@ -5,6 +5,7 @@ type token =
   | IMPORT
   | SEMICOLON
   | NAME of (string)
+  | DOUBLEQUOTE
   | PERIOD
   | BLACKBOX
   | AMPERSAND

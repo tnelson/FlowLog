@@ -83,7 +83,7 @@ module Parsing : sig
 
 	val make_Apply_Query : string -> string -> Syntax.term list -> Syntax.atom;;
 
-	val make_Constant_Variable : string -> Syntax.term;;
+	val make_Constant_or_Variable : string -> Syntax.term;;
 
 	val make_Field_ref : string -> string -> Syntax.term;;
 

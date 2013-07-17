@@ -20,6 +20,7 @@ rule token = parse
   | ',' { COMMA }
   | '(' { LPAREN }
   | ')' { RPAREN }
+  | '"' { DOUBLEQUOTE }
   | "not" { NOT }
   | "true" | "false" as boolean { BOOLEAN(boolean = "true") }
   | ['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9'] as dotted_ip { DOTTED_IP(dotted_ip)}

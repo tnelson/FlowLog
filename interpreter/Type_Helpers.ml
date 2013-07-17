@@ -301,7 +301,7 @@ module Parsing = struct
 		if bb_name name1 then Syntax.Query(name1, name2, tl) else
 		make_Apply (name2 ^ "/" ^ name1) tl;;
 
-	let make_Constant_Variable (str : string) : Syntax.term =
+	let make_Constant_or_Variable (str : string) : Syntax.term =
 		try let _ = int_of_string str in Syntax.Constant(str) with exn -> 
 		if begins_with str "\"" && ends_with str "\"" then Syntax.Constant(str) else Syntax.Variable(str);;
 
