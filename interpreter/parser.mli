@@ -3,26 +3,30 @@ open Type_Helpers.Parsing;;
 type token =
   | EOF
   | IMPORT
-  | SEMICOLON
-  | NAME of (string)
-  | DOUBLEQUOTE
-  | PERIOD
   | BLACKBOX
-  | AMPERSAND
-  | NUMBER of (string)
-  | DOTTED_IP of (string)
   | MODULE
-  | COLON
   | TYPE
+  | PLUS
+  | MINUS
+  | STATE
+  | ACTION
+  | NOT
+  | BOOLEAN of (bool)
+  | PERIOD
+  | AMPERSAND
+  | COLON_HYPHEN
+  | COLON
+  | SEMICOLON
   | EQUALS
   | LCURLY
   | RCURLY
   | COMMA
   | LPAREN
   | RPAREN
-  | COLON_HYPHEN
-  | NOT
-  | BOOLEAN of (bool)
+  | DOUBLEQUOTE
+  | DOTTED_IP of (string)
+  | NUMBER of (string)
+  | NAME of (string)
 
 val main :
   (Lexing.lexbuf  -> token) -> Lexing.lexbuf -> program

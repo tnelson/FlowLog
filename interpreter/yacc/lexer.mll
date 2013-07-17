@@ -6,14 +6,20 @@ rule token = parse
   | "//" [^ '\n']* { token lexbuf }
   | eof { EOF }
   | "import" { IMPORT }
-  | '.' { PERIOD }
   | "blackbox" { BLACKBOX }
-  | '@' { AMPERSAND }
   | "module" { MODULE }
+  | "type" { TYPE }
+  | "plus" { PLUS }
+  | "minus" { MINUS }
+  | "state" { STATE }
+  | "action" { ACTION }
+  | "not" { NOT }
+  | "true" | "false" as boolean { BOOLEAN(boolean = "true") }
+  | '.' { PERIOD }
+  | '@' { AMPERSAND }
   | ":-" { COLON_HYPHEN }
   | ':' { COLON }
   | ';' { SEMICOLON }
-  | "type" { TYPE }
   | '=' { EQUALS }
   | '{' { LCURLY }
   | '}' { RCURLY }
@@ -21,8 +27,6 @@ rule token = parse
   | '(' { LPAREN }
   | ')' { RPAREN }
   | '"' { DOUBLEQUOTE }
-  | "not" { NOT }
-  | "true" | "false" as boolean { BOOLEAN(boolean = "true") }
   | ['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9'] as dotted_ip { DOTTED_IP(dotted_ip)}
   | ['0'-'9']+ | '0''x'(['0'-'9']+) as number { NUMBER(number) }
-  | ['a'-'z''A'-'Z''_''+''-''0'-'9']+ as name { NAME(name) }
+  | ['a'-'z''A'-'Z''_''0'-'9']+ as name { NAME(name) }

@@ -1,31 +1,39 @@
 %{
-  open Flowlog_Types.Syntax;;
-  open Type_Helpers.Parsing;;
+  open Types.Types;;
+  (*open Type_Helpers.Parsing;;*)
 
-  let parse_debug = false;;
+  (*let parse_debug = false;;*)
 %}
+
+
   %token EOF
+
   %token IMPORT
-  %token SEMICOLON
-  %token <string> NAME
-  %token DOUBLEQUOTE
-  %token PERIOD
   %token BLACKBOX
-  %token AMPERSAND
-  %token <string> NUMBER
-  %token <string> DOTTED_IP
   %token MODULE
-  %token COLON
   %token TYPE
+  %token PLUS
+  %token MINUS
+  %token STATE
+  %token ACTION
+  %token NOT
+  %token <bool> BOOLEAN
+
+  %token PERIOD
+  %token AMPERSAND
+  %token COLON_HYPHEN
+  %token COLON
+  %token SEMICOLON
   %token EQUALS
   %token LCURLY
   %token RCURLY
   %token COMMA
   %token LPAREN
   %token RPAREN
-  %token COLON_HYPHEN
-  %token NOT
-  %token <bool> BOOLEAN
+  %token DOUBLEQUOTE
+  %token <string> DOTTED_IP
+  %token <string> NUMBER
+  %token <string> NAME
   %start main
 
   %type <program> main
@@ -37,18 +45,15 @@
   %type <notif_type> type_decl
   %type <string list> name_list
   %type <clause> clause
-  %type <argument list> notif_term_arg_list
-  %type <argument> notif_arg
-  %type <literal list> literal_list
-  %type <literal> literal
   %type <atom> atom
+  %type <atom list> atom_list
   %type <term> term
   %type <term list> term_list
   %%
   main:
       top module_decl bottom EOF { match $1 with (imports, blackboxes) ->
         match $3 with (types, clauses) ->
-        make_Program $2 imports blackboxes types clauses }
+        Program($2, imports, blackboxes, types, clauses) }
   ;
   top:
       import { ([$1], []) }
@@ -63,58 +68,57 @@
     | clause bottom { match $2 with (types, clauses) -> (types, $1 :: clauses) }
   ;
   import:
-      IMPORT NAME SEMICOLON { make_import $2 }
+      IMPORT NAME SEMICOLON { $2 }
   ;
   blackbox:
-      BLACKBOX NAME AMPERSAND DOTTED_IP NUMBER SEMICOLON { make_External_BB (String.lowercase $2) $4 (int_of_string $5) }
-    | BLACKBOX NAME SEMICOLON { make_Internal_BB (String.lowercase $2) }
+      BLACKBOX NAME AMPERSAND DOTTED_IP NUMBER SEMICOLON { BlackBox(String.lowercase $2, External($4, (int_of_string $5))) }
+    | BLACKBOX NAME SEMICOLON { BlackBox(String.lowercase $2, Internal) }
   ;
   module_decl:
       MODULE NAME COLON { String.lowercase $2 }
   ;
   type_decl:
-    TYPE NAME EQUALS LCURLY name_list RCURLY SEMICOLON { make_Type (String.lowercase $2) $5 }
+    TYPE NAME EQUALS LCURLY name_list RCURLY SEMICOLON { Type(String.lowercase $2, $5) }
   ;
   name_list:
       NAME { [String.uppercase $1] }
     | NAME COMMA name_list { (String.uppercase $1) :: $3 }
   ;
   clause:
-      NAME LPAREN notif_term_arg_list RPAREN COLON_HYPHEN literal_list SEMICOLON { make_Plus_Minus_Clause (String.lowercase $1) $3 $6 }
-    | NAME LPAREN name_list RPAREN COLON_HYPHEN literal_list SEMICOLON { make_HelperClause (String.lowercase $1) (List.map (fun str -> make_Arg_term(make_Variable(str))) $3) $6 }
-    | NAME LPAREN RPAREN COLON_HYPHEN literal_list SEMICOLON { make_HelperClause (String.lowercase $1) [] $5 }
-    | NAME LPAREN notif_arg COMMA notif_arg RPAREN COLON_HYPHEN literal_list SEMICOLON { make_NotifClause (String.lowercase $1) [$3; $5] $8 }
-  ;
-  notif_term_arg_list:
-      notif_arg { [$1] }
-    | notif_arg COMMA name_list { $1 :: List.map (fun str -> make_Arg_term (make_Variable str)) $3 }
-  ;
-  notif_arg:
-      NAME COLON NAME { make_Arg_notif (make_Notif_var (String.lowercase $3) (String.uppercase $1)) }
-  ;
-  literal_list:
-      literal { [$1] }
-    | literal COMMA literal_list { $1 :: $3 }
-  ;
-  literal:
-      atom { Pos($1) }
-    | NOT atom { Neg($2) }
-  ;
-  atom:
-      term EQUALS term { Equals($1, $3) }
-    | NAME LPAREN term_list RPAREN { make_Apply (String.lowercase $1) $3 }
-    | NAME LPAREN RPAREN { make_Apply (String.lowercase $1) [] }
-    | NAME PERIOD NAME LPAREN term_list RPAREN { make_Apply_Query (String.lowercase $1) $3 $5 }
-    | NAME PERIOD NAME LPAREN RPAREN { make_Apply_Query (String.lowercase $1) $3 [] }
-    | BOOLEAN { Bool($1) }
-  ;
-  term:
-      NAME { (if parse_debug then Printf.printf "NAME: %s\n%!" $1; make_Constant_or_Variable (String.uppercase $1)) }
-    | NUMBER { (if parse_debug then Printf.printf "NUMBER: %s\n%!" $1; Constant($1)) }
-    | DOUBLEQUOTE NAME DOUBLEQUOTE { (if parse_debug then Printf.printf "DQ NAME DQ: %s\n%!" $2; Constant($2)) } 
-    | NAME PERIOD NAME { make_Field_ref (String.uppercase $1) (String.uppercase $3) }
+      PLUS NAME LPAREN term_list RPAREN COLON_HYPHEN atom_list SEMICOLON { Clause(Plus, String.lowercase $2, $4, $7) }
+    | MINUS NAME LPAREN term_list RPAREN COLON_HYPHEN atom_list SEMICOLON { Clause(Minus, String.lowercase $2, $4, $7) }
+    | STATE NAME LPAREN term_list RPAREN COLON_HYPHEN atom_list SEMICOLON { Clause(State, String.lowercase $2, $4, $7) }
+    | STATE NAME LPAREN RPAREN COLON_HYPHEN atom_list SEMICOLON { Clause(State, String.lowercase $2, [], $6) }
+    | ACTION NAME LPAREN term_list RPAREN COLON_HYPHEN atom_list SEMICOLON { Clause(Action, String.lowercase $2, $4 ,$7) }
   ;
   term_list:
       term { [$1] }
     | term COMMA term_list { $1 :: $3 }
   ;
+  term:
+      NAME { Variable(String.uppercase $1) }
+    | NUMBER { Constant($1) }
+    | DOUBLEQUOTE NAME DOUBLEQUOTE { Constant($2) } 
+    | NAME PERIOD NAME { Field_ref(String.uppercase $1, String.uppercase $3) }
+    | NAME COLON NAME { Notiv_var(String.uppercase $1, String.uppercase $3) }
+  ;
+  atom:
+      term EQUALS term { Equals(Pos, $1, $3) }
+    | NOT term EQUALS term { Equals(Neg, $2, $2) }
+    | NAME LPAREN term_list RPAREN { Apply(Pos, "", String.lowercase $1, $3) }
+    | NOT NAME LPAREN term_list RPAREN { Apply(Neg, "", String.lowercase $2, $4) }
+    | NAME LPAREN RPAREN { Apply(Pos, "", String.lowercase $1, []) }
+    | NOT NAME LPAREN RPAREN { Apply(Neg, "", String.lowercase $2, []) }
+    | NAME PERIOD NAME LPAREN term_list RPAREN { Apply(Pos, String.lowercase $1, String.lowercase $3, $5) }
+    | NAME PERIOD NAME LPAREN RPAREN { Apply(Pos, String.lowercase $1, String.lowercase $3, []) }
+    | NOT NAME PERIOD NAME LPAREN term_list RPAREN { Apply(Neg, String.lowercase $2, String.lowercase $4, $6) }
+    | NOT NAME PERIOD NAME LPAREN RPAREN { Apply(Neg, String.lowercase $2, String.lowercase $4, []) }
+    | BOOLEAN { Bool(Pos, $1) }
+    | NOT BOOLEAN { Bool(Neg, $2) }
+  ;
+  atom_list:
+      atom { [$1] }
+    | atom COMMA atom_list { $1 :: $3 }
+  ;
+  
+  
