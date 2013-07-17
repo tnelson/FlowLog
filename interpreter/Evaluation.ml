@@ -19,20 +19,27 @@ module Evaluation = struct
 		match bb with
 		| Types.Internal_BB(name) -> if name = "forward" then Controller_Forwarding.forward_packets out_notifs 
                                              else raise (Failure ("internal black box " ^ name ^ " is not currently supported.")) 
-		| _ -> List.iter (fun n -> Flowlog_Thrift_Out.doBBnotify bb n) out_notifs;;
+		| _ -> List.iter (fun n -> if debug then Printf.printf "SENDING EXT NOTIF: %s\n%!" (Type_Helpers.notif_val_to_string n);
+	                               Flowlog_Thrift_Out.doBBnotify bb n)
+	                     out_notifs;;
 
 	let fire_relation (prgm : Types.program) (rel : Types.relation) (notif : Types.notif_val)  : unit =
 		if debug then print_endline ("firing relation: " ^ (Type_Helpers.relation_name rel));
+		(* terms contains the terms in the INCOMING notif *val*. ntype is the type of the INCOMING val *)
 		match notif with Types.Notif_val(ntype, terms) ->
 		let arg_terms = List.map (fun t -> Types.Arg_term(t)) terms in
-		match rel with
+		match rel with		
 		| Types.NotifRelation(bb, args, _) ->
+		    (* args is the args in the head of this relation. the second one gives us our target type. *)
 			(match args with
-			| [] -> raise (Failure "notif relations always have two arguments.");
-			| _ :: tail -> 
-			let out_notifs = List.map (fun (tl : Types.term list) -> Types.Notif_val(ntype, tl))
-				(Communication.query_relation rel (arg_terms @ tail)) in
-			send_notifications bb out_notifs;);
+			| [] -> raise (Failure "notif relations always have two arguments.");			
+			| [_; (Types.Arg_notif(Types.Notif_var(targettype, _))) as tail] -> 				    
+			    let out_notifs = List.map (fun (tl : Types.term list) -> Types.Notif_val(targettype, tl))
+				                          (Communication.query_relation rel (arg_terms @ [tail])) in
+			      send_notifications bb out_notifs;
+			| [_;_] -> raise (Failure "malformed second argument to notif relation");
+			| _ -> failwith "failure of fire_relation assumption: notif_type args is 2 element list")
+			  			
 		| Types.MinusRelation(_, args, _) ->
 			(match args with
 			| [] -> raise (Failure "minus relations always have at least one argument.");

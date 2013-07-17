@@ -1,4 +1,6 @@
-// Should get all BBs and notifs declared in Canary (and in Mac_Learning since Canary imports Mac_Learning)
+blackbox BBtimer @ 127.0.0.1 9091;
+
+// Should get all notifs declared in Canary (and in Mac_Learning since Canary imports Mac_Learning)
 import Canary;
 
 module Zombie_Canary:
@@ -13,7 +15,7 @@ forward(pkt : packet, newpkt : packet) :- Mac_learning.forward(pkt, newpkt), ris
 
 // Start a timer. When the timer expires, riiiise from the graaaave. Or unconsciousness.
 // Whatever. This metaphor is kind of falling apart.
-//BBtimer(lo : low_oxygen, timer : timer_start) :- timer.seconds = lo.seconds, timer.id = "zombie_canary";
+BBtimer(lo : low_oxygen, timer : start_timer) :- timer.seconds = lo.seconds, timer.id = "zombie_canary";
 
-//+risen(timer : timer_expired) :- timer.id = "zombie_canary";
++risen(timer : timer_expired) :- timer.id = "zombie_canary";
 -risen(lo : low_oxygen) :- true;

@@ -1,5 +1,4 @@
 import Mac_Learning;
-blackbox BBtimer @ 127.0.0.1 9091;
 
 module Canary:
 

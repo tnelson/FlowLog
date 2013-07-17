@@ -54,15 +54,19 @@ module Xsb = struct
 	    if debug then Printf.printf "send_assert: %s\n%!" str;
 		let out_ch, in_ch = get_ch () in
 		output_string out_ch (str ^ "\n");
-		flush out_ch;
+		flush out_ch;		
 		let answer = ref "" in
-		let next_str = ref "" in
-		while (not (Type_Helpers.ends_with (String.trim !next_str) "yes") && not (Type_Helpers.ends_with (String.trim !next_str) "no")) do
+		let next_str = ref "" in		
+		while (not (Type_Helpers.ends_with (String.trim !next_str) "yes") && not (Type_Helpers.ends_with (String.trim !next_str) "no")) do		
 			next_str := input_line in_ch;
-            (*print_endline ("DEBUG: send_assert "^ str ^" getting response. Line was: "^(!next_str));*)
+
+			(* Do not use this: it won't work. But it is useful for debugging situations with weird XSB output. *)
+			(*next_str := (!next_str) ^ (String.make 1 (input_char in_ch));*)
+
+            if debug then Printf.printf "DEBUG: send_assert %s getting response. Line was: %s\n%!" str (!next_str);
 			answer := (!answer ^ "\n" ^ String.trim !next_str);
 		done;
-		(*if debug then Printf.printf "send_assert answer: %s\n%!" (String.trim !answer);*)
+		(* if debug then Printf.printf "send_assert answer: %s\n%!" (String.trim !answer); *)
 		String.trim !answer;;
 
 
@@ -100,6 +104,7 @@ module Xsb = struct
 		(*let _ = print_endline (string_of_bool (ends_with (String.trim !next_str) "no")) in*)
 		let counter = ref 0 in
 		while not (Type_Helpers.ends_with (String.trim !next_str) "no") do
+			if debug then Printf.printf "DEBUG: send_query %s getting response. Line was: %s\n%!" str (!next_str);
 			if (!counter mod num_vars = 0) then
 			(output_string out_ch ";\n";
 			flush out_ch);

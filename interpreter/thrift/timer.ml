@@ -54,7 +54,8 @@ object (self)
     let ntype = sod ((sod notif)#get_notificationType) in
     let values = sod ((sod notif)#get_values) in
       Printf.printf "received notification. type=%s\n%!" ntype;
-      if ntype != "start_timer" then
+      (* <>, not != *)
+      if ntype <> "start_timer" then
       begin
         let reply = new notification in
         let tbl = (Hashtbl.create 2) in

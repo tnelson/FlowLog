@@ -1,6 +1,8 @@
 %{
   open Flowlog_Types.Syntax;;
   open Type_Helpers.Parsing;;
+
+  let parse_debug = false;;
 %}
   %token EOF
   %token IMPORT
@@ -107,9 +109,9 @@
     | BOOLEAN { Bool($1) }
   ;
   term:
-      NAME { make_Constant_or_Variable (String.uppercase $1) }
-    | NUMBER { Constant($1) }
-    | DOUBLEQUOTE NAME DOUBLEQUOTE { Constant( (String.uppercase $2) ) } 
+      NAME { (if parse_debug then Printf.printf "NAME: %s\n%!" $1; make_Constant_or_Variable (String.uppercase $1)) }
+    | NUMBER { (if parse_debug then Printf.printf "NUMBER: %s\n%!" $1; Constant($1)) }
+    | DOUBLEQUOTE NAME DOUBLEQUOTE { (if parse_debug then Printf.printf "DQ NAME DQ: %s\n%!" $2; Constant($2)) } 
     | NAME PERIOD NAME { make_Field_ref (String.uppercase $1) (String.uppercase $3) }
   ;
   term_list:
