@@ -2,6 +2,7 @@ open Unix;;
 open Printf;;
 open Flowlog_Types;;
 open Type_Helpers;;
+open Flowlog_Thrift_Out;;
 
 let debug = true;;
 
@@ -142,15 +143,45 @@ module Communication = struct
 		| Types.MinusRelation(name, _, _) -> process ("-" ^ name) args_string;
 		| Types.HelperRelation(name, _, _) -> process name args_string;
 		| Types.NotifRelation(bb, _, _) -> process (Type_Helpers.blackbox_name bb) args_string;) in
-		if debug then print_endline ("sending: "^str);
+		if debug then print_endline ("sending: " ^ str);
 		send_message str (List.length vars);;
 
+	let get_queries (cls : Types.clause) : Types.atom list =
+		List.fold (fun lit acc -> 
+			let a = Type_Helpers.get_atom lit in
+			match a with
+			| Types.Query(_, _, _) -> a :: acc;
+			| _ -> acc;) (Type_Helpers.clause_body cls) [];;
+
+	let assert_queries (qs : (atom * string list list) list) : unit =
+		List.iter (function (q, ans) -> match q with
+			| Types.Query(bb, str, tl) -> List.iter (fun sl -> send_message ("assert((" ^ str ^ "/" ^ (Types.blackbox_name bb) ^ "(" ^ (Type_Helpers.list_to_string (fun x -> x) sl) ^ ")))." )) ans;
+			| _ -> raise (Failure "only queries allowed here");) qs;;
+
+	let assert_queries (qs : (atom * string list list) list) : unit =
+		List.iter (function (q, ans) -> match q with
+			| Types.Query(bb, str, tl) -> List.iter (fun sl -> send_message ("retract((" ^ str ^ "/" ^ (Types.blackbox_name bb) ^ "(" ^ (Type_Helpers.list_to_string (fun x -> x) sl) ^ ")))." )) ans;
+			| _ -> raise (Failure "only queries allowed here");) qs;;
+
+
+	let query_relation (rel : Types.relation) (args : Types.argument list) : (Types.term list) list = 
+		let queries = List.fold(fun cls acc -> (get_queries cls) @ acc) (Type_Helpers.relation_body rel) in
+		let query_answers = List.map (fun q -> match q with 
+			| Types.Query(bb, str, tl) -> (q, Flowlog_Thrift_Out.doBBquery bb q);
+			| _ -> raise (Failure "this is only for queries");) queries in
+		assert_queries query_answers;
+		let ans = send_relation rel (Type_Helpers.arguments_to_terms args) (fun name args_string -> name ^ "(" ^ args_string ^ ").") in
+		retract_queries query_answers;
+		ans;;
+
+(*
 	let query_relation (rel : Types.relation) (args : Types.argument list) : (Types.term list) list =
 		if debug then print_endline ("query relation: " ^ (Type_Helpers.relation_name rel) ^ "(" ^ 
 			(Type_Helpers.list_to_string Type_Helpers.argument_to_string args) ^ ")");
 		let ans = send_relation rel (Type_Helpers.arguments_to_terms args) (fun name args_string -> name ^ "(" ^ args_string ^ ").") in
 		if debug then List.iter (fun tl -> Printf.printf "query answer: %s\n%!" (Type_Helpers.list_to_string Type_Helpers.term_to_string tl)) ans;
 		ans;;
+*)
 
 	let retract_relation (rel : Types.relation) (args : Types.term list) : unit =
 		let _ = send_relation rel args (fun name args_string -> 

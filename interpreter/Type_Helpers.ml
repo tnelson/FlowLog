@@ -62,7 +62,7 @@ module Type_Helpers = struct
 		match a with
 		| Types.Equals(t1, t2) -> (term_to_string t1) ^ " = " ^ (term_to_string t2);
 		| Types.Apply(str, tl) -> str ^ "(" ^ (list_to_string (term_notif_to_string cls) tl) ^ ")";
-		| Types.Query(bb, name, tl) -> (blackbox_name bb) ^ "_" ^ name ^ "(" ^ (list_to_string (term_notif_to_string cls) tl) ^ ")";
+		| Types.Query(bb, name, tl) -> name ^ "/" ^ (blackbox_name bb) ^ "(" ^ (list_to_string (term_notif_to_string cls) tl) ^ ")";
 		| Types.Bool(b) -> string_of_bool b;;
 
 	let literal_to_string (cls : Types.clause)(l : Types.literal) : string = 
