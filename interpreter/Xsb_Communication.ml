@@ -32,12 +32,6 @@ module Xsb = struct
 		flush out_ch;;
 
 
-	(* True if string str1 ends with string str2 *)
-	let ends_with (str1 : string) (str2 : string) : bool = 
-		if String.length str2 > String.length str1
-		then false
-		else (String.sub str1 ((String.length str1) - (String.length str2)) (String.length str2)) = str2;;
-
 	(* Prints the XSB listings currently asserted to stdout.
 	   This function is useful for confirming that XSB knows what we think it knows. *)
 	let debug_print_listings () : unit =
@@ -47,7 +41,7 @@ module Xsb = struct
 
 		let next_str = ref (input_line in_ch) in
 		  Printf.printf "%s\n%!" !next_str;
-		  while not (ends_with (String.trim !next_str) "yes") do
+		  while not (Type_Helpers.ends_with (String.trim !next_str) "yes") do
 			next_str := input_line in_ch;
 			Printf.printf "%s\n%!" !next_str;
 		  done;
@@ -57,22 +51,24 @@ module Xsb = struct
 	(* This takes in a string command (not query, this doesn't deal with the semicolons).
 	It writes the command to xsb and returns the resulting text. *)
 	let send_assert (str : string) : string =
+	    if debug then Printf.printf "send_assert: %s\n%!" str;
 		let out_ch, in_ch = get_ch () in
 		output_string out_ch (str ^ "\n");
 		flush out_ch;
 		let answer = ref "" in
 		let next_str = ref "" in
-		while (not (ends_with (String.trim !next_str) "yes") && not (ends_with (String.trim !next_str) "no")) do
+		while (not (Type_Helpers.ends_with (String.trim !next_str) "yes") && not (Type_Helpers.ends_with (String.trim !next_str) "no")) do
 			next_str := input_line in_ch;
             (*print_endline ("DEBUG: send_assert "^ str ^" getting response. Line was: "^(!next_str));*)
 			answer := (!answer ^ "\n" ^ String.trim !next_str);
 		done;
+		(*if debug then Printf.printf "send_assert answer: %s\n%!" (String.trim !answer);*)
 		String.trim !answer;;
 
 
 	(* Removes str2 from the end of str1 if its there, otherwise returns str1 *)
 	let remove_from_end (str1 : string) (str2 : string) : string = 
-		if ends_with str1 str2
+		if Type_Helpers.ends_with str1 str2
 		then String.sub str1 0 ((String.length str1) - (String.length str2))
 		else str1;; 
 
@@ -93,6 +89,7 @@ module Xsb = struct
 	(* Takes a string query (thing with semicolon answers), the number of variables involved.
 	 It writes the query to xsb and returns a list of lists with all of the results. *)
 	let send_query (str : string) (num_vars : int) : (string list) list =
+	    if debug then Printf.printf "send_query: %s %d\n%!" str num_vars;
 		let out_ch, in_ch = get_ch () in
 		output_string out_ch (str ^ "\n");
 		flush out_ch;
@@ -102,7 +99,7 @@ module Xsb = struct
 		let next_str = ref (input_line in_ch) in
 		(*let _ = print_endline (string_of_bool (ends_with (String.trim !next_str) "no")) in*)
 		let counter = ref 0 in
-		while not (ends_with (String.trim !next_str) "no") do
+		while not (Type_Helpers.ends_with (String.trim !next_str) "no") do
 			if (!counter mod num_vars = 0) then
 			(output_string out_ch ";\n";
 			flush out_ch);
@@ -120,8 +117,13 @@ end
 module Communication = struct
 
 	(* assertion, number of answers to expect (number of variables in clause) *)
+	(* if this is a query with 0 variables, will call send_assert and thus need to provide [] vs [[]] *)
 	let send_message (message : string) (num_ans : int) : (Types.term list) list =
-		let answer = (if num_ans > 0 then Xsb.send_query message num_ans else let _ = Xsb.send_assert message in []) in
+		let answer = (if num_ans > 0 then
+		                Xsb.send_query message num_ans 
+		              else let yn = Xsb.send_assert message in
+		                if (Type_Helpers.ends_with yn "yes") then [[]]
+		                else []) in
 		List.map (fun (l : string list) -> List.map (fun str -> Types.Constant(str)) l) answer;;
 
 	let send_relation (rel : Types.relation) (args : Types.term list) (process : string -> string -> string) : (Types.term list) list =

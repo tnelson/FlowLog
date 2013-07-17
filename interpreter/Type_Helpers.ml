@@ -5,6 +5,12 @@ let debug = true;;
 (* Provides printing functions and conversion functions both for pretty printing and communication with XSB. *)
 module Type_Helpers = struct
 
+	(* True if string str1 ends with string str2 *)
+	let ends_with (str1 : string) (str2 : string) : bool = 
+		if String.length str2 > String.length str1
+		then false
+		else (String.sub str1 ((String.length str1) - (String.length str2)) (String.length str2)) = str2;;
+
 	let list_to_string (conversion : 'a -> string) (l : 'a list) : string = 
 		let ans = List.fold_right (fun x acc -> (conversion x) ^ "," ^ acc) l "" in
 		if ans = "" then ans else String.sub ans 0 (String.length ans - 1);;

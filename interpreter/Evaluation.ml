@@ -38,13 +38,17 @@ module Evaluation = struct
 			| [] -> raise (Failure "minus relations always have at least one argument.");
 			| _ :: tail ->
 			let to_retract = Communication.query_relation rel (arg_terms @ tail) in
+			if debug then Printf.printf "Retracting %d facts.\n%!" (List.length to_retract);
 			let helper_rel = Type_Helpers.helper_relation prgm rel in
 			List.iter (fun (tl : Types.term list) -> Communication.retract_relation helper_rel tl) to_retract;);
 		| Types.PlusRelation(_, args, _) ->
 			(match args with
 			| [] -> raise (Failure "plus relations always have at least one argument.");
 			| _ :: tail ->
+			(* to_assert contains the list of tuples that the query vs. +R returned. These should be added to R. *)
 			let to_assert = Communication.query_relation rel (arg_terms @ tail) in
+			if debug then Printf.printf "Asserting %d facts.\n%!" (List.length to_assert);
+			(* The helper_rel should be R, not +R *)
 			let helper_rel = Type_Helpers.helper_relation prgm rel in			
 			List.iter (fun (tl : Types.term list) -> 
 		                 Communication.assert_relation helper_rel tl) 
