@@ -31,6 +31,14 @@ Executable o2warning
   CompiledObject: best
   BuildDepends: thrift, flowlog_thrift, threads
 
+Executable notify
+  Path: .
+  MainIs: notify.ml
+  Build$: true
+  CompiledObject: best
+  BuildDepends: thrift, flowlog_thrift, threads, str
+
+
 Executable Timer
   Path: .
   MainIs: timer.ml
