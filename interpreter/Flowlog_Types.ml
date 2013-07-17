@@ -51,13 +51,13 @@ module Syntax = struct
 	(* name, arguments, body *)
 	type clause = 
 		(* rest of name, args, body*)
-		PlusClause of string * argument list * literal list |
+		| PlusClause of string * argument list * literal list 
 		(* rest of name, args, body *)
-		MinusClause of string * argument list * literal list |
+		| MinusClause of string * argument list * literal list 
 		(* name, args, body *)
-		HelperClause of string * argument list * literal list |
+		| HelperClause of string * argument list * literal list 
 		(* name, args (only 2 and both are Arg_notif), body *)
-		NotifClause of string * argument list * literal list;;
+		| NotifClause of string * argument list * literal list;;
 
 	(* name, module names to be imported, black boxes, notification types, clauses *)	
 	type program = Program of string * string list * blackbox list * notif_type list * clause list;;
@@ -124,23 +124,23 @@ module Types = struct
 
 	type clause = 
 		(* rest of name, args, body*)
-		PlusClause of string * argument list * literal list |
+		| PlusClause of string * argument list * literal list 
 		(* rest of name, args, body *)
-		MinusClause of string * argument list * literal list |
+		| MinusClause of string * argument list * literal list 
 		(* name, args, body *)
-		HelperClause of string * argument list * literal list |
+		| HelperClause of string * argument list * literal list 
 		(* name, args (only 2 and both are Arg_notif), body *)
-		NotifClause of blackbox * argument list * literal list;;
+		| NotifClause of blackbox * argument list * literal list;;
 
 	type relation =
 		(* rest of name, args, body*)
-		PlusRelation of string * argument list * clause list |
+		| PlusRelation of string * argument list * clause list 
 		(* rest of name, args, body*)
-		MinusRelation of string * argument list * clause list |
+		| MinusRelation of string * argument list * clause list 
 		(* name, args, body *)
-		HelperRelation of string * argument list * clause list |
+		| HelperRelation of string * argument list * clause list 
 		(* name, args (only 2 and both are Arg_notif), body *)
-		NotifRelation of blackbox * argument list * clause list;;
+		| NotifRelation of blackbox * argument list * clause list;;
 
 	(* name, types, relations *)	
 	type program = Program of string * notif_type list * relation list;;
