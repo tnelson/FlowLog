@@ -1,5 +1,4 @@
-open Flowlog_Types.Syntax;;
-open Type_Helpers.Parsing;;
+open Types.Types;;
 type token =
   | EOF
   | IMPORT
