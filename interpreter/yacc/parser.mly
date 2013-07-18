@@ -100,7 +100,7 @@
     | NUMBER { Constant($1) }
     | DOUBLEQUOTE NAME DOUBLEQUOTE { Constant("constant_" ^ $2) (* WHAT IF THERE ARE SPACES? use String.map (fun c -> if c = ' ' then '_' else c) maybe? *)} 
     | NAME PERIOD NAME { Field_ref(String.uppercase $1, String.uppercase $3) }
-    | NAME COLON NAME { Notiv_var(String.uppercase $1, String.uppercase $3) }
+    | NAME COLON NAME { Notif_var(String.uppercase $1, String.uppercase $3) }
   ;
   atom:
       term EQUALS term { Equals(Pos, $1, $3) }

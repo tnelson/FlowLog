@@ -1,29 +1,3 @@
-(* Defines the basic syntax types for the Flowlog interpreter. *)
-(* File format:
-
-import module1;
-blackbox name1 @ ip1, port1;
-blackbox name2;
-import module2;
-... (* imports and blackboxes go first *)
-
-module module_name:
-
-type type_name_1 = { name_1,1, name_1,2, ..., name_1,M };
-type type_name_2 = { name_2,1, name_2,2, ..., name_2,M };
-...
-type type_name_K = { name_K,1, name_K,2, ..., name_K,M };
-
-clause_name(arg_1 : type_name_1, ..., arg_n) :-
-line_1,
-line_2,
-...
-line_J.
-
-...
-
-During parsing, relation name rel_name in module module_name (which in flowlog is module_name.rel_name) is rewritten module_name/rel_name (all turned to lower case).
-*)
 module Types = struct
 	(* either internal or external in which case it has an ip and a port. *)
 	type bb_type = Internal | External of string * int;;
