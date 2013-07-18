@@ -6,12 +6,7 @@ open Type_Helpers;;
 
 let debug = true;;
 
-(* Provides functions for running a Flowlog program.
-ASSUMPTIONS: We assume that programs passed into functions in this module have
-1) all implied relations defined (i.e. if there's +R or -R then there's R)
-2) all relations except NotifRelations have names ending in /(name of program).
-3) the name of the program is lower case.
-*)
+(* Provides functions for running a Flowlog program.*)
 module Evaluation = struct
 
 	let send_notifications (bb : Types.blackbox) (out_notifs : Types.notif_val list) : unit =
@@ -66,9 +61,20 @@ module Evaluation = struct
 
 	let respond_to_notification (notif : Types.notif_val) (prgm : Types.program) : unit =
 		if debug1 then print_endline ("incoming notif: " ^ Type_Helpers.notif_val_to_string notif);
-		match prgm with Types.Program(name, _, relations) ->
+		match prgm with Types.Program(name, _, _, _, clauses) ->
 		match notif with Types.Notif_val(ntype, _) ->
-		if debug1 then print_endline "starting NotifRelations.";
+		List.iter (function Types.Clause(ctype, name, args, body) -> match ctype with
+			| Types.Action -> match args with
+				| [Types.Notif_var(nt, _), Types.Notif_var(_, _)] -> if nt = ntype then queue_fire_cls cls ;
+			| _ -> (););
+		List.iter (function Types.Clause(ctype, name, args, body) -> match ctype with
+			| Types.Minus -> ... ;
+			| _ -> (););
+		List.iter (function Types.Clause(ctype, name, args, body) -> match ctype with
+			| Types.Plus -> ... ;
+			| _ -> (););
+		
+
 		let _ = List.iter (fun rel -> match rel with
 			| Types.NotifRelation(bb, args, _) -> (match args with
 				| [] -> raise (Failure "NotifRelations always have two arguments");

@@ -4,6 +4,10 @@ let debug = true;;
 
 (* Provides printing functions and conversion functions both for pretty printing and communication with XSB. *)
 module Type_Helpers = struct
+(* 
+need: list_to_string
+*)
+
 
 	(* True if string str1 ends with string str2 *)
 	let ends_with (str1 : string) (str2 : string) : bool = 
@@ -171,6 +175,10 @@ module Type_Helpers = struct
 end
 
 module Parsing = struct
+(*
+need import
+*)
+
 	(* raised on errors in parsing or converting from Syntax to Types. *)
 	exception Parse_error of string;;
 
@@ -310,7 +318,7 @@ module Parsing = struct
 		raise (Parse_error ("notification variable names cannot begin with +, -, or BB. This is violated by " ^ var_name));;
 
 end
-
+(*
 module Conversion = struct
 	(* Functions to turn a Syntax.program into a Types.program. *)
 
@@ -442,4 +450,4 @@ module Conversion = struct
 		match prgm with Syntax.Program(name, _, _, ntypes, clauses) ->
 		Types.Program(name, List.map notif_type_convert ntypes, make_relations (List.map (clause_convert prgm) clauses));;
 
-end
+end*)

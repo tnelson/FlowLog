@@ -19,6 +19,7 @@ module Types : sig
 	(* name, module names to be imported, black boxes, notification types, clauses *)	
 	type program = Program of string * string list * blackbox list * notif_type list * clause list;;
 
+	(*val make_notif_val : program -> string -> string list -> notif_val;;*)
 	val packet_type : notif_type;;
 	val switch_port_type : notif_type;;
 

@@ -1,0 +1,79 @@
+Redesign ideas.
+
+File organization:
+
+	First imports and blackboxes.
+	Syntax: (recall // denotes comments in Flowlog)
+	import file_name; // file_name is the name of a .flg file in the same directory, minus the file extension.
+	// the file_name must be the same case etc as the name of the file. This is the only place where case matters.
+	
+	blackbox bbname; // introduces an internal blackbox. Right now the only one is forward.
+	blackbox bbname @ ip_addr, port_num; // introduces an external blackbox. The name here must start with bb and no
+	// other clauses may start with bb. The ip is written in the form 00:00:00:00 as always and the port number is
+	// written as any other number.
+	
+	Then a module declaration.
+	Syntax:
+	module module_name: // the module_name should be the same as the file name though right now we aren't enforcing
+	// this. It will just be convenient because imports are done by filename not module name. Module names cannot start
+	// with bb as this is reserved for external blackboxes.
+	
+	Then type definitions and clauses.
+	Syntax:
+	type type_name = { field_id_1, ..., field_id_n }; // the fields of a typed variable will be accessed with a '.'
+	
+	clause_type clause_name(var_1, var_2, ..., var_n) // clause_type is one of plus, minus, state, or action.
+	Example:
+	state learned(v1, v2, pkt : packet) :- ...; // the variables can be primitive variables or typed variables
+	plus learned(pkt : packet, v1, v2, pkt2 : packet) :- ...; // this is a plus relation for the learned relation
+	// note that they have the same name. The first argument must be a type argument and the others must have the same
+	// types of those in the learned relation. This applies for minus as well.
+	action forward(pkt : packet, newpkt : packet) :- ...; // action clauses must have exactly two fields, both of which
+	// are typed variables. The name of an action clause must be a blackbox. State, plus, and minus clauses cannot
+	// share names with action clauses.
+	// When a module is imported into another module the action clauses are turned into state clauses.
+	
+	Body of a clause:
+	The body of a clause is a comma separated list of atoms ended by a semicolon.
+	Atoms are either
+	A = B,
+	relation(A, B, ..., N),
+	true,
+	false,
+	or not followed by any of the above.
+	For the second type, relation can be a relation of the current module, or it can be a relation of a different
+	module, or it can be an external blackbox query.
+	1) this module: learned(A, B, C)
+	2) other module called mod: mod.learned(A, B, C)
+	3) external blackbox query: bbox.learned(A, B, C)
+	The second and third cannot overlap because external blackboxes start with bb and module names cannot.
+
+Evaluation:
+
+The command line Run_Flowlog.d.byte takes in a flowlog filename (name.flg) of a file in the current directory.
+It then parses it in and recursively parses in all imported modules (they must all be in the same directory).
+The imported modules are added to the module that was ran and evaluation begins.
+
+Thrift is called to start listening for notifications, and xsb is sent relations to start its database.
+Every clause is desugared and sent to xsb, and every state clause used but not declared is asserted false.
+Then Ox begins listening for packets. When a notification arrives (either from thrift or as a packet from Ox),
+the Evaluation.respond_to_notification function is run on the program and the notification that arrived.
+This function runs through every action, minus, and plus clause (in that order) and checks if the type of the
+incoming notifiaction matches the type of the first argument to that clause. If it does then it does the following:
+1) Action: queries the clause and finds out what notifications to send out. If it's to an external blackbox
+it sends it out. If its to an internal blackbox, it queues it to be sent out. When the action clauses are finished
+a flush function is called to send out the queued notifications to the internal blackboxes (this is needed because
+all packets have to be sent out together.)
+2) Minus: queries the clause and finds out what should be retracted from its associated state relation. These are
+then retracted.
+3) Plus: queries the clause and finds out what should be asserted to its associated state relation. These are
+then asserted.
+
+Blackbox queries:
+
+When querying a relation, xsb can handle everything except for the blackbox queries. Right now we are doing a very simple thing which will not work in general: when a relation is queried, find all of the blackbox query atoms in it,
+and query those verbatim (with variables and maybe some constants) to the blackbox. If we are lucky the blackbox
+will return a finite set of answers which we then assert as facts to xsb. Then the relation is queried to xsb and
+the desired answer is returned. Afterwards, the facts asserted to xsb from the blackbox are retracted. In the future
+we will need a better algorithm that can handle blackbox queries that return infinitely many answers because in
+the context of variables being bound they may actually provide only finitely many answers.

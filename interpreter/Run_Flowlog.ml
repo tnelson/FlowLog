@@ -2,9 +2,9 @@ open Type_Helpers;;
 open Controller;;
 open Parser;;
 open Lexer;;
-open Flowlog_Types;;
+open Types;;
 
-let read_program (filename : string) : Syntax.program = 
+let read_program (filename : string) : Types.program = 
     let lexbuf = Lexing.from_channel (open_in filename) in
     try Parser.main Lexer.token lexbuf
         with exn -> 
@@ -16,18 +16,18 @@ let read_program (filename : string) : Syntax.program =
             " in token " ^ tok);
         raise exn;;
 
-let rec parse_imports_helper (filenames : string list) (already_parsed : Syntax.program list) (already_seen : string list) : Syntax.program list =
+let rec parse_imports_helper (filenames : string list) (already_parsed : Types.program list) (already_seen : string list) : Types.program list =
     match filenames with
     | [] -> already_parsed;
     | h :: t -> if List.mem h already_seen then raise (Parsing.Parse_error ("circular imports: " ^ (Type_Helpers.list_to_string (fun x -> x) (h :: already_seen)))) else
     let first = read_program h in
-        match first with Syntax.Program(_, imports, _, _, _) ->
+        match first with Types.Program(_, imports, _, _, _) ->
         parse_imports_helper ((List.map (fun str -> str ^ ".flg") imports) @ t) (first :: already_parsed) (h :: already_seen);;
 
 let build_finished_program (filename : string) : Types.program = 
-    let syntax_program = read_program filename in
-    match syntax_program with Syntax.Program(_, imports, _, _, _) ->
-    Conversion.program_convert (Parsing.import syntax_program (parse_imports_helper (List.map (fun str -> str ^ ".flg") imports) [] [filename]));;
+    let prgm = read_program filename in
+    match prgm with Types.Program(_, imports, _, _, _) ->
+    Parsing.import prgm (parse_imports_helper (List.map (fun str -> str ^ ".flg") imports) [] [filename]);;
 
 
 module Parsed_Program : PROGRAM = struct

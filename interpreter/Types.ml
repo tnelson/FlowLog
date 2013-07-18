@@ -41,9 +41,19 @@ module Types = struct
 	type clause_type = Plus | Minus | State | Action;;
 	(* name, arguments, body *)
 	type clause = Clause of clause_type * string * term list * atom list;;
-
 	(* name, module names to be imported, black boxes, notification types, clauses *)	
 	type program = Program of string * string list * blackbox list * notif_type list * clause list;;
+
+	(* actual notification value *)
+	type notif_val = Notif_val of notif_type * term list;;
+
+	(*let make_notif_val (prgm : program) (type_name : string) (vals : string list) : notif_val =
+		match prgm with Program(prgm_name, _, _, types, _) ->
+		match List.filter (function Type(name, _) -> name = String.lowercase type_name) types with
+		| [] -> raise (Failure ("Program " ^ prgm_name ^ " does not have a type called " ^ type_name "."));
+		| Type(name, fields) :: _ -> if fields.length = vals.length then
+			Notif_val(Type(name, fields), List.map (fun str -> Constant(str)) vals) else
+			raise (Failure "Too many arguments passed into a notif_val of type " ^ name ".");;*)
 
 	let packet_type = Type("packet", ["LOCSW"; "LOCPT"; "DLSRC"; "DLDST"; "DLTYP"; "NWSRC"; "NWDST"; "NWPROTO"]);;
 	let switch_port_type = Type("switch_port", ["SWITCH"; "PORT"]);;

@@ -1,8 +1,8 @@
 %{
   open Types.Types;;
   (*open Type_Helpers.Parsing;;*)
-
   (*let parse_debug = false;;*)
+  (* note: name changes have to happen here. Bring back Type_Helpers.Parsing.make_Program etc. *)
 %}
 
 
@@ -98,7 +98,7 @@
   term:
       NAME { Variable(String.uppercase $1) }
     | NUMBER { Constant($1) }
-    | DOUBLEQUOTE NAME DOUBLEQUOTE { Constant($2) } 
+    | DOUBLEQUOTE NAME DOUBLEQUOTE { Constant("constant_" ^ $2) (* WHAT IF THERE ARE SPACES? use String.map (fun c -> if c = ' ' then '_' else c) maybe? *)} 
     | NAME PERIOD NAME { Field_ref(String.uppercase $1, String.uppercase $3) }
     | NAME COLON NAME { Notiv_var(String.uppercase $1, String.uppercase $3) }
   ;

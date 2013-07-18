@@ -1,2 +1,0 @@
-Examples illustrating how queries will be evalutated.
-

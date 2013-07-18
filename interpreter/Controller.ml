@@ -1,4 +1,4 @@
-open Flowlog_Types;;
+open Types;;
 open Type_Helpers;;
 open Xsb_Communication;;
 open Evaluation;;
@@ -15,6 +15,10 @@ module type PROGRAM = sig
 	val program : Types.program;;
 end
 
+(* 
+need:
+Evalutaion.respond_to_notification
+*)
 
 module Make_OxModule (Program : PROGRAM) = struct
 	include OxStart.DefaultTutorialHandlers;;	
