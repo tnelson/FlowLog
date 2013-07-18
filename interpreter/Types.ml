@@ -1,25 +1,27 @@
 module Types = struct
 	(* either internal or external in which case it has an ip and a port. *)
-	type bb_type = Internal | External of string * int;;
+	type bb_type = Internal | External of string * int | BB_defer;;
 	(* actual blackbox. *)
 	type blackbox = BlackBox of string * bb_type;;
 	(* type name, field names *)
-	type notif_type = Type of string * string list;;
-	(* constant, variable, notif_var like pkt : packet, field_ref like pkt.locPt *)
-	type term = Constant of string | Variable of string | Notif_var of string * string | Field_ref of string * string;;
-	(* not a negation, or negation *)
+	type term_type = Type of string * string list | Term_defer of string option;;
+	(* constants, variables, field refs *)
+	type term = Constant of string list * term_type | Variable of string * term_type | Field_ref of term * string;;
 	type sign = Pos | Neg;;
 	(* things like A = B or R(A, B, C). For apply its sign, module, relation, args *)
-	type atom = Equals of sign * term * term | Apply of sign * string * string * term list | Bool of sign * bool;;
+	type atom = Equals of sign * term * term | Apply of sign * blackbox option * string * term list | Bool of bool;;
 	(* type of clause *)
-	type clause_type = Plus | Minus | State | Action;;
+	type clause_type = Plus | Minus | Helper | Action;;
 	(* name, arguments, body *)
 	type clause = Clause of clause_type * string * term list * atom list;;
+	(* groupings of clauses by name and type signature.
+		type, name (this is the long desugared name e.g. learned_pkt_raw_raw_raw for mac_learning's plus learned clause),
+		arguments (all variables), clauses (all the clauses with that signature) *)
+	type relation = Relation of clause_type * string * term list * clause list;;
 	(* name, module names to be imported, black boxes, notification types, clauses *)	
-	type program = Program of string * string list * blackbox list * notif_type list * clause list;;
+	type raw_program = Raw_program of string * string list * blackbox list * term_type list * clause list;;
+	type program = Program of string * blackbox list * term_type list * relation list;;
 
-	(* actual notification value *)
-	type notif_val = Notif_val of notif_type * term list;;
 
 	(*let make_notif_val (prgm : program) (type_name : string) (vals : string list) : notif_val =
 		match prgm with Program(prgm_name, _, _, types, _) ->
