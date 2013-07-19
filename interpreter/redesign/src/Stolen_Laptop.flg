@@ -15,16 +15,13 @@ type stolen_laptop_report = {mac};
 type stolen_laptop_cancel = {mac};
 type stolen_laptop_found = {mac,swid,time};
 
-action forward(pkt : packet, newpkt : packet) :- Mac_learning.forward(pkt, newpkt);
+forward(pkt : packet, newpkt : packet) :- Mac_learning.forward(pkt, newpkt);
 
-plus stolen(report: stolen_laptop_report, mac) :- report.mac = mac;
++stolen(report: stolen_laptop_report, mac) :- report.mac = mac;
 
 // TODO
 // Can't do this right now; we hit the interpreter's lack of type sensitivity on evaluation
 //-stolen(cancel: stolen_laptop_cancel, mac) :- cancel.mac = mac;
 
-action BBpolice(pkt : packet, found: stolen_laptop_found) :- 
-  stolen(pkt.dlSrc),
-  found.mac = pkt.dlSrc,
-  found.swid = pkt.locSw,
-  BBTimer.time(found.time);
+BBpolice(pkt : packet, found: stolen_laptop_found) :- 
+  stolen(pkt.dlSrc), found.mac = pkt.dlSrc, found.swid = pkt.locSw, BBTimer.time(found.time);

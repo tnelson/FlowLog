@@ -7,20 +7,14 @@ module Types = struct
 	type term_type = Type of string * string list | Term_defer of string option;;
 	(* constants, variables, field refs *)
 	type term = Constant of string list * term_type | Variable of string * term_type | Field_ref of term * string;;
-	type sign = Pos | Neg;;
-	(* things like A = B or R(A, B, C). For apply its sign, module, relation, args *)
-	type atom = Equals of sign * term * term | Apply of sign * blackbox option * string * term list | Bool of bool;;
+	(* things like A = B or R(A, B, C) or true. For apply it's sign, blackbox, relation, args *)
+	type atom = Equals of bool * term * term | Apply of bool * blackbox option * string * term list | Bool of bool;;
 	(* type of clause *)
 	type clause_type = Plus | Minus | Helper | Action;;
-	(* name, arguments, body *)
+	(* clause type, name, arguments, body *)
 	type clause = Clause of clause_type * string * term list * atom list;;
-	(* groupings of clauses by name and type signature.
-		type, name (this is the long desugared name e.g. learned_pkt_raw_raw_raw for mac_learning's plus learned clause),
-		arguments (all variables), clauses (all the clauses with that signature) *)
-	type relation = Relation of clause_type * string * term list * clause list;;
 	(* name, module names to be imported, black boxes, notification types, clauses *)	
-	type raw_program = Raw_program of string * string list * blackbox list * term_type list * clause list;;
-	type program = Program of string * blackbox list * term_type list * relation list;;
+	type program = Program of string * string list * blackbox list * term_type list * clause list;;
 
 
 	(*let make_notif_val (prgm : program) (type_name : string) (vals : string list) : notif_val =

@@ -10,12 +10,12 @@ type start_timer = {seconds, id};
 type timer_expired = {id};
 
 
-action forward(pkt : packet, newpkt : packet) :- Canary.forward(pkt, newpkt);
-action forward(pkt : packet, newpkt : packet) :- Mac_learning.forward(pkt, newpkt), risen();
+forward(pkt : packet, newpkt : packet) :- Canary.forward(pkt, newpkt);
+forward(pkt : packet, newpkt : packet) :- Mac_learning.forward(pkt, newpkt), risen();
 
 // Start a timer. When the timer expires, riiiise from the graaaave. Or unconsciousness.
 // Whatever. This metaphor is kind of falling apart.
-action BBtimer(lo : low_oxygen, timer : start_timer) :- timer.seconds = lo.seconds, timer.id = "zombie_canary";
+BBtimer(lo : low_oxygen, timer : start_timer) :- timer.seconds = lo.seconds, timer.id = "zombie_canary";
 
-plus risen(timer : timer_expired) :- timer.id = "zombie_canary";
-minus risen(lo : low_oxygen) :- true;
++risen(timer : timer_expired) :- timer.id = "zombie_canary";
+-risen(lo : low_oxygen) :- true;

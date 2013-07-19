@@ -30,24 +30,26 @@ module Type_Helpers = struct
 	let atom_to_string (a : Types.atom) : string =
 		match a with
 		| Types.Equals(sgn, t1, t2) -> (bool_to_string sgn) ^ (term_to_string t1) ^ " = " ^ (term_to_string t2);
-		| Types.Apply(sgn, _, name, tl) -> (bool_to_string sgn) ^ name ^ "(" ^ (list_to_string term_to_string tl) ^ ")";
-		| Types.Bool(b) -> string_of_bool b;;
+		| Types.Apply(sgn, None, name, tl) -> (bool_to_string sgn) ^ name ^ "(" ^ (list_to_string term_to_string tl) ^ ")";
+		| Types.Apply(sgn, Some(Types.BlackBox(bb_name)), name, tl) -> (bool_to_string sgn) ^ (bb_name ^ "/" ^ name) ^ "(" ^ (list_to_string term_to_string tl) ^ ")";
+		| Types.Bool(b) -> string_of_bool b;
+		| _ -> failwith "Not a valid atom";;
 
 	let clause_type_to_string (cls_type : Types.clause_type) : string =
 		match cls_type with
-		| Types.Plus -> "plus";
-		| Types.Minus -> "minus";
-		| Types.Helper -> "helper";
-		| Types.Action -> "action";;
+		| Plus -> "plus";
+		| Minus -> "minus";
+		| Helper -> "helper";
+		| Action -> "action";;
 
 	let clause_signature_name (cls : Types.clause) : string =
 		match cls with Types.Clause(cls_type, name, args, body) ->
-		let name_list = [clause_type_to_string cls_type; name] @ (List.map term_to_string args) in
+		let name_list = [clause_type_to_string cls; name] @ (List.map term_to_string args) in
 		List.fold_right (fun str acc -> str ^ "_" ^ acc) name_list "";;
 
 	let clause_signature (cls : Types.clause) : string =
 		match cls with Types.Clause(_, _, args, _) ->
-		(clause_signature_name cls) ^ "(" ^ (list_to_string term_to_string args) ^ ")";;
+		(clause_signature_name cls) ^ "(" (list_to_string term_to_string args) ^ ")";;
 
 	let clause_to_string (cls : Types.clause) : string = 
 		match cls with Types.Clause(_, _, _, body) ->
@@ -55,14 +57,14 @@ module Type_Helpers = struct
 		| [] -> (clause_signature cls) ^ ":- false";
 		| _ -> (clause_signature cls) ^ ":-" ^ (list_to_string atom_to_string body);;
 
-end
 
 
 
 
 
 
-(*
+
+
 	let atom_to_string (cls : Types.clause) (a : Types.atom) : string =
 		match a with
 		| Types.Equals(t1, t2) -> (term_to_string t1) ^ " = " ^ (term_to_string t2);
@@ -451,4 +453,4 @@ module Conversion = struct
 		match prgm with Syntax.Program(name, _, _, ntypes, clauses) ->
 		Types.Program(name, List.map notif_type_convert ntypes, make_relations (List.map (clause_convert prgm) clauses));;
 
-end*)*)
+end*)
