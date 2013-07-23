@@ -58,6 +58,9 @@ module Type_Helpers = struct
 		let name_list = [clause_type_to_string cls_type; name] @ (List.map (fun t -> term_type_name (type_of_term t)) args) in
 		List.fold_right (fun str acc -> str ^ "_" ^ acc) name_list "";;
 
+	let clause_signature (cls : Types.clause) : string =
+		match cls with Types.Clause(s, _) -> signature_name s;;
+
 	let signature_to_string (s : Types.signature) : string =
 		match s with Types.Signature(_, _, args) ->
 		(signature_name s) ^ "(" ^ (list_to_string term_to_string args) ^ ")";;

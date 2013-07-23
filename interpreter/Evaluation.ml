@@ -27,27 +27,29 @@ Type_Helpers.get_blackbox
 *)
 
 
-(* NEED PARTITIONY FUNCTION *)
-
 	let respond_to_notification (notif : Types.term) (prgm : Types.program) : unit =
 		if debug1 then print_endline ("incoming notif: " ^ Type_Helpers.term_to_string notif);
+		let already_seen = ref [];
 		match prgm with Types.Program(_, _, _, _, clauses) ->
 		match notif with Types.Constant(_, ttype) ->
 		List.iter (fun cls -> match cls with 
 			| Types.Clause(Types.Signature(Types.Action, cls_name, [Types.Variable(_, type1); Types.Variable(_, _) as v2]), _) ->
-				if type1 = ttype then
+				if (not List.mem (Type_Helpers.clause_signature cls) !already_seen) && type1 = ttype then
+				already_seen := Type_Helpers.clause_signature cls :: !already_seen;
 				let to_send = Communication.query_signature (Types.Signature(Types.Action, cls_name, [notif; v2])) in
 				send_notifications (Type_Helpers.get_blackbox prgm name) to_send);
 			| _ -> ();) clauses;
 		List.iter (fun cls -> match cls with 
 			| Types.Clause(Types.Signature(Types.Minus, cls_name, Types.Variable(_, type1) :: tail), _) ->
-				if type1 = ttype then
+				if (not List.mem (Type_Helpers.clause_signature cls) !already_seen) && type1 = ttype then
+				already_seen := Type_Helpers.clause_signature cls :: !already_seen;
 				let to_retract = Communication.query_signature (Types.Signature(Types.Minus, cls_name, notif @ tail)) in
 				List.iter (fun (tl : Types.term list) -> Communication.retract_signature (Types.Signature(Types.Helper, cls_name, tl))) to_retract;
 			| _ -> ();) clauses;
 		List.iter (fun cls -> match cls with 
 			| Types.Clause(Types.Signature(Types.Plus, cls_name, Types.Variable(_, type1) :: tail), _) ->
-				if type1 = ttype then
+				if (not List.mem (Type_Helpers.clause_signature cls) !already_seen) && type1 = ttype then
+				already_seen := Type_Helpers.clause_signature cls :: !already_seen;
 				let to_assert = Communication.query_signature (Types.Signature(Types.Plus, cls_name, notif @ tail)) in
 				List.iter (fun (tl : Types.term list) -> Communication.assert_signature (Types.Signature(Types.Helper, cls_name, tl))) to_retract;
 			| _ -> ();) clauses;
