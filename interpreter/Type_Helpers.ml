@@ -21,7 +21,7 @@ module Type_Helpers = struct
 		| Types.Term_defer(Some(name)) -> "term_defer_" ^ name;
 		| Types.Term_defer(None) -> "term_defer";;
 
-	let type_of_term (t : Types.term) : string =
+	let type_of_term (t : Types.term) : Types.term_type =
 		match t with
 		| Types.Constant(_, ttype) -> ttype;
 		| Types.Variable(_, ttype) -> ttype;

@@ -1,7 +1,7 @@
-open Flowlog_Types;;
+open Types;;
 open Controller_Forwarding;;
 open Xsb_Communication;;
-open Flowlog_Thrift_Out;;
+(*open Flowlog_Thrift_Out;;*)
 open Type_Helpers;;
 
 let debug = true;;
@@ -13,10 +13,9 @@ module Evaluation = struct
 		if debug then List.iter (fun out_notif -> print_endline ("outgoing notif: " ^ Type_Helpers.term_to_string out_notif)) out_notifs;
 		match bb with
 		| Types.BlackBox(name, Types.Internal) -> if name = "forward" then Controller_Forwarding.queue_packets out_notifs 
-                                             else raise (Failure ("internal black box " ^ name ^ " is not currently supported.")) 
+			else raise (Failure ("internal black box " ^ name ^ " is not currently supported.")) 
 		| _ -> List.iter (fun n -> if debug then Printf.printf "SENDING EXT NOTIF: %s\n%!" (Type_Helpers.term_to_string n);
-	                               Flowlog_Thrift_Out.doBBnotify bb n)
-	                     out_notifs;;
+			(*Flowlog_Thrift_Out.doBBnotify bb n*))	out_notifs;;
 
 	let debug1 = false;;
 
@@ -37,7 +36,7 @@ Type_Helpers.get_blackbox
 				if (not List.mem (Type_Helpers.clause_signature cls) !already_seen) && type1 = ttype then
 				already_seen := Type_Helpers.clause_signature cls :: !already_seen;
 				let to_send = Communication.query_signature (Types.Signature(Types.Action, cls_name, [notif; v2])) in
-				send_notifications (Type_Helpers.get_blackbox prgm name) to_send);
+				send_notifications (Type_Helpers.get_blackbox prgm name) to_send;
 			| _ -> ();) clauses;
 		List.iter (fun cls -> match cls with 
 			| Types.Clause(Types.Signature(Types.Minus, cls_name, Types.Variable(_, type1) :: tail), _) ->
@@ -52,6 +51,6 @@ Type_Helpers.get_blackbox
 				already_seen := Type_Helpers.clause_signature cls :: !already_seen;
 				let to_assert = Communication.query_signature (Types.Signature(Types.Plus, cls_name, notif @ tail)) in
 				List.iter (fun (tl : Types.term list) -> Communication.assert_signature (Types.Signature(Types.Helper, cls_name, tl))) to_retract;
-			| _ -> ();) clauses;
+			| _ -> ();) clauses;;
 
 end

@@ -1,4 +1,4 @@
-open Flowlog_Types;;
+open Types;;
 open Type_Helpers;;
 open Packet;;
 open OxPlatform;;
@@ -20,17 +20,19 @@ module Controller_Forwarding = struct
 
 	let get_field (notif : Types.term) (str : string) : string =
 		if debug then print_endline ("starting get_field with field " ^ str);
-		match notif with Types.Constant(strings, Types.Type(_, fields)) ->
-		let combined = List.combine fields strings in
-		if debug then print_endline (Type_Helpers.list_to_string (function (str, t) -> str ^ ":" ^ Type_Helpers.term_to_string t) combined);
-		if debug then print_endline (Type_Helpers.term_to_string (List.assoc str combined));
-		List.assoc str combined;;
+		match notif with
+		| Types.Constant(strings, Types.Type(_, fields)) ->
+			let combined = List.combine fields strings in
+			if debug then print_endline (Type_Helpers.list_to_string (function (str1, str2) -> str ^ ":" ^ str2) combined);
+			if debug then print_endline (List.assoc str combined);
+			List.assoc str combined;
+		| _ -> raise (Failure "for notification values only");;
 
 	let pkt_to_notif (sw : switchId) (pk : packetIn) : Types.term = 
 		if debug then print_endline "starting pkt_to_notif";
 		let pkt_payload = parse_payload pk.input_payload in
 		let isIp = ((dlTyp pkt_payload) = 0x0800) in
-		let terms = List.map (function x -> Types.Constant(x)) [Int64.to_string sw;
+		let strings = [Int64.to_string sw;
 		string_of_int pk.port;
 		Int64.to_string pkt_payload.Packet.dlSrc;
 		Int64.to_string pkt_payload.Packet.dlDst;
@@ -41,7 +43,7 @@ module Controller_Forwarding = struct
 		(*let _ = if debug then print_endline ("pkt to term list: " ^ (Type_Helpers.list_to_string Type_Helpers.term_to_string ans)) in
 		let _ = if debug then print_endline ("dlTyp: " ^ (string_of_int (dlTyp pkt_payload))) in*)
 		if debug then print_endline "finishing pkt_to_notif";
-		Types.Constant(terms, Types.packet_type);;
+		Types.Constant(strings, Types.packet_type);;
 
 	(* notice that the current implementation is not efficient--if its just a repeater its doing way too much work. *)
 	let forward_packets (notifs : Types.term list) : unit =

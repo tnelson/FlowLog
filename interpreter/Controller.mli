@@ -1,4 +1,4 @@
-open Flowlog_Types;;
+open Types;;
 open Packet;;
 open OxPlatform;;
 open OpenFlow0x01_Core;;

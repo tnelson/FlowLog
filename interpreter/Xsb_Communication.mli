@@ -1,4 +1,4 @@
-open Flowlog_Types;;
+open Types;;
 
 module Xsb : sig
 	val start_xsb : unit -> out_channel * in_channel;;

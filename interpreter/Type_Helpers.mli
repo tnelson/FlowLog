@@ -1,8 +1,11 @@
 open Types;;
 
 module Type_Helpers : sig
+	val ends_with : string -> string -> bool;;
 
 	val list_to_string : ('a -> string) -> 'a list -> string;;
+
+	val type_of_term : Types.term -> Types.term_type;;
 
 	val term_to_string : Types.term -> string;;
 

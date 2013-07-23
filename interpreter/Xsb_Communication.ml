@@ -1,8 +1,8 @@
 open Unix;;
 open Printf;;
-open Flowlog_Types;;
+open Types;;
 open Type_Helpers;;
-open Flowlog_Thrift_Out;;
+(*open Flowlog_Thrift_Out;;*)
 
 let debug = true;;
 
@@ -134,33 +134,34 @@ module Communication = struct
 	(* ignoring blackbox queries for the moment *)
 	let retract_signature (s : Types.signature) : unit =
 		match s with Types.Signature(_, _, args) ->
-		let num_vars = List.length (List.filter (function | Constant(_, _) -> false; | _ -> true) args) in
-		let _ = send_message ("retract((" ^ (Type_Helpers.signature_to_string) ^ ")).") num_vars in ();;
+		let num_vars = List.length (List.filter (function | Types.Constant(_, _) -> false; | _ -> true) args) in
+		let _ = send_message ("retract((" ^ (Type_Helpers.signature_to_string s) ^ ")).") num_vars in ();;
 
 	let assert_signature (s : Types.signature) : unit =
-		retract_signature s;;
+		retract_signature s;
 		match s with Types.Signature(_, _, args) ->
-		let num_vars = List.length (List.filter (function | Constant(_, _) -> false; | _ -> true) args) in
-		let _ = send_message ("assert((" ^ (Type_Helpers.signature_to_string) ^ ")).") num_vars in ();;	
+		let num_vars = List.length (List.filter (function | Types.Constant(_, _) -> false; | _ -> true) args) in
+		let _ = send_message ("assert((" ^ (Type_Helpers.signature_to_string s) ^ ")).") num_vars in ();;	
 
-	let rec split (num : int) (l : 'a list) : 'a list * 'a list =
+	let rec split_list (num : int) (l : 'a list) : 'a list * 'a list =
 		if num < 0 then raise (Failure "num should be nonnegative") else
 		if num = 0 then ([], l) else
 		match l with
 		| [] -> raise (Failure "num is bigger than the length of the list");
-		| h :: t -> let first_recur, rest_recur = split (num - 1) t in (h :: first_recur, rest_recur);;
+		| h :: t -> let first_recur, rest_recur = split_list (num - 1) t in (h :: first_recur, rest_recur);;
 
 	let rec group_into_constants (sl : string list) (types : Types.term_type list) : Types.term list =
 		match types with
-		| [] -> if sl = [] then [] else raise ("More strings than fit into the types");
+		| [] -> if sl = [] then [] else raise (Failure "More strings than fit into the types");
 		| Types.Type(_, fields) as t :: tail ->
 			let (first_bunch, rest) = split_list (List.length fields) sl in
-			Types.Constant(first_bunch, t) :: group_into_constants rest tail;;
+			Types.Constant(first_bunch, t) :: group_into_constants rest tail;
+		| _ -> raise (Failure "deferd type");;
 
 	let query_signature (s : Types.signature) : (Types.term list) list =
 		match s with Types.Signature(_, _, args) ->
-		let num_vars = List.length (List.filter (function | Variable(_, _) -> true; | _ -> false) args) in
-		let strings = send_message ((Type_Helpers.signature_to_string) ^ ".") num_vars in
+		let num_vars = List.length (List.filter (function | Types.Variable(_, _) -> true; | _ -> false) args) in
+		let strings = send_message ((Type_Helpers.signature_to_string s) ^ ".") num_vars in
 		let types = List.map Type_Helpers.type_of_term args in
 		List.map (fun sl -> group_into_constants sl types) strings;;
 
@@ -242,7 +243,7 @@ module Communication = struct
 		List.fold_right (fun a acc -> match a with
 				| Types.Equals(_, t1, t2) -> add_unique_var t1 (add_unique_var t2 acc);
 				| Types.Apply(_, _, tl) -> List.fold_right add_unique_var tl acc;
-				| Types.Bool(_) -> acc;) body (List.fold_right add_unique_var (Type_Helpers.arguments_to_terms args) []);;)
+				| Types.Bool(_) -> acc;) body (List.fold_right add_unique_var args []);;
 
 	let start_clause (cls : Types.clause) : unit =
 		if debug then print_endline ("assert((" ^ (Type_Helpers.clause_to_string cls) ^ ")).");
