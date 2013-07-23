@@ -15,11 +15,23 @@ module Type_Helpers = struct
 		let ans = List.fold_right (fun x acc -> (conversion x) ^ "," ^ acc) l "" in
 		if ans = "" then ans else String.sub ans 0 (String.length ans - 1);;
 
+	let term_type_name (t : Types.term_type) : string =
+		match t with
+		| Types.Type(name, _) -> name;
+		| Types.Term_defer(Some(name)) -> "term_defer_" ^ name;
+		| Types.Term_defer(None) -> "term_defer";;
+
+	let type_of_term (t : Types.term) : string =
+		match t with
+		| Types.Constant(_, ttype) -> ttype;
+		| Types.Variable(_, ttype) -> ttype;
+		| Types.Field_ref(_, _) -> Types.raw_type;;
+
 	let term_to_string (t : Types.term) : string = 
 		match t with
 		| Types.Constant(values, _) -> list_to_string (fun str -> str) values; 
 		| Types.Variable(name, Types.Type(_, fields)) -> list_to_string (fun field -> name ^ "_" ^ field) fields;
-		| Types.Field_ref(Types.Variable(name, _), field) -> name ^ "_" ^ field;
+		| Types.Field_ref(name, field) -> name ^ "_" ^ field;
 		| _ -> failwith "Not a valid term";;
 
 	let bool_to_string (b : bool) : string =
@@ -27,10 +39,11 @@ module Type_Helpers = struct
 		| true -> "";
 		| false -> "not ";;
 
+	(* note that the name of a relation includes the prefix (before the dot) *)
 	let atom_to_string (a : Types.atom) : string =
 		match a with
 		| Types.Equals(sgn, t1, t2) -> (bool_to_string sgn) ^ (term_to_string t1) ^ " = " ^ (term_to_string t2);
-		| Types.Apply(sgn, _, name, tl) -> (bool_to_string sgn) ^ name ^ "(" ^ (list_to_string term_to_string tl) ^ ")";
+		| Types.Apply(sgn, name, tl) -> (bool_to_string sgn) ^ name ^ "(" ^ (list_to_string term_to_string tl) ^ ")";
 		| Types.Bool(b) -> string_of_bool b;;
 
 	let clause_type_to_string (cls_type : Types.clause_type) : string =
@@ -40,20 +53,24 @@ module Type_Helpers = struct
 		| Types.Helper -> "helper";
 		| Types.Action -> "action";;
 
-	let clause_signature_name (cls : Types.clause) : string =
-		match cls with Types.Clause(cls_type, name, args, body) ->
-		let name_list = [clause_type_to_string cls_type; name] @ (List.map term_to_string args) in
+	let signature_name (s : Types.signature) : string = 
+		match s with Types.Signature(cls_type, name, args) ->
+		let name_list = [clause_type_to_string cls_type; name] @ (List.map (fun t -> term_type_name (type_of_term t)) args) in
 		List.fold_right (fun str acc -> str ^ "_" ^ acc) name_list "";;
 
-	let clause_signature (cls : Types.clause) : string =
-		match cls with Types.Clause(_, _, args, _) ->
-		(clause_signature_name cls) ^ "(" ^ (list_to_string term_to_string args) ^ ")";;
+	let signature_to_string (s : Types.signature) : string =
+		match s with Types.Signature(_, _, args) ->
+		(signature_name s) ^ "(" ^ (list_to_string term_to_string args) ^ ")";;
 
 	let clause_to_string (cls : Types.clause) : string = 
-		match cls with Types.Clause(_, _, _, body) ->
+		match cls with Types.Clause(s, body) ->
 		match body with
-		| [] -> (clause_signature cls) ^ ":- false";
-		| _ -> (clause_signature cls) ^ ":-" ^ (list_to_string atom_to_string body);;
+		| [] -> (signature_to_string s) ^ ":- false";
+		| _ -> (signature_to_string s) ^ ":-" ^ (list_to_string atom_to_string body);;
+
+	(*let relations = Hashtbl.create;;
+ 
+	let make_relations (prgm : Types.program) : unit =*)
 
 end
 

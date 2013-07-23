@@ -9,8 +9,8 @@ module Xsb : sig
 end
 
 module Communication : sig
-	val query_relation : Types.relation -> Types.argument list -> (Types.term list) list;;
-	val retract_relation : Types.relation -> Types.term list -> unit;;
-	val assert_relation : Types.relation -> Types.term list -> unit;;
+	val query_signature : Types.signature -> (Types.term list) list;;
+	val retract_signature : Types.signature -> unit;;
+	val assert_signature : Types.signature -> unit;;
 	val start_program : Types.program -> unit;; 
 end

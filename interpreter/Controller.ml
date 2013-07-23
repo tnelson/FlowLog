@@ -31,7 +31,7 @@ module Make_OxModule (Program : PROGRAM) = struct
 	    Printf.printf "Switch %Ld connected.\n%!" sw;
 	    let port_nums = List.map (fun (x : PortDescription.t)-> x.PortDescription.port_no) feats.SwitchFeatures.ports in
 	    let sw_string = Int64.to_string sw in
-	    let notifs = List.map (fun portid -> Types.Notif_val(Types.switch_port_type, [Types.Constant(sw_string); Types.Constant(string_of_int portid)])) port_nums in
+	    let notifs = List.map (fun portid -> Types.Term([Types.Constant(sw_string); Types.Constant(string_of_int portid)], Types.switch_port_type)) port_nums in
 	    List.iter (fun notif -> Evaluation.respond_to_notification notif Program.program) notifs;
 	    if debug then Xsb.debug_print_listings ();;
 

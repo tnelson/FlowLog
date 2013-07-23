@@ -1,19 +1,21 @@
 module Types = struct
 	(* either internal or external in which case it has an ip and a port. *)
-	type bb_type = Internal | External of string * int | BB_defer;;
+	type bb_type = Internal | External of string * int;;
 	(* actual blackbox. *)
 	type blackbox = BlackBox of string * bb_type;;
 	(* type name, field names *)
 	type term_type = Type of string * string list | Term_defer of string option;;
 	(* constants, variables, field refs *)
-	type term = Constant of string list * term_type | Variable of string * term_type | Field_ref of term * string;;
+	type term = Constant of string list * term_type | Variable of string * term_type | Field_ref of string * string;;
 	(* things like A = B or R(A, B, C) or true. For apply it's sign, blackbox, relation, args *)
-	type atom = Equals of bool * term * term | Apply of bool * blackbox option * string * term list | Bool of bool;;
+	type atom = Equals of bool * term * term | Apply of bool * string * term list | Bool of bool;;
 	(* type of clause *)
 	type clause_type = Plus | Minus | Helper | Action;;
+	(* the full type of the clause *)
+	type signature = Signature of clause_type * string * term list;;
 	(* clause type, name, arguments, body *)
-	type clause = Clause of clause_type * string * term list * atom list;;
-	(* name, module names to be imported, black boxes, notification types, clauses *)	
+	type clause = Clause of signature * atom list;;
+	(* name, module names to be imported, black boxes, notification types, clauses *)
 	type program = Program of string * string list * blackbox list * term_type list * clause list;;
 
 
@@ -25,6 +27,7 @@ module Types = struct
 			Notif_val(Type(name, fields), List.map (fun str -> Constant(str)) vals) else
 			raise (Failure "Too many arguments passed into a notif_val of type " ^ name ".");;*)
 
+	let raw_type = Type("raw", ["VALUE"]);;
 	let packet_type = Type("packet", ["LOCSW"; "LOCPT"; "DLSRC"; "DLDST"; "DLTYP"; "NWSRC"; "NWDST"; "NWPROTO"]);;
 	let switch_port_type = Type("switch_port", ["SWITCH"; "PORT"]);;
 

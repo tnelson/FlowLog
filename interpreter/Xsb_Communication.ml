@@ -124,15 +124,50 @@ module Communication = struct
 
 	(* assertion, number of answers to expect (number of variables in clause) *)
 	(* if this is a query with 0 variables, will call send_assert and thus need to provide [] vs [[]] *)
-	let send_message (message : string) (num_ans : int) : (Types.term list) list =
-		let answer = (if num_ans > 0 then
+	let send_message (message : string) (num_ans : int) : (string list) list =
+		if num_ans > 0 then
 		                Xsb.send_query message num_ans 
 		              else let yn = Xsb.send_assert message in
 		                if (Type_Helpers.ends_with yn "yes") then [[]]
-		                else []) in
-		List.map (fun (l : string list) -> List.map (fun str -> Types.Constant(str)) l) answer;;
+		                else []
 
-	let send_relation (rel : Types.relation) (args : Types.term list) (process : string -> string -> string) : (Types.term list) list =
+	(* ignoring blackbox queries for the moment *)
+	let retract_signature (s : Types.signature) : unit =
+		match s with Types.Signature(_, _, args) ->
+		let num_vars = List.length (List.filter (function | Constant(_, _) -> false; | _ -> true) args) in
+		let _ = send_message ("retract((" ^ (Type_Helpers.signature_to_string) ^ ")).") num_vars in ();;
+
+	let assert_signature (s : Types.signature) : unit =
+		retract_signature s;;
+		match s with Types.Signature(_, _, args) ->
+		let num_vars = List.length (List.filter (function | Constant(_, _) -> false; | _ -> true) args) in
+		let _ = send_message ("assert((" ^ (Type_Helpers.signature_to_string) ^ ")).") num_vars in ();;	
+
+	let rec split (num : int) (l : 'a list) : 'a list * 'a list =
+		if num < 0 then raise (Failure "num should be nonnegative") else
+		if num = 0 then ([], l) else
+		match l with
+		| [] -> raise (Failure "num is bigger than the length of the list");
+		| h :: t -> let first_recur, rest_recur = split (num - 1) t in (h :: first_recur, rest_recur);;
+
+	let rec group_into_constants (sl : string list) (types : Types.term_type list) : Types.term list =
+		match types with
+		| [] -> if sl = [] then [] else raise ("More strings than fit into the types");
+		| Types.Type(_, fields) as t :: tail ->
+			let (first_bunch, rest) = split_list (List.length fields) sl in
+			Types.Constant(first_bunch, t) :: group_into_constants rest tail;;
+
+	let query_signature (s : Types.signature) : (Types.term list) list =
+		match s with Types.Signature(_, _, args) ->
+		let num_vars = List.length (List.filter (function | Variable(_, _) -> true; | _ -> false) args) in
+		let strings = send_message ((Type_Helpers.signature_to_string) ^ ".") num_vars in
+		let types = List.map Type_Helpers.type_of_term args in
+		List.map (fun sl -> group_into_constants sl types) strings;;
+
+
+
+
+	(*let send_relation (rel : Types.relation) (args : Types.term list) (process : string -> string -> string) : (Types.term list) list =
 		let vars = List.filter (function 
 			| Types.Variable(_) -> true;
 			| Types.Field_ref(_, _) -> true;
@@ -158,7 +193,7 @@ module Communication = struct
 			| Types.Query(bb, str, tl) -> List.iter (fun sl -> send_message ("assert((" ^ str ^ "/" ^ (Types.blackbox_name bb) ^ "(" ^ (Type_Helpers.list_to_string (fun x -> x) sl) ^ ")))." )) ans;
 			| _ -> raise (Failure "only queries allowed here");) qs;;
 
-	let assert_queries (qs : (atom * string list list) list) : unit =
+	let retract_queries (qs : (atom * string list list) list) : unit =
 		List.iter (function (q, ans) -> match q with
 			| Types.Query(bb, str, tl) -> List.iter (fun sl -> send_message ("retract((" ^ str ^ "/" ^ (Types.blackbox_name bb) ^ "(" ^ (Type_Helpers.list_to_string (fun x -> x) sl) ^ ")))." )) ans;
 			| _ -> raise (Failure "only queries allowed here");) qs;;
@@ -172,7 +207,7 @@ module Communication = struct
 		assert_queries query_answers;
 		let ans = send_relation rel (Type_Helpers.arguments_to_terms args) (fun name args_string -> name ^ "(" ^ args_string ^ ").") in
 		retract_queries query_answers;
-		ans;;
+		ans;;*)
 
 (*
 	let query_relation (rel : Types.relation) (args : Types.argument list) : (Types.term list) list =
@@ -183,14 +218,14 @@ module Communication = struct
 		ans;;
 *)
 
-	let retract_relation (rel : Types.relation) (args : Types.term list) : unit =
+	(*let retract_relation (rel : Types.relation) (args : Types.term list) : unit =
 		let _ = send_relation rel args (fun name args_string -> 
 			"retract((" ^ name ^ "(" ^ args_string ^ "))).") in ();;
 
 	let assert_relation (rel : Types.relation) (args : Types.term list) : unit =
 		retract_relation rel args;
 		let _ = send_relation rel args (fun name args_string -> 
-			"assert((" ^ name ^ "(" ^ args_string ^ "))).") in ();;
+			"assert((" ^ name ^ "(" ^ args_string ^ "))).") in ();;*)
 
 	(* Returns x :: l if x not already in l *)
 	let add_unique (x : 'a) (l : 'a list) : 'a list = if List.mem x l then l else x :: l;;
@@ -198,34 +233,31 @@ module Communication = struct
 	(* Same as add_unique but only if x is a Variable *)
 	let add_unique_var (t : Types.term) (acc : Types.term list) : Types.term list = 
 		match t with
-		| Types.Constant(_) -> acc;
-		| Types.Variable(_) -> add_unique t acc;
+		| Types.Constant(_, _) -> acc;
+		| Types.Variable(_, _) -> add_unique t acc;
 		| Types.Field_ref(_, _) -> add_unique t acc;;
 	
-	(* Takes a desugared clause (i.e. one whose arguments are all terms and body contains no Field_refs) and
-		returns the number of variables in the clause *)
 	let get_vars (cls : Types.clause) : Types.term list =
-		let args, body = (Type_Helpers.clause_arguments cls, Type_Helpers.clause_body cls) in
-		List.fold_right (fun (lit : Types.literal) (acc : Types.term list) -> 
-				match Type_Helpers.get_atom(lit) with
-				| Types.Equals(t1, t2) -> add_unique_var t1 (add_unique_var t2 acc);
-				| Types.Apply(_, tl) -> List.fold_right add_unique_var tl acc;
-				| Types.Query(_, _, tl) -> List.fold_right add_unique_var tl acc; 
-				| Types.Bool(_) -> acc;) body (List.fold_right add_unique_var (Type_Helpers.arguments_to_terms args) []);;
+		match cls with Types.Clause(Types.Signature(_, _, args), body) ->
+		List.fold_right (fun a acc -> match a with
+				| Types.Equals(_, t1, t2) -> add_unique_var t1 (add_unique_var t2 acc);
+				| Types.Apply(_, _, tl) -> List.fold_right add_unique_var tl acc;
+				| Types.Bool(_) -> acc;) body (List.fold_right add_unique_var (Type_Helpers.arguments_to_terms args) []);;)
 
 	let start_clause (cls : Types.clause) : unit =
 		if debug then print_endline ("assert((" ^ (Type_Helpers.clause_to_string cls) ^ ")).");
 		let _ = send_message ("assert((" ^ (Type_Helpers.clause_to_string cls) ^ ")).") (List.length (get_vars cls)) in ();;
 		
 
-	let start_relation (rel : Types.relation) : unit =
+(*	let start_relation (rel : Types.relation) : unit =
 		match Type_Helpers.relation_body rel with
 		| [] -> start_clause (Types.HelperClause(Type_Helpers.relation_name rel, Type_Helpers.relation_arguments rel, []));
-		| body -> List.iter start_clause body;;
+		| body -> List.iter start_clause body;;*)
 
+	(* assuming all implicitly defined clauses have been added to list of clauses *)
 	let start_program (prgm : Types.program) : unit =
 		print_endline "starting program.";
-		match prgm with Types.Program(_, _, relations) ->
-		List.iter start_relation relations;;
+		match prgm with Types.Program(_, _, _, _, clauses) ->
+		List.iter start_clause clauses;;
 
 end

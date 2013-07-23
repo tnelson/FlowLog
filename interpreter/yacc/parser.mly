@@ -85,40 +85,38 @@
     | NAME COMMA name_list { (String.uppercase $1) :: $3 }
   ;
   clause:
-      PLUS NAME LPAREN term_list RPAREN COLON_HYPHEN atom_list SEMICOLON { Clause(Plus, String.lowercase $2, $4, $7) }
-    | MINUS NAME LPAREN term_list RPAREN COLON_HYPHEN atom_list SEMICOLON { Clause(Minus, String.lowercase $2, $4, $7) }
-    | STATE NAME LPAREN term_list RPAREN COLON_HYPHEN atom_list SEMICOLON { Clause(State, String.lowercase $2, $4, $7) }
-    | STATE NAME LPAREN RPAREN COLON_HYPHEN atom_list SEMICOLON { Clause(State, String.lowercase $2, [], $6) }
-    | ACTION NAME LPAREN term_list RPAREN COLON_HYPHEN atom_list SEMICOLON { Clause(Action, String.lowercase $2, $4 ,$7) }
+      PLUS NAME LPAREN term_list RPAREN COLON_HYPHEN atom_list SEMICOLON { Clause(Signature(Plus, String.lowercase $2, $4), $7) }
+    | MINUS NAME LPAREN term_list RPAREN COLON_HYPHEN atom_list SEMICOLON { Clause(Signature(Minus, String.lowercase $2, $4), $7) }
+    | HELPER NAME LPAREN term_list RPAREN COLON_HYPHEN atom_list SEMICOLON { Clause(Signature(Helper, String.lowercase $2, $4), $7) }
+    | HELPER NAME LPAREN RPAREN COLON_HYPHEN atom_list SEMICOLON { Clause(Signature(Helper, String.lowercase $2, []), $6) }
+    | ACTION NAME LPAREN term_list RPAREN COLON_HYPHEN atom_list SEMICOLON { Clause(Signature(Action, String.lowercase $2, $4) ,$7) }
   ;
   term_list:
       term { [$1] }
     | term COMMA term_list { $1 :: $3 }
   ;
   term:
-      NAME { Variable(String.uppercase $1) }
-    | NUMBER { Constant($1) }
-    | DOUBLEQUOTE NAME DOUBLEQUOTE { Constant("constant_" ^ $2) (* WHAT IF THERE ARE SPACES? use String.map (fun c -> if c = ' ' then '_' else c) maybe? *)} 
+      NAME { Variable(String.uppercase $1, raw_type) }
+    | NUMBER { Constant([$1], raw_type) }
+    | DOUBLEQUOTE NAME DOUBLEQUOTE { Constant([$2], raw_type) (* WHAT IF THERE ARE SPACES? use String.map (fun c -> if c = ' ' then '_' else c) maybe? *)} 
     | NAME PERIOD NAME { Field_ref(String.uppercase $1, String.uppercase $3) }
-    | NAME COLON NAME { Notif_var(String.uppercase $1, String.uppercase $3) }
+    | NAME COLON NAME { Variable(String.uppercase $1, Term_defer(Some(String.uppercase $3))) }
   ;
   atom:
-      term EQUALS term { Equals(Pos, $1, $3) }
-    | NOT term EQUALS term { Equals(Neg, $2, $2) }
-    | NAME LPAREN term_list RPAREN { Apply(Pos, "", String.lowercase $1, $3) }
-    | NOT NAME LPAREN term_list RPAREN { Apply(Neg, "", String.lowercase $2, $4) }
-    | NAME LPAREN RPAREN { Apply(Pos, "", String.lowercase $1, []) }
-    | NOT NAME LPAREN RPAREN { Apply(Neg, "", String.lowercase $2, []) }
-    | NAME PERIOD NAME LPAREN term_list RPAREN { Apply(Pos, String.lowercase $1, String.lowercase $3, $5) }
-    | NAME PERIOD NAME LPAREN RPAREN { Apply(Pos, String.lowercase $1, String.lowercase $3, []) }
-    | NOT NAME PERIOD NAME LPAREN term_list RPAREN { Apply(Neg, String.lowercase $2, String.lowercase $4, $6) }
-    | NOT NAME PERIOD NAME LPAREN RPAREN { Apply(Neg, String.lowercase $2, String.lowercase $4, []) }
-    | BOOLEAN { Bool(Pos, $1) }
-    | NOT BOOLEAN { Bool(Neg, $2) }
+      term EQUALS term { Equals(true, $1, $3) }
+    | NOT term EQUALS term { Equals(false, $2, $2) }
+    | NAME LPAREN term_list RPAREN { Apply(true, String.lowercase $1, $3) }
+    | NOT NAME LPAREN term_list RPAREN { Apply(false, String.lowercase $2, $4) }
+    | NAME LPAREN RPAREN { Apply(true, String.lowercase $1, []) }
+    | NOT NAME LPAREN RPAREN { Apply(false, String.lowercase $2, []) }
+    | NAME PERIOD NAME LPAREN term_list RPAREN { Apply(true, (String.lowercase $1) ^ "/" ^ (String.lowercase $3), $5) }
+    | NAME PERIOD NAME LPAREN RPAREN { Apply(false, (String.lowercase $1) ^ "/" ^ (String.lowercase $3), []) }
+    | NOT NAME PERIOD NAME LPAREN term_list RPAREN { Apply(false, BB_defer)), (String.lowercase $2) ^ "/" ^ (String.lowercase $4), $6) }
+    | NOT NAME PERIOD NAME LPAREN RPAREN { Apply(false, (String.lowercase $2) ^ "/" ^ (String.lowercase $4), []) }
+    | BOOLEAN { Bool($1) }
+    | NOT BOOLEAN { Bool(not $2) }
   ;
   atom_list:
       atom { [$1] }
     | atom COMMA atom_list { $1 :: $3 }
-  ;
-  
-  
+  ; 

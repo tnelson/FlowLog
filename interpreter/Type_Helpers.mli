@@ -1,7 +1,23 @@
 open Types;;
 
 module Type_Helpers : sig
-    
+
+	val list_to_string : ('a -> string) -> 'a list -> string;;
+
+	val term_to_string : Types.term -> string;;
+
+	val bool_to_string : bool -> string;;
+
+	val atom_to_string : Types.atom -> string;;
+
+	val clause_type_to_string : Types.clause_type -> string;;
+
+	val signature_name : Types.signature -> string;;
+
+	val signature_to_string : Types.signature -> string;;
+
+	val clause_to_string : Types.clause -> string;;
+
 end
 (*
 module Parsing : sig
