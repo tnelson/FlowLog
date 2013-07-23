@@ -1,0 +1,30 @@
+### Starting build.
+# Target: Evaluation.ml.depends, tags: { extension:ml, file:Evaluation.ml, ocaml, ocamldep, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamldep -package packet -package openflow -package ox -package thrift -modules Evaluation.ml > Evaluation.ml.depends
+# Target: Evaluation.mli.depends, tags: { extension:mli, file:Evaluation.mli, ocaml, ocamldep, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamldep -package packet -package openflow -package ox -package thrift -modules Evaluation.mli > Evaluation.mli.depends # cached
+# Target: Types.mli.depends, tags: { extension:mli, file:Types.mli, ocaml, ocamldep, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamldep -package packet -package openflow -package ox -package thrift -modules Types.mli > Types.mli.depends # cached
+# Target: Types.cmi, tags: { byte, compile, extension:mli, file:Types.mli, interf, ocaml, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamlc -c -ppopt -lwt-debug -thread -package packet -package openflow -package ox -package thrift -I thrift -I thrift/gen-ocaml -o Types.cmi Types.mli # cached
+# Target: Evaluation.cmi, tags: { byte, compile, extension:mli, file:Evaluation.mli, interf, ocaml, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamlc -c -ppopt -lwt-debug -thread -package packet -package openflow -package ox -package thrift -I thrift -I thrift/gen-ocaml -o Evaluation.cmi Evaluation.mli # cached
+# Target: Controller_Forwarding.mli.depends, tags: { extension:mli, file:Controller_Forwarding.mli, ocaml, ocamldep, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamldep -package packet -package openflow -package ox -package thrift -modules Controller_Forwarding.mli > Controller_Forwarding.mli.depends # cached
+# Target: Controller_Forwarding.cmi, tags: { byte, compile, extension:mli, file:Controller_Forwarding.mli, interf, ocaml, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamlc -c -ppopt -lwt-debug -thread -package packet -package openflow -package ox -package thrift -I thrift -I thrift/gen-ocaml -o Controller_Forwarding.cmi Controller_Forwarding.mli # cached
+# Target: Type_Helpers.mli.depends, tags: { extension:mli, file:Type_Helpers.mli, ocaml, ocamldep, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamldep -package packet -package openflow -package ox -package thrift -modules Type_Helpers.mli > Type_Helpers.mli.depends # cached
+# Target: Type_Helpers.cmi, tags: { byte, compile, extension:mli, file:Type_Helpers.mli, interf, ocaml, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamlc -c -ppopt -lwt-debug -thread -package packet -package openflow -package ox -package thrift -I thrift -I thrift/gen-ocaml -o Type_Helpers.cmi Type_Helpers.mli # cached
+# Target: Xsb_Communication.mli.depends, tags: { extension:mli, file:Xsb_Communication.mli, ocaml, ocamldep, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamldep -package packet -package openflow -package ox -package thrift -modules Xsb_Communication.mli > Xsb_Communication.mli.depends # cached
+# Target: Xsb_Communication.cmi, tags: { byte, compile, extension:mli, file:Xsb_Communication.mli, interf, ocaml, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamlc -c -ppopt -lwt-debug -thread -package packet -package openflow -package ox -package thrift -I thrift -I thrift/gen-ocaml -o Xsb_Communication.cmi Xsb_Communication.mli # cached
+# Target: Evaluation.d.cmo, tags: { byte, compile, debug, extension:cmo, extension:ml, file:Evaluation.d.cmo, file:Evaluation.ml, implem, ocaml, package(openflow), package(ox), package(packet), package(thrift), quiet, thread, traverse }
+ocamlfind ocamlc -c -ppopt -lwt-debug -g -thread -package packet -package openflow -package ox -package thrift -I thrift -I thrift/gen-ocaml -o Evaluation.d.cmo Evaluation.ml
++ ocamlfind ocamlc -c -ppopt -lwt-debug -g -thread -package packet -package openflow -package ox -package thrift -I thrift -I thrift/gen-ocaml -o Evaluation.d.cmo Evaluation.ml
+File "Evaluation.ml", line 15, characters 69-104:
+Error: Unbound value Controller_Forwarding.queue_packets
+Command exited with code 2.
+# Compilation unsuccessful.
