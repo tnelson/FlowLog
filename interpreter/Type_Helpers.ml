@@ -71,9 +71,12 @@ module Type_Helpers = struct
 		| [] -> (signature_to_string s) ^ ":- false";
 		| _ -> (signature_to_string s) ^ ":-" ^ (list_to_string atom_to_string body);;
 
-	(*let relations = Hashtbl.create;;
- 
-	let make_relations (prgm : Types.program) : unit =*)
+
+	let get_blackbox (prgm : Types.program) (name : string) : Types.blackbox =
+		match prgm with Types.Program(_, _, blackboxes, _, _) ->
+		match List.filter (function Types.BlackBox(n, _) -> n = name) blackboxes with
+		| [] -> raise (Failure ("No such black box as " ^ name));
+		| h :: _ -> h;;
 
 end
 

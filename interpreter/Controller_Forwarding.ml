@@ -45,6 +45,11 @@ module Controller_Forwarding = struct
 		if debug then print_endline "finishing pkt_to_notif";
 		Types.Constant(strings, Types.packet_type);;
 
+	let forward_queue = ref [];;
+
+	let queue_packets (out_notifs : Types.term list) : unit =
+		forward_queue := out_notifs @ !forward_queue;;
+
 	(* notice that the current implementation is not efficient--if its just a repeater its doing way too much work. *)
 	let forward_packets (notifs : Types.term list) : unit =
 		match !pkt_buffer with
@@ -78,6 +83,10 @@ module Controller_Forwarding = struct
 			()) notifs in
 		let _ = if debug then print_endline ("print packet payload: " ^ (Packet.to_string (parse_payload pk.input_payload))) in
 		send_packet_out sw 0l {output_payload = pk.input_payload; port_id = None; apply_actions = !actions_list};;
+
+	let flush_packets () : unit =
+		forward_packets !forward_queue;
+		forward_queue := [];;
 
 end
 

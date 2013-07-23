@@ -21,6 +21,8 @@ module Type_Helpers : sig
 
 	val clause_to_string : Types.clause -> string;;
 
+	val get_blackbox : Types.program -> string -> Types.blackbox;;
+
 end
 (*
 module Parsing : sig

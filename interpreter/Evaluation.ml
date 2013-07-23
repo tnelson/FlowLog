@@ -36,20 +36,21 @@ Type_Helpers.get_blackbox
 				if (not (List.mem (Type_Helpers.clause_signature cls) !already_seen)) && type1 = ttype then
 				(already_seen := Type_Helpers.clause_signature cls :: !already_seen;
 				let to_send = Communication.query_signature (Types.Signature(Types.Action, cls_name, [notif; v2])) in
-				send_notifications (Type_Helpers.get_blackbox prgm name) to_send);
+				List.iter (fun (tl : Types.term list) -> send_notifications (Type_Helpers.get_blackbox prgm cls_name) tl) to_send);
 			| _ -> ();) clauses;
+		Controller_Forwarding.flush_packets (); 
 		List.iter (fun cls -> match cls with 
 			| Types.Clause(Types.Signature(Types.Minus, cls_name, Types.Variable(_, type1) :: tail), _) ->
-				if (not List.mem (Type_Helpers.clause_signature cls) !already_seen) && type1 = ttype then
+				if (not (List.mem (Type_Helpers.clause_signature cls) !already_seen)) && type1 = ttype then
 				already_seen := Type_Helpers.clause_signature cls :: !already_seen;
-				let to_retract = Communication.query_signature (Types.Signature(Types.Minus, cls_name, notif @ tail)) in
+				let to_retract = Communication.query_signature (Types.Signature(Types.Minus, cls_name, notif :: tail)) in
 				List.iter (fun (tl : Types.term list) -> Communication.retract_signature (Types.Signature(Types.Helper, cls_name, tl))) to_retract;
 			| _ -> ();) clauses;
 		List.iter (fun cls -> match cls with 
 			| Types.Clause(Types.Signature(Types.Plus, cls_name, Types.Variable(_, type1) :: tail), _) ->
-				if (not List.mem (Type_Helpers.clause_signature cls) !already_seen) && type1 = ttype then
+				if (not (List.mem (Type_Helpers.clause_signature cls) !already_seen)) && type1 = ttype then
 				already_seen := Type_Helpers.clause_signature cls :: !already_seen;
-				let to_assert = Communication.query_signature (Types.Signature(Types.Plus, cls_name, notif @ tail)) in
+				let to_assert = Communication.query_signature (Types.Signature(Types.Plus, cls_name, notif :: tail)) in
 				List.iter (fun (tl : Types.term list) -> Communication.assert_signature (Types.Signature(Types.Helper, cls_name, tl))) to_assert;
 			| _ -> ();) clauses;;
 

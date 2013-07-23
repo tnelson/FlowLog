@@ -7,7 +7,7 @@ open OxPlatform;;
 open OpenFlow0x01_Core;;
 open OpenFlow0x01;;
 open Controller_Forwarding;;
-open Flowlog_Thrift_In;;
+(*open Flowlog_Thrift_In;;*)
 
 let debug = true;;
 
@@ -25,13 +25,13 @@ module Make_OxModule (Program : PROGRAM) = struct
 	
 	Communication.start_program Program.program;;
    
-    Flowlog_Thrift_In.start_listening(Program.program);;
+    (*Flowlog_Thrift_In.start_listening(Program.program);;*)
 
 	let switch_connected (sw : switchId) (feats : OpenFlow0x01.SwitchFeatures.t) : unit =
 	    Printf.printf "Switch %Ld connected.\n%!" sw;
 	    let port_nums = List.map (fun (x : PortDescription.t)-> x.PortDescription.port_no) feats.SwitchFeatures.ports in
 	    let sw_string = Int64.to_string sw in
-	    let notifs = List.map (fun portid -> Types.Term([Types.Constant(sw_string); Types.Constant(string_of_int portid)], Types.switch_port_type)) port_nums in
+	    let notifs = List.map (fun portid -> Types.Constant([sw_string; string_of_int portid], Types.switch_port_type)) port_nums in
 	    List.iter (fun notif -> Evaluation.respond_to_notification notif Program.program) notifs;
 	    if debug then Xsb.debug_print_listings ();;
 
