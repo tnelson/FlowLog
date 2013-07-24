@@ -1,2 +1,0 @@
-<*.ml{,i}> : package(packet), package(openflow), package(ox), package(thrift), thread
-<*.d.byte> : package(packet), package(openflow), package(ox), package(thrift), thread

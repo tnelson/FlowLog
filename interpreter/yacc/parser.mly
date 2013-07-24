@@ -83,11 +83,11 @@
     | NAME COMMA name_list { (String.uppercase $1) :: $3 }
   ;
   clause:
-      PLUS NAME LPAREN term_list RPAREN COLON_HYPHEN atom_list SEMICOLON { Clause(Signature(Plus, String.lowercase $2, $4), $7) }
-    | MINUS NAME LPAREN term_list RPAREN COLON_HYPHEN atom_list SEMICOLON { Clause(Signature(Minus, String.lowercase $2, $4), $7) }
-    | HELPER NAME LPAREN term_list RPAREN COLON_HYPHEN atom_list SEMICOLON { Clause(Signature(Helper, String.lowercase $2, $4), $7) }
-    | HELPER NAME LPAREN RPAREN COLON_HYPHEN atom_list SEMICOLON { Clause(Signature(Helper, String.lowercase $2, []), $6) }
-    | ACTION NAME LPAREN term_list RPAREN COLON_HYPHEN atom_list SEMICOLON { Clause(Signature(Action, String.lowercase $2, $4) ,$7) }
+      PLUS NAME LPAREN term_list RPAREN COLON_HYPHEN atom_list SEMICOLON { Clause(Signature(Plus, "", String.lowercase $2, $4), $7) }
+    | MINUS NAME LPAREN term_list RPAREN COLON_HYPHEN atom_list SEMICOLON { Clause(Signature(Minus, "", String.lowercase $2, $4), $7) }
+    | HELPER NAME LPAREN term_list RPAREN COLON_HYPHEN atom_list SEMICOLON { Clause(Signature(Helper, "", String.lowercase $2, $4), $7) }
+    | HELPER NAME LPAREN RPAREN COLON_HYPHEN atom_list SEMICOLON { Clause(Signature(Helper, "", String.lowercase $2, []), $6) }
+    | ACTION NAME LPAREN term_list RPAREN COLON_HYPHEN atom_list SEMICOLON { Clause(Signature(Action, "", String.lowercase $2, $4) ,$7) }
   ;
   term_list:
       term { [$1] }
@@ -103,14 +103,14 @@
   atom:
       term EQUALS term { Equals(true, $1, $3) }
     | NOT term EQUALS term { Equals(false, $2, $4) }
-    | NAME LPAREN term_list RPAREN { Apply(true, String.lowercase $1, $3) }
-    | NOT NAME LPAREN term_list RPAREN { Apply(false, String.lowercase $2, $4) }
-    | NAME LPAREN RPAREN { Apply(true, String.lowercase $1, []) }
-    | NOT NAME LPAREN RPAREN { Apply(false, String.lowercase $2, []) }
-    | NAME PERIOD NAME LPAREN term_list RPAREN { Apply(true, (String.lowercase $1) ^ "/" ^ (String.lowercase $3), $5) }
-    | NAME PERIOD NAME LPAREN RPAREN { Apply(false, (String.lowercase $1) ^ "/" ^ (String.lowercase $3), []) }
-    | NOT NAME PERIOD NAME LPAREN term_list RPAREN { Apply(false, (String.lowercase $2) ^ "/" ^ (String.lowercase $4), $6) }
-    | NOT NAME PERIOD NAME LPAREN RPAREN { Apply(false, (String.lowercase $2) ^ "/" ^ (String.lowercase $4), []) }
+    | NAME LPAREN term_list RPAREN { Apply(true, "", String.lowercase $1, $3) }
+    | NOT NAME LPAREN term_list RPAREN { Apply(false, "", String.lowercase $2, $4) }
+    | NAME LPAREN RPAREN { Apply(true, "", String.lowercase $1, []) }
+    | NOT NAME LPAREN RPAREN { Apply(false, "", String.lowercase $2, []) }
+    | NAME PERIOD NAME LPAREN term_list RPAREN { Apply(true, (String.lowercase $1), (String.lowercase $3), $5) }
+    | NAME PERIOD NAME LPAREN RPAREN { Apply(false, (String.lowercase $1), (String.lowercase $3), []) }
+    | NOT NAME PERIOD NAME LPAREN term_list RPAREN { Apply(false, (String.lowercase $2), (String.lowercase $4), $6) }
+    | NOT NAME PERIOD NAME LPAREN RPAREN { Apply(false, (String.lowercase $2), (String.lowercase $4), []) }
     | BOOLEAN { Bool($1) }
     | NOT BOOLEAN { Bool(not $2) }
   ;

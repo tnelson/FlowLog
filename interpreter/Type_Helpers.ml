@@ -40,7 +40,6 @@ module Type_Helpers = struct
 
     (* TODO: note that using PLUS etc. prevents treating +learned as a helper, which we could do before *)
 
-
 	let clause_type_to_string (cls_type : Types.clause_type) : string =
 		match cls_type with
 		| Types.Plus -> "plus";
@@ -48,27 +47,23 @@ module Type_Helpers = struct
 		| Types.Helper -> "helper";
 		| Types.Action -> "action";;
 
-
-
-    let signature_name (s : Types.signature) : string = 
-		match s with Types.Signature(cls_type, name, args) ->
-		let name_list = [clause_type_to_string cls_type; name] @ (List.map (fun t -> term_type_name (type_of_term t)) args) in
+	let signature_name (s : Types.signature) : string = 
+		match s with Types.Signature(cls_type, module_name, name, args) ->
+		let name_list = [clause_type_to_string cls_type; module_name ^ "/" ^ name] @ (List.map (fun t -> term_type_name (type_of_term t)) args) in
 		List.fold_right (fun str acc -> str ^ "_" ^ acc) name_list "";;
 
 	let clause_signature (cls : Types.clause) : string =
 		match cls with Types.Clause(s, _) -> signature_name s;;
 
 	let signature_to_string (s : Types.signature) : string =
-		match s with Types.Signature(_, _, args) ->
+		match s with Types.Signature(_, _, _, args) ->
 		(signature_name s) ^ "(" ^ (list_to_string term_to_string args) ^ ")";;
-
-
 
 	(* note that the name of a relation includes the prefix (before the dot) *)
 	let atom_to_string (a : Types.atom) : string =
 		match a with
 		| Types.Equals(sgn, t1, t2) -> (bool_to_string sgn) ^ (term_to_string t1) ^ " = " ^ (term_to_string t2);
-		| Types.Apply(sgn, name, tl) ->  (bool_to_string sgn) ^ (signature_to_string (Types.Signature(Types.Helper, name, tl)));		
+		| Types.Apply(sgn, module_name, name, tl) ->  (bool_to_string sgn) ^ (signature_to_string (Types.Signature(Types.Helper, module_name, name, tl)));		
 		| Types.Bool(b) -> string_of_bool b;;
 
 
@@ -113,20 +108,44 @@ module Parse_Helpers = struct
 		match prgm with Types.Program(prgm_name, _, _, _, _) ->
 		match a with
 		| Types.Equals(b, t1, t2) -> Types.Equals(b, process_term prgm t1, process_term prgm t2);
-		| Types.Apply(b, name, tl) -> Types.Apply(b, process_name name prgm_name , List.map (process_term prgm) tl);
+		| Types.Apply(b, "", name, tl) -> Types.Apply(b, prgm_name, name, List.map (process_term prgm) tl);
+		| Types.Apply(b, module_name, name, tl) -> Types.Apply(b, module_name, name, List.map (process_term prgm) tl);
 		| _ -> a;;
 
 	let process_signature (prgm : Types.program) (s : Types.signature) : Types.signature =
 		match prgm with Types.Program(prgm_name, _, _, _, _) ->
-		match s with Types.Signature(cls_type, name, tl) ->
-		Types.Signature(cls_type, process_name name prgm_name, List.map (process_term prgm) tl);;
-
+		match s with 
+		| Types.Signature(cls_type, "", name, tl) -> Types.Signature(cls_type, prgm_name, name, List.map (process_term prgm) tl);
+		| Types.Signature(cls_type, module_name, name, tl) -> Types.Signature(cls_type, module_name, name, List.map (process_term prgm) tl);;
+	
 	let process_clause (prgm : Types.program) (cls : Types.clause) : Types.clause =
 		match cls with Types.Clause(s, al) -> Types.Clause(process_signature prgm s, List.map (process_atom prgm) al);;
 
+	let rec list_contains (l : 'a list) (equiv : 'a -> 'a -> bool) (item : 'a) =
+		match l with
+		| [] -> false;
+		| h :: t -> if equiv h item then true else list_contains t equiv item;;
+
+	let rec drop (l : 'a list) (n : int) : 'a list = 
+		if n <= 0 then l else
+		match l with
+		| [] -> [];
+		| h :: t -> drop t (n - 1);;
+
+	let process_clause_list (prgm : Types.program) (clauses : Types.clause list) : Types.clause list =
+		let equiv = fun cls1 cls2 -> Type_Helpers.clause_signature cls1 = Type_Helpers.clause_signature cls2 in
+		let fixed_clauses = List.map (process_clause prgm) clauses in
+		(List.fold_right (fun cls acc -> match cls with Types.Clause(Types.Signature(cls_type, module_name, name, args), _) -> match cls_type with
+			| Types.Plus -> let new_clause = Types.Clause(Types.Signature(Types.Helper, module_name, name, drop args 1), []) in
+				if list_contains fixed_clauses equiv new_clause then acc else new_clause :: acc;
+			| Types.Minus -> let new_clause = Types.Clause(Types.Signature(Types.Helper, module_name, name, drop args 1), []) in
+				if list_contains fixed_clauses equiv new_clause then acc else new_clause :: acc;
+			| _ -> acc;) fixed_clauses []) @ fixed_clauses;;
+
+
 	let process_program (prgm : Types.program) : Types.program =
 		match prgm with Types.Program(name, modules, blackboxes, types, clauses) ->
-		Types.Program(name, modules, blackboxes, types, List.map (process_clause prgm) clauses);;
+		Types.Program(name, modules, blackboxes, types, process_clause_list prgm clauses);;
 
 	let rec remove_duplicates (l : 'a list) : 'a list =
 		match l with
@@ -141,7 +160,7 @@ module Parse_Helpers = struct
 		let blackboxes = prgm_blackboxes @ acc_blackboxes in
 		let types = prgm_types @ acc_types in
 		let clauses = (List.map (fun cls -> match cls with
-			| Types.Clause(Types.Signature(Types.Action, name, args), body) -> Types.Clause(Types.Signature(Types.Helper, name, args), body);
+			| Types.Clause(Types.Signature(Types.Action, module_name, name, args), body) -> Types.Clause(Types.Signature(Types.Helper, module_name, name, args), body);
 			| _ -> cls;) prgm_clauses) @ acc_clauses in
 		Types.Program(acc_name, modules, blackboxes, types, clauses)) imports main;;
 
