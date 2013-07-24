@@ -64,10 +64,9 @@ let doBBquery (bbdecl : Types.blackbox) (bbatom : Types.atom) =
       | Types.Bool(_) -> Printf.printf "ERROR: passed boolean atom to dobbquery.\n%!";
                        raise (Failure "ERROR: passed boolean atom to dobbquery.")
                 (* bbname, bbrel are both strings here. *)
-      | (*Types.Apply(sign, bbname, bbrel, tlist) -> *)
-        Types.Apply(sign, bbname, tlist) -> 
+      | Types.Apply(sign, bbname, bbrel, tlist) -> 
+    
         Printf.printf "querying...\n%!";
-        let bbrel = "dsnmfkdsnfjasndf" in 
         let qry = new query in
         qry#set_relName bbrel;
         qry#set_arguments (List.map Type_Helpers.term_to_string tlist); 
