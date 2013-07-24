@@ -102,7 +102,7 @@
   ;
   atom:
       term EQUALS term { Equals(true, $1, $3) }
-    | NOT term EQUALS term { Equals(false, $2, $2) }
+    | NOT term EQUALS term { Equals(false, $2, $4) }
     | NAME LPAREN term_list RPAREN { Apply(true, String.lowercase $1, $3) }
     | NOT NAME LPAREN term_list RPAREN { Apply(false, String.lowercase $2, $4) }
     | NAME LPAREN RPAREN { Apply(true, String.lowercase $1, []) }

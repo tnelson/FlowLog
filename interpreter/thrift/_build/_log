@@ -1,0 +1,74 @@
+### Starting build.
+# Target: gen-ocaml/flowlog_rpc_consts.ml.depends, tags: { debug, extension:ml, file:gen-ocaml/flowlog_rpc_consts.ml, ocaml, ocamldep, pkg_threads, pkg_thrift, quiet, traverse }
+ocamlfind ocamldep -package thrift -package threads -modules gen-ocaml/flowlog_rpc_consts.ml > gen-ocaml/flowlog_rpc_consts.ml.depends # cached
+# Target: gen-ocaml/flowlog_rpc_types.mli.depends, tags: { debug, extension:mli, file:gen-ocaml/flowlog_rpc_types.mli, ocaml, ocamldep, pkg_threads, pkg_thrift, quiet, traverse }
+ocamlfind ocamldep -package thrift -package threads -modules gen-ocaml/flowlog_rpc_types.mli > gen-ocaml/flowlog_rpc_types.mli.depends # cached
+# Target: gen-ocaml/flowlog_rpc_types.cmi, tags: { byte, compile, debug, extension:mli, file:gen-ocaml/flowlog_rpc_types.mli, interf, ocaml, pkg_threads, pkg_thrift, quiet, traverse }
+ocamlfind ocamlc -c -g -package thrift -package threads -thread -I gen-ocaml -o gen-ocaml/flowlog_rpc_types.cmi gen-ocaml/flowlog_rpc_types.mli # cached
+# Target: gen-ocaml/flowlog_rpc_consts.cmo, tags: { byte, compile, debug, extension:cmo, extension:ml, file:gen-ocaml/flowlog_rpc_consts.cmo, file:gen-ocaml/flowlog_rpc_consts.ml, implem, ocaml, pkg_threads, pkg_thrift, quiet, traverse }
+ocamlfind ocamlc -c -g -package thrift -package threads -thread -I gen-ocaml -o gen-ocaml/flowlog_rpc_consts.cmo gen-ocaml/flowlog_rpc_consts.ml # cached
+# Target: gen-ocaml/BlackBox.mli.depends, tags: { debug, extension:mli, file:gen-ocaml/BlackBox.mli, ocaml, ocamldep, pkg_threads, pkg_thrift, quiet, traverse }
+ocamlfind ocamldep -package thrift -package threads -modules gen-ocaml/BlackBox.mli > gen-ocaml/BlackBox.mli.depends # cached
+# Target: gen-ocaml/BlackBox.cmi, tags: { byte, compile, debug, extension:mli, file:gen-ocaml/BlackBox.mli, interf, ocaml, pkg_threads, pkg_thrift, quiet, traverse }
+ocamlfind ocamlc -c -g -package thrift -package threads -thread -I gen-ocaml -o gen-ocaml/BlackBox.cmi gen-ocaml/BlackBox.mli # cached
+# Target: gen-ocaml/BlackBox.ml.depends, tags: { debug, extension:ml, file:gen-ocaml/BlackBox.ml, ocaml, ocamldep, pkg_threads, pkg_thrift, quiet, traverse }
+ocamlfind ocamldep -package thrift -package threads -modules gen-ocaml/BlackBox.ml > gen-ocaml/BlackBox.ml.depends # cached
+# Target: gen-ocaml/BlackBox.cmo, tags: { byte, compile, debug, extension:cmo, extension:ml, file:gen-ocaml/BlackBox.cmo, file:gen-ocaml/BlackBox.ml, implem, ocaml, pkg_threads, pkg_thrift, quiet, traverse }
+ocamlfind ocamlc -c -g -package thrift -package threads -thread -I gen-ocaml -o gen-ocaml/BlackBox.cmo gen-ocaml/BlackBox.ml # cached
+# Target: gen-ocaml/FlowLogInterpreter.mli.depends, tags: { debug, extension:mli, file:gen-ocaml/FlowLogInterpreter.mli, ocaml, ocamldep, pkg_threads, pkg_thrift, quiet, traverse }
+ocamlfind ocamldep -package thrift -package threads -modules gen-ocaml/FlowLogInterpreter.mli > gen-ocaml/FlowLogInterpreter.mli.depends # cached
+# Target: gen-ocaml/FlowLogInterpreter.cmi, tags: { byte, compile, debug, extension:mli, file:gen-ocaml/FlowLogInterpreter.mli, interf, ocaml, pkg_threads, pkg_thrift, quiet, traverse }
+ocamlfind ocamlc -c -g -package thrift -package threads -thread -I gen-ocaml -o gen-ocaml/FlowLogInterpreter.cmi gen-ocaml/FlowLogInterpreter.mli # cached
+# Target: gen-ocaml/FlowLogInterpreter.ml.depends, tags: { debug, extension:ml, file:gen-ocaml/FlowLogInterpreter.ml, ocaml, ocamldep, pkg_threads, pkg_thrift, quiet, traverse }
+ocamlfind ocamldep -package thrift -package threads -modules gen-ocaml/FlowLogInterpreter.ml > gen-ocaml/FlowLogInterpreter.ml.depends # cached
+# Target: gen-ocaml/FlowLogInterpreter.cmo, tags: { byte, compile, debug, extension:cmo, extension:ml, file:gen-ocaml/FlowLogInterpreter.cmo, file:gen-ocaml/FlowLogInterpreter.ml, implem, ocaml, pkg_threads, pkg_thrift, quiet, traverse }
+ocamlfind ocamlc -c -g -package thrift -package threads -thread -I gen-ocaml -o gen-ocaml/FlowLogInterpreter.cmo gen-ocaml/FlowLogInterpreter.ml # cached
+# Target: gen-ocaml/flowlog_thrift.cma, tags: { byte, debug, extension:cma, file:gen-ocaml/flowlog_thrift.cma, library, link, ocaml, quiet, traverse }
+ocamlfind ocamlc -a gen-ocaml/flowlog_rpc_consts.cmo gen-ocaml/BlackBox.cmo gen-ocaml/FlowLogInterpreter.cmo -o gen-ocaml/flowlog_thrift.cma # cached
+# Target: gen-ocaml/flowlog_rpc_types.ml.depends, tags: { debug, extension:ml, file:gen-ocaml/flowlog_rpc_types.ml, ocaml, ocamldep, pkg_threads, pkg_thrift, quiet, traverse }
+ocamlfind ocamldep -package thrift -package threads -modules gen-ocaml/flowlog_rpc_types.ml > gen-ocaml/flowlog_rpc_types.ml.depends # cached
+# Target: gen-ocaml/flowlog_rpc_types.cmx, tags: { compile, debug, extension:cmx, extension:ml, file:gen-ocaml/flowlog_rpc_types.cmx, file:gen-ocaml/flowlog_rpc_types.ml, implem, native, ocaml, pkg_threads, pkg_thrift, quiet, traverse }
+ocamlfind ocamlopt -c -g -package thrift -package threads -thread -I gen-ocaml -o gen-ocaml/flowlog_rpc_types.cmx gen-ocaml/flowlog_rpc_types.ml # cached
+# Target: gen-ocaml/flowlog_rpc_consts.cmx, tags: { compile, debug, extension:cmx, extension:ml, file:gen-ocaml/flowlog_rpc_consts.cmx, file:gen-ocaml/flowlog_rpc_consts.ml, implem, native, ocaml, pkg_threads, pkg_thrift, quiet, traverse }
+ocamlfind ocamlopt -c -g -package thrift -package threads -thread -I gen-ocaml -o gen-ocaml/flowlog_rpc_consts.cmx gen-ocaml/flowlog_rpc_consts.ml # cached
+# Target: gen-ocaml/BlackBox.cmx, tags: { compile, debug, extension:cmx, extension:ml, file:gen-ocaml/BlackBox.cmx, file:gen-ocaml/BlackBox.ml, implem, native, ocaml, pkg_threads, pkg_thrift, quiet, traverse }
+ocamlfind ocamlopt -c -g -package thrift -package threads -thread -I gen-ocaml -o gen-ocaml/BlackBox.cmx gen-ocaml/BlackBox.ml # cached
+# Target: gen-ocaml/FlowLogInterpreter.cmx, tags: { compile, debug, extension:cmx, extension:ml, file:gen-ocaml/FlowLogInterpreter.cmx, file:gen-ocaml/FlowLogInterpreter.ml, implem, native, ocaml, pkg_threads, pkg_thrift, quiet, traverse }
+ocamlfind ocamlopt -c -g -package thrift -package threads -thread -I gen-ocaml -o gen-ocaml/FlowLogInterpreter.cmx gen-ocaml/FlowLogInterpreter.ml # cached
+# Target: gen-ocaml/flowlog_thrift.cmxa, tags: { debug, extension:cmxa, file:gen-ocaml/flowlog_thrift.cmxa, library, link, native, ocaml, quiet, traverse }
+ocamlfind ocamlopt -a gen-ocaml/flowlog_rpc_consts.cmx gen-ocaml/BlackBox.cmx gen-ocaml/FlowLogInterpreter.cmx -o gen-ocaml/flowlog_thrift.cmxa # cached
+# Target: gen-ocaml/flowlog_thrift.cmxs, tags: { debug, extension:cmxs, file:gen-ocaml/flowlog_thrift.cmxs, library, link, linkall, native, ocaml, quiet, shared, traverse, use_flowlog_thrift }
+ocamlfind ocamlopt -shared -linkall gen-ocaml/flowlog_thrift.cmxa -o gen-ocaml/flowlog_thrift.cmxs
+# Target: o2warning.ml.depends, tags: { debug, extension:ml, file:o2warning.ml, ocaml, ocamldep, pkg_str, pkg_threads, pkg_thrift, quiet, traverse, use_flowlog_thrift }
+ocamlfind ocamldep -package thrift -package threads -package str -modules o2warning.ml > o2warning.ml.depends # cached
+# Target: o2warning.cmo, tags: { byte, compile, debug, extension:cmo, extension:ml, file:o2warning.cmo, file:o2warning.ml, implem, ocaml, pkg_str, pkg_threads, pkg_thrift, quiet, traverse, use_flowlog_thrift }
+ocamlfind ocamlc -c -g -I gen-ocaml -package thrift -package threads -package str -thread -I gen-ocaml -o o2warning.cmo o2warning.ml # cached
+# Target: o2warning.cmx, tags: { compile, debug, extension:cmx, extension:ml, file:o2warning.cmx, file:o2warning.ml, implem, native, ocaml, pkg_str, pkg_threads, pkg_thrift, quiet, traverse, use_flowlog_thrift }
+ocamlfind ocamlopt -c -g -I gen-ocaml -package thrift -package threads -package str -thread -I gen-ocaml -o o2warning.cmx o2warning.ml # cached
+# Target: o2warning.native, tags: { debug, dont_link_with, extension:native, file:o2warning.native, link, native, ocaml, pkg_threads, pkg_thrift, program, quiet, traverse, use_flowlog_thrift }
+ocamlfind ocamlopt -g -linkpkg -package thrift -package threads -thread gen-ocaml/flowlog_rpc_types.cmx gen-ocaml/flowlog_thrift.cmxa o2warning.cmx -o o2warning.native # cached
+# Target: notify.ml.depends, tags: { debug, extension:ml, file:notify.ml, ocaml, ocamldep, pkg_str, pkg_threads, pkg_thrift, quiet, traverse, use_flowlog_thrift }
+ocamlfind ocamldep -package thrift -package threads -package str -modules notify.ml > notify.ml.depends # cached
+# Target: notify.cmo, tags: { byte, compile, debug, extension:cmo, extension:ml, file:notify.cmo, file:notify.ml, implem, ocaml, pkg_str, pkg_threads, pkg_thrift, quiet, traverse, use_flowlog_thrift }
+ocamlfind ocamlc -c -g -I gen-ocaml -package thrift -package threads -package str -thread -I gen-ocaml -o notify.cmo notify.ml # cached
+# Target: notify.cmx, tags: { compile, debug, extension:cmx, extension:ml, file:notify.cmx, file:notify.ml, implem, native, ocaml, pkg_str, pkg_threads, pkg_thrift, quiet, traverse, use_flowlog_thrift }
+ocamlfind ocamlopt -c -g -I gen-ocaml -package thrift -package threads -package str -thread -I gen-ocaml -o notify.cmx notify.ml # cached
+# Target: notify.native, tags: { debug, dont_link_with, extension:native, file:notify.native, link, native, ocaml, pkg_str, pkg_threads, pkg_thrift, program, quiet, traverse, use_flowlog_thrift }
+ocamlfind ocamlopt -g -linkpkg -package thrift -package threads -package str -thread gen-ocaml/flowlog_rpc_types.cmx gen-ocaml/flowlog_thrift.cmxa notify.cmx -o notify.native # cached
+# Target: timer.ml.depends, tags: { debug, extension:ml, file:timer.ml, ocaml, ocamldep, pkg_str, pkg_threads, pkg_thrift, quiet, traverse, use_flowlog_thrift }
+ocamlfind ocamldep -package thrift -package threads -package str -modules timer.ml > timer.ml.depends
+# Target: timer.cmo, tags: { byte, compile, debug, extension:cmo, extension:ml, file:timer.cmo, file:timer.ml, implem, ocaml, pkg_str, pkg_threads, pkg_thrift, quiet, traverse, use_flowlog_thrift }
+ocamlfind ocamlc -c -g -I gen-ocaml -package thrift -package threads -package str -thread -I gen-ocaml -o timer.cmo timer.ml
+# Target: timer.cmx, tags: { compile, debug, extension:cmx, extension:ml, file:timer.cmx, file:timer.ml, implem, native, ocaml, pkg_str, pkg_threads, pkg_thrift, quiet, traverse, use_flowlog_thrift }
+ocamlfind ocamlopt -c -g -I gen-ocaml -package thrift -package threads -package str -thread -I gen-ocaml -o timer.cmx timer.ml
+# Target: timer.native, tags: { debug, dont_link_with, extension:native, file:timer.native, link, native, ocaml, pkg_threads, pkg_thrift, program, quiet, traverse, use_flowlog_thrift }
+ocamlfind ocamlopt -g -linkpkg -package thrift -package threads -thread gen-ocaml/flowlog_rpc_types.cmx gen-ocaml/flowlog_thrift.cmxa timer.cmx -o timer.native
+# Target: police_tipline.ml.depends, tags: { debug, extension:ml, file:police_tipline.ml, ocaml, ocamldep, pkg_str, pkg_threads, pkg_thrift, quiet, traverse, use_flowlog_thrift }
+ocamlfind ocamldep -package thrift -package threads -package str -modules police_tipline.ml > police_tipline.ml.depends # cached
+# Target: police_tipline.cmo, tags: { byte, compile, debug, extension:cmo, extension:ml, file:police_tipline.cmo, file:police_tipline.ml, implem, ocaml, pkg_str, pkg_threads, pkg_thrift, quiet, traverse, use_flowlog_thrift }
+ocamlfind ocamlc -c -g -I gen-ocaml -package thrift -package threads -package str -thread -I gen-ocaml -o police_tipline.cmo police_tipline.ml # cached
+# Target: police_tipline.cmx, tags: { compile, debug, extension:cmx, extension:ml, file:police_tipline.cmx, file:police_tipline.ml, implem, native, ocaml, pkg_str, pkg_threads, pkg_thrift, quiet, traverse, use_flowlog_thrift }
+ocamlfind ocamlopt -c -g -I gen-ocaml -package thrift -package threads -package str -thread -I gen-ocaml -o police_tipline.cmx police_tipline.ml # cached
+# Target: police_tipline.native, tags: { debug, dont_link_with, extension:native, file:police_tipline.native, link, native, ocaml, pkg_threads, pkg_thrift, program, quiet, traverse, use_flowlog_thrift }
+ocamlfind ocamlopt -g -linkpkg -package thrift -package threads -thread gen-ocaml/flowlog_rpc_types.cmx gen-ocaml/flowlog_thrift.cmxa police_tipline.cmx -o police_tipline.native # cached
+# Compilation successful.

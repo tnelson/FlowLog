@@ -1,0 +1,796 @@
+   0  $accept : %entry% $end
+
+   1  empty_list :
+
+   2  main : import_list blackbox_list module_decl type_decl_list clause_list EOF
+
+   3  import_list : import
+   4              | import import_list
+   5              | empty_list
+
+   6  import : IMPORT NAME SEMICOLON
+
+   7  blackbox_list : blackbox
+   8                | blackbox blackbox_list
+
+   9  blackbox : BLACKBOX NAME AMPERSAND NUMBER NUMBER SEMICOLON
+  10           | BLACKBOX NAME SEMICOLON
+
+  11  module_decl : MODULE NAME COLON
+
+  12  type_decl_list : type_decl
+  13                 | type_decl type_decl_list
+
+  14  type_decl : TYPE NAME EQUALS LCURLY name_list RCURLY SEMICOLON
+
+  15  name_list : NAME
+  16            | NAME COMMA name_list
+
+  17  clause_list : clause
+  18              | clause clause_list
+
+  19  clause : NAME LPAREN notif_term_arg_list RPAREN COLON_HYPHEN literal_list SEMICOLON
+  20         | NAME LPAREN name_list RPAREN COLON_HYPHEN literal_list SEMICOLON
+  21         | NAME LPAREN notif_arg notif_arg RPAREN COLON_HYPHEN literal_list SEMICOLON
+
+  22  notif_term_arg_list : notif_arg
+  23                      | notif_arg COMMA name_list
+
+  24  notif_arg : NAME COLON NAME
+
+  25  literal_list : literal
+  26               | literal COMMA literal_list
+
+  27  literal : atom
+  28          | NOT atom
+
+  29  atom : term EQUALS term
+  30       | NAME LPAREN term_list RPAREN
+  31       | NAME PERIOD NAME LPAREN term_list RPAREN
+  32       | BOOLEAN
+
+  33  term : NAME
+  34       | NAME PERIOD NAME
+
+  35  term_list : term
+  36            | term COMMA term_list
+
+  37  %entry% : '\001' main
+
+state 0
+	$accept : . %entry% $end  (0)
+
+	'\001'  shift 1
+	.  error
+
+	%entry%  goto 2
+
+
+state 1
+	%entry% : '\001' . main  (37)
+	empty_list : .  (1)
+
+	IMPORT  shift 3
+	BLACKBOX  reduce 1
+
+	main  goto 4
+	import_list  goto 5
+	import  goto 6
+	empty_list  goto 7
+
+
+state 2
+	$accept : %entry% . $end  (0)
+
+	$end  accept
+
+
+state 3
+	import : IMPORT . NAME SEMICOLON  (6)
+
+	NAME  shift 8
+	.  error
+
+
+state 4
+	%entry% : '\001' main .  (37)
+
+	.  reduce 37
+
+
+state 5
+	main : import_list . blackbox_list module_decl type_decl_list clause_list EOF  (2)
+
+	BLACKBOX  shift 9
+	.  error
+
+	blackbox_list  goto 10
+	blackbox  goto 11
+
+
+6: reduce/reduce conflict (reduce 1, reduce 3) on BLACKBOX
+state 6
+	import_list : import .  (3)
+	import_list : import . import_list  (4)
+	empty_list : .  (1)
+
+	IMPORT  shift 3
+	BLACKBOX  reduce 1
+
+	import_list  goto 12
+	import  goto 6
+	empty_list  goto 7
+
+
+state 7
+	import_list : empty_list .  (5)
+
+	.  reduce 5
+
+
+state 8
+	import : IMPORT NAME . SEMICOLON  (6)
+
+	SEMICOLON  shift 13
+	.  error
+
+
+state 9
+	blackbox : BLACKBOX . NAME AMPERSAND NUMBER NUMBER SEMICOLON  (9)
+	blackbox : BLACKBOX . NAME SEMICOLON  (10)
+
+	NAME  shift 14
+	.  error
+
+
+state 10
+	main : import_list blackbox_list . module_decl type_decl_list clause_list EOF  (2)
+
+	MODULE  shift 15
+	.  error
+
+	module_decl  goto 16
+
+
+state 11
+	blackbox_list : blackbox .  (7)
+	blackbox_list : blackbox . blackbox_list  (8)
+
+	BLACKBOX  shift 9
+	MODULE  reduce 7
+
+	blackbox_list  goto 17
+	blackbox  goto 11
+
+
+state 12
+	import_list : import import_list .  (4)
+
+	.  reduce 4
+
+
+state 13
+	import : IMPORT NAME SEMICOLON .  (6)
+
+	.  reduce 6
+
+
+state 14
+	blackbox : BLACKBOX NAME . AMPERSAND NUMBER NUMBER SEMICOLON  (9)
+	blackbox : BLACKBOX NAME . SEMICOLON  (10)
+
+	SEMICOLON  shift 18
+	AMPERSAND  shift 19
+	.  error
+
+
+state 15
+	module_decl : MODULE . NAME COLON  (11)
+
+	NAME  shift 20
+	.  error
+
+
+state 16
+	main : import_list blackbox_list module_decl . type_decl_list clause_list EOF  (2)
+
+	TYPE  shift 21
+	.  error
+
+	type_decl_list  goto 22
+	type_decl  goto 23
+
+
+state 17
+	blackbox_list : blackbox blackbox_list .  (8)
+
+	.  reduce 8
+
+
+state 18
+	blackbox : BLACKBOX NAME SEMICOLON .  (10)
+
+	.  reduce 10
+
+
+state 19
+	blackbox : BLACKBOX NAME AMPERSAND . NUMBER NUMBER SEMICOLON  (9)
+
+	NUMBER  shift 24
+	.  error
+
+
+state 20
+	module_decl : MODULE NAME . COLON  (11)
+
+	COLON  shift 25
+	.  error
+
+
+state 21
+	type_decl : TYPE . NAME EQUALS LCURLY name_list RCURLY SEMICOLON  (14)
+
+	NAME  shift 26
+	.  error
+
+
+state 22
+	main : import_list blackbox_list module_decl type_decl_list . clause_list EOF  (2)
+
+	NAME  shift 27
+	.  error
+
+	clause_list  goto 28
+	clause  goto 29
+
+
+state 23
+	type_decl_list : type_decl .  (12)
+	type_decl_list : type_decl . type_decl_list  (13)
+
+	TYPE  shift 21
+	NAME  reduce 12
+
+	type_decl_list  goto 30
+	type_decl  goto 23
+
+
+state 24
+	blackbox : BLACKBOX NAME AMPERSAND NUMBER . NUMBER SEMICOLON  (9)
+
+	NUMBER  shift 31
+	.  error
+
+
+state 25
+	module_decl : MODULE NAME COLON .  (11)
+
+	.  reduce 11
+
+
+state 26
+	type_decl : TYPE NAME . EQUALS LCURLY name_list RCURLY SEMICOLON  (14)
+
+	EQUALS  shift 32
+	.  error
+
+
+state 27
+	clause : NAME . LPAREN notif_term_arg_list RPAREN COLON_HYPHEN literal_list SEMICOLON  (19)
+	clause : NAME . LPAREN name_list RPAREN COLON_HYPHEN literal_list SEMICOLON  (20)
+	clause : NAME . LPAREN notif_arg notif_arg RPAREN COLON_HYPHEN literal_list SEMICOLON  (21)
+
+	LPAREN  shift 33
+	.  error
+
+
+state 28
+	main : import_list blackbox_list module_decl type_decl_list clause_list . EOF  (2)
+
+	EOF  shift 34
+	.  error
+
+
+state 29
+	clause_list : clause .  (17)
+	clause_list : clause . clause_list  (18)
+
+	NAME  shift 27
+	EOF  reduce 17
+
+	clause_list  goto 35
+	clause  goto 29
+
+
+state 30
+	type_decl_list : type_decl type_decl_list .  (13)
+
+	.  reduce 13
+
+
+state 31
+	blackbox : BLACKBOX NAME AMPERSAND NUMBER NUMBER . SEMICOLON  (9)
+
+	SEMICOLON  shift 36
+	.  error
+
+
+state 32
+	type_decl : TYPE NAME EQUALS . LCURLY name_list RCURLY SEMICOLON  (14)
+
+	LCURLY  shift 37
+	.  error
+
+
+state 33
+	clause : NAME LPAREN . notif_term_arg_list RPAREN COLON_HYPHEN literal_list SEMICOLON  (19)
+	clause : NAME LPAREN . name_list RPAREN COLON_HYPHEN literal_list SEMICOLON  (20)
+	clause : NAME LPAREN . notif_arg notif_arg RPAREN COLON_HYPHEN literal_list SEMICOLON  (21)
+
+	NAME  shift 38
+	.  error
+
+	name_list  goto 39
+	notif_term_arg_list  goto 40
+	notif_arg  goto 41
+
+
+state 34
+	main : import_list blackbox_list module_decl type_decl_list clause_list EOF .  (2)
+
+	.  reduce 2
+
+
+state 35
+	clause_list : clause clause_list .  (18)
+
+	.  reduce 18
+
+
+state 36
+	blackbox : BLACKBOX NAME AMPERSAND NUMBER NUMBER SEMICOLON .  (9)
+
+	.  reduce 9
+
+
+state 37
+	type_decl : TYPE NAME EQUALS LCURLY . name_list RCURLY SEMICOLON  (14)
+
+	NAME  shift 42
+	.  error
+
+	name_list  goto 43
+
+
+state 38
+	name_list : NAME .  (15)
+	name_list : NAME . COMMA name_list  (16)
+	notif_arg : NAME . COLON NAME  (24)
+
+	COLON  shift 44
+	COMMA  shift 45
+	RPAREN  reduce 15
+
+
+state 39
+	clause : NAME LPAREN name_list . RPAREN COLON_HYPHEN literal_list SEMICOLON  (20)
+
+	RPAREN  shift 46
+	.  error
+
+
+state 40
+	clause : NAME LPAREN notif_term_arg_list . RPAREN COLON_HYPHEN literal_list SEMICOLON  (19)
+
+	RPAREN  shift 47
+	.  error
+
+
+state 41
+	clause : NAME LPAREN notif_arg . notif_arg RPAREN COLON_HYPHEN literal_list SEMICOLON  (21)
+	notif_term_arg_list : notif_arg .  (22)
+	notif_term_arg_list : notif_arg . COMMA name_list  (23)
+
+	NAME  shift 48
+	COMMA  shift 49
+	RPAREN  reduce 22
+
+	notif_arg  goto 50
+
+
+state 42
+	name_list : NAME .  (15)
+	name_list : NAME . COMMA name_list  (16)
+
+	COMMA  shift 45
+	RCURLY  reduce 15
+	RPAREN  reduce 15
+
+
+state 43
+	type_decl : TYPE NAME EQUALS LCURLY name_list . RCURLY SEMICOLON  (14)
+
+	RCURLY  shift 51
+	.  error
+
+
+state 44
+	notif_arg : NAME COLON . NAME  (24)
+
+	NAME  shift 52
+	.  error
+
+
+state 45
+	name_list : NAME COMMA . name_list  (16)
+
+	NAME  shift 42
+	.  error
+
+	name_list  goto 53
+
+
+state 46
+	clause : NAME LPAREN name_list RPAREN . COLON_HYPHEN literal_list SEMICOLON  (20)
+
+	COLON_HYPHEN  shift 54
+	.  error
+
+
+state 47
+	clause : NAME LPAREN notif_term_arg_list RPAREN . COLON_HYPHEN literal_list SEMICOLON  (19)
+
+	COLON_HYPHEN  shift 55
+	.  error
+
+
+state 48
+	notif_arg : NAME . COLON NAME  (24)
+
+	COLON  shift 44
+	.  error
+
+
+state 49
+	notif_term_arg_list : notif_arg COMMA . name_list  (23)
+
+	NAME  shift 42
+	.  error
+
+	name_list  goto 56
+
+
+state 50
+	clause : NAME LPAREN notif_arg notif_arg . RPAREN COLON_HYPHEN literal_list SEMICOLON  (21)
+
+	RPAREN  shift 57
+	.  error
+
+
+state 51
+	type_decl : TYPE NAME EQUALS LCURLY name_list RCURLY . SEMICOLON  (14)
+
+	SEMICOLON  shift 58
+	.  error
+
+
+state 52
+	notif_arg : NAME COLON NAME .  (24)
+
+	.  reduce 24
+
+
+state 53
+	name_list : NAME COMMA name_list .  (16)
+
+	.  reduce 16
+
+
+state 54
+	clause : NAME LPAREN name_list RPAREN COLON_HYPHEN . literal_list SEMICOLON  (20)
+
+	NAME  shift 59
+	NOT  shift 60
+	BOOLEAN  shift 61
+	.  error
+
+	literal_list  goto 62
+	literal  goto 63
+	atom  goto 64
+	term  goto 65
+
+
+state 55
+	clause : NAME LPAREN notif_term_arg_list RPAREN COLON_HYPHEN . literal_list SEMICOLON  (19)
+
+	NAME  shift 59
+	NOT  shift 60
+	BOOLEAN  shift 61
+	.  error
+
+	literal_list  goto 66
+	literal  goto 63
+	atom  goto 64
+	term  goto 65
+
+
+state 56
+	notif_term_arg_list : notif_arg COMMA name_list .  (23)
+
+	.  reduce 23
+
+
+state 57
+	clause : NAME LPAREN notif_arg notif_arg RPAREN . COLON_HYPHEN literal_list SEMICOLON  (21)
+
+	COLON_HYPHEN  shift 67
+	.  error
+
+
+state 58
+	type_decl : TYPE NAME EQUALS LCURLY name_list RCURLY SEMICOLON .  (14)
+
+	.  reduce 14
+
+
+state 59
+	atom : NAME . LPAREN term_list RPAREN  (30)
+	atom : NAME . PERIOD NAME LPAREN term_list RPAREN  (31)
+	term : NAME .  (33)
+	term : NAME . PERIOD NAME  (34)
+
+	PERIOD  shift 68
+	LPAREN  shift 69
+	EQUALS  reduce 33
+
+
+state 60
+	literal : NOT . atom  (28)
+
+	NAME  shift 59
+	BOOLEAN  shift 61
+	.  error
+
+	atom  goto 70
+	term  goto 65
+
+
+state 61
+	atom : BOOLEAN .  (32)
+
+	.  reduce 32
+
+
+state 62
+	clause : NAME LPAREN name_list RPAREN COLON_HYPHEN literal_list . SEMICOLON  (20)
+
+	SEMICOLON  shift 71
+	.  error
+
+
+state 63
+	literal_list : literal .  (25)
+	literal_list : literal . COMMA literal_list  (26)
+
+	COMMA  shift 72
+	SEMICOLON  reduce 25
+
+
+state 64
+	literal : atom .  (27)
+
+	.  reduce 27
+
+
+state 65
+	atom : term . EQUALS term  (29)
+
+	EQUALS  shift 73
+	.  error
+
+
+state 66
+	clause : NAME LPAREN notif_term_arg_list RPAREN COLON_HYPHEN literal_list . SEMICOLON  (19)
+
+	SEMICOLON  shift 74
+	.  error
+
+
+state 67
+	clause : NAME LPAREN notif_arg notif_arg RPAREN COLON_HYPHEN . literal_list SEMICOLON  (21)
+
+	NAME  shift 59
+	NOT  shift 60
+	BOOLEAN  shift 61
+	.  error
+
+	literal_list  goto 75
+	literal  goto 63
+	atom  goto 64
+	term  goto 65
+
+
+state 68
+	atom : NAME PERIOD . NAME LPAREN term_list RPAREN  (31)
+	term : NAME PERIOD . NAME  (34)
+
+	NAME  shift 76
+	.  error
+
+
+state 69
+	atom : NAME LPAREN . term_list RPAREN  (30)
+
+	NAME  shift 77
+	.  error
+
+	term  goto 78
+	term_list  goto 79
+
+
+state 70
+	literal : NOT atom .  (28)
+
+	.  reduce 28
+
+
+state 71
+	clause : NAME LPAREN name_list RPAREN COLON_HYPHEN literal_list SEMICOLON .  (20)
+
+	.  reduce 20
+
+
+state 72
+	literal_list : literal COMMA . literal_list  (26)
+
+	NAME  shift 59
+	NOT  shift 60
+	BOOLEAN  shift 61
+	.  error
+
+	literal_list  goto 80
+	literal  goto 63
+	atom  goto 64
+	term  goto 65
+
+
+state 73
+	atom : term EQUALS . term  (29)
+
+	NAME  shift 77
+	.  error
+
+	term  goto 81
+
+
+state 74
+	clause : NAME LPAREN notif_term_arg_list RPAREN COLON_HYPHEN literal_list SEMICOLON .  (19)
+
+	.  reduce 19
+
+
+state 75
+	clause : NAME LPAREN notif_arg notif_arg RPAREN COLON_HYPHEN literal_list . SEMICOLON  (21)
+
+	SEMICOLON  shift 82
+	.  error
+
+
+state 76
+	atom : NAME PERIOD NAME . LPAREN term_list RPAREN  (31)
+	term : NAME PERIOD NAME .  (34)
+
+	LPAREN  shift 83
+	EQUALS  reduce 34
+
+
+state 77
+	term : NAME .  (33)
+	term : NAME . PERIOD NAME  (34)
+
+	PERIOD  shift 84
+	SEMICOLON  reduce 33
+	COMMA  reduce 33
+	RPAREN  reduce 33
+
+
+state 78
+	term_list : term .  (35)
+	term_list : term . COMMA term_list  (36)
+
+	COMMA  shift 85
+	RPAREN  reduce 35
+
+
+state 79
+	atom : NAME LPAREN term_list . RPAREN  (30)
+
+	RPAREN  shift 86
+	.  error
+
+
+state 80
+	literal_list : literal COMMA literal_list .  (26)
+
+	.  reduce 26
+
+
+state 81
+	atom : term EQUALS term .  (29)
+
+	.  reduce 29
+
+
+state 82
+	clause : NAME LPAREN notif_arg notif_arg RPAREN COLON_HYPHEN literal_list SEMICOLON .  (21)
+
+	.  reduce 21
+
+
+state 83
+	atom : NAME PERIOD NAME LPAREN . term_list RPAREN  (31)
+
+	NAME  shift 77
+	.  error
+
+	term  goto 78
+	term_list  goto 87
+
+
+state 84
+	term : NAME PERIOD . NAME  (34)
+
+	NAME  shift 88
+	.  error
+
+
+state 85
+	term_list : term COMMA . term_list  (36)
+
+	NAME  shift 77
+	.  error
+
+	term  goto 78
+	term_list  goto 89
+
+
+state 86
+	atom : NAME LPAREN term_list RPAREN .  (30)
+
+	.  reduce 30
+
+
+state 87
+	atom : NAME PERIOD NAME LPAREN term_list . RPAREN  (31)
+
+	RPAREN  shift 90
+	.  error
+
+
+state 88
+	term : NAME PERIOD NAME .  (34)
+
+	.  reduce 34
+
+
+state 89
+	term_list : term COMMA term_list .  (36)
+
+	.  reduce 36
+
+
+state 90
+	atom : NAME PERIOD NAME LPAREN term_list RPAREN .  (31)
+
+	.  reduce 31
+
+
+Rules never reduced:
+	import_list : import  (3)
+
+
+State 6 contains 1 reduce/reduce conflict.
+
+
+23 terminals, 21 nonterminals
+38 grammar rules, 91 states

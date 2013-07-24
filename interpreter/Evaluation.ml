@@ -17,7 +17,7 @@ module Evaluation = struct
 		| _ -> List.iter (fun n -> if debug then Printf.printf "SENDING EXT NOTIF: %s\n%!" (Type_Helpers.term_to_string n);
 			(*Flowlog_Thrift_Out.doBBnotify bb n*))	out_notifs;;
 
-	let debug1 = false;;
+	let debug1 = true;;
 
 (* 
 need:
@@ -36,6 +36,7 @@ Type_Helpers.get_blackbox
 				if (not (List.mem (Type_Helpers.clause_signature cls) !already_seen)) && type1 = ttype then
 				(already_seen := Type_Helpers.clause_signature cls :: !already_seen;
 				let to_send = Communication.query_signature (Types.Signature(Types.Action, cls_name, [notif; v2])) in
+				(*Printf.printf "  *** tosend found %d\n%!" (List.length to_send);*)
 				List.iter (fun (tl : Types.term list) -> send_notifications (Type_Helpers.get_blackbox prgm cls_name) tl) to_send);
 			| _ -> ();) clauses;
 		Controller_Forwarding.flush_packets (); 

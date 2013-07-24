@@ -447,7 +447,7 @@ let yyact = [|
     let _4 = (Parsing.peek_val __caml_parser_env 0 : term) in
     Obj.repr(
 # 105 "parser.mly"
-                           ( Equals(false, _2, _2) )
+                           ( Equals(false, _2, _4) )
 # 452 "../parser.ml"
                : atom))
 ; (fun __caml_parser_env ->

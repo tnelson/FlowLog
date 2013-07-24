@@ -1,0 +1,12 @@
+# OASIS_START
+# DO NOT EDIT (digest: f2afe00b5f8adee9682dfe01974a9a3d)
+version = "1.0"
+description = "FlowLog Thrift"
+requires = "threads"
+archive(byte) = "flowlog_thrift.cma"
+archive(byte, plugin) = "flowlog_thrift.cma"
+archive(native) = "flowlog_thrift.cmxa"
+archive(native, plugin) = "flowlog_thrift.cmxs"
+exists_if = "flowlog_thrift.cma"
+# OASIS_STOP
+

@@ -38,12 +38,8 @@ module Type_Helpers = struct
 		| true -> "";
 		| false -> "not ";;
 
-	(* note that the name of a relation includes the prefix (before the dot) *)
-	let atom_to_string (a : Types.atom) : string =
-		match a with
-		| Types.Equals(sgn, t1, t2) -> (bool_to_string sgn) ^ (term_to_string t1) ^ " = " ^ (term_to_string t2);
-		| Types.Apply(sgn, name, tl) -> (bool_to_string sgn) ^ name ^ "(" ^ (list_to_string term_to_string tl) ^ ")";
-		| Types.Bool(b) -> string_of_bool b;;
+    (* TODO: note that using PLUS etc. prevents treating +learned as a helper, which we could do before *)
+
 
 	let clause_type_to_string (cls_type : Types.clause_type) : string =
 		match cls_type with
@@ -52,7 +48,9 @@ module Type_Helpers = struct
 		| Types.Helper -> "helper";
 		| Types.Action -> "action";;
 
-	let signature_name (s : Types.signature) : string = 
+
+
+    let signature_name (s : Types.signature) : string = 
 		match s with Types.Signature(cls_type, name, args) ->
 		let name_list = [clause_type_to_string cls_type; name] @ (List.map (fun t -> term_type_name (type_of_term t)) args) in
 		List.fold_right (fun str acc -> str ^ "_" ^ acc) name_list "";;
@@ -64,17 +62,28 @@ module Type_Helpers = struct
 		match s with Types.Signature(_, _, args) ->
 		(signature_name s) ^ "(" ^ (list_to_string term_to_string args) ^ ")";;
 
+
+
+	(* note that the name of a relation includes the prefix (before the dot) *)
+	let atom_to_string (a : Types.atom) : string =
+		match a with
+		| Types.Equals(sgn, t1, t2) -> (bool_to_string sgn) ^ (term_to_string t1) ^ " = " ^ (term_to_string t2);
+		| Types.Apply(sgn, name, tl) ->  (bool_to_string sgn) ^ (signature_to_string (Types.Signature(Types.Helper, name, tl)));		
+		| Types.Bool(b) -> string_of_bool b;;
+
+
 	let clause_to_string (cls : Types.clause) : string = 
 		match cls with Types.Clause(s, body) ->
 		match body with
-		| [] -> (signature_to_string s) ^ ":- false";
-		| _ -> (signature_to_string s) ^ ":-" ^ (list_to_string atom_to_string body);;
+		| [] -> (signature_to_string s) ^ " :- false";
+		| _ -> (signature_to_string s) ^ " :- " ^ (list_to_string atom_to_string body);;
 
 
-	let get_blackbox (prgm : Types.program) (name : string) : Types.blackbox =
+	let get_blackbox (prgm : Types.program) (name : string) : Types.blackbox =	    
 		match prgm with Types.Program(_, _, blackboxes, _, _) ->
 		match List.filter (function Types.BlackBox(n, _) -> n = name) blackboxes with
-		| [] -> raise (Failure ("No such black box as " ^ name));
+		| [] -> Printf.printf "Unknown blackbox %s\n%!" name;
+		        raise (Failure ("No such black box as " ^ name));
 		| h :: _ -> h;;
 
 end

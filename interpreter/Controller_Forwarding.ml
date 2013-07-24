@@ -50,8 +50,35 @@ module Controller_Forwarding = struct
 	let queue_packets (out_notifs : Types.term list) : unit =
 		forward_queue := out_notifs @ !forward_queue;;
 
+    let of_pport_to_string (pp: pseudoPort) : string =
+     match pp with      
+      | PhysicalPort(id) -> "PhysicalPort: "^(string_of_int id);
+      | AllPorts -> "AllPorts";
+      | InPort -> "InPort";
+      | Flood -> "Flood";
+      | Controller(x) -> "Controller:"^(string_of_int x);;
+
+    let sod = function
+        Some v -> v
+        | None -> -1;;
+
+    let of_action_to_string (act : action) : string =
+    match act with
+     | Output(pseudoPort) -> "Output to "^(of_pport_to_string pseudoPort);
+     | SetDlVlan(dlVlan) -> "Set dlVlan="^(string_of_int (sod dlVlan));
+     | SetDlVlanPcp(dlVlanPcp) -> "Set dlVlanPcp="^(string_of_int dlVlanPcp);
+     | SetDlSrc(dlAddr) -> "Set dlSrc="^(Int64.to_string dlAddr);
+     | SetDlDst(dlAddr) -> "Set dlDst="^(Int64.to_string dlAddr);
+     | SetNwSrc(nwAddr) -> "Set nwsrc="^(Int32.to_string nwAddr);
+     | SetNwDst(nwAddr) -> "Set nwdst="^(Int32.to_string nwAddr);
+     | SetNwTos(nwTos) -> "Set nwTos= "^(string_of_int nwTos);
+     | SetTpSrc(tpPort) -> "Set tpSrc = "^(string_of_int tpPort);
+     | SetTpDst(tpPort) -> "Set tpDst = "^(string_of_int tpPort);;
+
+
 	(* notice that the current implementation is not efficient--if its just a repeater its doing way too much work. *)
 	let forward_packets (notifs : Types.term list) : unit =
+	    if debug then Printf.printf "In forward_packets...\n%!";
 		match !pkt_buffer with
 		| None -> raise (Failure "forward packets called before packet arrived.");
 		| Some(sw, pk) ->
@@ -80,13 +107,19 @@ module Controller_Forwarding = struct
 	
 			let nwDst_new = (get_field notif "NWDST") in
 			let _ = actions_list := SetNwDst(Int32.of_string (if (begins_with nwDst_new "_h") then nwDst_old else nwDst_new)) :: !actions_list in
-			()) notifs in
-		let _ = if debug then print_endline ("print packet payload: " ^ (Packet.to_string (parse_payload pk.input_payload))) in
+			()) notifs in		
+		let _ = if debug then Printf.printf "FORWARDING PACKET. Switch=%s, Fields= %s\n%!" (Int64.to_string sw) (Packet.to_string (parse_payload pk.input_payload)) in
+        let _ = if debug then (List.iter (fun act -> (Printf.printf "---ACTION: %s\n%!" (of_action_to_string act))) !actions_list) in
+        let _ = if debug && (List.length !actions_list) = 0 then Printf.printf "---NO ACTIONS! Packet will be dropped.\n%!" in
 		send_packet_out sw 0l {output_payload = pk.input_payload; port_id = None; apply_actions = !actions_list};;
 
 	let flush_packets () : unit =
-		forward_packets !forward_queue;
-		forward_queue := [];;
+	    if debug then Printf.printf "In flush_packets..\n%!";
+	    if !forward_queue <> [] then
+	    begin
+		  forward_packets !forward_queue;
+		  forward_queue := [];
+		end;;
 
 end
 

@@ -8,30 +8,43 @@ let debug = true;;
 
 module Xsb = struct
 	
-	(* creates a pair channels for talking to xsb, starts xsb, and returns the channels *)
-	let start_xsb () : out_channel * in_channel =
+    (* creates a pair channels for talking to xsb, starts xsb, and returns the channels *)
+	let start_xsb () : out_channel * in_channel * in_channel =
 		let xin_channel, xout_channel, error_channel = Unix.open_process_full "xsb" (Unix.environment ()) in
-		(xout_channel, xin_channel);;
+		(xout_channel, xin_channel, error_channel);;
 
 	let ref_out_ch = ref None;;
 	let ref_in_ch = ref None;;
-	
+	let ref_err_ch = ref None;;
+
 	let get_ch () : out_channel * in_channel = 
 		match !ref_out_ch with
-		| None -> let out_ch, in_ch = start_xsb () in 
+		| None -> let out_ch, in_ch, err_ch = start_xsb () in 
 			let _ = ref_out_ch := Some(out_ch) in
 			let _ = ref_in_ch := Some(in_ch) in
+			let _ = ref_err_ch := Some(err_ch) in
 			(out_ch, in_ch);
 		| Some(out_ch) -> (match !ref_in_ch with
 			|Some(in_ch) -> (out_ch, in_ch);
 			| _ -> raise (Failure "ref_out_ch is some but ref_in_ch is none"););;
-
 
 	let halt_xsb () : unit = 
 		let out_ch, _ = get_ch () in
 		output_string out_ch "halt.\n";
 		flush out_ch;;
 
+	(* because Tim can't find a non-blocking read similar to read-bytes-avail in Racket,
+	    this halts XSB, then terminates  *)
+	let debug_print_errors_and_exit () : unit =
+	  halt_xsb();	    	    
+	  let errstr = ref "" in
+	  try
+	    while true do
+            errstr := !errstr ^ (String.make 1 (input_char (match !ref_err_ch with 
+                                               | Some(ch) -> ch;
+                                               | _ -> raise (End_of_file))));                      
+	      done
+	  with End_of_file -> Printf.printf "%s\n%!" !errstr; exit(1);;
 
 	(* Prints the XSB listings currently asserted to stdout.
 	   This function is useful for confirming that XSB knows what we think it knows. *)
@@ -94,15 +107,25 @@ module Xsb = struct
 	(* Takes a string query (thing with semicolon answers), the number of variables involved.
 	 It writes the query to xsb and returns a list of lists with all of the results. *)
 	let send_query (str : string) (num_vars : int) : (string list) list =
-	    if debug then Printf.printf "send_query: %s %d\n%!" str num_vars;
+	    if debug then Printf.printf "send_query: %s (#vars: %d)\n%!" str num_vars;
 		let out_ch, in_ch = get_ch () in
 		output_string out_ch (str ^ "\n");
 		flush out_ch;
 		(*let first_line = input_line in_ch in
 		if ((ends_with (String.trim first_line) "no") || (ends_with (String.trim first_line) "yes")) then [] else*)
 		let answer = ref [] in
+
 		let next_str = ref (input_line in_ch) in
-		(*let _ = print_endline (string_of_bool (ends_with (String.trim !next_str) "no")) in*)
+
+		(* Do not use this: it won't work. But it is useful for debugging situations with weird XSB output. 
+           Note the debug_print_errors_and_exit() call---catches error case (which has no endline at end of input) *)
+        (*let next_str = ref "" in
+		while not (Type_Helpers.ends_with !next_str "\n") do
+		  next_str := (!next_str) ^ (String.make 1 (input_char in_ch));
+		  Printf.printf "next_str=%s\n%!" !next_str;
+		  if (Type_Helpers.ends_with !next_str "| ?- | ?-") then debug_print_errors_and_exit();
+		done;*)
+		
 		let counter = ref 0 in
 		while not (Type_Helpers.ends_with (String.trim !next_str) "no") do
 			if debug then Printf.printf "DEBUG: send_query %s getting response. Line was: %s\n%!" str (!next_str);
@@ -110,9 +133,20 @@ module Xsb = struct
 			(output_string out_ch ";\n";
 			flush out_ch);
 			counter := !counter + 1;
+
 			next_str := input_line in_ch;
+		
+        (*next_str := "";
+        while not (Type_Helpers.ends_with !next_str "\n") do
+		  next_str := (!next_str) ^ (String.make 1 (input_char in_ch));
+		  Printf.printf "next_str=%s\n%!" !next_str;
+		  if (Type_Helpers.ends_with !next_str "| ?- | ?-") then debug_print_errors_and_exit();
+		done;*)
+
 			answer := (remove_from_end (String.trim !next_str) "no") :: !answer;
+			(* TODO If num_vars is wrong, this will freeze. Can we improve? *)
 		done;
+		if debug then Printf.printf "send_query finished. answers: \n%s\n%!" (String.concat ", " !answer);
 		List.map (fun (l : string list) -> List.map after_equals l) (group (List.rev !answer) num_vars);;
 
 end
@@ -131,16 +165,35 @@ module Communication = struct
 		                if (Type_Helpers.ends_with yn "yes") then [[]]
 		                else []
 
+	(* Returns x :: l if x not already in l *)
+	let add_unique (x : 'a) (l : 'a list) : 'a list = if List.mem x l then l else x :: l;;
+	
+	(* Same as add_unique but only if x is a Variable *)
+	let add_unique_var (t : Types.term) (acc : Types.term list) : Types.term list = 
+		match t with
+		| Types.Constant(_, _) -> acc;
+		| Types.Variable(name, Types.Type(_, fields)) -> List.fold_right (fun field acc1 -> add_unique (Types.Field_ref(name, field)) acc1) fields acc;
+		| Types.Field_ref(_, _) -> add_unique t acc;
+		| _ -> acc;;
+	
+	let get_vars (cls : Types.clause) : Types.term list =
+		match cls with Types.Clause(Types.Signature(_, _, args), body) ->
+		List.fold_right (fun a acc -> match a with
+				| Types.Equals(_, t1, t2) -> add_unique_var t1 (add_unique_var t2 acc);
+				| Types.Apply(_, _, tl) -> List.fold_right add_unique_var tl acc;
+				| Types.Bool(_) -> acc;) body (List.fold_right add_unique_var args []);;
+
+
 	(* ignoring blackbox queries for the moment *)
 	let retract_signature (s : Types.signature) : unit =
 		match s with Types.Signature(_, _, args) ->
-		let num_vars = List.length (List.filter (function | Types.Constant(_, _) -> false; | _ -> true) args) in
+		let num_vars = List.length (List.fold_right (fun t acc -> add_unique_var t acc) args []) in
 		let _ = send_message ("retract((" ^ (Type_Helpers.signature_to_string s) ^ ")).") num_vars in ();;
 
 	let assert_signature (s : Types.signature) : unit =
 		retract_signature s;
 		match s with Types.Signature(_, _, args) ->
-		let num_vars = List.length (List.filter (function | Types.Constant(_, _) -> false; | _ -> true) args) in
+		let num_vars = List.length (List.fold_right (fun t acc -> add_unique_var t acc) args []) in
 		let _ = send_message ("assert((" ^ (Type_Helpers.signature_to_string s) ^ ")).") num_vars in ();;	
 
 	let rec split_list (num : int) (l : 'a list) : 'a list * 'a list =
@@ -160,9 +213,9 @@ module Communication = struct
 
 	let query_signature (s : Types.signature) : (Types.term list) list =
 		match s with Types.Signature(_, _, args) ->
-		let num_vars = List.length (List.filter (function | Types.Variable(_, _) -> true; | _ -> false) args) in
+		let num_vars = List.length (List.fold_right (fun t acc -> add_unique_var t acc) args []) in
 		let strings = send_message ((Type_Helpers.signature_to_string s) ^ ".") num_vars in
-		let types = List.map Type_Helpers.type_of_term args in
+		let types = List.map Type_Helpers.type_of_term (List.filter (function Types.Constant(_,_) -> false; | _ -> true;) args) in
 		List.map (fun sl -> group_into_constants sl types) strings;;
 
 
@@ -228,25 +281,10 @@ module Communication = struct
 		let _ = send_relation rel args (fun name args_string -> 
 			"assert((" ^ name ^ "(" ^ args_string ^ "))).") in ();;*)
 
-	(* Returns x :: l if x not already in l *)
-	let add_unique (x : 'a) (l : 'a list) : 'a list = if List.mem x l then l else x :: l;;
-	
-	(* Same as add_unique but only if x is a Variable *)
-	let add_unique_var (t : Types.term) (acc : Types.term list) : Types.term list = 
-		match t with
-		| Types.Constant(_, _) -> acc;
-		| Types.Variable(_, _) -> add_unique t acc;
-		| Types.Field_ref(_, _) -> add_unique t acc;;
-	
-	let get_vars (cls : Types.clause) : Types.term list =
-		match cls with Types.Clause(Types.Signature(_, _, args), body) ->
-		List.fold_right (fun a acc -> match a with
-				| Types.Equals(_, t1, t2) -> add_unique_var t1 (add_unique_var t2 acc);
-				| Types.Apply(_, _, tl) -> List.fold_right add_unique_var tl acc;
-				| Types.Bool(_) -> acc;) body (List.fold_right add_unique_var args []);;
 
 	let start_clause (cls : Types.clause) : unit =
-		if debug then print_endline ("assert((" ^ (Type_Helpers.clause_to_string cls) ^ ")).");
+		if debug then print_endline ("start_clause: assert((" ^ (Type_Helpers.clause_to_string cls) ^ ")).");
+		if debug then (List.iter (fun t -> (Printf.printf "var: %s\n%!" (Type_Helpers.term_to_string t))) (get_vars cls));
 		let _ = send_message ("assert((" ^ (Type_Helpers.clause_to_string cls) ^ ")).") (List.length (get_vars cls)) in ();;
 		
 
