@@ -148,7 +148,7 @@ module Parse_Helpers = struct
 	let process_term_type (prgm : Types.program) (ttype : Types.term_type) : Types.term_type =
 		match prgm with Types.Program(_, _, _, types, _) ->
 		match ttype with
-		| Types.Type(_, _) -> ttype;
+		| Types.Type(_, _) -> ttype;		
 		| Types.Term_defer(type_name) ->
 			(match List.filter (function | Types.Type(name, fields) -> name = type_name; | _ -> false;) types with
 			| [] -> raise (Failure ("type " ^ type_name ^ " was not declared"));

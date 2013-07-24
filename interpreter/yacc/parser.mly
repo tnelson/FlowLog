@@ -94,7 +94,7 @@
     | term COMMA term_list { $1 :: $3 }
   ;
   term:
-      NAME { Variable(String.uppercase $1, raw_type) }
+      NAME { Variable(String.uppercase $1, Term_defer("")) }
     | NUMBER { Constant([$1], raw_type) }
     | DOUBLEQUOTE NAME DOUBLEQUOTE { Constant([$2], raw_type) (* WHAT IF THERE ARE SPACES? use String.map (fun c -> if c = ' ' then '_' else c) maybe? *)} 
     | NAME PERIOD NAME { Field_ref(String.uppercase $1, String.uppercase $3) }
