@@ -145,35 +145,41 @@ module Parse_Helpers = struct
 			| _ -> cls;) prgm_clauses) @ acc_clauses in
 		Types.Program(acc_name, modules, blackboxes, types, clauses)) imports main;;
 
-	let process_term_type (prgm : Types.program) (ttype : Types.term_type) : Types.term_type =
+	let process_term_type (prgm : Types.program) (s : Types.signature) (var_name : string) (ttype : Types.term_type) : Types.term_type =
 		match prgm with Types.Program(_, _, _, types, _) ->
 		match ttype with
-		| Types.Type(_, _) -> ttype;		
+		| Types.Type(_, _) -> ttype;
+		| Types.Term_defer("") -> (match s with Types.Signature(_, _, _, args) ->
+			match List.filter (function Types.Variable(name,_) -> name = var_name; | _ -> false;) args with
+			| [] -> Types.raw_type;
+			| Types.Variable(_, t) :: _ -> t;
+			| _ -> raise (Failure "cannot have a constant in a signature in a program")); 
 		| Types.Term_defer(type_name) ->
 			(match List.filter (function | Types.Type(name, fields) -> name = type_name; | _ -> false;) types with
 			| [] -> raise (Failure ("type " ^ type_name ^ " was not declared"));
 			| h :: _ -> h;);;
 
-	let process_term (prgm : Types.program) (t : Types.term) : Types.term =
+	let process_term (prgm : Types.program) (s : Types.signature) (t : Types.term) : Types.term =
 		match t with
-		| Types.Constant(sl, ttype) -> Types.Constant(sl, process_term_type prgm ttype);
-		| Types.Variable(vn, ttype) -> Types.Variable(vn, process_term_type prgm ttype);
+		| Types.Constant(sl, ttype) -> Types.Constant(sl, process_term_type prgm s "" ttype);
+		| Types.Variable(vn, ttype) -> Types.Variable(vn, process_term_type prgm s vn ttype);
 		| _ -> t;;
 
-	let process_atom (prgm : Types.program) (a : Types.atom) : Types.atom =
+	let process_atom (prgm : Types.program) (s : Types.signature) (a : Types.atom) : Types.atom =
 		match prgm with Types.Program(prgm_name, _, _, _, _) ->
 		match a with
-		| Types.Equals(b, t1, t2) -> Types.Equals(b, process_term prgm t1, process_term prgm t2);
-		| Types.Apply(b, module_name, name, tl) -> Types.Apply(b, module_name, name, List.map (process_term prgm) tl);
+		| Types.Equals(b, t1, t2) -> Types.Equals(b, process_term prgm s t1, process_term prgm s t2);
+		| Types.Apply(b, module_name, name, tl) -> Types.Apply(b, module_name, name, List.map (process_term prgm s) tl);
 		| _ -> a;;
 
 	let process_signature (prgm : Types.program) (s : Types.signature) : Types.signature =
 		match prgm with Types.Program(prgm_name, _, _, _, _) ->
 		match s with 
-		| Types.Signature(cls_type, module_name, name, tl) -> Types.Signature(cls_type, module_name, name, List.map (process_term prgm) tl);;
+		| Types.Signature(cls_type, module_name, name, tl) -> Types.Signature(cls_type, module_name, name, List.map (process_term prgm s) tl);;
 	
 	let process_clause (prgm : Types.program) (cls : Types.clause) : Types.clause =
-		match cls with Types.Clause(s, al) -> Types.Clause(process_signature prgm s, List.map (process_atom prgm) al);;
+		match cls with Types.Clause(s, al) -> let fixed_sig = process_signature prgm s in
+		Types.Clause(fixed_sig, List.map (process_atom prgm fixed_sig) al);;
 
 	let process_program_types (prgm : Types.program) : Types.program =
 		match prgm with Types.Program(name, modules, blackboxes, types, clauses) ->
