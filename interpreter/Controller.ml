@@ -25,7 +25,7 @@ module Make_OxModule (Program : PROGRAM) = struct
 	
 	Communication.start_program Program.program;;
    
-    (*Flowlog_Thrift_In.start_listening(Program.program);;*)
+    Flowlog_Thrift_In.start_listening(Program.program);;
 
 	let switch_connected (sw : switchId) (feats : OpenFlow0x01.SwitchFeatures.t) : unit =
 	    Printf.printf "Switch %Ld connected.\n%!" sw;

@@ -401,7 +401,7 @@ let yyact = [|
     let _1 = (Parsing.peek_val __caml_parser_env 0 : string) in
     Obj.repr(
 # 97 "parser.mly"
-           ( Variable(String.uppercase _1, raw_type) )
+           ( Variable(String.uppercase _1, Term_defer("")) )
 # 406 "../parser.ml"
                : term))
 ; (fun __caml_parser_env ->

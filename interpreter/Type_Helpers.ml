@@ -31,7 +31,8 @@ module Type_Helpers = struct
 		| Types.Constant(values, _) -> list_to_string (fun str -> str) values; 
 		| Types.Variable(name, Types.Type(_, fields)) -> list_to_string (fun field -> name ^ "_" ^ field) fields;
 		| Types.Field_ref(name, field) -> name ^ "_" ^ field;
-		| _ -> failwith "Not a valid term";;
+		| Types.Variable(name, Types.Term_defer(str)) -> failwith ("not a valid term: "^name^" with defer: "^str);;
+		(*| _ -> failwith "Not a valid term";;*)
 
 	let bool_to_string (b : bool) : string =
 		match b with
@@ -145,16 +146,16 @@ module Parse_Helpers = struct
 			| _ -> cls;) prgm_clauses) @ acc_clauses in
 		Types.Program(acc_name, modules, blackboxes, types, clauses)) imports main;;
 
-	let process_term_type (prgm : Types.program) (s : Types.signature) (var_name : string) (ttype : Types.term_type) : Types.term_type =
+	let process_term_type (prgm : Types.program) (s : Types.signature) (var_name : string) (ttype : Types.term_type) : Types.term_type =		
 		match prgm with Types.Program(_, _, _, types, _) ->
 		match ttype with
-		| Types.Type(_, _) -> ttype;
-		| Types.Term_defer("") -> (match s with Types.Signature(_, _, _, args) ->
+		| Types.Type(tname, _) -> ttype;
+		| Types.Term_defer("") -> (match s with Types.Signature(_, _, _, args) ->			
 			match List.filter (function Types.Variable(name,_) -> name = var_name; | _ -> false;) args with
 			| [] -> Types.raw_type;
-			| Types.Variable(_, t) :: _ -> t;
+			| Types.Variable(_, t) :: _ -> (match t with | Types.Term_defer(_) -> Types.raw_type; | _ -> t;);
 			| _ -> raise (Failure "cannot have a constant in a signature in a program")); 
-		| Types.Term_defer(type_name) ->
+		| Types.Term_defer(type_name) ->		    
 			(match List.filter (function | Types.Type(name, fields) -> name = type_name; | _ -> false;) types with
 			| [] -> raise (Failure ("type " ^ type_name ^ " was not declared"));
 			| h :: _ -> h;);;
@@ -166,10 +167,11 @@ module Parse_Helpers = struct
 		| _ -> t;;
 
 	let process_atom (prgm : Types.program) (s : Types.signature) (a : Types.atom) : Types.atom =
+	   (* Printf.printf "   *** pa: %s\n%!" (Type_Helpers.atom_to_string a); *)
 		match prgm with Types.Program(prgm_name, _, _, _, _) ->
 		match a with
 		| Types.Equals(b, t1, t2) -> Types.Equals(b, process_term prgm s t1, process_term prgm s t2);
-		| Types.Apply(b, module_name, name, tl) -> Types.Apply(b, module_name, name, List.map (process_term prgm s) tl);
+		| Types.Apply(b, module_name, name, tl) -> Types.Apply(b, module_name, name, List.map (process_term prgm s) tl);		
 		| _ -> a;;
 
 	let process_signature (prgm : Types.program) (s : Types.signature) : Types.signature =
