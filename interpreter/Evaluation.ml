@@ -1,8 +1,8 @@
 open Types;;
 open Controller_Forwarding;;
 open Xsb_Communication;;
-(*open Flowlog_Thrift_Out;;*)
 open Type_Helpers;;
+open Flowlog_Thrift_Out;;
 
 let debug = true;;
 
@@ -15,7 +15,7 @@ module Evaluation = struct
 		| Types.BlackBox(name, Types.Internal) -> if name = "forward" then Controller_Forwarding.queue_packets out_notifs 
 			else raise (Failure ("internal black box " ^ name ^ " is not currently supported.")) 
 		| _ -> List.iter (fun n -> if debug then Printf.printf "SENDING EXT NOTIF: %s\n%!" (Type_Helpers.term_to_string n);
-			(*Flowlog_Thrift_Out.doBBnotify bb n*))	out_notifs;;
+			Flowlog_Thrift_Out.doBBnotify bb n)	out_notifs;;
 
 	let debug1 = true;;
 

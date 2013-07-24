@@ -11,7 +11,7 @@ open Arg;;
 open Thrift;;
 open Flowlog_rpc_types;;
 open Thread;;
-open Flowlog_Types.Types;;
+open Types;;
 open Type_Helpers;;
 open Evaluation;;
 
@@ -38,11 +38,12 @@ let lowercase_notif_values tbl =
 module Flowlog_Thrift_In = struct
 
   (* not to be confused with Types_Helper.notif_type_to_string *)
-  let notif_type_to_name (n : notif_type ) : string = 
+  let notif_type_to_name (n : Types.term_type ) : string = 
     match n with
-      Type(myname, _) -> myname
+      | Types.Type(myname, _) -> myname;
+      | Types.Term_defer(defname) -> defname;;
 
-  let get_ntype_from_list (ntypename : string) (notif_types : notif_type list) : notif_type =
+  let get_ntype_from_list (ntypename : string) (notif_types : Types.term_type list) : Types.term_type =
     let filtered = (List.filter (fun ntype -> (String.lowercase (notif_type_to_name ntype)) = 
                                               (String.lowercase ntypename))
                                 notif_types) in          
@@ -53,13 +54,13 @@ module Flowlog_Thrift_In = struct
       List.hd filtered
 
    
-class fl_handler (a_program : program) (the_notif_types : notif_type list) =
+class fl_handler (a_program : Types.program) (the_notif_types : Types.term_type list) =
 object (self)
   inherit FlowLogInterpreter.iface
   
   (* Always created within a program context, with some set of notif types *)
-  val the_program : program = a_program;
-  val notif_types : notif_type list = the_notif_types;
+  val the_program : Types.program = a_program;
+  val notif_types : Types.term_type list = the_notif_types;
     
   method notifyMe notif : unit = 
     let ntypestr = sod ((sod notif)#get_notificationType) in
@@ -69,12 +70,12 @@ object (self)
     try           
       let ntype = get_ntype_from_list ntypestr notif_types in          
       match ntype with
-        Type(_, fieldnames) ->                
+        Types.Type(_, fieldnames) ->                
         (* construct a list of terms from the hashtbl in values. use the type as an index *)      
         let theterms = (List.map (fun fieldname -> 
                           if (not (Hashtbl.mem values (String.lowercase fieldname))) then
                             raise (Failure ("Field "^fieldname^" was not included in the notification of type: "^ntypestr));
-                            (Constant (Hashtbl.find values (String.lowercase fieldname))))
+                            (Types.Constant (Hashtbl.find values (String.lowercase fieldname))))
                                  fieldnames) in                       
           Evaluation.respond_to_notification (Type_Helpers.terms_to_notif_val ntype theterms) the_program;      
     with Failure(msg) ->  Printf.printf "   *** ERROR! Ignoring notification for reason: %s\n%!" msg;     
@@ -96,10 +97,10 @@ let connect ~host port =
     { trans = tx ; proto = proto; bb = bb}
 ;;
 
-let start_listening (a_program : program) : unit =
-  match a_program with
-    Program(_, the_notif_types,_) -> 
-  let h = new fl_handler a_program the_notif_types in
+let start_listening (a_program : Types.program) : unit =
+  match a_program with  
+    Program(_, _, the_blackboxes, the_term_types,_) -> 
+  let h = new fl_handler a_program the_term_types in
   let proc = new FlowLogInterpreter.processor h in
   let port = 9090 in (* FL listen on 9090 *)
   let pf = new TBinaryProtocol.factory in

@@ -214,7 +214,10 @@ module Communication = struct
 	let query_signature (s : Types.signature) : (Types.term list) list =
 		match s with Types.Signature(_, _, args) ->
 		let num_vars = List.length (List.fold_right (fun t acc -> add_unique_var t acc) args []) in
+
+		(* need to populate BB query helpers before here, and de-populate when done *)
 		let strings = send_message ((Type_Helpers.signature_to_string s) ^ ".") num_vars in
+
 		let types = List.map Type_Helpers.type_of_term (List.filter (function Types.Constant(_,_) -> false; | _ -> true;) args) in
 		List.map (fun sl -> group_into_constants sl types) strings;;
 
@@ -235,13 +238,6 @@ module Communication = struct
 		if debug then print_endline ("sending: " ^ str);
 		send_message str (List.length vars);;
 
-	let get_queries (cls : Types.clause) : Types.atom list =
-		List.fold (fun lit acc -> 
-			let a = Type_Helpers.get_atom lit in
-			match a with
-			| Types.Query(_, _, _) -> a :: acc;
-			| _ -> acc;) (Type_Helpers.clause_body cls) [];;
-
 	let assert_queries (qs : (atom * string list list) list) : unit =
 		List.iter (function (q, ans) -> match q with
 			| Types.Query(bb, str, tl) -> List.iter (fun sl -> send_message ("assert((" ^ str ^ "/" ^ (Types.blackbox_name bb) ^ "(" ^ (Type_Helpers.list_to_string (fun x -> x) sl) ^ ")))." )) ans;
@@ -251,6 +247,14 @@ module Communication = struct
 		List.iter (function (q, ans) -> match q with
 			| Types.Query(bb, str, tl) -> List.iter (fun sl -> send_message ("retract((" ^ str ^ "/" ^ (Types.blackbox_name bb) ^ "(" ^ (Type_Helpers.list_to_string (fun x -> x) sl) ^ ")))." )) ans;
 			| _ -> raise (Failure "only queries allowed here");) qs;;
+
+
+let get_queries (cls : Types.clause) : Types.atom list =
+		List.fold (fun lit acc -> 
+			let a = Type_Helpers.get_atom lit in
+			match a with
+			| Types.Query(_, _, _) -> a :: acc;
+			| _ -> acc;) (Type_Helpers.clause_body cls) [];;
 
 
 	let query_relation (rel : Types.relation) (args : Types.argument list) : (Types.term list) list = 

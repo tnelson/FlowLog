@@ -5,9 +5,8 @@ open Arg;;
 open Thrift;;
 open Flowlog_rpc_types;;
 open Thread;;
-open Flowlog_Types.Types;;
 open Type_Helpers;;
-
+open Types;;
 
 module Flowlog_Thrift_Out = struct
 
@@ -36,13 +35,13 @@ let print_notif_values tbl =
   Hashtbl.iter (fun k v -> 
                 Printf.printf "%s -> %s\n%!" k v) tbl 
 
-let get_ntype_from_list ntypename thelist =
+(*let get_ntype_from_list ntypename thelist =
   let filtered = (List.filter (fun ntype -> match ntype with Type(aname, _) -> ntypename = aname)
                               thelist) in
   if (List.length filtered) = 0 then
     raise (Failure "Unknown notif type");
   List.hd filtered
-
+*)
 
 (* dobbquery: atom * blackbox -> string list list
     The resulting list contains all the tuples (as string lists) returned.  
@@ -52,22 +51,23 @@ let get_ntype_from_list ntypename thelist =
 
     Note: each query opens a separate, new connection to the black-box.
 *)
-let doBBquery (bbdecl : blackbox) (bbatom : atom) = 
+let doBBquery (bbdecl : Types.blackbox) (bbatom : Types.atom) = 
   match bbdecl with
-    Internal_BB(_) -> raise (Failure "dobbquery passed internal BB.")
-    | External_BB(_, bbip, bbport) -> 
+    | Types.BlackBox(_, Types.Internal) -> raise (Failure "dobbquery passed internal BB.")
+    | Types.BlackBox(_, Types.External(bbip, bbport)) -> 
       let cli = connect ~host:bbip bbport in 
       try
 
       match bbatom with
-        Equals(_,_) -> Printf.printf "ERROR: passed equals atom to dobbquery.\n%!";
+        Types.Equals(_,_,_) -> Printf.printf "ERROR: passed equals atom to dobbquery.\n%!";
                        raise (Failure "ERROR: passed equals atom to dobbquery.")
-      | Apply(_,_) -> Printf.printf "ERROR: passed apply atom to dobbquery.\n%!";
-                       raise (Failure "ERROR: passed apply atom to dobbquery.")
-      | Bool(_) -> Printf.printf "ERROR: passed boolean atom to dobbquery.\n%!";
+      | Types.Bool(_) -> Printf.printf "ERROR: passed boolean atom to dobbquery.\n%!";
                        raise (Failure "ERROR: passed boolean atom to dobbquery.")
-      | Query(_, bbrel, tlist) -> 
+                (* bbname, bbrel are both strings here. *)
+      | (*Types.Apply(sign, bbname, bbrel, tlist) -> *)
+        Types.Apply(sign, bbname, tlist) -> 
         Printf.printf "querying...\n%!";
+        let bbrel = "dsnmfkdsnfjasndf" in 
         let qry = new query in
         qry#set_relName bbrel;
         qry#set_arguments (List.map Type_Helpers.term_to_string tlist); 
@@ -89,15 +89,18 @@ let doBBquery (bbdecl : blackbox) (bbatom : atom) =
    Each notification opens a separate, new connection to the black-box.
 *)
 
-let doBBnotify (bbdecl : blackbox) (nvalue : notif_val) =
+let doBBnotify (bbdecl : Types.blackbox) (nvalue : Types.term) =
   match bbdecl with
-    Internal_BB(_) -> raise (Failure "dobbnotify passed internal BB.")
-    | External_BB(_, bbip, bbport) -> 
+    Types.BlackBox(_, Types.Internal) -> raise (Failure "dobbnotify passed internal BB.")
+    | Types.BlackBox(_, Types.External(bbip, bbport)) -> 
       match nvalue with
-        Notif_val(ntype, termlist) -> 
-          match ntype with
-          Type(typename, fieldnames) ->
-	    if (List.length fieldnames) != (List.length termlist) then
+        | Types.Variable(_, _) -> raise (Failure "doBBnotify given variable");
+        | Types.Field_ref(_, _) -> raise (Failure "doBBnotify given fieldref");
+        | Types.Constant(_, Types.Term_defer(_)) -> raise (Failure "doBBnotify given deferred constant");
+        (* The notification is a constant term with a notification type. 
+           So the "constant term" is a list of raw constants. *)
+        | Types.Constant(vallist, Types.Type(typename, fieldnames)) -> 
+    	    if (List.length fieldnames) != (List.length vallist) then
               raise (Failure "dobbnotify called with notif value and notif type that had different arities!");
 
             let cli = connect ~host:bbip bbport in 
@@ -105,14 +108,15 @@ let doBBnotify (bbdecl : blackbox) (nvalue : notif_val) =
 
               Printf.printf "sending a notification\n%!"; 
               let notif = new notification in
-              let tbl = (Hashtbl.create (List.length termlist)) in
+              let tbl = (Hashtbl.create (List.length vallist)) in
               notif#set_notificationType typename;
               notif#set_values tbl;
 
               (* need to lock-step iter over the field names and the params *)
               List.iter2 (fun ele1 ele2 -> 
                               Hashtbl.add tbl ele1 ele2)
-                         fieldnames (List.map Type_Helpers.term_to_string termlist);
+                         fieldnames 
+                         vallist;
               cli.bb#notifyMe notif;      
               cli.trans#close
 
