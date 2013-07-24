@@ -1,8 +1,6 @@
 %{
   open Types.Types;;
-  (*open Type_Helpers.Parsing;;*)
-  (*let parse_debug = false;;*)
-  (* note: name changes have to happen here. Bring back Type_Helpers.Parsing.make_Program etc. *)
+  open Type_Helpers;;
 %}
 
 
@@ -14,7 +12,7 @@
   %token TYPE
   %token PLUS
   %token MINUS
-  %token STATE
+  %token HELPER
   %token ACTION
   %token NOT
   %token <bool> BOOLEAN
@@ -38,11 +36,11 @@
 
   %type <program> main
   %type <string list * blackbox list> top
-  %type <notif_type list * clause list> bottom
+  %type <term_type list * clause list> bottom
   %type <string> import
   %type <blackbox> blackbox
   %type <string> module_decl
-  %type <notif_type> type_decl
+  %type <term_type> type_decl
   %type <string list> name_list
   %type <clause> clause
   %type <atom> atom
@@ -53,7 +51,7 @@
   main:
       top module_decl bottom EOF { match $1 with (imports, blackboxes) ->
         match $3 with (types, clauses) ->
-        Program($2, imports, blackboxes, types, clauses) }
+        Parse_Helpers.process_program (Program($2, imports, blackboxes, types, clauses)) }
   ;
   top:
       import { ([$1], []) }
@@ -100,7 +98,7 @@
     | NUMBER { Constant([$1], raw_type) }
     | DOUBLEQUOTE NAME DOUBLEQUOTE { Constant([$2], raw_type) (* WHAT IF THERE ARE SPACES? use String.map (fun c -> if c = ' ' then '_' else c) maybe? *)} 
     | NAME PERIOD NAME { Field_ref(String.uppercase $1, String.uppercase $3) }
-    | NAME COLON NAME { Variable(String.uppercase $1, Term_defer(Some(String.uppercase $3))) }
+    | NAME COLON NAME { Variable(String.uppercase $1, Term_defer(String.uppercase $3)) }
   ;
   atom:
       term EQUALS term { Equals(true, $1, $3) }
@@ -111,7 +109,7 @@
     | NOT NAME LPAREN RPAREN { Apply(false, String.lowercase $2, []) }
     | NAME PERIOD NAME LPAREN term_list RPAREN { Apply(true, (String.lowercase $1) ^ "/" ^ (String.lowercase $3), $5) }
     | NAME PERIOD NAME LPAREN RPAREN { Apply(false, (String.lowercase $1) ^ "/" ^ (String.lowercase $3), []) }
-    | NOT NAME PERIOD NAME LPAREN term_list RPAREN { Apply(false, BB_defer)), (String.lowercase $2) ^ "/" ^ (String.lowercase $4), $6) }
+    | NOT NAME PERIOD NAME LPAREN term_list RPAREN { Apply(false, (String.lowercase $2) ^ "/" ^ (String.lowercase $4), $6) }
     | NOT NAME PERIOD NAME LPAREN RPAREN { Apply(false, (String.lowercase $2) ^ "/" ^ (String.lowercase $4), []) }
     | BOOLEAN { Bool($1) }
     | NOT BOOLEAN { Bool(not $2) }

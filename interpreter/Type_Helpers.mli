@@ -24,6 +24,14 @@ module Type_Helpers : sig
 	val get_blackbox : Types.program -> string -> Types.blackbox;;
 
 end
+
+module Parse_Helpers : sig
+	val process_program : Types.program -> Types.program;;
+
+	val import : Types.program -> Types.program list -> Types.program;;
+
+end
+
 (*
 module Parsing : sig
 	(* raised on errors in parsing or converting from Syntax to Types. *)

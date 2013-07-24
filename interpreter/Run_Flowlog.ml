@@ -19,7 +19,7 @@ let read_program (filename : string) : Types.program =
 let rec parse_imports_helper (filenames : string list) (already_parsed : Types.program list) (already_seen : string list) : Types.program list =
     match filenames with
     | [] -> already_parsed;
-    | h :: t -> if List.mem h already_seen then raise (Parsing.Parse_error ("circular imports: " ^ (Type_Helpers.list_to_string (fun x -> x) (h :: already_seen)))) else
+    | h :: t -> if List.mem h already_seen then raise (Failure ("circular imports: " ^ (Type_Helpers.list_to_string (fun x -> x) (h :: already_seen)))) else
     let first = read_program h in
         match first with Types.Program(_, imports, _, _, _) ->
         parse_imports_helper ((List.map (fun str -> str ^ ".flg") imports) @ t) (first :: already_parsed) (h :: already_seen);;
@@ -27,11 +27,11 @@ let rec parse_imports_helper (filenames : string list) (already_parsed : Types.p
 let build_finished_program (filename : string) : Types.program = 
     let prgm = read_program filename in
     match prgm with Types.Program(_, imports, _, _, _) ->
-    Parsing.import prgm (parse_imports_helper (List.map (fun str -> str ^ ".flg") imports) [] [filename]);;
+    Parse_Helpers.import prgm (parse_imports_helper (List.map (fun str -> str ^ ".flg") imports) [] [filename]);;
 
 
 module Parsed_Program : PROGRAM = struct
-	let filename = try Sys.argv.(1) with exn -> raise (Parsing.Parse_error "Input a .flg filename in the current directory.");;
+	let filename = try Sys.argv.(1) with exn -> raise (Failure "Input a .flg filename in the current directory.");;
     let program = build_finished_program filename;;
 end
 

@@ -4,7 +4,7 @@ module Types = struct
 	(* actual blackbox. *)
 	type blackbox = BlackBox of string * bb_type;;
 	(* type name, field names *)
-	type term_type = Type of string * string list | Term_defer of string option;;
+	type term_type = Type of string * string list | Term_defer of string;;
 	(* constants, variables, field refs *)
 	type term = Constant of string list * term_type | Variable of string * term_type | Field_ref of string * string;;
 	(* things like A = B or R(A, B, C) or true. For apply it's sign, blackbox, relation, args *)
@@ -17,15 +17,6 @@ module Types = struct
 	type clause = Clause of signature * atom list;;
 	(* name, module names to be imported, black boxes, notification types, clauses *)
 	type program = Program of string * string list * blackbox list * term_type list * clause list;;
-
-
-	(*let make_notif_val (prgm : program) (type_name : string) (vals : string list) : notif_val =
-		match prgm with Program(prgm_name, _, _, types, _) ->
-		match List.filter (function Type(name, _) -> name = String.lowercase type_name) types with
-		| [] -> raise (Failure ("Program " ^ prgm_name ^ " does not have a type called " ^ type_name "."));
-		| Type(name, fields) :: _ -> if fields.length = vals.length then
-			Notif_val(Type(name, fields), List.map (fun str -> Constant(str)) vals) else
-			raise (Failure "Too many arguments passed into a notif_val of type " ^ name ".");;*)
 
 	let raw_type = Type("raw", ["VALUE"]);;
 	let packet_type = Type("packet", ["LOCSW"; "LOCPT"; "DLSRC"; "DLDST"; "DLTYP"; "NWSRC"; "NWDST"; "NWPROTO"]);;

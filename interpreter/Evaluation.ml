@@ -52,6 +52,7 @@ Type_Helpers.get_blackbox
 				already_seen := Type_Helpers.clause_signature cls :: !already_seen;
 				let to_assert = Communication.query_signature (Types.Signature(Types.Plus, cls_name, notif :: tail)) in
 				List.iter (fun (tl : Types.term list) -> Communication.assert_signature (Types.Signature(Types.Helper, cls_name, tl))) to_assert;
-			| _ -> ();) clauses;;
+			| _ -> ();) clauses;
+		| _ -> raise (Failure "respond_to_notification can only be called with a constant");;
 
 end

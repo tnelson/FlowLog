@@ -11,7 +11,7 @@ rule token = parse
   | "type" { TYPE }
   | "plus" { PLUS }
   | "minus" { MINUS }
-  | "state" { STATE }
+  | "helper" { HELPER }
   | "action" { ACTION }
   | "not" { NOT }
   | "true" | "false" as boolean { BOOLEAN(boolean = "true") }

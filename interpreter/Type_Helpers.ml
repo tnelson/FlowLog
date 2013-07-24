@@ -18,8 +18,7 @@ module Type_Helpers = struct
 	let term_type_name (t : Types.term_type) : string =
 		match t with
 		| Types.Type(name, _) -> name;
-		| Types.Term_defer(Some(name)) -> "term_defer_" ^ name;
-		| Types.Term_defer(None) -> "term_defer";;
+		| Types.Term_defer(name) -> "term_defer_" ^ name;;
 
 	let type_of_term (t : Types.term) : Types.term_type =
 		match t with
@@ -80,7 +79,64 @@ module Type_Helpers = struct
 
 end
 
+module Parse_Helpers = struct
+(* need post_process prgm and import prgm prgm list*)
 
+	let process_term_type (prgm : Types.program) (ttype : Types.term_type) : Types.term_type =
+		match prgm with Types.Program(_, _, _, types, _) ->
+		match ttype with
+		| Types.Type(_, _) -> ttype;
+		| Types.Term_defer(type_name) ->
+			(match List.filter (function | Types.Type(name, fields) -> name = type_name; | _ -> false;) types with
+			| [] -> raise (Failure "type not declared");
+			| h :: _ -> h;);;
+
+	let process_term (prgm : Types.program) (t : Types.term) : Types.term =
+		match t with
+		| Types.Constant(sl, ttype) -> Types.Constant(sl, process_term_type prgm ttype);
+		| Types.Variable(vn, ttype) -> Types.Variable(vn, process_term_type prgm ttype);
+		| _ -> t;;
+
+	let process_name (name : string) (str : string) : string =
+		if not (String.contains str '/') then str ^ "/" ^ name else str;;
+
+	let process_atom (prgm : Types.program) (a : Types.atom) : Types.atom =
+		match prgm with Types.Program(prgm_name, _, _, _, _) ->
+		match a with
+		| Types.Equals(b, t1, t2) -> Types.Equals(b, process_term prgm t1, process_term prgm t2);
+		| Types.Apply(b, name, tl) -> Types.Apply(b, process_name name prgm_name , List.map (process_term prgm) tl);
+		| _ -> a;;
+
+	let process_signature (prgm : Types.program) (s : Types.signature) : Types.signature =
+		match prgm with Types.Program(prgm_name, _, _, _, _) ->
+		match s with Types.Signature(cls_type, name, tl) ->
+		Types.Signature(cls_type, process_name name prgm_name, List.map (process_term prgm) tl);;
+
+	let process_clause (prgm : Types.program) (cls : Types.clause) : Types.clause =
+		match cls with Types.Clause(s, al) -> Types.Clause(process_signature prgm s, List.map (process_atom prgm) al);;
+
+	let process_program (prgm : Types.program) : Types.program =
+		match prgm with Types.Program(name, modules, blackboxes, types, clauses) ->
+		Types.Program(name, modules, blackboxes, types, List.map (process_clause prgm) clauses);;
+
+	let rec remove_duplicates (l : 'a list) : 'a list =
+		match l with
+		[] -> [];
+		| h :: t -> if List.mem h t then (remove_duplicates t) else h :: (remove_duplicates t);;
+
+	let import (main : Types.program) (imports : Types.program list) : Types.program =
+		List.fold_right (fun prgm acc -> 
+		match acc with Types.Program(acc_name, acc_modules, acc_blackboxes, acc_types, acc_clauses) ->
+		match prgm with Types.Program(prgm_name, prgm_modules, prgm_blackboxes, prgm_types, prgm_clauses) ->
+		let modules = remove_duplicates (prgm_modules @ acc_modules) in
+		let blackboxes = prgm_blackboxes @ acc_blackboxes in
+		let types = prgm_types @ acc_types in
+		let clauses = (List.map (fun cls -> match cls with
+			| Types.Clause(Types.Signature(Types.Action, name, args), body) -> Types.Clause(Types.Signature(Types.Helper, name, args), body);
+			| _ -> cls;) prgm_clauses) @ acc_clauses in
+		Types.Program(acc_name, modules, blackboxes, types, clauses)) imports main;;
+
+end
 
 
 

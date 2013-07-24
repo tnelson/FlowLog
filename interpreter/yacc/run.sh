@@ -9,3 +9,4 @@ ocamlyacc -b../parser parser.mly
 # add manually. DO NOT add Flowlog_Parsing.
 echo "Adding header to mli file..."
 sed -i '1iopen Types.Types;;' ../parser.mli
+sed -i '1iopen Type_Helpers;;' ../parser.mli
