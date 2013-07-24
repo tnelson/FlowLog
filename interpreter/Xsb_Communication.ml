@@ -177,22 +177,22 @@ module Communication = struct
 		| _ -> acc;;
 	
 	let get_vars (cls : Types.clause) : Types.term list =
-		match cls with Types.Clause(Types.Signature(_, _, args), body) ->
+		match cls with Types.Clause(Types.Signature(_, _, _, args), body) ->
 		List.fold_right (fun a acc -> match a with
 				| Types.Equals(_, t1, t2) -> add_unique_var t1 (add_unique_var t2 acc);
-				| Types.Apply(_, _, tl) -> List.fold_right add_unique_var tl acc;
+				| Types.Apply(_, _, _, tl) -> List.fold_right add_unique_var tl acc;
 				| Types.Bool(_) -> acc;) body (List.fold_right add_unique_var args []);;
 
 
 	(* ignoring blackbox queries for the moment *)
 	let retract_signature (s : Types.signature) : unit =
-		match s with Types.Signature(_, _, args) ->
+		match s with Types.Signature(_, _, _, args) ->
 		let num_vars = List.length (List.fold_right (fun t acc -> add_unique_var t acc) args []) in
 		let _ = send_message ("retract((" ^ (Type_Helpers.signature_to_string s) ^ ")).") num_vars in ();;
 
 	let assert_signature (s : Types.signature) : unit =
 		retract_signature s;
-		match s with Types.Signature(_, _, args) ->
+		match s with Types.Signature(_, _, _, args) ->
 		let num_vars = List.length (List.fold_right (fun t acc -> add_unique_var t acc) args []) in
 		let _ = send_message ("assert((" ^ (Type_Helpers.signature_to_string s) ^ ")).") num_vars in ();;	
 
@@ -212,7 +212,7 @@ module Communication = struct
 		| _ -> raise (Failure "deferd type");;
 
 	let query_signature (s : Types.signature) : (Types.term list) list =
-		match s with Types.Signature(_, _, args) ->
+		match s with Types.Signature(_, _, _, args) ->
 		let num_vars = List.length (List.fold_right (fun t acc -> add_unique_var t acc) args []) in
 		let strings = send_message ((Type_Helpers.signature_to_string s) ^ ".") num_vars in
 		let types = List.map Type_Helpers.type_of_term (List.filter (function Types.Constant(_,_) -> false; | _ -> true;) args) in
