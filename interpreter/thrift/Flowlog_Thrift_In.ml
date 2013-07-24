@@ -70,14 +70,18 @@ object (self)
     try           
       let ntype = get_ntype_from_list ntypestr notif_types in          
       match ntype with
-        Types.Type(_, fieldnames) ->                
+        | Types.Term_defer(_) -> failwith "notifyMe called for defer. should never get here"
+        | Types.Type(_, fieldnames) ->                
         (* construct a list of terms from the hashtbl in values. use the type as an index *)      
-        let theterms = (List.map (fun fieldname -> 
-                          if (not (Hashtbl.mem values (String.lowercase fieldname))) then
-                            raise (Failure ("Field "^fieldname^" was not included in the notification of type: "^ntypestr));
-                            (Types.Constant (Hashtbl.find values (String.lowercase fieldname))))
-                                 fieldnames) in                       
-          Evaluation.respond_to_notification (Type_Helpers.terms_to_notif_val ntype theterms) the_program;      
+        let notif_constant = Types.Constant(
+                               (List.map 
+                                 (fun fieldname -> 
+                                   if (not (Hashtbl.mem values (String.lowercase fieldname))) then
+                                     raise (Failure ("Field "^fieldname^" was not included in the notification of type: "^ntypestr));
+                                   (Hashtbl.find values (String.lowercase fieldname)))
+                                 fieldnames),
+                             ntype) in                       
+          Evaluation.respond_to_notification notif_constant the_program;      
     with Failure(msg) ->  Printf.printf "   *** ERROR! Ignoring notification for reason: %s\n%!" msg;     
 
 end
@@ -99,7 +103,7 @@ let connect ~host port =
 
 let start_listening (a_program : Types.program) : unit =
   match a_program with  
-    Program(_, _, the_blackboxes, the_term_types,_) -> 
+    Types.Program(_, _, the_blackboxes, the_term_types,_) -> 
   let h = new fl_handler a_program the_term_types in
   let proc = new FlowLogInterpreter.processor h in
   let port = 9090 in (* FL listen on 9090 *)

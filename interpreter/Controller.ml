@@ -7,7 +7,7 @@ open OxPlatform;;
 open OpenFlow0x01_Core;;
 open OpenFlow0x01;;
 open Controller_Forwarding;;
-(*open Flowlog_Thrift_In;;*)
+open Flowlog_Thrift_In;;
 
 let debug = true;;
 
