@@ -222,7 +222,7 @@ let yyact = [|
 # 52 "parser.mly"
                                  ( match _1 with (imports, blackboxes) ->
         match _3 with (types, clauses) ->
-        Parse_Helpers.process_program (Program(_2, imports, blackboxes, types, clauses)) )
+        Parse_Helpers.process_program_names (Program(_2, imports, blackboxes, types, clauses)) )
 # 227 "../parser.ml"
                : program))
 ; (fun __caml_parser_env ->

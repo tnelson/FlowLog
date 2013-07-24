@@ -27,7 +27,7 @@ let rec parse_imports_helper (filenames : string list) (already_parsed : Types.p
 let build_finished_program (filename : string) : Types.program = 
     let prgm = read_program filename in
     match prgm with Types.Program(_, imports, _, _, _) ->
-    Parse_Helpers.import prgm (parse_imports_helper (List.map (fun str -> str ^ ".flg") imports) [] [filename]);;
+    Parse_Helpers.process_program_types (Parse_Helpers.import prgm (parse_imports_helper (List.map (fun str -> str ^ ".flg") imports) [] [filename]));;
 
 
 module Parsed_Program : PROGRAM = struct

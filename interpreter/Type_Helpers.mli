@@ -26,9 +26,11 @@ module Type_Helpers : sig
 end
 
 module Parse_Helpers : sig
-	val process_program : Types.program -> Types.program;;
+	val process_program_names : Types.program -> Types.program;;
 
 	val import : Types.program -> Types.program list -> Types.program;;
+
+	val process_program_types : Types.program -> Types.program;;
 
 end
 

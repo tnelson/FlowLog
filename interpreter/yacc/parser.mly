@@ -51,7 +51,7 @@
   main:
       top module_decl bottom EOF { match $1 with (imports, blackboxes) ->
         match $3 with (types, clauses) ->
-        Parse_Helpers.process_program (Program($2, imports, blackboxes, types, clauses)) }
+        Parse_Helpers.process_program_names (Program($2, imports, blackboxes, types, clauses)) }
   ;
   top:
       import { ([$1], []) }
