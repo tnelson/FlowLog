@@ -35,7 +35,7 @@ Type_Helpers.get_blackbox
 			| Types.Clause(Types.Signature(Types.Action, module_name, cls_name, [Types.Variable(_, type1); Types.Variable(_, _) as v2]), _) ->
 				if (not (List.mem (Type_Helpers.clause_signature cls) !already_seen)) && type1 = ttype then
 				(already_seen := Type_Helpers.clause_signature cls :: !already_seen;
-				let to_send = Communication.query_signature (Types.Signature(Types.Action, module_name, cls_name, [notif; v2])) in
+				let to_send = Communication.query_signature prgm (Types.Signature(Types.Action, module_name, cls_name, [notif; v2])) in
 				(*Printf.printf "  *** tosend found %d\n%!" (List.length to_send);*)
 				List.iter (fun (tl : Types.term list) -> send_notifications (Type_Helpers.get_blackbox prgm cls_name) tl) to_send);
 			| _ -> ();) clauses;
@@ -44,14 +44,14 @@ Type_Helpers.get_blackbox
 			| Types.Clause(Types.Signature(Types.Minus, module_name, cls_name, Types.Variable(_, type1) :: tail), _) ->
 				if (not (List.mem (Type_Helpers.clause_signature cls) !already_seen)) && type1 = ttype then
 				already_seen := Type_Helpers.clause_signature cls :: !already_seen;
-				let to_retract = Communication.query_signature (Types.Signature(Types.Minus, module_name, cls_name, notif :: tail)) in
+				let to_retract = Communication.query_signature prgm (Types.Signature(Types.Minus, module_name, cls_name, notif :: tail)) in
 				List.iter (fun (tl : Types.term list) -> Communication.retract_signature (Types.Signature(Types.Helper, module_name, cls_name, tl))) to_retract;
 			| _ -> ();) clauses;
 		List.iter (fun cls -> match cls with 
 			| Types.Clause(Types.Signature(Types.Plus, module_name, cls_name, Types.Variable(_, type1) :: tail), _) ->
 				if (not (List.mem (Type_Helpers.clause_signature cls) !already_seen)) && type1 = ttype then
 				already_seen := Type_Helpers.clause_signature cls :: !already_seen;
-				let to_assert = Communication.query_signature (Types.Signature(Types.Plus, module_name, cls_name, notif :: tail)) in
+				let to_assert = Communication.query_signature prgm (Types.Signature(Types.Plus, module_name, cls_name, notif :: tail)) in
 				List.iter (fun (tl : Types.term list) -> Communication.assert_signature (Types.Signature(Types.Helper, module_name, cls_name, tl))) to_assert;
 			| _ -> ();) clauses;
 		| _ -> raise (Failure "respond_to_notification can only be called with a constant");;

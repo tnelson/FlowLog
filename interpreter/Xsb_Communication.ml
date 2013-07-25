@@ -211,9 +211,23 @@ module Communication = struct
 			Types.Constant(first_bunch, t) :: group_into_constants rest tail;
 		| _ -> raise (Failure "deferd type");;
 
-	let query_signature (s : Types.signature) : (Types.term list) list =
+	let get_queries (prgm : Types.program) (cls : Types.clause) : (Types.atom * Types.blackbox) list =
+		match prgm with Types.Program(_, _, blackboxes, _, _) ->
+		match cls with Types.Clause(_, body) -> List.fold_right (fun a acc -> match a with
+			| Types.Apply(b, bb_name, rel_name, tl) -> (match List.filter (fun bb -> match bb with Types.BlackBox(name, _) -> bb_name = name) blackboxes with
+				| [] -> acc;
+				| h :: _ -> (a, h) :: acc;);
+			| _ -> acc;) body [];;
+
+	let query_signature (prgm : Types.program) (s : Types.signature) : (Types.term list) list =
 		match s with Types.Signature(_, _, _, args) ->
 		let num_vars = List.length (List.fold_right (fun t acc -> add_unique_var t acc) args []) in
+
+		(*match prgm with Types.Program(_, _, _, _, prgm_clauses) ->
+		let clauses = List.filter (fun cls -> Type_Helpers.clause_signature cls = Type_Helpers.signature_name s) prgm_clauses in
+		let queries = List.fold_right (fun cls acc -> (get_queries prgm cls) @ acc) clauses [] in*)
+
+		(* CONTINUE QUERY STUFF HERE USING ABOVE COMMENTED OUT CODE AND PREVIOUS FUNCTION *)
 
 		(* need to populate BB query helpers before here, and de-populate when done *)
 		let strings = send_message ((Type_Helpers.signature_to_string s) ^ ".") num_vars in

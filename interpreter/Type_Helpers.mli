@@ -17,6 +17,8 @@ module Type_Helpers : sig
 
 	val clause_signature : Types.clause -> string;;
 
+	val signature_name : Types.signature -> string;;
+
 	val signature_to_string : Types.signature -> string;;
 
 	val clause_to_string : Types.clause -> string;;
