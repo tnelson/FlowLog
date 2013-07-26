@@ -246,80 +246,11 @@ module Communication = struct
 		List.map (fun sl -> group_into_constants types sl) strings;;
 
 
-
-
-	(*let send_relation (rel : Types.relation) (args : Types.term list) (process : string -> string -> string) : (Types.term list) list =
-		let vars = List.filter (function 
-			| Types.Variable(_) -> true;
-			| Types.Field_ref(_, _) -> true;
-			| Types.Constant(_) -> false;) args in
-		let args_string = (Type_Helpers.list_to_string Type_Helpers.term_to_string args)  in
-		let str = (match rel with
-		| Types.PlusRelation(name, _, _) -> process ("+" ^ name) args_string;
-		| Types.MinusRelation(name, _, _) -> process ("-" ^ name) args_string;
-		| Types.HelperRelation(name, _, _) -> process name args_string;
-		| Types.NotifRelation(bb, _, _) -> process (Type_Helpers.blackbox_name bb) args_string;) in
-		if debug then print_endline ("sending: " ^ str);
-		send_message str (List.length vars);;
-
-	let assert_queries (qs : (atom * string list list) list) : unit =
-		List.iter (function (q, ans) -> match q with
-			| Types.Query(bb, str, tl) -> List.iter (fun sl -> send_message ("assert((" ^ str ^ "/" ^ (Types.blackbox_name bb) ^ "(" ^ (Type_Helpers.list_to_string (fun x -> x) sl) ^ ")))." )) ans;
-			| _ -> raise (Failure "only queries allowed here");) qs;;
-
-	let retract_queries (qs : (atom * string list list) list) : unit =
-		List.iter (function (q, ans) -> match q with
-			| Types.Query(bb, str, tl) -> List.iter (fun sl -> send_message ("retract((" ^ str ^ "/" ^ (Types.blackbox_name bb) ^ "(" ^ (Type_Helpers.list_to_string (fun x -> x) sl) ^ ")))." )) ans;
-			| _ -> raise (Failure "only queries allowed here");) qs;;
-
-
-let get_queries (cls : Types.clause) : Types.atom list =
-		List.fold (fun lit acc -> 
-			let a = Type_Helpers.get_atom lit in
-			match a with
-			| Types.Query(_, _, _) -> a :: acc;
-			| _ -> acc;) (Type_Helpers.clause_body cls) [];;
-
-
-	let query_relation (rel : Types.relation) (args : Types.argument list) : (Types.term list) list = 
-		let queries = List.fold(fun cls acc -> (get_queries cls) @ acc) (Type_Helpers.relation_body rel) in
-		let query_answers = List.map (fun q -> match q with 
-			| Types.Query(bb, str, tl) -> (q, Flowlog_Thrift_Out.doBBquery bb q);
-			| _ -> raise (Failure "this is only for queries");) queries in
-		assert_queries query_answers;
-		let ans = send_relation rel (Type_Helpers.arguments_to_terms args) (fun name args_string -> name ^ "(" ^ args_string ^ ").") in
-		retract_queries query_answers;
-		ans;;*)
-
-(*
-	let query_relation (rel : Types.relation) (args : Types.argument list) : (Types.term list) list =
-		if debug then print_endline ("query relation: " ^ (Type_Helpers.relation_name rel) ^ "(" ^ 
-			(Type_Helpers.list_to_string Type_Helpers.argument_to_string args) ^ ")");
-		let ans = send_relation rel (Type_Helpers.arguments_to_terms args) (fun name args_string -> name ^ "(" ^ args_string ^ ").") in
-		if debug then List.iter (fun tl -> Printf.printf "query answer: %s\n%!" (Type_Helpers.list_to_string Type_Helpers.term_to_string tl)) ans;
-		ans;;
-*)
-
-	(*let retract_relation (rel : Types.relation) (args : Types.term list) : unit =
-		let _ = send_relation rel args (fun name args_string -> 
-			"retract((" ^ name ^ "(" ^ args_string ^ "))).") in ();;
-
-	let assert_relation (rel : Types.relation) (args : Types.term list) : unit =
-		retract_relation rel args;
-		let _ = send_relation rel args (fun name args_string -> 
-			"assert((" ^ name ^ "(" ^ args_string ^ "))).") in ();;*)
-
-
 	let start_clause (cls : Types.clause) : unit =
 		if debug then print_endline ("start_clause: assert((" ^ (Type_Helpers.clause_to_string cls) ^ ")).");
 		if debug then (List.iter (fun t -> (Printf.printf "var: %s\n%!" (Type_Helpers.term_to_string t))) (get_vars cls));
 		let _ = send_message ("assert((" ^ (Type_Helpers.clause_to_string cls) ^ ")).") (List.length (get_vars cls)) in ();;
 		
-
-(*	let start_relation (rel : Types.relation) : unit =
-		match Type_Helpers.relation_body rel with
-		| [] -> start_clause (Types.HelperClause(Type_Helpers.relation_name rel, Type_Helpers.relation_arguments rel, []));
-		| body -> List.iter start_clause body;;*)
 
 	(* assuming all implicitly defined clauses have been added to list of clauses *)
 	let start_program (prgm : Types.program) : unit =

@@ -19,12 +19,6 @@ module Evaluation = struct
 
 	let debug1 = true;;
 
-(* 
-need:
-Flowlog_Thrift_Out.doBBnotify bb n
-Type_Helpers.get_blackbox
-*)
-
 
 	let respond_to_notification (notif : Types.term) (prgm : Types.program) : unit =
 		if debug1 then print_endline ("incoming notif: " ^ Type_Helpers.term_to_string notif);
