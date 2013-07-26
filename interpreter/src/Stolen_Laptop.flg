@@ -6,7 +6,6 @@
 blackbox BBtimer @ 127.0.0.1 9091;
 blackbox BBpolice @ 127.0.0.1 5050; // (The 5-0)
 
-// Should get all notifs declared in Canary (and in Mac_Learning since Canary imports Mac_Learning)
 import Mac_Learning;
 
 module Stolen_Laptop:
@@ -19,9 +18,7 @@ action forward(pkt : packet, newpkt : packet) :- Mac_learning.forward(pkt, newpk
 
 plus stolen(report: stolen_laptop_report, mac) :- report.mac = mac;
 
-// TODO
-// Can't do this right now; we hit the interpreter's lack of type sensitivity on evaluation
-//-stolen(cancel: stolen_laptop_cancel, mac) :- cancel.mac = mac;
+minus stolen(cancel: stolen_laptop_cancel, mac) :- cancel.mac = mac;
 
 action BBpolice(pkt : packet, found: stolen_laptop_found) :- 
   stolen(pkt.dlSrc),
