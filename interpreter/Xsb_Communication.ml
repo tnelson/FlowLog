@@ -2,7 +2,7 @@ open Unix;;
 open Printf;;
 open Types;;
 open Type_Helpers;;
-(*open Flowlog_Thrift_Out;;*)
+open Flowlog_Thrift_Out;;
 
 let debug = true;;
 
@@ -220,14 +220,18 @@ module Communication = struct
 			| _ -> acc;) body [];;
 
 	let retract_query (qs : Types.atom * Types.blackbox) =
-		match qs with (Types.Apply(_, module_name, name, tl) as q, bb) ->
+		match qs with | (Types.Apply(_, module_name, name, tl) as q, bb) ->
 		let query_answers = List.map (group_into_constants (List.map Type_Helpers.type_of_term tl)) (Flowlog_Thrift_Out.doBBquery bb q) in
-		List.iter (fun ans -> retract_signature (Types.Signature(Types.Helper, module_name, name, ans))) query_answers;;
+		List.iter (fun ans -> retract_signature (Types.Signature(Types.Helper, module_name, name, ans))) query_answers;
+		              | _ -> failwith "retract_query: wrong type of atom";;
 
-	let retract_query (qs : Types.atom * Types.blackbox) =
-		match qs with (Types.Apply(_, module_name, name, tl) as q, bb) ->
-		let query_answers = List.map (group_into_constants (List.map type_of_term tl)) (Flowlog_Thrift_Out.doBBquery bb q) in
-		List.iter (fun ans -> assert_signature (Types.Signature(Types.Helper, module_name, name, ans))) query_answers;;
+	let assert_query (qs : Types.atom * Types.blackbox) =
+		match qs with | (Types.Apply(_, module_name, name, tl) as q, bb) ->
+		let query_answers = List.map (group_into_constants (List.map Type_Helpers.type_of_term tl)) (Flowlog_Thrift_Out.doBBquery bb q) in
+		List.iter (fun ans -> assert_signature (Types.Signature(Types.Helper, module_name, name, ans))) query_answers;
+		              | _ -> failwith "assert_query: wrong type of atom";;
+
+  (* TODO: tons of code-duplication here *)
 
 	let query_signature (prgm : Types.program) (s : Types.signature) : (Types.term list) list =
 		match s with Types.Signature(_, _, _, args) ->
