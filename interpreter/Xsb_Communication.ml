@@ -203,12 +203,12 @@ module Communication = struct
 		| [] -> raise (Failure "num is bigger than the length of the list");
 		| h :: t -> let first_recur, rest_recur = split_list (num - 1) t in (h :: first_recur, rest_recur);;
 
-	let rec group_into_constants (sl : string list) (types : Types.term_type list) : Types.term list =
+	let rec group_into_constants (types : Types.term_type list) (sl : string list) : Types.term list =
 		match types with
 		| [] -> if sl = [] then [] else raise (Failure "More strings than fit into the types");
 		| Types.Type(_, fields) as t :: tail ->
 			let (first_bunch, rest) = split_list (List.length fields) sl in
-			Types.Constant(first_bunch, t) :: group_into_constants rest tail;
+			Types.Constant(first_bunch, t) :: group_into_constants tail rest;
 		| _ -> raise (Failure "deferd type");;
 
 	let get_queries (prgm : Types.program) (cls : Types.clause) : (Types.atom * Types.blackbox) list =
@@ -219,10 +219,15 @@ module Communication = struct
 				| h :: _ -> (a, h) :: acc;);
 			| _ -> acc;) body [];;
 
-	(*let retract_query (qs : (Types.atom * Types.blackbox) list) =
-		match qs with (q, bb)
-		let query_answers = Flowlog_Thrift_Out.doBBquery bb a in*)
+	let retract_query (qs : Types.atom * Types.blackbox) =
+		match qs with (Types.Apply(_, module_name, name, tl) as q, bb) ->
+		let query_answers = List.map (group_into_constants (List.map Type_Helpers.type_of_term tl)) (Flowlog_Thrift_Out.doBBquery bb q) in
+		List.iter (fun ans -> retract_signature (Types.Signature(Types.Helper, module_name, name, ans))) query_answers;;
 
+	let retract_query (qs : Types.atom * Types.blackbox) =
+		match qs with (Types.Apply(_, module_name, name, tl) as q, bb) ->
+		let query_answers = List.map (group_into_constants (List.map type_of_term tl)) (Flowlog_Thrift_Out.doBBquery bb q) in
+		List.iter (fun ans -> assert_signature (Types.Signature(Types.Helper, module_name, name, ans))) query_answers;;
 
 	let query_signature (prgm : Types.program) (s : Types.signature) : (Types.term list) list =
 		match s with Types.Signature(_, _, _, args) ->
@@ -230,11 +235,11 @@ module Communication = struct
 		match prgm with Types.Program(_, _, _, _, prgm_clauses) ->
 		let clauses = List.filter (fun cls -> Type_Helpers.clause_signature cls = Type_Helpers.signature_name s) prgm_clauses in
 		let queries = List.fold_right (fun cls acc -> (get_queries prgm cls) @ acc) clauses [] in
-		(*List.iter assert_query queries;*)
+		List.iter assert_query queries;
 		let strings = send_message ((Type_Helpers.signature_to_string s) ^ ".") num_vars in
-		(*List.iter retract_query queries;*)
+		List.iter retract_query queries;
 		let types = List.map Type_Helpers.type_of_term (List.filter (function Types.Constant(_,_) -> false; | _ -> true;) args) in
-		List.map (fun sl -> group_into_constants sl types) strings;;
+		List.map (fun sl -> group_into_constants types sl) strings;;
 
 
 
