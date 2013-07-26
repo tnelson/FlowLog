@@ -77,6 +77,7 @@
   ;
   type_decl:
     TYPE NAME EQUALS LCURLY name_list RCURLY SEMICOLON { Type(String.lowercase $2, $5) }
+  | TYPE NAME EQUALS LCURLY RCURLY SEMICOLON { Type(String.lowercase $2, []) }
   ;
   name_list:
       NAME { [String.uppercase $1] }
