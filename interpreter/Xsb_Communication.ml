@@ -219,19 +219,20 @@ module Communication = struct
 				| h :: _ -> (a, h) :: acc;);
 			| _ -> acc;) body [];;
 
+	(*let retract_query (qs : (Types.atom * Types.blackbox) list) =
+		match qs with (q, bb)
+		let query_answers = Flowlog_Thrift_Out.doBBquery bb a in*)
+
+
 	let query_signature (prgm : Types.program) (s : Types.signature) : (Types.term list) list =
 		match s with Types.Signature(_, _, _, args) ->
 		let num_vars = List.length (List.fold_right (fun t acc -> add_unique_var t acc) args []) in
-
-		(*match prgm with Types.Program(_, _, _, _, prgm_clauses) ->
+		match prgm with Types.Program(_, _, _, _, prgm_clauses) ->
 		let clauses = List.filter (fun cls -> Type_Helpers.clause_signature cls = Type_Helpers.signature_name s) prgm_clauses in
-		let queries = List.fold_right (fun cls acc -> (get_queries prgm cls) @ acc) clauses [] in*)
-
-		(* CONTINUE QUERY STUFF HERE USING ABOVE COMMENTED OUT CODE AND PREVIOUS FUNCTION *)
-
-		(* need to populate BB query helpers before here, and de-populate when done *)
+		let queries = List.fold_right (fun cls acc -> (get_queries prgm cls) @ acc) clauses [] in
+		(*List.iter assert_query queries;*)
 		let strings = send_message ((Type_Helpers.signature_to_string s) ^ ".") num_vars in
-
+		(*List.iter retract_query queries;*)
 		let types = List.map Type_Helpers.type_of_term (List.filter (function Types.Constant(_,_) -> false; | _ -> true;) args) in
 		List.map (fun sl -> group_into_constants sl types) strings;;
 
