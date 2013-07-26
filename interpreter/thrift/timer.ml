@@ -50,6 +50,8 @@ class bb_handler =
 object (self)
   inherit BlackBox.iface
 
+  val counter: int ref = ref 0;
+
   method notifyMe notif = 
     let ntype = sod ((sod notif)#get_notificationType) in
     let values = sod ((sod notif)#get_values) in
@@ -94,7 +96,7 @@ object (self)
     let tbl = (Hashtbl.create 1) in
     if relname = "time" then
     begin
-      Printf.printf "handling time() query\n%!";
+      Printf.printf "handling time query\n%!";
       (* need to return a QueryReply. s/b only one argument. if it's a variable,
          return the value. if it's a constant, compare. e.g. if time=10,
          time(X) should return {[10]}. But time(3) should return {}. time(10) would return {[10]}.
@@ -120,6 +122,37 @@ object (self)
         rep#set_result tbl;
         rep
     end
+    else if relname = "nonce" then
+    begin
+      Printf.printf "handling nonce query\n%!";
+      (* this nonce is not secure. 
+         it's also sequential...
+         it's not even guaranteed unique. 
+         it's also generated adhoc---ocaml has no gensym? *)
+      let nonce = string_of_int !counter in 
+        counter := (!counter) + 1;
+
+        Printf.printf "Nonce was: %d\n%!" !counter;
+
+        if (List.length args) != 1 then
+        begin
+          rep#set_exception_code "1";
+          rep#set_exception_message "Timer.nonce expects a single argument."
+        end 
+        else if (List.hd args) = (String.capitalize (List.hd args)) then
+        begin
+          Hashtbl.add tbl [nonce] true
+        end
+        else if (List.hd args) = nonce then
+        begin
+          (* for constant *)
+          Hashtbl.add tbl [nonce] true 
+        end;
+
+        rep#set_result tbl;
+        rep
+
+    end
     else 
     begin
       Printf.printf "invalid query relation %s\n%!" relname;
@@ -136,11 +169,11 @@ let dobb () =
   let port = timer_port in
   let pf = new TBinaryProtocol.factory in
   let server = new TThreadedServer.t
-		 proc
-		 (new TServerSocket.t port)
-		 (new Transport.factory)
-		 pf
-		 pf
+     proc
+     (new TServerSocket.t port)
+     (new Transport.factory)
+     pf
+     pf
   in
     (* Listen in a separate thread. *)
     (* returns handle to new thread. ignore to avoid warning *)
@@ -160,5 +193,4 @@ let timer_expire id  =
 
 
 dobb();;
-
 
