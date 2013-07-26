@@ -71,6 +71,15 @@ module Xsb = struct
 		flush out_ch;		
 		let answer = ref "" in
 		let next_str = ref "" in		
+
+        (*let next_str = ref "" in
+		while not (Type_Helpers.ends_with !next_str "\n") do
+		  next_str := (!next_str) ^ (String.make 1 (input_char in_ch));
+		  Printf.printf "next_str=%s\n%!" !next_str;
+		  if (Type_Helpers.ends_with !next_str "| ?- | ?-") then debug_print_errors_and_exit();
+		done;*)
+
+
 		while (not (Type_Helpers.ends_with (String.trim !next_str) "yes") && not (Type_Helpers.ends_with (String.trim !next_str) "no")) do		
 			next_str := input_line in_ch;
 

@@ -2,9 +2,9 @@
 // (2) We watch for packets with that MAC
 // (3) We send the police the mac, the switch it's connected to, and the local time.
 
-// Problem: This sends notifications for every switch traversed, not just the source.
-//  Without mobility, these can be fixed via timers. But now the timer may wake up
-// and report the wrong switch!
+// Problem 1: This spams the police for _every packet_ sent from a stolen MAC address.
+// Problem 2: This sends notifications for every switch traversed, not just the source.
+//  Without mobility, these can be fixed via timers.
 
 // Declaring two external listeners on such-and-such ports:
 blackbox BBtimer @ 127.0.0.1 9091;
@@ -17,12 +17,9 @@ module Stolen_Laptop:
 
 // Declare these notification types, with field names. 
 // E.g. the stolen_laptop_report has a single field, "mac".
-// TODO: these are repeated. should be baked in?
 type stolen_laptop_report = {mac};
 type stolen_laptop_cancel = {mac};
 type stolen_laptop_found = {mac,swid,time};
-type start_timer = {seconds, id};
-type timer_expired = {id};
 
 // Our forwarding behavior contains the Mac_learning behavior
 // (Note type names on notification variables! packet is a type of notification)
@@ -43,22 +40,4 @@ action BBpolice(pkt : packet, found: stolen_laptop_found) :-
   stolen(pkt.dlSrc),
   found.mac = pkt.dlSrc,
   found.swid = pkt.locSw,
-  BBTimer.time(found.time),
-  not ratelim(found.mac);
-
-// TODO PARSER: can't use packet for packet name, yet no nice reserved-word error.
-// TODO LACK OF ERR MSG: Timer vs. BBTimer should say unknown module. But silently fails
-
-// Rate limit spam of police tipline (10 second timer. longer in real situation, of course)
-// Use mac address as timer ID.
-// Note check for not ratelim(mac) before sending timer notification! This is vital.
-
-plus ratelim(pkt : packet, mac) :- not ratelim(mac), stolen(mac), pkt.dlSrc = mac;
-
-minus ratelim(ev : timer_expired, mac) :- ratelim(mac), ev.id = mac;
-minus ratelim(ev : stolen_laptop_cancel, mac) :- ratelim(mac), ev.mac = mac;
-
-action BBtimer(pkt : packet, st: start_timer) :- 
-  not ratelim(mac), stolen(mac),
-  st.id = pkt.dlSrc, st.seconds = 10;
-
+  BBTimer.time(found.time);
