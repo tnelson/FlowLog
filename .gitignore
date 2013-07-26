@@ -1,2 +1,5 @@
 *~
 .*
+*.log
+interpreter/_build
+interpreter/thrift/_build
