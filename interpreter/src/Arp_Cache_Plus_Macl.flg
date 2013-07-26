@@ -1,0 +1,62 @@
+import Mac_Learning;
+
+// (To check, use xterm <host> in mininet and the arp -d command to remove local arp entries between pings.)
+
+module Arp_Cache_Plus_Macl:
+
+type arp-packet extends packet {arp-op, arp-sha, arp-spa, arp-tha, arp-tpa};
+
+// No mobility support here: once learned, always learned.
+plus cache(pkt : arp-packet, ip, mac ) :- 
+  pkt.arp-op = 2, // arp reply 
+  not cache( pkt.nwSrc, any),
+  ip = pkt.nwSrc, mac = pkt.dlSrc;
+
+// Propagate all arp replies via flooding, and never interfere with a reply.
+action forward(pkt : packet, newpkt  : packet) :-  
+  pkt.arp-op = 2,
+  newpkt.locSw = pkt.locSw,
+  Mac_Learning.switch_has_port(pkt.locSw, newpkt.locPt), // REQUIRED: manual invocation for now
+  not pkt.locPt = newpkt.locPt;
+
+// Propagate all arp requests for unlearned addresses
+// note this rule is split vs. what appeared in hotsdn
+action forward(pkt : arp-packet, newpkt : arp-packet) :-
+  pkt.arp-op = 1, 
+  not cache(pkt.nwDst, any),
+  newpkt.locSw = pkt.locSw,
+  Mac_Learning.switch_has_port(pkt.locSw, newpkt.locPt), // REQUIRED: manual invocation for now
+  not newpkt.locPt = pkt.locPt
+// also note: assumed EVERYTHING IDENTICAL IF UNMENTIONED.
+// needs a check in parser. TODO.
+// doubly so now since not well-defined if result not same type as trigger
+  ;
+
+// modify request into reply if we know the mac address.
+action forward(pkt : arp-packet, newpkt : arp-packet) :-
+  pkt.arp-op = 1, // triggers for request
+  newpkt.arp-op = 2, // produces reply
+
+  // if we have a value cached (save it in newpkt's dlSrc)
+  cache ( pkt.nwDst, newpkt.dlSrc ),
+
+  // Flip/set ARP-protocol fields.
+  // Required in well-formed reply!
+  newpkt.arp-sha = newpkt.dlSrc,
+  newpkt.arp-spa = newpkt.nwSrc,
+  newpkt.arp-tha = pkt.dlSrc,
+  newpkt.arp-tpa = pkt.nwSrc,
+
+  // flip the packet (same exit port as entrance)
+  newpkt.locSw = pkt.locSw,
+  newpkt.locPt = pkt.locPt,
+  // + appropriate ethernet-level address flipping
+  newpkt.nwDst = pkt.nwSrc,
+  newpkt.dlDst = pkt.dlSrc,
+  newpkt.nwSrc = pkt.nwDst;
+
+// Defer to MAC learning for other packet types
+action forward(pkt : packet, newpkt : packet) :- 
+  not pkt.dlTyp = 0x0806, Mac_Learning.forward(pkt, newpkt);
+action forward(pkt : packet, newpkt : packet) :- 
+  not pkt.nwProto = 1, not pkt.nwProto = 2, Mac_Learning.forward(pkt, newpkt);
