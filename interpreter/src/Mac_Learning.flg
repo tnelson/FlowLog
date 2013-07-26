@@ -22,7 +22,8 @@ plus switch_has_port(sw_pt : switch_port, sw, pt) :-
 sw_pt.switch = sw,
 sw_pt.port = pt;
 
-action forward(pkt : packet, nwpkt : packet) :-
-switch_has_port(pkt.locSw, nwpkt.locPt),
+// omg different var name! but it's ok!
+action forward(pkt : packet, newpkt : packet) :-
+switch_has_port(pkt.locSw, newpkt.locPt),
 not learned(pkt.locSw, any, pkt.dlDst),
-not pkt.locPt = nwpkt.locPt;
+not pkt.locPt = newpkt.locPt;
