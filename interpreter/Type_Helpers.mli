@@ -5,6 +5,10 @@ module Type_Helpers : sig
 
 	val list_to_string : ('a -> string) -> 'a list -> string;;
 
+	val blackbox_name : Types.blackbox -> string;;
+
+	val term_type_name : Types.term_type -> string;;
+
 	val type_of_term : Types.term -> Types.term_type;;
 
 	val term_to_string : Types.term -> string;;

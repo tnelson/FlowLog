@@ -15,6 +15,9 @@ module Type_Helpers = struct
 		let ans = List.fold_right (fun x acc -> (conversion x) ^ "," ^ acc) l "" in
 		if ans = "" then ans else String.sub ans 0 (String.length ans - 1);;
 
+	let blackbox_name (bb : Types.blackbox) : string =
+		match bb with Types.BlackBox(name, _) -> name;;
+
 	let term_type_name (t : Types.term_type) : string =
 		match t with
 		| Types.Type(name, _) -> name;
@@ -131,8 +134,17 @@ module Parse_Helpers = struct
 
 	let rec remove_duplicates (l : 'a list) : 'a list =
 		match l with
-		[] -> [];
+		| [] -> [];
 		| h :: t -> if List.mem h t then (remove_duplicates t) else h :: (remove_duplicates t);;
+
+	let rec fail_if_duplicates (l : 'a list) (a_to_str : 'a -> string) : unit =
+		match l with
+		| [] -> ();
+		| h :: t -> (match List.filter (fun a -> a_to_str a = a_to_str h) t with
+			| [] -> fail_if_duplicates t a_to_str;
+			| _ -> raise (Failure ("multiple definitions of " ^ (a_to_str h) ^ ".")););;
+
+
 
 	let import (main : Types.program) (imports : Types.program list) : Types.program =
 		List.fold_right (fun prgm acc -> 
@@ -141,10 +153,13 @@ module Parse_Helpers = struct
 		let modules = remove_duplicates (prgm_modules @ acc_modules) in
 		let blackboxes = prgm_blackboxes @ acc_blackboxes in
 		let types = prgm_types @ acc_types in
+		fail_if_duplicates blackboxes Type_Helpers.blackbox_name;
+		fail_if_duplicates types Type_Helpers.term_type_name;
 		let clauses = (List.map (fun cls -> match cls with
 			| Types.Clause(Types.Signature(Types.Action, module_name, name, args), body) -> Types.Clause(Types.Signature(Types.Helper, module_name, name, args), body);
 			| _ -> cls;) prgm_clauses) @ acc_clauses in
 		Types.Program(acc_name, modules, blackboxes, types, clauses)) imports main;;
+
 
 	let process_term_type (prgm : Types.program) (s : Types.signature) (var_name : string) (ttype : Types.term_type) : Types.term_type =		
 		match prgm with Types.Program(_, _, _, types, _) ->
