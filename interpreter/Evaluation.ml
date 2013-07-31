@@ -19,9 +19,10 @@ module Evaluation = struct
 
 	let debug1 = true;;
 
-
 	let respond_to_notification (notif : Types.term) (prgm : Types.program) : unit =
-		if debug1 then print_endline ("incoming notif: " ^ Type_Helpers.term_to_string notif);
+		if debug1 then 
+		  Printf.printf "incoming notif: [%s] of type: %s\n%!" 
+		    (Type_Helpers.term_to_string notif) (Type_Helpers.term_type_name (Type_Helpers.type_of_term notif));
 		let already_seen = ref [] in
 		match prgm with Types.Program(_, _, _, _, clauses) ->
 		match notif with Types.Constant(_, ttype) ->

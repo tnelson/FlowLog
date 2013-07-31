@@ -22,11 +22,18 @@ Evalutaion.respond_to_notification
 
 module Make_OxModule (Program : PROGRAM) = struct
 	include OxStart.DefaultTutorialHandlers;;	
-	
+
+    (* Start up XSB, etc. *)
 	Communication.start_program Program.program;;
    
-    Flowlog_Thrift_In.start_listening(Program.program);;
+    (* Listen for incoming notifications via RPC *)
+    Flowlog_Thrift_In.start_listening Program.program;;
+ 
+    (* Send the "startup" notification. Enables initialization, etc. in programs *)
+    let startup = Types.Constant([], Types.startup_type) in
+	  Evaluation.respond_to_notification startup Program.program;;
 
+	
 	let switch_connected (sw : switchId) (feats : OpenFlow0x01.SwitchFeatures.t) : unit =
 	    Printf.printf "Switch %Ld connected.\n%!" sw;
 	    let port_nums = List.map (fun (x : PortDescription.t)-> x.PortDescription.port_no) feats.SwitchFeatures.ports in

@@ -10,10 +10,9 @@ module Type_Helpers = struct
 		if String.length str2 > String.length str1
 		then false
 		else (String.sub str1 ((String.length str1) - (String.length str2)) (String.length str2)) = str2;;
-
+    
 	let list_to_string (conversion : 'a -> string) (l : 'a list) : string = 
-		let ans = List.fold_right (fun x acc -> (conversion x) ^ "," ^ acc) l "" in
-		if ans = "" then ans else String.sub ans 0 (String.length ans - 1);;
+		String.concat "," (List.filter (fun s -> s <> "") (List.map conversion l));;
 
 	let blackbox_name (bb : Types.blackbox) : string =
 		match bb with Types.BlackBox(name, _) -> name;;
@@ -31,11 +30,11 @@ module Type_Helpers = struct
 
 	let term_to_string (t : Types.term) : string = 
 		match t with
-		| Types.Constant(values, _) -> list_to_string (fun str -> str) values; 
+		| Types.Constant(values, Types.Type(n, _)) -> (list_to_string (fun str -> str) values) ; 		
 		| Types.Variable(name, Types.Type(_, fields)) -> list_to_string (fun field -> name ^ "_" ^ field) fields;
 		| Types.Field_ref(name, field) -> name ^ "_" ^ field;
-		| Types.Variable(name, Types.Term_defer(str)) -> failwith ("not a valid term: "^name^" with defer: "^str);;
-		(*| _ -> failwith "Not a valid term";;*)
+		| Types.Variable(name, Types.Term_defer(str)) -> failwith ("not a valid variable: "^name^" with defer: "^str);
+		| Types.Constant(values, Types.Term_defer(str)) -> failwith ("not a valid constant with defer: "^str);;  
 
 	let bool_to_string (b : bool) : string =
 		match b with

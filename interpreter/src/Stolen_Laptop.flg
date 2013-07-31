@@ -23,6 +23,7 @@ type stolen_laptop_cancel = {mac};
 type stolen_laptop_found = {mac,swid,time};
 type start_timer = {seconds, id};
 type timer_expired = {id};
+type startup = {};
 
 // Our forwarding behavior contains the Mac_learning behavior
 // (Note type names on notification variables! packet is a type of notification)
@@ -62,3 +63,5 @@ action BBtimer(pkt : packet, st: start_timer) :-
   not ratelim(mac), stolen(mac),
   st.id = pkt.dlSrc, st.seconds = 10;
 
+// Test startup event
+plus unused(st: startup) :- true;

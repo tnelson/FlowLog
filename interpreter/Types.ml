@@ -21,5 +21,6 @@ module Types = struct
 	let raw_type = Type("raw", ["VALUE"]);;
 	let packet_type = Type("packet", ["LOCSW"; "LOCPT"; "DLSRC"; "DLDST"; "DLTYP"; "NWSRC"; "NWDST"; "NWPROTO"]);;
 	let switch_port_type = Type("switch_port", ["SWITCH"; "PORT"]);;
+	let startup_type = Type("startup", []);;
 
 end

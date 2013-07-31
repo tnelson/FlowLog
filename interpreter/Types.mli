@@ -20,5 +20,6 @@ module Types : sig
 	val raw_type : term_type;;
 	val packet_type : term_type;;
 	val switch_port_type : term_type;;
+    val startup_type : term_type;;
 
 end
