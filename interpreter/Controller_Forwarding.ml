@@ -9,10 +9,11 @@ let debug = true;;
 
 module Controller_Forwarding = struct
 
-	let pkt_buffer = ref None;;
-
-	(* type of pkt_info is switchId * packetIn option but I can't declare it that for some reason. *)
-	let update_buffer pkt_info : unit = pkt_buffer := pkt_info;;
+	let in_packet_context = ref None;;
+	
+	(* *)
+	let remember_for_forwarding (pkt_info: (switchId * packetIn) option) : unit = 
+	  in_packet_context := pkt_info;;
 
 	let begins_with (str1 : string) (str2 : string) : bool = 
 		if String.length str2 > String.length str1 then false else
@@ -45,10 +46,10 @@ module Controller_Forwarding = struct
 		if debug then print_endline "finishing pkt_to_notif";
 		Types.Constant(strings, Types.packet_type);;
 
-	let forward_queue = ref [];;
+	let outgoing_packet_queue = ref [];;
 
 	let queue_packets (out_notifs : Types.term list) : unit =
-		forward_queue := out_notifs @ !forward_queue;;
+		outgoing_packet_queue := out_notifs @ !outgoing_packet_queue;;
 
     let of_pport_to_string (pp: pseudoPort) : string =
      match pp with      
@@ -76,49 +77,123 @@ module Controller_Forwarding = struct
      | SetTpDst(tpPort) -> "Set tpDst = "^(string_of_int tpPort);;
 
 
-	(* notice that the current implementation is not efficient--if its just a repeater its doing way too much work. *)
-	let forward_packets (notifs : Types.term list) : unit =
-	    if debug then Printf.printf "In forward_packets...\n%!";
-		match !pkt_buffer with
-		| None -> raise (Failure "forward packets called before packet arrived.");
-		| Some(sw, pk) ->
-		let _ = pkt_buffer := None in
+	(* notice that the current implementation is not efficient---
+	   if its just a repeater its doing way too much work. *)
+	let send_queued_packets (notifs : Types.term list) (sw: switchId) (pkt_payload: payload): unit =
+	    if debug then Printf.printf "In send_queued_packets...\n%!";
 		let actions_list = ref [] in
-		let pk_notif = pkt_to_notif sw pk in
-		let dlSrc_old = (get_field pk_notif "DLSRC") in
-		if debug then print_endline ("dlSrc_old: " ^ dlSrc_old);
+		
+		(* !!! the problem is here: really nowhere to get these values for EMIT. 
+		   so restructuring stopped us from getting them. *)
+
+		(*let pk_notif = pkt_to_notif sw pk in
+		let dlSrc_old = (get_field pk_notif "DLSRC") in		
 		let dlDst_old = (get_field pk_notif "DLDST") in
 		let nwSrc_old = (get_field pk_notif "NWSRC") in
 		let nwDst_old = (get_field pk_notif "NWDST") in
 		if debug then print_endline ("dlSrc_old: " ^ dlSrc_old ^ " dlDst_old: " ^ dlDst_old ^ " nwSrc_old: " ^ nwSrc_old ^ " nwDst_old: " ^ nwDst_old);
-		let _ = List.iter (fun notif -> 
+		*)
+
+		(* for each switch, need to group ports to output and field rewrites to do.
+		   Ox actions are imperative, so SetDlSrc(5) Output(3) SetDlSrc(4) Output(2) works the way you'd expect. *)
+		List.iter (fun notif -> 
+			(* no need to get the locSw, since the set of packets given will have a common switch *)
 			let locPt_string = (get_field notif "LOCPT") in
 			(* if (begins_with locPt_string "_h") then actions_list := Output(AllPorts) :: !actions_list else *)
-			let _ = actions_list := Output(PhysicalPort(int_of_string locPt_string)) :: !actions_list in
+			actions_list := Output(PhysicalPort(int_of_string locPt_string)) :: !actions_list;
 	
-			let dlSrc_new = (get_field notif "DLSRC") in
-			let _ = actions_list := SetDlSrc(Int64.of_string (if (begins_with dlSrc_new "_h") then dlSrc_old else dlSrc_new)) :: !actions_list in
-	
-			let dlDst_new = (get_field notif "DLDST") in
-			let _ = actions_list := SetDlDst(Int64.of_string (if (begins_with dlDst_new "_h") then dlDst_old else dlDst_new)) :: !actions_list in
-	
-			let nwSrc_new = (get_field notif "NWSRC") in
-			let _ = actions_list := SetNwSrc(Int32.of_string (if (begins_with nwSrc_new "_h") then nwSrc_old else nwSrc_new)) :: !actions_list in
-	
-			let nwDst_new = (get_field notif "NWDST") in
-			let _ = actions_list := SetNwDst(Int32.of_string (if (begins_with nwDst_new "_h") then nwDst_old else nwDst_new)) :: !actions_list in
-			()) notifs in		
-		let _ = if debug then Printf.printf "FORWARDING PACKET. Switch=%s, Fields= %s\n%!" (Int64.to_string sw) (Packet.to_string (parse_payload pk.input_payload)) in
-        let _ = if debug then (List.iter (fun act -> (Printf.printf "---ACTION: %s\n%!" (of_action_to_string act))) !actions_list) in
-        let _ = if debug && (List.length !actions_list) = 0 then Printf.printf "---NO ACTIONS! Packet will be dropped.\n%!" in
-		send_packet_out sw 0l {output_payload = pk.input_payload; port_id = None; apply_actions = !actions_list};;
+			(* TODO: avoid unnecessary Set* actions by remembering the last one uttered. *)
 
+			(* TODO check: should throw an error if we get unrestricted header field except for port, right? *)
+			
+			(*let dlSrc_new = (get_field notif "DLSRC") in
+			actions_list := SetDlSrc(Int64.of_string (if (begins_with dlSrc_new "_h") then dlSrc_old else dlSrc_new)) :: !actions_list;*)
+	        
+	        actions_list := SetDlSrc(Int64.of_string (get_field notif "DLSRC")) :: !actions_list;
+
+			(*let dlDst_new = (get_field notif "DLDST") in
+			actions_list := SetDlDst(Int64.of_string (if (begins_with dlDst_new "_h") then dlDst_old else dlDst_new)) :: !actions_list;*)
+	
+			actions_list := SetDlDst(Int64.of_string (get_field notif "DLDST")) :: !actions_list;
+
+			(*let nwSrc_new = (get_field notif "NWSRC") in
+			actions_list := SetNwSrc(Int32.of_string (if (begins_with nwSrc_new "_h") then nwSrc_old else nwSrc_new)) :: !actions_list;*)
+			
+			actions_list := SetNwSrc(Int32.of_string (get_field notif "NWSRC")) :: !actions_list;
+
+			(*let nwDst_new = (get_field notif "NWDST") in
+			actions_list := SetNwDst(Int32.of_string (if (begins_with nwDst_new "_h") then nwDst_old else nwDst_new)) :: !actions_list;*)
+			
+			actions_list := SetNwDst(Int32.of_string (get_field notif "NWDST")) :: !actions_list;
+			
+			()) notifs;
+
+		if debug then 
+		begin 
+          (List.iter (fun act -> (Printf.printf "---ACTION: %s\n%!" (of_action_to_string act))) !actions_list);
+          if (List.length !actions_list) = 0 then
+            Printf.printf "---NO ACTIONS! Packet will be dropped.\n%!";
+        end;
+
+        (* Since send_packet_out needs the switch, and we may have multiple switches... *)
+        send_packet_out sw 0l 
+	      {output_payload = pkt_payload; port_id = None; apply_actions = !actions_list};;
+
+
+    let manufacture_payload() : OpenFlow0x01_Core.payload = 
+      NotBuffered(Packet.marshal(
+       {Packet.dlSrc = Int64.of_int 100; Packet.dlDst = Int64.of_int 101;
+        Packet.dlVlan = None; Packet.dlVlanPcp = 103;
+        nw = Packet.Unparsable(1000, Cstruct.create(0))
+       }));;
+
+    let debufferize (pl : payload): payload =
+      match pl with
+      | NotBuffered(_) -> pl;
+      | Buffered(_, b) -> NotBuffered(b);;
+
+    let split_packets_by_switch (pkts : Types.term list): (switchId, Types.term list) Hashtbl.t =
+      let sofar = Hashtbl.create(1) in
+    	List.iter (fun pkt  -> let locsw = (Int64.of_string (get_field pkt "LOCSW")) in
+    		                     if (Hashtbl.mem sofar locsw) then
+                                    Hashtbl.add sofar locsw (pkt :: (Hashtbl.find sofar locsw)) 
+                                 else
+                                    Hashtbl.add sofar locsw [pkt])
+    	                pkts;
+    	sofar;;
+
+    (* Queue up all packets to be sent and send at once *)
 	let flush_packets () : unit =
 	    if debug then Printf.printf "In flush_packets..\n%!";
-	    if !forward_queue <> [] then
+	    if !outgoing_packet_queue <> [] then
 	    begin
-		  forward_packets !forward_queue;
-		  forward_queue := [];
+          
+          if debug then 
+   		    match !in_packet_context with
+		  	  | None -> Printf.printf "Flushing... NO INITIAL PACKET!\n%!";
+		              
+		      | Some(sw, pk) -> 
+		        Printf.printf "Flushing... FORWARDING PACKET. Switch=%s, Fields= %s\n%!" 
+		          (Int64.to_string sw) 
+		          (Packet.to_string (parse_payload pk.input_payload));
+
+		  in_packet_context := None;
+
+          (* Every packet in the queue has a dest switch. Group by those,
+             since we can only call send_packet_out ONCE per switch for a buffered pkt. *)
+		  let mapSwToPkts = (split_packets_by_switch !outgoing_packet_queue) in 
+            Hashtbl.iter (fun swId pkts -> 
+               		        let pkt_payload = (match !in_packet_context with
+		  	                (* If this is a pure emit (no payload; create one) *)
+		                    | None -> manufacture_payload();		
+		                    (* If there is a payload to copy over, and the switch is the same, BUFFER *)              		
+		      				| Some(in_sw, in_pk) -> if in_sw = swId then pk.input_payload
+		      				(* If there is a payload to copy over, but the switch is different, UNBUFFER *)
+		      			                            else debufferize pk.input_payload) in 
+                              send_queued_packets pkts swId pkt_payload) 
+              mapSwToPkts;
+
+		  outgoing_packet_queue := [];
 		end;;
 
 end
