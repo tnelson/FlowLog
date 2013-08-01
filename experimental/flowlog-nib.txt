@@ -1,0 +1,215 @@
+
+[[IN PROGRESS]]
+
+[[Writing up nib example for distribution to discussion list. problem
+is that all of this is unproven. so is it a waste of everyone's time?
+want something more concrete than musing.]]
+
+
+Once FlowLog has timers and the ability to emit packets on the
+fly, we can do some pretty cool stuff. I'm going to show how we
+can build some NIB functionality as well as spanning-tree and
+rough shortest-path routing using Flowlog.
+
+To build NIB functionality, we need to detect links and hosts,
+but even more detect when hosts move, when links go down, etc. To
+do this, we can send test packets on every port, every few
+seconds, in response to a timer expiration:
+
+----------------------------------------------------
+// pkt's location is unconstrained, except to store
+// this (starting) location in the packet itself.
+// (The field names for those values go isn't important.)
+emit(timer: timer_expired, pkt: nib-test-packet) :- 
+  timer.id = "NIB",
+  pkt.nib-srcSw = pkt.locSw, pkt.nib-srcPt = pkt.locPt;
+
+// Restart the same timer every time it expires
+// "send timer_start to Timer black-box on timer_expired if..."
+BBTimer(timer: timer_expired, st: timer_start) :- 
+  st.seconds = 10, st.id = "NIB", timer.id = "NIB";;
+----------------------------------------------------
+
+We've also started sending a notification on startup, so we can
+initialize the timers. (It wouldn't be safe to send the initial
+packets on startup, since the switches may not have connected
+yet.)
+
+----------------------------------------------------
+// Startup events have no fields. They just trigger rules.
+BBTimer(start: startup, st: timer_start) :- 
+  st.seconds = 10, st.id = "NIB";
+----------------------------------------------------
+
+In order to stop these test packets after one hop, our forwarding
+behavior will ignore them. That's easy enough to do.
+
+Now that we're sending the packets, we can react to their receipt
+by learning the switch topology:
+
+----------------------------------------------------
+// There is a wire from sw1,pt1 to sw2,pt2 if...
+// we see a nib-test-packet at <dst location>, storing
+// <src location> in its fields.
++switchTopology(p: nib-test-packet, sw1, pt1, sw2, pt2) :-
+  sw1 = p.nib-srcSw, pt1 = p.nib-srcPt,
+  sw2 = p.locSw, pt2 = p.locPt; 
+----------------------------------------------------
+
+That's pretty naive though, since it doesn't allow for the fact
+that links come down! So instead, we can build up our knowledge
+and replace it every k seconds:
+
+----------------------------------------------------
+// Empty and re-populate "under-construction" topology every cycle
+-ucST(timer: timer_expired, sw1, pt1, sw2, pt2) :- 
+  timer.id = "NIB";
++ucST(p: nib-test-packet, sw1, pt1, sw2, pt2) :-
+  sw1 = p.nib-srcSw, pt1 = p.nib-srcPt,
+  sw2 = p.locSw, pt2 = p.locPt; 
+
+// And save what we built at the end of the cycle, replacing old results:
+-switchTopology(timer: timer_expired, sw1, pt1, sw2, pt2) :-
+  timer.id = "NIB";
++switchTopology(timer: timer_expired, sw1, pt1, sw2, pt2) :-  
+  timer.id = "NIB", ucST(sw, pt1, sw2, pt2);
+----------------------------------------------------
+
+How is it that those rules actually work? Flowlog reacts to
+notifications in the following order (same as in the HotSDN paper):
+
+(1) Send out resulting packets and notifications;
+(2) Build set of tuples to add and remove (off the same prestate!)
+(3) REMOVE and then ADD from the controller state.
+
+(Yes, we could add conflict-resolution operators to the language, but
+for now it's "permit overrides" for state. The important thing is that
+removals/additions use the same pre-state.)
+
+So when a cycle ends and the timer expires, ucST and switchTopology
+will be cleared out completely (rules 1 and 3), but switchTopology
+will be populated with everything currently in ucST (rule 4). And
+every time a packet is received (rule 2), ucST learned that the link
+was up in this cycle.
+
+In the same way, we can discover which ports are external:
+
+----------------------------------------------------
+// an external port is one from which no test packet was received:
+-externalPort(timer: timer_expired, sw, pt) :- 
+  timer.id = "NIB";
+// Read "_" as a wildcard
++externalPort(timer: timer_expired, sw, pt) :-  
+  timer.id = "NIB",
+  not switchTopology(sw, pt, _, _); 
+----------------------------------------------------
+
+Now we can detect where hosts are connected, or notice that a host has
+moved since the last cycle:
+
+----------------------------------------------------
+// If we see a packet from an external port...
++macConnectedAt(pkt: packet, mac, sw, pt) :- not is-nib-test(pkt),
+  externalPort(sw, pt), mac = pkt.dlSrc, sw=pkt.locSw, pt=pkt.locPt;
+
+// If new mac on this port
+-macConnectedAt(pkt: packet, mac, sw, pt) :- not is-nib-test(pkt),
+ mac != pkt.dlSrc, sw=pkt.locSw, pt=pkt.locPt;
+
+// OR if mac was known to be elsewhere (new port number or new switch)
+-macConnectedAt(pkt: packet, mac, sw, pt) :- not is-nib-test(pkt),
+ mac = pkt.dlSrc, sw=pkt.locSw, pt != pkt.locPt;
+-macConnectedAt(pkt: packet, mac, sw, pt) :- not is-nib-test(pkt),
+ mac = pkt.dlSrc, sw != pkt.locSw, pt = pkt.locPt;
+
+----------------------------------------------------
+
+We can also announce link failures via notification:
+
+----------------------------------------------------
+BBwhatever(timer: timer_expired, ld: link_down) :-
+  switchTopology(ld.sw1, ld.pt1, ld.sw2, ld.pt2),
+  // Vital to use ucST here since we want the current cycle:
+  not ucST(ld.sw1, ld.pt1, ld.sw2, ld.pt2),
+  BBTimer.time(ld.time);
+----------------------------------------------------
+
+(And if we allowed flowlog programs to send notifications back to
+flowlog, we could announce link failures to other parts of the
+program!)
+
+
+Here's a way to build a spanning-tree in Flowlog. Notice how we build
+a "transitive closure so far" relation as a helper. Just because we
+have no recursion in Flowlog doesn't mean that we can't do stuff like
+this:
+
+----------------------------------------------------
+// Transitive-closure between switches so far this cycle:
++ucTC(p: nib-test-packet, sw1, sw2) :-
+  p.locSw = sw1, p.srcSw = sw2;
++ucTC(p: nib-test-packet, sw1, sw2) :-
+  p.locSw = sw2, ucTC(sw1, p.srcSw);
+
+// port is endpoint of a line in the tree if it leads to a new switch:
++tree(p: nib-test-packet, sw, pt) :-
+  p.nib-srcSw = sw, p.nib-srcPt = pt,
+  not ucTC(sw, p.locSw);
+
+// (Housekeeping rules omitted, and I think I'm neglecting symmetry.)
+----------------------------------------------------
+
+(We are not building an IDB from a static set of EDBs here, so this is
+not "spanning tree" in the pure sense. It does reflect the dynamic
+construction of a spanning tree ala modern networks, though.)
+
+With the help of arithmetic black-boxes, we can accomplish a basic
+shortest-path algorithm:
+
+----------------------------------------------------
+// routing: swsrc, swdst, pt, hops
+// [swsrc] can reach [swdst] in [hops] via [pt]
+
+// Base case:
++routing(p: nib-test-packet, src, dest, pt, hops) :- 
+  p.locSw = dest,
+  p.srcSw = src, p.srcPt = pt,
+  hops = 1;  
+
+// Inductive case: 
++routing(p: nib-pkt, src, dst, pt, hops) :- 
+// some mid node:
+routing(src, mid, pt1, hops1),
+routing(mid, dst, pt2, hops2),
+// tie together new length
+Math.add(hops1, hops2, foobar),
+Math.succ(foobar, hops),
+// is new length actually better?
+[
+ not routing(src, dst, _,_)
+ OR  
+ // forall pt | routing(src, dst,  pt, pthops) --> pthops > hops
+ not helper(src, dst) 
+]
+
+
+helper(src, dst, asgood) :-
+  // already exists some pt that we know of  that's just as good
+  routing(src, dst, _, pthops),
+  Math.lte(pthops, asgood);
+ 
+// todo: branch?
+// todo: check
+----------------------------------------------------
+
+
+
+
+*** I have not tested these programs, nor have I proven them
+    correct. ***
+
+
+
+This is a significant amount of code, yielding a significant amount of
+functionality. Surely there's a bug somewhere. Gee, it sure would be
+nice if we could verify it. Oh wait, we can. :-)
