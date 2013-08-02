@@ -2,6 +2,13 @@ open Types;;
 
 let debug = true;;
 
+(* Sets of terms, rather than lists *)   
+module TermSet = Set.Make( 
+  struct
+    let compare = Pervasives.compare
+    type t = Types.term
+  end )
+
 (* Provides printing functions and conversion functions both for pretty printing and communication with XSB. *)
 module Type_Helpers = struct
 
@@ -167,17 +174,19 @@ module Parse_Helpers = struct
 		match prgm with Types.Program(_, _, _, types, _) ->
 		match ttype with
 		| Types.Type(tname, _) -> ttype;
-		| Types.Term_defer("") -> (match s with Types.Signature(_, _, _, args) ->			
-			match List.filter (function Types.Variable(name,_) -> name = var_name; | _ -> false;) args with
+		| Types.Term_defer("") -> 		  
+		  (match s with Types.Signature(_, _, _, args) ->			
+		 	match List.filter (function Types.Variable(name,_) -> name = var_name; | _ -> false;) args with
 			| [] -> Types.raw_type;
 			| Types.Variable(_, t) :: _ -> (match t with | Types.Term_defer(_) -> Types.raw_type; | _ -> t;);
 			| _ -> raise (Failure "cannot have a constant in a signature in a program")); 
-		| Types.Term_defer(type_name) ->		    
+		| Types.Term_defer(type_name) ->		    	        
 			(match List.filter (function | Types.Type(name, fields) -> name = type_name; | _ -> false;) types with
 			| [] -> raise (Failure ("type " ^ type_name ^ " was not declared"));
 			| h :: _ -> h;);;
 
 	let process_term (prgm : Types.program) (s : Types.signature) (t : Types.term) : Types.term =
+	    (*if debug then Printf.printf "Processing term: %s\n%!" (Type_Helpers.term_to_string t);*)
 		match t with
 		| Types.Constant(sl, ttype) -> Types.Constant(sl, process_term_type prgm s "" ttype);
 		| Types.Variable(vn, ttype) -> Types.Variable(vn, process_term_type prgm s vn ttype);
@@ -200,20 +209,41 @@ module Parse_Helpers = struct
     let expand_var (arg: Types.term): Types.term list =
       match arg with 
       | Types.Constant(_, _) -> [arg];
+      | Types.Variable(vname, Types.Type("raw", ["VALUE"])) -> 
+        [arg] (* don't expand out raw variables! why couldn't i just stick Types.raw_type here? *)
       | Types.Variable(vname, Types.Type(_,fields)) -> 
         List.map (fun fld -> Types.Field_ref(vname, fld)) fields
       | _ -> failwith "expand_var---unexpected term type";;
 
-	let flatten_terms_to_constrain (signat: Types.signature): Types.term list =
 
+
+
+     (* EDITING HERE !!!!!!!! *)
+
+
+
+
+     (* First component: needs constraint. Second component: treat as constant (triggers) *)
+	let flatten_terms_to_constrain (signat: Types.signature): Types.term list * TermSet.t =
 	  match signat with 
-        | Types.Signature(Types.Plus, _, _, args)  (* ocaml has fallthrough! *)
+	    (* plus, action -- leave the trigger free to be unconstrained 
+	       but everything else needs to be constrained. *)
+        (* same for minus, even though it might seem otherwise. minus is still a relation
+            that needs to be evaluated by XSB. *)
+        | Types.Signature(Types.Plus, _, _, args)  (* ocaml has fallthrough! *)        
         | Types.Signature(Types.Minus, _, _, args) 
-        | Types.Signature(Types.Action, _, _, args) -> 
-           (* leave the trigger free to be unconstrained *)
-            List.fold_right (fun arg accum -> (expand_var arg) @ accum) (List.tl args) [];
+        | Types.Signature(Types.Action, _, _, args) ->                    
+            (List.fold_right (fun arg accum -> (expand_var arg) @ accum) (List.tl args) [],
+             List.fold_right (fun aterm sofar -> TermSet.add aterm sofar)
+                             (expand_var (List.hd args))
+                             TermSet.empty);         
+
+         (* helper: everything needs to be constrained *)
+         (* TODO careful: what about module imports? don't those get helperized? 
+             yes. so this needs to look at type of first component... *)
         | Types.Signature(Types.Helper, _, _, args) -> 
-	        List.fold_right (fun arg accum -> arg :: accum) args [];;
+	        (List.fold_right (fun arg accum -> arg :: accum) args [], 
+	        TermSet.empty);;
 
      let constrain_term (signat : Types.signature) (to_constrain: Types.term) : Types.atom =	       
 		match signat with 
@@ -224,12 +254,12 @@ module Parse_Helpers = struct
               (match List.hd args with 
               | Types.Variable(vname, _) ->
                   Types.Equals(true, to_constrain, Types.Field_ref(vname, fld))
-              | _ -> failwith "constrain_term: args")
-            | _ -> failwith "constrain_term: to_constrain"
+              | _ -> failwith "constrain_term on forward: args error. expected first arg to be variables")            
+            | _ -> failwith "constrain_term on forward: to_constrain error. Expected all needed constraints to be Field_refs"
       	  else if relname = "emit" then  (* If emit, default to 0. *)  
       	    Types.Equals(true, to_constrain, Types.Constant(["0"], Types.raw_type))  	
       	  else 
-      	    let msg = ("Unconstrained term "^(Type_Helpers.term_to_string to_constrain)^"in clause with signature "^Type_Helpers.signature_to_string signat) in 
+      	    let msg = ("Unconstrained term "^(Type_Helpers.term_to_string to_constrain)^" in clause with signature "^Type_Helpers.signature_to_string signat) in 
       	    Printf.printf "%s\n%!" msg;
       	    raise (Failure msg);;
 
@@ -238,24 +268,30 @@ module Parse_Helpers = struct
       | Types.Constant(_,_) -> true
       | _ -> false;;
 
-    let find_constrained_terms_single (atom: Types.atom) (accum: Types.term list): Types.term list =
+    let find_constrained_terms_single (atom: Types.atom) (accum: TermSet.t): TermSet.t =
+      if debug then Printf.printf "-- FCTS %s\n%!" (Type_Helpers.atom_to_string atom);
+      (* For action/plus/minus clauses, the accum must be pre-populated with the trigger fields 
+          (or else this block will just return accum) *)
       match atom with
         | Types.Equals(sign, t1, t2) -> 
           if not sign then accum
-          else if is_constant_term t1 then t2 :: accum
-          else if is_constant_term t2 then t1 :: accum
-          else if List.mem t1 accum then t2 :: accum
-          else if List.mem t2 accum then t1 :: accum 
+          else if is_constant_term t1 then TermSet.add t2 accum
+          else if is_constant_term t2 then TermSet.add t1 accum
+          else if TermSet.mem t1 accum then TermSet.add t2 accum
+          else if TermSet.mem t2 accum then TermSet.add t1 accum 
           else accum
 		| Types.Apply(sign, _, _, tl) -> 
           if not sign then accum
-          else tl @ accum 
+          else List.fold_right (fun aterm sofar -> TermSet.add aterm sofar) tl accum
 		| Types.Bool(b) -> accum;;
 
     (* Iterate to fixpoint to catch cross-constraints. E.g. x = 5, y = x. *)
-    let rec find_constrained_terms (atomlst: Types.atom list) (accum: Types.term list): Types.term list =      
+    let rec find_constrained_terms (atomlst: Types.atom list) (accum: TermSet.t): TermSet.t =      
       let result = List.fold_right find_constrained_terms_single atomlst accum in
-        if List.length result = List.length accum then result
+        if debug then 
+            Printf.printf "Iterating find_constrained_terms. Result=[%s]\n%!"
+            (Type_Helpers.list_to_string Type_Helpers.term_to_string (TermSet.elements result));
+        if TermSet.equal result accum then result
         else find_constrained_terms atomlst result;;
 
 	(* If a clause doesn't constrain everything in the head, do something. 
@@ -266,10 +302,14 @@ module Parse_Helpers = struct
 		match atomlst with 
 		| [Types.Bool(false)] -> atomlst;
 		| _ -> 
-		let all_flat_to_constrain_terms: Types.term list = flatten_terms_to_constrain signat in
-		let constrained_terms: Types.term list = find_constrained_terms atomlst [] in
-		let must_constrain: Types.term list = List.filter (fun t -> not (List.mem t constrained_terms)) 
-		                                 all_flat_to_constrain_terms in        
+		let all_flattened_split = flatten_terms_to_constrain signat in
+		match all_flattened_split with (all_flat_to_constrain_terms, to_ignore_terms_set) -> 
+		let constrained_terms = find_constrained_terms atomlst to_ignore_terms_set in
+		let must_constrain = List.filter (fun t -> not (TermSet.mem t constrained_terms)) 
+		                                 all_flat_to_constrain_terms in    
+		  if debug then 
+		    Printf.printf "[Preprocessing] MUST CONSTRAIN: [%s]\n%!"   
+		                 (Type_Helpers.list_to_string Type_Helpers.term_to_string must_constrain); 
       	  let newatoms: Types.atom list = List.map (constrain_term signat) must_constrain in
       	    newatoms @ atomlst;;
 
@@ -277,11 +317,11 @@ module Parse_Helpers = struct
 		match cls with Types.Clause(signat, atomlst) -> 
 		  let fixed_sig = process_signature prgm signat in
 		  let processed_atoms = List.map (process_atom prgm fixed_sig) atomlst in		  
-		  if debug then 
-		    Printf.printf "[Preprocessing] Processing clause. Signature: %s\n%!" (Type_Helpers.signature_to_string signat);
+		  (*if debug then 
+		    Printf.printf "[Preprocessing] Processed clause. Fixed signature: %s\n%!" (Type_Helpers.signature_to_string fixed_sig);
 		    Printf.printf "[Preprocessing] Atoms processed. They are now:\n [%s]\n%!" 
-		      (Type_Helpers.list_to_string Type_Helpers.atom_to_string atomlst);
-		  let completed_atoms = check_complete_atoms signat processed_atoms in
+		      (Type_Helpers.list_to_string Type_Helpers.atom_to_string processed_atoms);*)
+		  let completed_atoms = check_complete_atoms fixed_sig processed_atoms in
 		  Types.Clause(fixed_sig, completed_atoms);;
 
 	let process_program_types (prgm : Types.program) : Types.program =

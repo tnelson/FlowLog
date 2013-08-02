@@ -13,7 +13,10 @@ pkt.locPt = pt;
 minus learned(pkt : packet, sw, pt, mac) :-
 pkt.locSw = sw,
 pkt.dlSrc = mac,
-not pkt.locPt = pt;
+not pkt.locPt = pt,
+// This is to positively constrain the pt variable
+// should be automatic. TODO. 
+learned(sw, pt, mac);
 
 action forward(pkt : packet, nwpkt : packet) :-
 learned(pkt.locSw, nwpkt.locPt, pkt.dlDst);
