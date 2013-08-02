@@ -215,13 +215,15 @@ module Parse_Helpers = struct
         List.map (fun fld -> Types.Field_ref(vname, fld)) fields
       | _ -> failwith "expand_var---unexpected term type";;
 
+    let prep_for_non_helper args = 
+      (List.fold_right (fun arg accum -> (expand_var arg) @ accum) (List.tl args) [],
+       List.fold_right (fun aterm sofar -> TermSet.add aterm sofar)
+                       (expand_var (List.hd args))
+                       TermSet.empty);;         
 
-
-
-     (* EDITING HERE !!!!!!!! *)
-
-
-
+    let prep_for_true_helper args = 
+      (List.fold_right (fun arg accum -> arg :: accum) args [], 
+	   TermSet.empty);;       
 
      (* First component: needs constraint. Second component: treat as constant (triggers) *)
 	let flatten_terms_to_constrain (signat: Types.signature): Types.term list * TermSet.t =
@@ -230,20 +232,17 @@ module Parse_Helpers = struct
 	       but everything else needs to be constrained. *)
         (* same for minus, even though it might seem otherwise. minus is still a relation
             that needs to be evaluated by XSB. *)
-        | Types.Signature(Types.Plus, _, _, args)  (* ocaml has fallthrough! *)        
+        | Types.Signature(Types.Plus, _, _, args)  
         | Types.Signature(Types.Minus, _, _, args) 
-        | Types.Signature(Types.Action, _, _, args) ->                    
-            (List.fold_right (fun arg accum -> (expand_var arg) @ accum) (List.tl args) [],
-             List.fold_right (fun aterm sofar -> TermSet.add aterm sofar)
-                             (expand_var (List.hd args))
-                             TermSet.empty);         
+        | Types.Signature(Types.Action, _, _, args) ->  prep_for_non_helper args;                  
 
-         (* helper: everything needs to be constrained *)
-         (* TODO careful: what about module imports? don't those get helperized? 
-             yes. so this needs to look at type of first component... *)
+         (* helper: everything needs to be constrained, unless the first arg is non-raw
+            (in which case this is an action/plus/minus that got imported and helperized. *)         
         | Types.Signature(Types.Helper, _, _, args) -> 
-	        (List.fold_right (fun arg accum -> arg :: accum) args [], 
-	        TermSet.empty);;
+            match (List.hd args) with 
+            | Types.Variable(_, Types.Type("raw", ["VALUE"])) -> prep_for_true_helper args;
+            | Types.Variable(_, _) -> prep_for_non_helper args;
+            | _ -> prep_for_true_helper args;;
 
      let constrain_term (signat : Types.signature) (to_constrain: Types.term) : Types.atom =	       
 		match signat with 

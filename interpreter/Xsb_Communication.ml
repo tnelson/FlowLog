@@ -124,11 +124,13 @@ module Xsb = struct
 		if ((ends_with (String.trim first_line) "no") || (ends_with (String.trim first_line) "yes")) then [] else*)
 		let answer = ref [] in
 
+
 		let next_str = ref (input_line in_ch) in
 
+        if debug then Printf.printf "> %s\n%!" !next_str;
 		(* Do not use this: it won't work. But it is useful for debugging situations with weird XSB output. 
            Note the debug_print_errors_and_exit() call---catches error case (which has no endline at end of input) *)
-        (*let next_str = ref "" in
+    (*    let next_str = ref "" in
 		while not (Type_Helpers.ends_with !next_str "\n") do
 		  next_str := (!next_str) ^ (String.make 1 (input_char in_ch));
 		  Printf.printf "next_str=%s\n%!" !next_str;
@@ -144,7 +146,8 @@ module Xsb = struct
 			counter := !counter + 1;
 
 			next_str := input_line in_ch;
-		
+			if debug then Printf.printf "> %s\n%!" !next_str;
+
         (*next_str := "";
         while not (Type_Helpers.ends_with !next_str "\n") do
 		  next_str := (!next_str) ^ (String.make 1 (input_char in_ch));
@@ -155,7 +158,7 @@ module Xsb = struct
 			answer := (remove_from_end (String.trim !next_str) "no") :: !answer;
 			(* TODO If num_vars is wrong, this will freeze. Can we improve? *)
 		done;
-		if debug then Printf.printf "send_query finished. answers: \n%s\n%!" (String.concat ", " !answer);
+		if debug then Printf.printf "send_query finished. answers: \n[%s]\n%!" (String.concat ", " !answer);
 		List.map (fun (l : string list) -> List.map after_equals l) (group (List.rev !answer) num_vars);;
 
 end
