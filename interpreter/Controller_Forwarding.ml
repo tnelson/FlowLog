@@ -12,22 +12,22 @@ module Controller_Forwarding = struct
 	let in_packet_context = ref None;;
 	
 	(* *)
-	let remember_for_forwarding (pkt_info: (switchId * packetIn) option) : unit = 
+	let remember_for_forwarding (pkt_info: (switchId * packetIn * Types.term) option) : unit = 
 	  in_packet_context := pkt_info;;
 
 	let begins_with (str1 : string) (str2 : string) : bool = 
 		if String.length str2 > String.length str1 then false else
 		(String.sub str1 0 (String.length str2)) = str2;;
 
-	let get_field (notif : Types.term) (str : string) : string =
-		if debug then print_endline ("starting get_field with field " ^ str);
+	let get_field (notif : Types.term) (fieldname : string) : string =
+		if debug then print_endline ("starting get_field with field " ^ fieldname);
 		match notif with
 		| Types.Constant(strings, Types.Type(_, fields)) ->
 			let combined = List.combine fields strings in
-			if debug then print_endline (Type_Helpers.list_to_string (function (str1, str2) -> str ^ ":" ^ str2) combined);
-			if debug then print_endline (List.assoc str combined);
-			List.assoc str combined;
-		| _ -> raise (Failure "for notification values only");;
+			if debug then print_endline (Type_Helpers.list_to_string (function (str1, str2) -> str1 ^ ":" ^ str2) combined);
+			if debug then print_endline ("Result: "^(List.assoc fieldname combined));
+			List.assoc fieldname combined;
+		| _ -> raise (Failure "for notification constants only");;
 
 	let pkt_to_notif (sw : switchId) (pk : packetIn) : Types.term = 
 		if debug then print_endline "starting pkt_to_notif";
@@ -79,51 +79,41 @@ module Controller_Forwarding = struct
 
 	(* notice that the current implementation is not efficient---
 	   if its just a repeater its doing way too much work. *)
-	let send_queued_packets (notifs : Types.term list) (sw: switchId) (pkt_payload: payload): unit =
+
+    (* the notifs set must be a set of packets with the same switch, but also the same payload.*)
+	let send_queued_packets (notifs : Types.term list) 
+	                        (sw: switchId) (pkt_payload: payload): unit =
 	    if debug then Printf.printf "In send_queued_packets...\n%!";
 		let actions_list = ref [] in
-		
-		(* !!! the problem is here: really nowhere to get these values for EMIT. 
-		   so restructuring stopped us from getting them. *)
-
-		(*let pk_notif = pkt_to_notif sw pk in
-		let dlSrc_old = (get_field pk_notif "DLSRC") in		
-		let dlDst_old = (get_field pk_notif "DLDST") in
-		let nwSrc_old = (get_field pk_notif "NWSRC") in
-		let nwDst_old = (get_field pk_notif "NWDST") in
-		if debug then print_endline ("dlSrc_old: " ^ dlSrc_old ^ " dlDst_old: " ^ dlDst_old ^ " nwSrc_old: " ^ nwSrc_old ^ " nwDst_old: " ^ nwDst_old);
-		*)
-
+				
 		(* for each switch, need to group ports to output and field rewrites to do.
 		   Ox actions are imperative, so SetDlSrc(5) Output(3) SetDlSrc(4) Output(2) works the way you'd expect. *)
 		List.iter (fun notif -> 
 			(* no need to get the locSw, since the set of packets given will have a common switch *)
 			let locPt_string = (get_field notif "LOCPT") in
+
+			(*let dlSrc_new = (get_field notif "DLSRC") in
+			let dlDst_new = (get_field notif "DLDST") in
+			let nwSrc_new = (get_field notif "NWSRC") in
+			let nwDst_new = (get_field notif "NWDST") in*)
+
 			(* if (begins_with locPt_string "_h") then actions_list := Output(AllPorts) :: !actions_list else *)
+			
 			actions_list := Output(PhysicalPort(int_of_string locPt_string)) :: !actions_list;
-	
-			(* TODO: avoid unnecessary Set* actions by remembering the last one uttered. *)
+
+			(*actions_list := SetDlSrc(Int64.of_string (if (begins_with dlSrc_new "_h") then dlSrc_old else dlSrc_new)) :: !actions_list;
+	        actions_list := SetDlDst(Int64.of_string (if (begins_with dlDst_new "_h") then dlDst_old else dlDst_new)) :: !actions_list;
+			actions_list := SetNwSrc(Int32.of_string (if (begins_with nwSrc_new "_h") then nwSrc_old else nwSrc_new)) :: !actions_list;
+			actions_list := SetNwDst(Int32.of_string (if (begins_with nwDst_new "_h") then nwDst_old else nwDst_new)) :: !actions_list;
+			*)
+			(* TODO: avoid unnecessary Set* actions by remembering the last one uttered or the original.
+			         which is a point... how expensive is it to modify, even once? *)
 
 			(* TODO check: should throw an error if we get unrestricted header field except for port, right? *)
 			
-			(*let dlSrc_new = (get_field notif "DLSRC") in
-			actions_list := SetDlSrc(Int64.of_string (if (begins_with dlSrc_new "_h") then dlSrc_old else dlSrc_new)) :: !actions_list;*)
-	        
 	        actions_list := SetDlSrc(Int64.of_string (get_field notif "DLSRC")) :: !actions_list;
-
-			(*let dlDst_new = (get_field notif "DLDST") in
-			actions_list := SetDlDst(Int64.of_string (if (begins_with dlDst_new "_h") then dlDst_old else dlDst_new)) :: !actions_list;*)
-	
 			actions_list := SetDlDst(Int64.of_string (get_field notif "DLDST")) :: !actions_list;
-
-			(*let nwSrc_new = (get_field notif "NWSRC") in
-			actions_list := SetNwSrc(Int32.of_string (if (begins_with nwSrc_new "_h") then nwSrc_old else nwSrc_new)) :: !actions_list;*)
-			
 			actions_list := SetNwSrc(Int32.of_string (get_field notif "NWSRC")) :: !actions_list;
-
-			(*let nwDst_new = (get_field notif "NWDST") in
-			actions_list := SetNwDst(Int32.of_string (if (begins_with nwDst_new "_h") then nwDst_old else nwDst_new)) :: !actions_list;*)
-			
 			actions_list := SetNwDst(Int32.of_string (get_field notif "NWDST")) :: !actions_list;
 			
 			()) notifs;
@@ -172,27 +162,32 @@ module Controller_Forwarding = struct
    		    match !in_packet_context with
 		  	  | None -> Printf.printf "Flushing... NO INITIAL PACKET!\n%!";
 		              
-		      | Some(sw, pk) -> 
+		      | Some(sw, in_pk, notif) -> 
 		        Printf.printf "Flushing... FORWARDING PACKET. Switch=%s, Fields= %s\n%!" 
 		          (Int64.to_string sw) 
-		          (Packet.to_string (parse_payload pk.input_payload));
-
-		  in_packet_context := None;
+		          (Packet.to_string (parse_payload in_pk.input_payload));
+		  
+		(* TODO: error message if attempting to mutate a field that can't be mutated. e.g. dlTyp. 
+		   IT can be set in emit, but not changed in forward. *)
 
           (* Every packet in the queue has a dest switch. Group by those,
              since we can only call send_packet_out ONCE per switch for a buffered pkt. *)
 		  let mapSwToPkts = (split_packets_by_switch !outgoing_packet_queue) in 
             Hashtbl.iter (fun swId pkts -> 
+               		        
                		        let pkt_payload = (match !in_packet_context with
 		  	                (* If this is a pure emit (no payload; create one) *)
 		                    | None -> manufacture_payload();		
 		                    (* If there is a payload to copy over, and the switch is the same, BUFFER *)              		
-		      				| Some(in_sw, in_pk) -> if in_sw = swId then pk.input_payload
+		      				| Some(in_sw, in_pk, _) -> if in_sw = swId then in_pk.input_payload
 		      				(* If there is a payload to copy over, but the switch is different, UNBUFFER *)
-		      			                            else debufferize pk.input_payload) in 
-                              send_queued_packets pkts swId pkt_payload) 
+		      			                            else debufferize in_pk.input_payload) in 
+
+               		        
+                            send_queued_packets pkts swId pkt_payload) 
               mapSwToPkts;
 
+		  in_packet_context := None;
 		  outgoing_packet_queue := [];
 		end;;
 

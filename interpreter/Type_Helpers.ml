@@ -33,8 +33,8 @@ module Type_Helpers = struct
 		| Types.Constant(values, Types.Type(n, _)) -> (list_to_string (fun str -> str) values) ; 		
 		| Types.Variable(name, Types.Type(_, fields)) -> list_to_string (fun field -> name ^ "_" ^ field) fields;
 		| Types.Field_ref(name, field) -> name ^ "_" ^ field;
-		| Types.Variable(name, Types.Term_defer(str)) -> failwith ("not a valid variable: "^name^" with defer: "^str);
-		| Types.Constant(values, Types.Term_defer(str)) -> failwith ("not a valid constant with defer: "^str);;  
+		| Types.Variable(name, Types.Term_defer(str)) -> name^": DEFER: "^str(*failwith ("not a valid variable: "^name^" with defer: "^str);*)
+		| Types.Constant(values, Types.Term_defer(str)) -> (list_to_string (fun str-> str) values)^": DEFER: "^str (*failwith ("not a valid constant with defer: "^str);;  *)
 
 	let bool_to_string (b : bool) : string =
 		match b with
@@ -69,11 +69,11 @@ module Type_Helpers = struct
 		| Types.Apply(sgn, module_name, name, tl) ->  (bool_to_string sgn) ^ (signature_to_string (Types.Signature(Types.Helper, module_name, name, tl)));		
 		| Types.Bool(b) -> string_of_bool b;;
 
-
+    (* the empty CONJUNCTION is true, not false *)
 	let clause_to_string (cls : Types.clause) : string = 
 		match cls with Types.Clause(s, body) ->
 		match body with
-		| [] -> (signature_to_string s) ^ " :- false";
+		| [] -> (signature_to_string s) ^ " :- true";
 		| _ -> (signature_to_string s) ^ " :- " ^ (list_to_string atom_to_string body);;
 
 
@@ -116,13 +116,16 @@ module Parse_Helpers = struct
 		| [] -> [];
 		| h :: t -> drop t (n - 1);;
 
+  (* Need to tell XSB about state relations as they appear. If we 
+     assert((r(X) :- p(X))). and then do r(X). we get an error. *)
+
 	let process_clause_list (prgm : Types.program) (clauses : Types.clause list) : Types.clause list =
 		let equiv = fun cls1 cls2 -> Type_Helpers.clause_signature cls1 = Type_Helpers.clause_signature cls2 in
 		let fixed_clauses = List.map (process_clause_names prgm) clauses in
 		(List.fold_right (fun cls acc -> match cls with Types.Clause(Types.Signature(cls_type, module_name, name, args), _) -> match cls_type with
-			| Types.Plus -> let new_clause = Types.Clause(Types.Signature(Types.Helper, module_name, name, drop args 1), []) in
+			| Types.Plus -> let new_clause = Types.Clause(Types.Signature(Types.Helper, module_name, name, drop args 1), [Types.Bool(false)]) in
 				if list_contains fixed_clauses equiv new_clause then acc else new_clause :: acc;
-			| Types.Minus -> let new_clause = Types.Clause(Types.Signature(Types.Helper, module_name, name, drop args 1), []) in
+			| Types.Minus -> let new_clause = Types.Clause(Types.Signature(Types.Helper, module_name, name, drop args 1), [Types.Bool(false)]) in
 				if list_contains fixed_clauses equiv new_clause then acc else new_clause :: acc;
 			| _ -> acc;) fixed_clauses []) @ fixed_clauses;;
 
@@ -192,13 +195,97 @@ module Parse_Helpers = struct
 		match prgm with Types.Program(prgm_name, _, _, _, _) ->
 		match s with 
 		| Types.Signature(cls_type, module_name, name, tl) -> Types.Signature(cls_type, module_name, name, List.map (process_term prgm s) tl);;
-	
+
+     (* expand out notif. vars into field refs *)
+    let expand_var (arg: Types.term): Types.term list =
+      match arg with 
+      | Types.Constant(_, _) -> [arg];
+      | Types.Variable(vname, Types.Type(_,fields)) -> 
+        List.map (fun fld -> Types.Field_ref(vname, fld)) fields
+      | _ -> failwith "expand_var---unexpected term type";;
+
+	let flatten_terms_to_constrain (signat: Types.signature): Types.term list =
+
+	  match signat with 
+        | Types.Signature(Types.Plus, _, _, args)  (* ocaml has fallthrough! *)
+        | Types.Signature(Types.Minus, _, _, args) 
+        | Types.Signature(Types.Action, _, _, args) -> 
+           (* leave the trigger free to be unconstrained *)
+            List.fold_right (fun arg accum -> (expand_var arg) @ accum) (List.tl args) [];
+        | Types.Signature(Types.Helper, _, _, args) -> 
+	        List.fold_right (fun arg accum -> arg :: accum) args [];;
+
+     let constrain_term (signat : Types.signature) (to_constrain: Types.term) : Types.atom =	       
+		match signat with 
+        | Types.Signature(ctype, modname, relname, args) -> 
+          if relname = "forward" then 	(* If forward, default to same in head. *)   	       
+            match to_constrain with 
+            | Types.Field_ref(_, fld) ->
+              (match List.hd args with 
+              | Types.Variable(vname, _) ->
+                  Types.Equals(true, to_constrain, Types.Field_ref(vname, fld))
+              | _ -> failwith "constrain_term: args")
+            | _ -> failwith "constrain_term: to_constrain"
+      	  else if relname = "emit" then  (* If emit, default to 0. *)  
+      	    Types.Equals(true, to_constrain, Types.Constant(["0"], Types.raw_type))  	
+      	  else 
+      	    let msg = ("Unconstrained term "^(Type_Helpers.term_to_string to_constrain)^"in clause with signature "^Type_Helpers.signature_to_string signat) in 
+      	    Printf.printf "%s\n%!" msg;
+      	    raise (Failure msg);;
+
+    let is_constant_term t =
+      match t with 
+      | Types.Constant(_,_) -> true
+      | _ -> false;;
+
+    let find_constrained_terms_single (atom: Types.atom) (accum: Types.term list): Types.term list =
+      match atom with
+        | Types.Equals(sign, t1, t2) -> 
+          if not sign then accum
+          else if is_constant_term t1 then t2 :: accum
+          else if is_constant_term t2 then t1 :: accum
+          else if List.mem t1 accum then t2 :: accum
+          else if List.mem t2 accum then t1 :: accum 
+          else accum
+		| Types.Apply(sign, _, _, tl) -> 
+          if not sign then accum
+          else tl @ accum 
+		| Types.Bool(b) -> accum;;
+
+    (* Iterate to fixpoint to catch cross-constraints. E.g. x = 5, y = x. *)
+    let rec find_constrained_terms (atomlst: Types.atom list) (accum: Types.term list): Types.term list =      
+      let result = List.fold_right find_constrained_terms_single atomlst accum in
+        if List.length result = List.length accum then result
+        else find_constrained_terms atomlst result;;
+
+	(* If a clause doesn't constrain everything in the head, do something. 
+	   For now, "something" is a kludge. TODO. *)
+	(* TODO: "otherwise same" syntax. this is too ad-hoc *)
+	let check_complete_atoms (signat: Types.signature) (atomlst : Types.atom list): Types.atom list =	
+		if debug then Printf.printf "[Preprocessing] In check_complete_atoms. List was: [%s]\n%!" (Type_Helpers.list_to_string Type_Helpers.atom_to_string atomlst);	
+		match atomlst with 
+		| [Types.Bool(false)] -> atomlst;
+		| _ -> 
+		let all_flat_to_constrain_terms: Types.term list = flatten_terms_to_constrain signat in
+		let constrained_terms: Types.term list = find_constrained_terms atomlst [] in
+		let must_constrain: Types.term list = List.filter (fun t -> not (List.mem t constrained_terms)) 
+		                                 all_flat_to_constrain_terms in        
+      	  let newatoms: Types.atom list = List.map (constrain_term signat) must_constrain in
+      	    newatoms @ atomlst;;
+
 	let process_clause (prgm : Types.program) (cls : Types.clause) : Types.clause =
-		match cls with Types.Clause(s, al) -> let fixed_sig = process_signature prgm s in
-		Types.Clause(fixed_sig, List.map (process_atom prgm fixed_sig) al);;
+		match cls with Types.Clause(signat, atomlst) -> 
+		  let fixed_sig = process_signature prgm signat in
+		  let processed_atoms = List.map (process_atom prgm fixed_sig) atomlst in		  
+		  if debug then 
+		    Printf.printf "[Preprocessing] Processing clause. Signature: %s\n%!" (Type_Helpers.signature_to_string signat);
+		    Printf.printf "[Preprocessing] Atoms processed. They are now:\n [%s]\n%!" 
+		      (Type_Helpers.list_to_string Type_Helpers.atom_to_string atomlst);
+		  let completed_atoms = check_complete_atoms signat processed_atoms in
+		  Types.Clause(fixed_sig, completed_atoms);;
 
 	let process_program_types (prgm : Types.program) : Types.program =
-		match prgm with Types.Program(name, modules, blackboxes, types, clauses) ->
+		match prgm with Types.Program(name, modules, blackboxes, types, clauses) ->		
 		Types.Program(name, modules, blackboxes, types, List.map (process_clause prgm) clauses);;
 
 
