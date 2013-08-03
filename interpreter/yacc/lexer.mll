@@ -30,3 +30,4 @@ rule token = parse
   | ['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9'] as dotted_ip { DOTTED_IP(dotted_ip)}
   | ['0'-'9']+ | '0''x'(['0'-'9']+) as number { NUMBER(number) }
   | ['a'-'z''A'-'Z''_''0'-'9']+ as name { NAME(name) }
+  | _ as c { Printf.printf "Unknown character in stream: %c\n" c; token lexbuf;}

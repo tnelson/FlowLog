@@ -1,0 +1,62 @@
+blackbox emit;
+blackbox BBtimer @ 127.0.0.1 9091;
+
+module NIB:
+
+type packet = {locSw, locPt, dlSrc, dlDst, dlTyp, nwSrc, nwDst, nwProto};
+type start_timer = {seconds, id};
+type timer_expired = {id};
+type startup = {};
+type switch_port = {switch, port};
+
+///////////////////////////////////////////////////////////
+
+// assumption: ports of a switch don't change
+plus switch_has_port(sw_pt : switch_port, sw, pt) :-
+  sw_pt.switch = sw, sw_pt.port = pt;
+
+///////////////////////////////////////////////////////////
+
+// For now, smuggle the sw/pt source in dl fields
+// See below for better way using nonces. But also could do w/ new packet type.
+action emit(swpt: switch_port, newpkt : packet) :- 
+  newpkt.locSw = swpt.switch, newpkt.locPt = swpt.port,
+  newpkt.dlTyp = 0, newpkt.dlSrc = swpt.switch, newpkt.dlDst = swpt.port;
+
+// In NIB, a better way would be: a fresh nonce for EACH PACKET EMITTED, and stored in a table. This means that the packets // need not carry their source directly, but more importantly, hosts couldn't spoof. But this is a challenge! More than what
+// was sent before. Because AFTER THE SWPT, in the timer triggered emit, it's the unconstraint in the new packet's location
+// that says "all ports get a packet" Including a nonce(X) there only gets called once, even if it's fresh. Need a stronger // effect.
+
+action emit(timer: timer_expired, pkt: packet) :- 
+  timer.id = "tNIB",
+  switch_has_port(pkt.locSw, pkt.locPt),
+  pkt.dlTyp = 0, pkt.dlSrc = pkt.locSw, pkt.dlDst = pkt.locPt;
+
+///////////////////////////////////////////////////////////
+
+action BBTimer(timer: timer_expired, st: start_timer) :- 
+  st.seconds = 10, st.id = "tNIB", timer.id = "tNIB";
+
+// could also start from first switch registration, and be shorter.
+action BBTimer(start: startup, st: start_timer) :- 
+  st.seconds = 10, st.id = "tNIB";  
+
+///////////////////////////////////////////////////////////
+
+minus ucST(timer: timer_expired, sw1, pt1, sw2, pt2) :- 
+  timer.id = "tNIB", 
+  ucST(sw1, pt1, sw2, pt2); // <-- to constrain
+plus ucST(p: packet, sw1, pt1, sw2, pt2) :-
+  sw1 = p.dlSrc, pt1 = p.dlDst,
+  sw2 = p.locSw, pt2 = p.locPt; 
+
+minus switchTopology(timer: timer_expired, sw1, pt1, sw2, pt2) :-
+  timer.id = "tNIB",
+  switchTopology(sw1, pt1, sw2, pt2); // <-- to constrain
+plus switchTopology(timer: timer_expired, sw1, pt1, sw2, pt2) :-  
+  timer.id = "tNIB", ucST(sw1, pt1, sw2, pt2);
+
+///////////////////////////////////////////////////////////
+
+
+// TODO: "NIB" gets treated as variable in XSB. Kludged with lowercase prefix for now.
