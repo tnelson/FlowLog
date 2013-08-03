@@ -159,14 +159,17 @@ module Controller_Forwarding = struct
 	    begin
           
           if debug then 
-   		    match !in_packet_context with
+          begin
+   		    (match !in_packet_context with
 		  	  | None -> Printf.printf "Flushing... NO INITIAL PACKET!\n%!";
 		              
 		      | Some(sw, in_pk, notif) -> 
 		        Printf.printf "Flushing... FORWARDING PACKET. Switch=%s, Fields= %s\n%!" 
 		          (Int64.to_string sw) 
-		          (Packet.to_string (parse_payload in_pk.input_payload));
-		  
+		          (Packet.to_string (parse_payload in_pk.input_payload)));
+		    Printf.printf "There are %d packets in the queue.\n%!" (List.length !outgoing_packet_queue);
+		  end;
+
 		(* TODO: error message if attempting to mutate a field that can't be mutated. e.g. dlTyp. 
 		   IT can be set in emit, but not changed in forward. *)
 
@@ -174,7 +177,7 @@ module Controller_Forwarding = struct
              since we can only call send_packet_out ONCE per switch for a buffered pkt. *)
 		  let mapSwToPkts = (split_packets_by_switch !outgoing_packet_queue) in 
             Hashtbl.iter (fun swId pkts -> 
-               		        
+               		        Printf.printf "  There are %d packets for switch %Ld\n%!" (List.length pkts) swId;
                		        let pkt_payload = (match !in_packet_context with
 		  	                (* If this is a pure emit (no payload; create one) *)
 		                    | None -> manufacture_payload();		

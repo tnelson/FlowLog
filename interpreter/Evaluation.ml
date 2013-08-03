@@ -12,7 +12,7 @@ module Evaluation = struct
 	let send_notifications (bb : Types.blackbox) (out_notifs : Types.term list) : unit =
 		if debug then List.iter (fun out_notif -> print_endline ("outgoing notif: " ^ Type_Helpers.term_to_string out_notif)) out_notifs;
 		match bb with
-		| Types.BlackBox(name, Types.Internal) -> if name = "forward" then Controller_Forwarding.queue_packets out_notifs 
+		| Types.BlackBox(name, Types.Internal) -> if name = "forward" || name = "emit" then Controller_Forwarding.queue_packets out_notifs 
 			else raise (Failure ("internal black box " ^ name ^ " is not currently supported.")) 
 		| _ -> List.iter (fun n -> if debug then Printf.printf "SENDING EXT NOTIF: %s\n%!" (Type_Helpers.term_to_string n);
 			Flowlog_Thrift_Out.doBBnotify bb n)	out_notifs;;
