@@ -32,14 +32,18 @@ module Controller_Forwarding = struct
 	let pkt_to_notif (sw : switchId) (pk : packetIn) : Types.term = 
 		if debug then print_endline "starting pkt_to_notif";
 		let pkt_payload = parse_payload pk.input_payload in
+		if debug then print_endline "payload parsed";
 		let isIp = ((dlTyp pkt_payload) = 0x0800) in
+		let isArp = ((dlTyp pkt_payload) = 0x0806) in
 		let strings = [Int64.to_string sw;
 		string_of_int pk.port;
 		Int64.to_string pkt_payload.Packet.dlSrc;
 		Int64.to_string pkt_payload.Packet.dlDst;
 		string_of_int (dlTyp pkt_payload);
-		Int32.to_string (nwSrc pkt_payload);
-		Int32.to_string (nwDst pkt_payload);
+		(* nwSrc/nwDst will throw an exception if you call them on an unsuitable packet *)
+		if (isIp || isArp) then Int32.to_string (nwSrc pkt_payload) else "0";
+		if (isIp || isArp) then Int32.to_string (nwDst pkt_payload) else "0";
+
 		if isIp then (string_of_int (nwProto pkt_payload)) else "arp"] in
 		(*let _ = if debug then print_endline ("pkt to term list: " ^ (Type_Helpers.list_to_string Type_Helpers.term_to_string ans)) in
 		let _ = if debug then print_endline ("dlTyp: " ^ (string_of_int (dlTyp pkt_payload))) in*)
@@ -132,9 +136,9 @@ module Controller_Forwarding = struct
 
     let manufacture_payload() : OpenFlow0x01_Core.payload = 
       NotBuffered(Packet.marshal(
-       {Packet.dlSrc = Int64.of_int 100; Packet.dlDst = Int64.of_int 101;
-        Packet.dlVlan = None; Packet.dlVlanPcp = 103;
-        nw = Packet.Unparsable(1000, Cstruct.create(0))
+       {Packet.dlSrc = Int64.of_int 0; Packet.dlDst = Int64.of_int 0;
+        Packet.dlVlan = None; Packet.dlVlanPcp = 0;
+        nw = Packet.Unparsable(0x801, Cstruct.create(0))
        }));;
 
     let debufferize (pl : payload): payload =

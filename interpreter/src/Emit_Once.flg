@@ -1,0 +1,15 @@
+blackbox emit;
+import Mac_Learning;
+
+module Startup_Emit:
+
+
+type startup = {};
+
+action forward(pkt : packet, newpkt : packet) :- Mac_Learning.forward(pkt, newpkt), not pkt.dlSrc = 0;
+
+// This actually won't work: no switches will have registered yet!
+// action emit(st: startup, newpkt : packet) :- newpkt.locSw = 1, newpkt.locPt = 1;
+
+// For NIB, instead, react to switch registration as initial event.
+action emit(swpt: switch_port, newpkt : packet) :- newpkt.locSw = swpt.switch, newpkt.locPt = swpt.port;

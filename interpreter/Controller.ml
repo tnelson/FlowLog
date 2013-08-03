@@ -43,7 +43,7 @@ module Make_OxModule (Program : PROGRAM) = struct
 	    if debug then Xsb.debug_print_listings ();;
 
 	let packet_in (sw : switchId) (xid : xid) (pk : packetIn) : unit =
-		Printf.printf "%s\n%!" (packetIn_to_string pk);
+		Printf.printf "Packet in on switch %Ld.\n%s\n%!" sw (packetIn_to_string pk);
 		(* pkt_to_notif parses the packet; don't repeat that work *)
 		let notif = (Controller_Forwarding.pkt_to_notif sw pk) in
 		  Controller_Forwarding.remember_for_forwarding (Some (sw, pk, notif));
