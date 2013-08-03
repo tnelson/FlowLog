@@ -35,6 +35,14 @@ module Type_Helpers = struct
 		| Types.Variable(_, ttype) -> ttype;
 		| Types.Field_ref(_, _) -> Types.raw_type;;
 
+    let term_to_string_debug (t : Types.term) : string = 
+		match t with
+		| Types.Constant(values, Types.Type(n, _)) -> ("(Constant)"^(list_to_string (fun str -> str) values)^": "^n) ; 		
+		| Types.Variable(name, Types.Type(_, fields)) -> "(Variable)"^list_to_string (fun field -> name ^ "_" ^ field) fields;
+		| Types.Field_ref(name, field) -> "(Field_ref) "^name ^ "_" ^ field;
+		| Types.Variable(name, Types.Term_defer(str)) -> name^": DEFER: "^str(*failwith ("not a valid variable: "^name^" with defer: "^str);*)
+		| Types.Constant(values, Types.Term_defer(str)) -> (list_to_string (fun str-> str) values)^": DEFER: "^str (*failwith ("not a valid constant with defer: "^str);;  *)
+
 	let term_to_string (t : Types.term) : string = 
 		match t with
 		| Types.Constant(values, Types.Type(n, _)) -> (list_to_string (fun str -> str) values) ; 		
@@ -210,9 +218,10 @@ module Parse_Helpers = struct
       match arg with 
       | Types.Constant(_, _) -> [arg];
       | Types.Variable(vname, Types.Type("raw", ["VALUE"])) -> 
-        [arg] (* don't expand out raw variables! why couldn't i just stick Types.raw_type here? *)
+        [arg] (* don't expand out raw variables! why couldn't I just stick Types.raw_type here? *)
       | Types.Variable(vname, Types.Type(_,fields)) -> 
         List.map (fun fld -> Types.Field_ref(vname, fld)) fields
+      | Types.Field_ref(_,_) -> [arg];
       | _ -> failwith "expand_var---unexpected term type";;
 
     let prep_for_non_helper args = 
@@ -267,29 +276,33 @@ module Parse_Helpers = struct
       | Types.Constant(_,_) -> true
       | _ -> false;;
 
+    let add_list_to_termset (lst: Types.term list) (tset: TermSet.t) : TermSet.t =
+    	List.fold_right (fun aterm sofar -> TermSet.add aterm sofar) lst tset;;
+
     let find_constrained_terms_single (atom: Types.atom) (accum: TermSet.t): TermSet.t =
       if debug then Printf.printf "-- FCTS %s\n%!" (Type_Helpers.atom_to_string atom);
       (* For action/plus/minus clauses, the accum must be pre-populated with the trigger fields 
           (or else this block will just return accum) *)
       match atom with
         | Types.Equals(sign, t1, t2) -> 
+          (* expand_var to break out a complex variable into field refs. *)
           if not sign then accum
-          else if is_constant_term t1 then TermSet.add t2 accum
-          else if is_constant_term t2 then TermSet.add t1 accum
-          else if TermSet.mem t1 accum then TermSet.add t2 accum
-          else if TermSet.mem t2 accum then TermSet.add t1 accum 
+          else if is_constant_term t1 then add_list_to_termset (expand_var t2) accum
+          else if is_constant_term t2 then add_list_to_termset (expand_var t1) accum
+          else if TermSet.mem t1 accum then add_list_to_termset (expand_var t2) accum
+          else if TermSet.mem t2 accum then add_list_to_termset (expand_var t1) accum 
           else accum
 		| Types.Apply(sign, _, _, tl) -> 
           if not sign then accum
-          else List.fold_right (fun aterm sofar -> TermSet.add aterm sofar) tl accum
-		| Types.Bool(b) -> accum;;
+          else add_list_to_termset (List.concat (List.map expand_var tl)) accum
+		| Types.Bool(b) -> accum;; 
 
     (* Iterate to fixpoint to catch cross-constraints. E.g. x = 5, y = x. *)
     let rec find_constrained_terms (atomlst: Types.atom list) (accum: TermSet.t): TermSet.t =      
       let result = List.fold_right find_constrained_terms_single atomlst accum in
         if debug then 
             Printf.printf "Iterating find_constrained_terms. Result=[%s]\n%!"
-            (Type_Helpers.list_to_string Type_Helpers.term_to_string (TermSet.elements result));
+            (Type_Helpers.list_to_string Type_Helpers.term_to_string_debug (TermSet.elements result));
         if TermSet.equal result accum then result
         else find_constrained_terms atomlst result;;
 
@@ -297,7 +310,9 @@ module Parse_Helpers = struct
 	   For now, "something" is a kludge. TODO. *)
 	(* TODO: "otherwise same" syntax. this is too ad-hoc *)
 	let check_complete_atoms (signat: Types.signature) (atomlst : Types.atom list): Types.atom list =	
-		if debug then Printf.printf "[Preprocessing] In check_complete_atoms. List was: [%s]\n%!" (Type_Helpers.list_to_string Type_Helpers.atom_to_string atomlst);	
+		if debug then Printf.printf "\n[Preprocessing] For a clause with sig: %s\nIn check_complete_atoms. List was: [%s]\n%!" 
+		             (Type_Helpers.signature_to_string signat)
+		             (Type_Helpers.list_to_string Type_Helpers.atom_to_string atomlst);	
 		match atomlst with 
 		| [Types.Bool(false)] -> atomlst;
 		| _ -> 
@@ -308,7 +323,7 @@ module Parse_Helpers = struct
 		                                 all_flat_to_constrain_terms in    
 		  if debug then 
 		    Printf.printf "[Preprocessing] MUST CONSTRAIN: [%s]\n%!"   
-		                 (Type_Helpers.list_to_string Type_Helpers.term_to_string must_constrain); 
+		                 (Type_Helpers.list_to_string Type_Helpers.term_to_string_debug must_constrain); 
       	  let newatoms: Types.atom list = List.map (constrain_term signat) must_constrain in
       	    newatoms @ atomlst;;
 
