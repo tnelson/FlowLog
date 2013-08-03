@@ -25,7 +25,7 @@ module Evaluation = struct
 		    (Type_Helpers.term_to_string notif) (Type_Helpers.term_type_name (Type_Helpers.type_of_term notif));
 		let already_seen = ref [] in
 		match prgm with Types.Program(_, _, _, _, clauses) ->
-		match notif with Types.Constant(_, ttype) ->
+		(match notif with Types.Constant(_, ttype) ->
 		List.iter (fun cls -> match cls with 
 			| Types.Clause(Types.Signature(Types.Action, module_name, cls_name, [Types.Variable(_, type1); Types.Variable(_, _) as v2]), _) ->
 				if (not (List.mem (Type_Helpers.clause_signature cls) !already_seen)) && type1 = ttype then
@@ -49,6 +49,8 @@ module Evaluation = struct
 				let to_assert = Communication.query_signature prgm (Types.Signature(Types.Plus, module_name, cls_name, notif :: tail)) in
 				List.iter (fun (tl : Types.term list) -> Communication.assert_signature (Types.Signature(Types.Helper, module_name, cls_name, tl))) to_assert;
 			| _ -> ();) clauses;
-		| _ -> raise (Failure "respond_to_notification can only be called with a constant");;
+		| _ -> raise (Failure "respond_to_notification can only be called with a constant"));
+
+		if debug then Xsb.debug_print_listings ();;
 
 end

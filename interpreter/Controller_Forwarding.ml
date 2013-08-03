@@ -84,10 +84,33 @@ module Controller_Forwarding = struct
 	(* notice that the current implementation is not efficient---
 	   if its just a repeater its doing way too much work. *)
 
+	(* no cause for multiple actions, etc. manufacture the payload for each packet to be emitted *)
+	let emit_packet_sw (notif : Types.term) (sw: switchId) : unit =
+	    if debug then Printf.printf "In emit_packets_sw...\n%!";	    
+	    let locPt = int_of_string (get_field notif "LOCPT") in 
+		let dlSrc = Int64.of_string (get_field notif "DLSRC") in 
+		let dlDst = Int64.of_string (get_field notif "DLDST") in 
+		let dlTyp = int_of_string (get_field notif "DLTYP") in 
+		let act = (Output (PhysicalPort locPt)) in
+		
+		(* todo: higher-layer stuff if the dltyp matches. ip or arp *)
+		(*let nwSrc = Int64.of_string (get_field notif "NWSRC") in 
+		let nwDst = Int64.of_string (get_field notif "NWDST") in 
+		let nwProto = Int64.of_string (get_field notif "NWPROTO") in *)
+        
+        let payload = NotBuffered(Packet.marshal(
+          {Packet.dlSrc = dlSrc; Packet.dlDst = dlDst;
+           Packet.dlVlan = None; Packet.dlVlanPcp = 0;
+           nw = Packet.Unparsable(dlTyp, Cstruct.create(0))
+          })) in
+        Printf.printf "---ACTION: %s\n%!" (of_action_to_string act);
+	    send_packet_out sw 0l 
+	      {output_payload = payload; port_id = None; apply_actions = [act]};;
+
     (* the notifs set must be a set of packets with the same switch, but also the same payload.*)
-	let send_queued_packets (notifs : Types.term list) 
-	                        (sw: switchId) (pkt_payload: payload): unit =
-	    if debug then Printf.printf "In send_queued_packets...\n%!";
+	let forward_packets_sw (notifs : Types.term list) 
+	                       (sw: switchId) (pkt_payload: payload): unit =
+	    if debug then Printf.printf "In forward_packets_sw...\n%!";
 		let actions_list = ref [] in
 				
 		(* for each switch, need to group ports to output and field rewrites to do.
@@ -104,12 +127,7 @@ module Controller_Forwarding = struct
 			(* if (begins_with locPt_string "_h") then actions_list := Output(AllPorts) :: !actions_list else *)
 			
 			actions_list := Output(PhysicalPort(int_of_string locPt_string)) :: !actions_list;
-
-			(*actions_list := SetDlSrc(Int64.of_string (if (begins_with dlSrc_new "_h") then dlSrc_old else dlSrc_new)) :: !actions_list;
-	        actions_list := SetDlDst(Int64.of_string (if (begins_with dlDst_new "_h") then dlDst_old else dlDst_new)) :: !actions_list;
-			actions_list := SetNwSrc(Int32.of_string (if (begins_with nwSrc_new "_h") then nwSrc_old else nwSrc_new)) :: !actions_list;
-			actions_list := SetNwDst(Int32.of_string (if (begins_with nwDst_new "_h") then nwDst_old else nwDst_new)) :: !actions_list;
-			*)
+			
 			(* TODO: avoid unnecessary Set* actions by remembering the last one uttered or the original.
 			         which is a point... how expensive is it to modify, even once? *)
 
@@ -132,14 +150,6 @@ module Controller_Forwarding = struct
         (* Since send_packet_out needs the switch, and we may have multiple switches... *)
         send_packet_out sw 0l 
 	      {output_payload = pkt_payload; port_id = None; apply_actions = !actions_list};;
-
-
-    let manufacture_payload() : OpenFlow0x01_Core.payload = 
-      NotBuffered(Packet.marshal(
-       {Packet.dlSrc = Int64.of_int 0; Packet.dlDst = Int64.of_int 0;
-        Packet.dlVlan = None; Packet.dlVlanPcp = 0;
-        nw = Packet.Unparsable(0x801, Cstruct.create(0))
-       }));;
 
     let debufferize (pl : payload): payload =
       match pl with
@@ -182,16 +192,14 @@ module Controller_Forwarding = struct
 		  let mapSwToPkts = (split_packets_by_switch !outgoing_packet_queue) in 
             Hashtbl.iter (fun swId pkts -> 
                		        Printf.printf "  There are %d packets for switch %Ld\n%!" (List.length pkts) swId;
-               		        let pkt_payload = (match !in_packet_context with
-		  	                (* If this is a pure emit (no payload; create one) *)
-		                    | None -> manufacture_payload();		
-		                    (* If there is a payload to copy over, and the switch is the same, BUFFER *)              		
-		      				| Some(in_sw, in_pk, _) -> if in_sw = swId then in_pk.input_payload
+               		        (match !in_packet_context with
+		  	                (* If this is a pure emit (no payload; create one according to results) *)
+		                    | None -> List.iter (fun pkt -> emit_packet_sw pkt swId) pkts;
+		      				| Some(in_sw, in_pk, _) -> 
+		      				(* If there is a payload to copy over, and the switch is the same, BUFFER *)              		
+		      				  if in_sw = swId then forward_packets_sw pkts swId in_pk.input_payload
 		      				(* If there is a payload to copy over, but the switch is different, UNBUFFER *)
-		      			                            else debufferize in_pk.input_payload) in 
-
-               		        
-                            send_queued_packets pkts swId pkt_payload) 
+		      			      else forward_packets_sw pkts swId (debufferize in_pk.input_payload))) 
               mapSwToPkts;
 
 		  in_packet_context := None;

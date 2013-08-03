@@ -280,7 +280,6 @@ module Parse_Helpers = struct
     	List.fold_right (fun aterm sofar -> TermSet.add aterm sofar) lst tset;;
 
     let find_constrained_terms_single (atom: Types.atom) (accum: TermSet.t): TermSet.t =
-      if debug then Printf.printf "-- FCTS %s\n%!" (Type_Helpers.atom_to_string atom);
       (* For action/plus/minus clauses, the accum must be pre-populated with the trigger fields 
           (or else this block will just return accum) *)
       match atom with

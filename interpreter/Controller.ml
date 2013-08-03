@@ -39,16 +39,14 @@ module Make_OxModule (Program : PROGRAM) = struct
 	    let port_nums = List.map (fun (x : PortDescription.t)-> x.PortDescription.port_no) feats.SwitchFeatures.ports in
 	    let sw_string = Int64.to_string sw in
 	    let notifs = List.map (fun portid -> Types.Constant([sw_string; string_of_int portid], Types.switch_port_type)) port_nums in
-	    List.iter (fun notif -> Evaluation.respond_to_notification notif Program.program) notifs;
-	    if debug then Xsb.debug_print_listings ();;
-
+	    List.iter (fun notif -> Evaluation.respond_to_notification notif Program.program) notifs;;
+	    
 	let packet_in (sw : switchId) (xid : xid) (pk : packetIn) : unit =
 		Printf.printf "Packet in on switch %Ld.\n%s\n%!" sw (packetIn_to_string pk);
 		(* pkt_to_notif parses the packet; don't repeat that work *)
 		let notif = (Controller_Forwarding.pkt_to_notif sw pk) in
 		  Controller_Forwarding.remember_for_forwarding (Some (sw, pk, notif));
-		  Evaluation.respond_to_notification notif Program.program;
-		  if debug then Xsb.debug_print_listings ();;
+		  Evaluation.respond_to_notification notif Program.program;;		  
 	
 	let cleanup () : unit = 
 		if debug then print_endline "running cleanup";

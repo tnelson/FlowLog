@@ -209,19 +209,23 @@ module Communication = struct
 		let _ = send_message ("assert((" ^ (Type_Helpers.signature_to_string s) ^ ")).") num_vars in ();;	
 
 	let rec split_list (num : int) (l : 'a list) : 'a list * 'a list =
-		if num < 0 then raise (Failure "num should be nonnegative") else
+		if num < 0 then raise (Failure "split_list: num should be nonnegative") else
 		if num = 0 then ([], l) else
 		match l with
-		| [] -> raise (Failure "num is bigger than the length of the list");
+		| [] -> raise (Failure "split_list: num is bigger than the length of the list");
 		| h :: t -> let first_recur, rest_recur = split_list (num - 1) t in (h :: first_recur, rest_recur);;
 
+	(* Take the raw results from XSB and produce notification constants*)
 	let rec group_into_constants (types : Types.term_type list) (sl : string list) : Types.term list =
+	    if debug then Printf.printf "group_into_constants: types=[%s] sl=[%s]\n%!"
+	            (Type_Helpers.list_to_string Type_Helpers.term_type_name types)
+	            (Type_Helpers.list_to_string (fun x -> x) sl);
 		match types with
 		| [] -> if sl = [] then [] else raise (Failure "More strings than fit into the types");
 		| Types.Type(_, fields) as t :: tail ->
 			let (first_bunch, rest) = split_list (List.length fields) sl in
 			Types.Constant(first_bunch, t) :: group_into_constants tail rest;
-		| _ -> raise (Failure "deferd type");;
+		| _ -> raise (Failure "group_into_constants: deferred type");;
 
 	let get_queries (prgm : Types.program) (cls : Types.clause) : (Types.atom * Types.blackbox) list =
 		match prgm with Types.Program(_, _, blackboxes, _, _) ->
