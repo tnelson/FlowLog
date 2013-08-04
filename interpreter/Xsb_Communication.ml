@@ -3,6 +3,7 @@ open Printf;;
 open Types;;
 open Type_Helpers;;
 open Flowlog_Thrift_Out;;
+open Str;;
 
 let debug = true;;
 
@@ -81,13 +82,27 @@ module Xsb = struct
 
 
 		while (not (Type_Helpers.ends_with (String.trim !next_str) "yes") && not (Type_Helpers.ends_with (String.trim !next_str) "no")) do		
-			next_str := input_line in_ch;
+        	(*next_str := input_line in_ch;*)
+          (* get a char at a time, because errors won't send a newline *)
+		  next_str := "";
+          while not (Type_Helpers.ends_with !next_str "\n") do
+  		    next_str := (!next_str) ^ (String.make 1 (input_char in_ch));		 
+  		    (*if (Type_Helpers.ends_with !next_str "| ?- | ?-") then debug_print_errors_and_exit();*)
+		    if (Type_Helpers.ends_with !next_str "| ?- | ?-") then 
+		    begin
+		  	  (* we may have asked an extra semicolon and caused a syntax error. *)
+		  	  if debug then Printf.printf "Error (assert). Asking query again.\n%!";
+		  	  output_string out_ch (str ^ "\n");
+		      flush out_ch;
+		      next_str := "";
+		    end
+		  done;		
 
-			(* Do not use this: it won't work. But it is useful for debugging situations with weird XSB output. *)
-			(*next_str := (!next_str) ^ (String.make 1 (input_char in_ch));*)
+		  next_str := String.trim (Str.global_replace (Str.regexp "| \\?-") "" !next_str);
 
-            if debug then Printf.printf "DEBUG: send_assert %s getting response. Line was: %s\n%!" str (!next_str);
-			answer := (!answer ^ "\n" ^ String.trim !next_str);
+
+          if debug then Printf.printf "DEBUG: send_assert %s getting response. Line was: %s\n%!" str (!next_str);
+   	      answer := (!answer ^ "\n" ^ String.trim !next_str);
 		done;
 		if debug then Printf.printf "send_assert answer: %s\n%!" (String.trim !answer); 
 		String.trim !answer;;
@@ -122,51 +137,52 @@ module Xsb = struct
 		flush out_ch;
 		
 		let answer = ref [] in
-		(* Expect this to be a prompt *)
-		let next_str = ref (input_line in_ch) in
-        if debug then Printf.printf "[prompt] > %s\n%!" !next_str;        
-        
-        if not (((String.trim !next_str) = "| ?-") || 
-                (Type_Helpers.ends_with (String.trim !next_str) "no")) then 
-          failwith ("XSB did not lead with prompt. led with "^ !next_str);
-
-		(* Do not use this: it won't work. But it is useful for debugging situations with weird XSB output. 
-           Note the debug_print_errors_and_exit() call---catches error case (which has no endline at end of input) *)
-        (*let next_str = ref "" in
-		while not (Type_Helpers.ends_with !next_str "\n") do
-		  next_str := (!next_str) ^ (String.make 1 (input_char in_ch));
-		  Printf.printf "next_str=%s\n%!" !next_str;
-		  if (Type_Helpers.ends_with !next_str "| ?- | ?-") then debug_print_errors_and_exit();
-		done;*)
-		
+		let next_str = ref "" in        		
 		let counter = ref 0 in
-		while not (Type_Helpers.ends_with (String.trim !next_str) "no") do
+		while not (Type_Helpers.ends_with !next_str "no") do
 
-			next_str := input_line in_ch;
-		(*next_str := "";
+			(*next_str := (input_line in_ch);			*)
+
+		(* get a char at a time, because errors won't send a newline *)
+		next_str := "";
         while not (Type_Helpers.ends_with !next_str "\n") do
-		  next_str := (!next_str) ^ (String.make 1 (input_char in_ch));
-		  Printf.printf "next_str=%s\n%!" !next_str;
-		  if (Type_Helpers.ends_with !next_str "| ?- | ?-") then debug_print_errors_and_exit();
-		done;		*)
+		  next_str := (!next_str) ^ (String.make 1 (input_char in_ch));		 
+		  (*if (Type_Helpers.ends_with !next_str "| ?- | ?-") then debug_print_errors_and_exit();*)
+		  if (Type_Helpers.ends_with !next_str "| ?- | ?-") then 
+		  begin
+		  	(* we may have asked an extra semicolon and caused a syntax error. *)
+		  	if debug then Printf.printf "Error. Asking query again.\n%!";
+		  	output_string out_ch (str ^ "\n");
+		    flush out_ch;
+		    next_str := "";
+		  end
+		done;		
 
-			if debug then Printf.printf "%d > %s\n%!" !counter !next_str;
+			next_str := String.trim (Str.global_replace (Str.regexp "| \\?-") "" !next_str);
+
+			if debug then Printf.printf "%d > '%s'\n%!" !counter !next_str;
 			(* the last line won't be followed by a newline until we give it a ;. 
 				TODO: Worry that since we don't know how many blocks total, we may send an extra ;. *)
+			
+			(* need to account for "X=3no" as well as "no" *)
 
-			if (!counter mod num_vars = (num_vars - 2)) then
+			if (String.length !next_str > 0) then (*  && not (Type_Helpers.ends_with !next_str "no") then*)
 			begin
-			  if debug then Printf.printf "time for semicolon\n%!";
-			  output_string out_ch ";\n";
-			  flush out_ch;
-			end;			
-			counter := !counter + 1;			
+				if (!counter mod num_vars = (num_vars - 2)) then
+				begin
+			  	if debug then Printf.printf "time for semicolon. at %d, of %d\n%!" !counter num_vars;
+			  	output_string out_ch ";\n";
+			  	flush out_ch;
+				end;			
+				counter := !counter + 1;			
 
-			answer := (remove_from_end (String.trim !next_str) "no") :: !answer;			        	
-
+				(* If we have a value to save *)
+				if !next_str <> "no" then 
+					answer := (remove_from_end !next_str "no") :: !answer;			        	
+			end;
 			(* TODO If num_vars is wrong, this will freeze. Can we improve? *)
 		done;
-		if debug then Printf.printf "send_query finished. answers: \n[%s]\n%!" (String.concat ", " !answer);		
+		if debug then Printf.printf "send_query finished. answers: [%s]\n%!" (String.concat ", " !answer);		
 		List.map (fun (l : string list) -> List.map after_equals l) (group (List.rev !answer) num_vars);;
 
 end
