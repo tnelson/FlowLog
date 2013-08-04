@@ -147,16 +147,24 @@ not ucST(ld.sw1, ld.pt1, ld.sw2, ld.pt2);
 // MOVE THESE TO ANOTHER MODULE
 // PURPOSE: spanning tree
 
-// Transitive-closure between switches so far this cycle:
+// Transitive-closure between switches so far this cycle.
+// IMPORTANT to add both sides of the link in 1 step, or else tree could have a 1-way cycle.
+// (To see what that means, remove the symmetric rules and test with 3-switch cyclic topo)
 plus ucTC(p: packet, sw1, sw2) :- p.dlTyp = 0x1001,
   p.locSw = sw2, p.dlSrc = sw1;
 plus ucTC(p: packet, sw1, sw2) :- p.dlTyp = 0x1001,
-  p.locSw = sw2, ucTC(sw1, sw2);
+  p.locSw = sw1, p.dlSrc = sw2; // for symmetry
+
+plus ucTC(p: packet, sw1, sw2) :- p.dlTyp = 0x1001,
+  p.dlSrc = sw1, ucTC(p.locSw, sw2); // pkt arrived at intermediate step
+plus ucTC(p: packet, sw1, sw2) :- p.dlTyp = 0x1001,
+  p.locSw = sw2, ucTC(sw1, p.dlSrc); // for symmetry: pkt arrived at end step
+
 
 // port is endpoint of a line in the tree if it leads to a new switch:
 plus ucTree(p: packet, sw, pt) :- pkt.dlTyp = 0x1001,
   p.dlSrc = sw, p.dlDst = pt,
-  not ucTC(sw, p.locSw);
+  not ucTC(sw, p.locSw); // "i don't know about where you came from yet"
 
 // The trustworthy full relation from last cycle, along with housekeeping
 // Yes, housekeeping for all 3 relations. This could get tedious.
