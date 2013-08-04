@@ -62,7 +62,7 @@ module Evaluation = struct
                              @ !to_assert;
 			| _ -> ();) clauses;
 
-		(* State changes happen together after evaluation is complete *)
+		(* State changes happen together after evaluation is complete, for all relations *)
         List.iter (fun (s : Types.signature) -> Communication.retract_signature s) !to_retract;
 		List.iter (fun (s : Types.signature) -> Communication.assert_signature s) !to_assert;
 
