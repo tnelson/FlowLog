@@ -14,6 +14,8 @@ module Controller_Forwarding = struct
 	(* *)
 	let remember_for_forwarding (pkt_info: (switchId * packetIn * Types.term) option) : unit = 
 	  in_packet_context := pkt_info;;
+	let clear_remember_for_forwarding () : unit =
+	  in_packet_context := None;;
 
 	let begins_with (str1 : string) (str2 : string) : bool = 
 		if String.length str2 > String.length str1 then false else
@@ -160,7 +162,7 @@ module Controller_Forwarding = struct
       let sofar = Hashtbl.create(1) in
     	List.iter (fun pkt  -> let locsw = (Int64.of_string (get_field pkt "LOCSW")) in
     		                     if (Hashtbl.mem sofar locsw) then
-                                    Hashtbl.add sofar locsw (pkt :: (Hashtbl.find sofar locsw)) 
+                                    Hashtbl.replace sofar locsw (pkt :: (Hashtbl.find sofar locsw)) 
                                  else
                                     Hashtbl.add sofar locsw [pkt])
     	                pkts;
@@ -202,8 +204,9 @@ module Controller_Forwarding = struct
 		      			      else forward_packets_sw pkts swId (debufferize in_pk.input_payload))) 
               mapSwToPkts;
 
-		  in_packet_context := None;
+		  (* controller is responsible for clearing out in_packet_context *)
 		  outgoing_packet_queue := [];
+		  if debug then Printf.printf "Completed flush_packets and cleared outgoing queue.\n%!";
 		end;;
 
 end

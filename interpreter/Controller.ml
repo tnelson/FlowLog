@@ -45,6 +45,7 @@ module Make_OxModule (Program : PROGRAM) = struct
 		Printf.printf "Packet in on switch %Ld.\n%s\n%!" sw (packetIn_to_string pk);
 		(* pkt_to_notif parses the packet; don't repeat that work *)
 		let notif = (Controller_Forwarding.pkt_to_notif sw pk) in
+		  (* for the love of sanity, remember to clear this out even if no packets result! *)
 		  Controller_Forwarding.remember_for_forwarding (Some (sw, pk, notif));
 		  Evaluation.respond_to_notification notif Program.program;;		  
 	

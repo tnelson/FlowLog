@@ -86,7 +86,8 @@ module Xsb = struct
           (* get a char at a time, because errors won't send a newline *)
 		  next_str := "";
           while not (Type_Helpers.ends_with !next_str "\n") do
-  		    next_str := (!next_str) ^ (String.make 1 (input_char in_ch));		 
+  		    next_str := (!next_str) ^ (String.make 1 (input_char in_ch));		
+  		    Printf.printf "%s\n%!" !next_str; 
   		    (*if (Type_Helpers.ends_with !next_str "| ?- | ?-") then debug_print_errors_and_exit();*)
 		    if (Type_Helpers.ends_with !next_str "| ?- | ?-") then 
 		    begin
@@ -147,6 +148,7 @@ module Xsb = struct
 		next_str := "";
         while not (Type_Helpers.ends_with !next_str "\n") do
 		  next_str := (!next_str) ^ (String.make 1 (input_char in_ch));		 
+		  (*Printf.printf "%s\n%!" !next_str;*)
 		  (*if (Type_Helpers.ends_with !next_str "| ?- | ?-") then debug_print_errors_and_exit();*)
 		  if (Type_Helpers.ends_with !next_str "| ?- | ?-") then 
 		  begin
