@@ -47,6 +47,23 @@ module Xsb = struct
 	      done
 	  with End_of_file -> Printf.printf "%s\n%!" !errstr; exit(1);;
 
+    (* we cannot read a line at a time, since XSB will not give a newline on errors *)
+	let get_line_gingerly (in_ch: in_channel) (out_ch: out_channel) (orig: string): string =
+		let next_str = ref "" in	    	    
+        while not (Type_Helpers.ends_with !next_str "\n") do
+  		    next_str := (!next_str) ^ (String.make 1 (input_char in_ch));		 
+  		  		 
+		    if (Type_Helpers.ends_with !next_str "| ?- | ?-") then 
+		    begin
+		    	(* we may have asked an extra semicolon and caused a syntax error. *)
+		    	if debug then Printf.printf "XSB Error. Asking again.\n%!";
+		  		output_string out_ch (orig ^ "\n");
+		    	flush out_ch;
+		    	next_str := "";
+		  	end
+		done;
+		!next_str;;
+
 	(* Prints the XSB listings currently asserted to stdout.
 	   This function is useful for confirming that XSB knows what we think it knows. *)
 	let debug_print_listings () : unit =
@@ -54,10 +71,11 @@ module Xsb = struct
 		let out_ch, in_ch = get_ch () in
 		output_string out_ch ("listing.\n"); flush out_ch;
 
-		let next_str = ref (input_line in_ch) in
-		  Printf.printf "%s\n%!" !next_str;
-		  while not (Type_Helpers.ends_with (String.trim !next_str) "yes") do
-			next_str := input_line in_ch;
+		let next_str = ref "" in
+		  while not (Type_Helpers.ends_with (String.trim !next_str) "yes") do		  	
+			next_str := get_line_gingerly in_ch out_ch "listing.\n";
+			next_str := String.trim (Str.global_replace (Str.regexp "| \\?-") "" !next_str);
+			next_str := String.trim (Str.global_replace (Str.regexp "\n\n") "\n" !next_str);
 			Printf.printf "%s\n%!" !next_str;
 		  done;
 		  Printf.printf "-------------------------------------------------\n%!";;
@@ -84,22 +102,8 @@ module Xsb = struct
 		while (not (Type_Helpers.ends_with (String.trim !next_str) "yes") && not (Type_Helpers.ends_with (String.trim !next_str) "no")) do		
         	(*next_str := input_line in_ch;*)
           (* get a char at a time, because errors won't send a newline *)
-		  next_str := "";
-          while not (Type_Helpers.ends_with !next_str "\n") do
-  		    next_str := (!next_str) ^ (String.make 1 (input_char in_ch));		  		    
-  		    (*if (Type_Helpers.ends_with !next_str "| ?- | ?-") then debug_print_errors_and_exit();*)
-		    if (Type_Helpers.ends_with !next_str "| ?- | ?-") then 
-		    begin
-		  	  (* we may have asked an extra semicolon and caused a syntax error. *)
-		  	  if debug then Printf.printf "Error (assert). Asking query again.\n%!";
-		  	  output_string out_ch (str ^ "\n");
-		      flush out_ch;
-		      next_str := "";
-		    end
-		  done;		
-
+          next_str := get_line_gingerly in_ch out_ch str;		  
 		  next_str := String.trim (Str.global_replace (Str.regexp "| \\?-") "" !next_str);
-
 
           if debug then Printf.printf "DEBUG: send_assert %s getting response. Line was: %s\n%!" str (!next_str);
    	      answer := (!answer ^ "\n" ^ String.trim !next_str);
@@ -142,23 +146,7 @@ module Xsb = struct
 		while not (Type_Helpers.ends_with !next_str "no") do
 
 			(*next_str := (input_line in_ch);			*)
-
-		(* get a char at a time, because errors won't send a newline *)
-		next_str := "";
-        while not (Type_Helpers.ends_with !next_str "\n") do
-		  next_str := (!next_str) ^ (String.make 1 (input_char in_ch));		 
-		  (*Printf.printf "%s\n%!" !next_str;*)
-		  (*if (Type_Helpers.ends_with !next_str "| ?- | ?-") then debug_print_errors_and_exit();*)
-		  if (Type_Helpers.ends_with !next_str "| ?- | ?-") then 
-		  begin
-		  	(* we may have asked an extra semicolon and caused a syntax error. *)
-		  	if debug then Printf.printf "Error. Asking query again.\n%!";
-		  	output_string out_ch (str ^ "\n");
-		    flush out_ch;
-		    next_str := "";
-		  end
-		done;		
-
+            next_str := get_line_gingerly in_ch out_ch str;		  		
 			next_str := String.trim (Str.global_replace (Str.regexp "| \\?-") "" !next_str);
 
 			if debug then Printf.printf "%d > '%s'\n%!" !counter !next_str;

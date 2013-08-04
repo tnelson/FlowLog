@@ -12,6 +12,8 @@ type switch_port = {switch, port};
 ///////////////////////////////////////////////////////////
 // Before panicking, make sure that you aren't testing with single,n.
 // There's no topology to learn there.
+//
+// Moreover: pkt.dlTyp = 0x1001 represents a NIB test packet 
 ///////////////////////////////////////////////////////////
 
 // PURPOSE: Learn which switches have which ports.
@@ -45,8 +47,9 @@ action emit(timer: timer_expired, pkt: packet) :-
 // PURPOSE: Trigger the timer.
 
 // UNCOMMENT TO UPDATE TOPOLOGY CONTINUOUSLY
-//action BBTimer(timer: timer_expired, st: start_timer) :- 
-//  st.seconds = 10, st.id = "tNIB", timer.id = "tNIB";
+// COMMENT TO PAUSE AFTER 1 ITERATION 
+action BBTimer(timer: timer_expired, st: start_timer) :- 
+  st.seconds = 10, st.id = "tNIB", timer.id = "tNIB";
 
 // could also start from first switch registration, and be shorter.
 action BBTimer(start: startup, st: start_timer) :- 
@@ -102,7 +105,6 @@ plus macConnectedAt(pkt: packet, mac, sw, pt) :- not pkt.dlTyp = 0x1001,
 // It shouldn't but it does via xsb
 ///////////////////////////////////////////////////////////
 
-
 // If new mac on this port
 minus macConnectedAt(pkt: packet, mac, sw, pt) :- not pkt.dlTyp = 0x1001,
   mac != pkt.dlSrc, sw=pkt.locSw, pt=pkt.locPt,
@@ -125,10 +127,45 @@ minus macConnectedAt(pkt: packet, mac, sw, pt) :- not pkt.dlTyp = 0x1001,
 
 // PURPOSE: Notice when links come down and when hosts connect/move
 
+
+
+
+
 ///////////////////////////////////////////////////////////
 
 // MOVE THESE TO ANOTHER MODULE
 // PURPOSE: spanning tree
+
+// Transitive-closure between switches so far this cycle:
+plus ucTC(p: packet, sw1, sw2) :- p.dlTyp = 0x1001,
+  p.locSw = sw2, p.dlSrc = sw1;
+plus ucTC(p: packet, sw1, sw2) :- p.dlTyp = 0x1001,
+  p.locSw = sw2, ucTC(sw1, sw2);
+
+// port is endpoint of a line in the tree if it leads to a new switch:
+plus ucTree(p: packet, sw, pt) :- pkt.dlTyp = 0x1001,
+  p.dlSrc = sw, p.dlDst = pt,
+  not ucTC(sw, p.locSw);
+
+// The trustworthy full relation from last cycle, along with housekeeping
+// Yes, housekeeping for all 3 relations. This could get tedious.
+minus spanningTree(timer: timer_expired, sw, pt) :- 
+  timer.id = "tNIB", 
+  spanningTree(sw, pt);
+minus ucTree(timer: timer_expired, sw, pt) :- 
+  timer.id = "tNIB", 
+  ucTree(sw, pt);
+minus ucTC(timer: timer_expired, sw, pt) :- 
+  timer.id = "tNIB", 
+  ucTC(sw, pt);
+
+plus spanningTree(timer: timer_expired, sw, pt) :- 
+  timer.id = "tNIB", 
+  ucTree(sw, pt);
+
+
+// TODO: housekeeping
+// TODO: symmetry?
 
 ///////////////////////////////////////////////////////////
 
