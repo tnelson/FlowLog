@@ -12,6 +12,8 @@ module Xsb = struct
     (* creates a pair channels for talking to xsb, starts xsb, and returns the channels *)
 	let start_xsb () : out_channel * in_channel * in_channel =
 		let xin_channel, xout_channel, error_channel = Unix.open_process_full "xsb" (Unix.environment ()) in
+		(* to prevent errors from accumulating *)
+		Unix.set_nonblock (Unix.descr_of_in_channel error_channel);
 		(xout_channel, xin_channel, error_channel);;
 
 	let ref_out_ch = ref None;;
@@ -33,19 +35,19 @@ module Xsb = struct
 		let out_ch, _ = get_ch () in
 		output_string out_ch "halt.\n";
 		flush out_ch;;
-
-	(* because Tim can't find a non-blocking read similar to read-bytes-avail in Racket,
-	    this halts XSB, then terminates  *)
-	let debug_print_errors_and_exit () : unit =
-	  halt_xsb();	    	    
+	
+	let print_or_flush_errors (print_too: bool) : unit =
 	  let errstr = ref "" in
 	  try
 	    while true do
-            errstr := !errstr ^ (String.make 1 (input_char (match !ref_err_ch with 
-                                               | Some(ch) -> ch;
-                                               | _ -> raise (End_of_file))));                      
-	      done
-	  with End_of_file -> Printf.printf "%s\n%!" !errstr; exit(1);;
+            errstr := !errstr ^ (String.make 1 (input_char
+               (match !ref_err_ch with 
+                   | Some(ch) -> ch;
+                   | _ -> raise (End_of_file))));   
+	    done
+	  with | End_of_file -> if print_too then Printf.printf "%s\n%!" !errstr;
+	       | Sys_blocked_io -> if print_too then Printf.printf "%s\n%!" !errstr;
+	  if print_too then Printf.printf "-------------------------------------------------\n%!";;
 
     (* we cannot read a line at a time, since XSB will not give a newline on errors *)
 	let get_line_gingerly (in_ch: in_channel) (out_ch: out_channel) (orig: string): string =
@@ -53,6 +55,7 @@ module Xsb = struct
         while not (Type_Helpers.ends_with !next_str "\n") do
   		    next_str := (!next_str) ^ (String.make 1 (input_char in_ch));		 
   		  		 
+  		  	(*Printf.printf "glg: %s\n%!" !next_str;*)
 		    if (Type_Helpers.ends_with !next_str "| ?- | ?-") then 
 		    begin
 		    	(* we may have asked an extra semicolon and caused a syntax error. *)
@@ -78,7 +81,11 @@ module Xsb = struct
 			next_str := String.trim (Str.global_replace (Str.regexp "\n\n") "\n" !next_str);
 			Printf.printf "%s\n%!" !next_str;
 		  done;
-		  Printf.printf "-------------------------------------------------\n%!";;
+		  Printf.printf "-------------------------------------------------\n%!";
+		  (* to turn on error printing, pass true. 
+		     we flush the error stream every notification to prevent it from filling up,
+		     which would cause XSB to block. *)
+		  print_or_flush_errors false;;		  
 
 
 	(* This takes in a string command (not query, this doesn't deal with the semicolons).
