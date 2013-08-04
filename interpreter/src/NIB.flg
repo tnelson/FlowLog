@@ -38,8 +38,9 @@ action emit(timer: timer_expired, pkt: packet) :-
 
 ///////////////////////////////////////////////////////////
 
-action BBTimer(timer: timer_expired, st: start_timer) :- 
-  st.seconds = 10, st.id = "tNIB", timer.id = "tNIB";
+// once todo
+//action BBTimer(timer: timer_expired, st: start_timer) :- 
+//  st.seconds = 10, st.id = "tNIB", timer.id = "tNIB";
 
 // could also start from first switch registration, and be shorter.
 action BBTimer(start: startup, st: start_timer) :- 

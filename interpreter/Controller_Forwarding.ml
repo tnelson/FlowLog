@@ -20,12 +20,12 @@ module Controller_Forwarding = struct
 		(String.sub str1 0 (String.length str2)) = str2;;
 
 	let get_field (notif : Types.term) (fieldname : string) : string =
-		if debug then print_endline ("starting get_field with field " ^ fieldname);
+		(*if debug then print_endline ("starting get_field with field " ^ fieldname);*)
 		match notif with
 		| Types.Constant(strings, Types.Type(_, fields)) ->
 			let combined = List.combine fields strings in
-			if debug then print_endline (Type_Helpers.list_to_string (function (str1, str2) -> str1 ^ ":" ^ str2) combined);
-			if debug then print_endline ("Result: "^(List.assoc fieldname combined));
+			(*if debug then print_endline (Type_Helpers.list_to_string (function (str1, str2) -> str1 ^ ":" ^ str2) combined);
+			if debug then print_endline ("Result: "^(List.assoc fieldname combined));*)
 			List.assoc fieldname combined;
 		| _ -> raise (Failure "for notification constants only");;
 

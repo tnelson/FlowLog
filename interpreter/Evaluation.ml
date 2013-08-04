@@ -18,39 +18,67 @@ module Evaluation = struct
 			Flowlog_Thrift_Out.doBBnotify bb n)	out_notifs;;
 
 	let debug1 = true;;
-
-	let respond_to_notification (notif : Types.term) (prgm : Types.program) : unit =
+	
+	let respond_to_notification_workhorse (notif : Types.term) (prgm : Types.program) : unit =
 		if debug1 then 
-		  Printf.printf "incoming notif: [%s] of type: %s\n%!" 
+		  Printf.printf "\n******************\nincoming notif: [%s] of type: %s\n\n%!" 
 		    (Type_Helpers.term_to_string notif) (Type_Helpers.term_type_name (Type_Helpers.type_of_term notif));
 		let already_seen = ref [] in
 		match prgm with Types.Program(_, _, _, _, clauses) ->
 		(match notif with Types.Constant(_, ttype) ->
+		(* Flowlog issues notifications before making state changes. It then evaluates +/- relations 
+		   on the same pre-state, and finally updates the state. So there is no "after minus but before plus". *)	
+		
+		(* Trigger the action/plus/minus clauses that match the incoming type. *)		
 		List.iter (fun cls -> match cls with 
 			| Types.Clause(Types.Signature(Types.Action, module_name, cls_name, [Types.Variable(_, type1); Types.Variable(_, _) as v2]), _) ->
 				if (not (List.mem (Type_Helpers.clause_signature cls) !already_seen)) && type1 = ttype then
 				(already_seen := Type_Helpers.clause_signature cls :: !already_seen;
-				let to_send = Communication.query_signature prgm (Types.Signature(Types.Action, module_name, cls_name, [notif; v2])) in
-				(*Printf.printf "  *** tosend found %d\n%!" (List.length to_send);*)
+				let to_send = Communication.query_signature prgm (Types.Signature(Types.Action, module_name, cls_name, [notif; v2])) in				
 				List.iter (fun (tl : Types.term list) -> send_notifications (Type_Helpers.get_blackbox prgm cls_name) tl) to_send);
 			| _ -> ();) clauses;
 		Controller_Forwarding.flush_packets (); 
+
+		let to_assert = ref [] in
+		let to_retract = ref [] in
+
 		List.iter (fun cls -> match cls with 
 			| Types.Clause(Types.Signature(Types.Minus, module_name, cls_name, Types.Variable(_, type1) :: tail), _) ->
 				if (not (List.mem (Type_Helpers.clause_signature cls) !already_seen)) && type1 = ttype then
 				already_seen := Type_Helpers.clause_signature cls :: !already_seen;
-				let to_retract = Communication.query_signature prgm (Types.Signature(Types.Minus, module_name, cls_name, notif :: tail)) in
-				List.iter (fun (tl : Types.term list) -> Communication.retract_signature (Types.Signature(Types.Helper, module_name, cls_name, tl))) to_retract;
+				to_retract := (List.map (fun tl -> (Types.Signature(Types.Helper, module_name, cls_name, tl)))
+					            (Communication.query_signature prgm (Types.Signature(Types.Minus, module_name, cls_name, notif :: tail))))
+  				              @ !to_retract;			
 			| _ -> ();) clauses;
+
 		List.iter (fun cls -> match cls with 
 			| Types.Clause(Types.Signature(Types.Plus, module_name, cls_name, Types.Variable(_, type1) :: tail), _) ->
 				if (not (List.mem (Type_Helpers.clause_signature cls) !already_seen)) && type1 = ttype then
 				already_seen := Type_Helpers.clause_signature cls :: !already_seen;
-				let to_assert = Communication.query_signature prgm (Types.Signature(Types.Plus, module_name, cls_name, notif :: tail)) in
-				List.iter (fun (tl : Types.term list) -> Communication.assert_signature (Types.Signature(Types.Helper, module_name, cls_name, tl))) to_assert;
+				to_assert := (List.map (fun tl -> (Types.Signature(Types.Helper, module_name, cls_name, tl)))
+					           (Communication.query_signature prgm (Types.Signature(Types.Plus, module_name, cls_name, notif :: tail))))		
+                             @ !to_assert;
 			| _ -> ();) clauses;
-		| _ -> raise (Failure "respond_to_notification can only be called with a constant"));
 
+		(* State changes happen together after evaluation is complete *)
+        List.iter (fun (s : Types.signature) -> Communication.retract_signature s) !to_retract;
+		List.iter (fun (s : Types.signature) -> Communication.assert_signature s) !to_assert;
+
+		| _ -> raise (Failure "respond_to_notification can only be called with a constant"));
+		
 		if debug then Xsb.debug_print_listings ();;
+
+let respond_to_notification (notif : Types.term) (prgm : Types.program) : unit =
+	  (* Ox is catching our exceptions and continuing. Bad behavior for debugging 
+	     a new codebase! So any time handling a notification throws an exception,
+	     catch it ourselves, print the stack trace, and quit. *)
+	  try
+		respond_to_notification_workhorse notif prgm
+	  with exn -> 
+	    Format.printf "Unexpected exception: %s\n----------\n%s\n%!"
+        (Printexc.to_string exn)
+        (Printexc.get_backtrace ());
+        exit(1);;
+
 
 end

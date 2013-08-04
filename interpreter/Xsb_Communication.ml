@@ -89,7 +89,7 @@ module Xsb = struct
             if debug then Printf.printf "DEBUG: send_assert %s getting response. Line was: %s\n%!" str (!next_str);
 			answer := (!answer ^ "\n" ^ String.trim !next_str);
 		done;
-		(* if debug then Printf.printf "send_assert answer: %s\n%!" (String.trim !answer); *)
+		if debug then Printf.printf "send_assert answer: %s\n%!" (String.trim !answer); 
 		String.trim !answer;;
 
 
@@ -120,17 +120,19 @@ module Xsb = struct
 		let out_ch, in_ch = get_ch () in
 		output_string out_ch (str ^ "\n");
 		flush out_ch;
-		(*let first_line = input_line in_ch in
-		if ((ends_with (String.trim first_line) "no") || (ends_with (String.trim first_line) "yes")) then [] else*)
+		
 		let answer = ref [] in
-
-
+		(* Expect this to be a prompt *)
 		let next_str = ref (input_line in_ch) in
+        if debug then Printf.printf "[prompt] > %s\n%!" !next_str;        
+        
+        if not (((String.trim !next_str) = "| ?-") || 
+                (Type_Helpers.ends_with (String.trim !next_str) "no")) then 
+          failwith ("XSB did not lead with prompt. led with "^ !next_str);
 
-        if debug then Printf.printf "> %s\n%!" !next_str;
 		(* Do not use this: it won't work. But it is useful for debugging situations with weird XSB output. 
            Note the debug_print_errors_and_exit() call---catches error case (which has no endline at end of input) *)
-    (*    let next_str = ref "" in
+        (*let next_str = ref "" in
 		while not (Type_Helpers.ends_with !next_str "\n") do
 		  next_str := (!next_str) ^ (String.make 1 (input_char in_ch));
 		  Printf.printf "next_str=%s\n%!" !next_str;
@@ -139,26 +141,32 @@ module Xsb = struct
 		
 		let counter = ref 0 in
 		while not (Type_Helpers.ends_with (String.trim !next_str) "no") do
-			if debug then Printf.printf "DEBUG: send_query %s getting response. Line was: %s\n%!" str (!next_str);
-			if (!counter mod num_vars = 0) then
-			(output_string out_ch ";\n";
-			flush out_ch);
-			counter := !counter + 1;
 
 			next_str := input_line in_ch;
-			if debug then Printf.printf "> %s\n%!" !next_str;
-
-        (*next_str := "";
+		(*next_str := "";
         while not (Type_Helpers.ends_with !next_str "\n") do
 		  next_str := (!next_str) ^ (String.make 1 (input_char in_ch));
 		  Printf.printf "next_str=%s\n%!" !next_str;
 		  if (Type_Helpers.ends_with !next_str "| ?- | ?-") then debug_print_errors_and_exit();
-		done;*)
+		done;		*)
 
-			answer := (remove_from_end (String.trim !next_str) "no") :: !answer;
+			if debug then Printf.printf "%d > %s\n%!" !counter !next_str;
+			(* the last line won't be followed by a newline until we give it a ;. 
+				TODO: Worry that since we don't know how many blocks total, we may send an extra ;. *)
+
+			if (!counter mod num_vars = (num_vars - 2)) then
+			begin
+			  if debug then Printf.printf "time for semicolon\n%!";
+			  output_string out_ch ";\n";
+			  flush out_ch;
+			end;			
+			counter := !counter + 1;			
+
+			answer := (remove_from_end (String.trim !next_str) "no") :: !answer;			        	
+
 			(* TODO If num_vars is wrong, this will freeze. Can we improve? *)
 		done;
-		if debug then Printf.printf "send_query finished. answers: \n[%s]\n%!" (String.concat ", " !answer);
+		if debug then Printf.printf "send_query finished. answers: \n[%s]\n%!" (String.concat ", " !answer);		
 		List.map (fun (l : string list) -> List.map after_equals l) (group (List.rev !answer) num_vars);;
 
 end
@@ -217,9 +225,9 @@ module Communication = struct
 
 	(* Take the raw results from XSB and produce notification constants*)
 	let rec group_into_constants (types : Types.term_type list) (sl : string list) : Types.term list =
-	    if debug then Printf.printf "group_into_constants: types=[%s] sl=[%s]\n%!"
+	    (*if debug then Printf.printf "group_into_constants: types=[%s] sl=[%s]\n%!"
 	            (Type_Helpers.list_to_string Type_Helpers.term_type_name types)
-	            (Type_Helpers.list_to_string (fun x -> x) sl);
+	            (Type_Helpers.list_to_string (fun x -> x) sl);*)
 		match types with
 		| [] -> if sl = [] then [] else raise (Failure "More strings than fit into the types");
 		| Types.Type(_, fields) as t :: tail ->
@@ -250,6 +258,7 @@ module Communication = struct
   (* TODO: tons of code-duplication here *)
 
 	let query_signature (prgm : Types.program) (s : Types.signature) : (Types.term list) list =
+	    if debug then Printf.printf "Query signature: %s\n%!" (Type_Helpers.signature_to_string s);
 		match s with Types.Signature(_, _, _, args) ->
 		let num_vars = List.length (List.fold_right (fun t acc -> add_unique_var t acc) args []) in
 		match prgm with Types.Program(_, _, _, _, prgm_clauses) ->
