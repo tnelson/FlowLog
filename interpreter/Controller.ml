@@ -44,10 +44,11 @@ module Make_OxModule (Program : PROGRAM) = struct
 	let packet_in (sw : switchId) (xid : xid) (pk : packetIn) : unit =
 		Printf.printf "Packet in on switch %Ld.\n%s\n%!" sw (packetIn_to_string pk);
 		(* pkt_to_notif parses the packet; don't repeat that work *)
-		let notif = (Controller_Forwarding.pkt_to_notif sw pk) in
-		  (* for the love of sanity, remember to clear this out even if no packets result! *)
+		let notif = (Controller_Forwarding.pkt_to_notif sw pk) in		  
 		  Controller_Forwarding.remember_for_forwarding (Some (sw, pk, notif));
-		  Evaluation.respond_to_notification notif Program.program;;		  
+		  Evaluation.respond_to_notification notif Program.program;
+		  (* for the love of sanity, remember to clear this out even if no packets result! *)
+		  Controller_Forwarding.clear_remember_for_forwarding();;		  
 	
 	let cleanup () : unit = 
 		if debug then print_endline "running cleanup";

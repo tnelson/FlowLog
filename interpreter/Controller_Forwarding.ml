@@ -14,7 +14,7 @@ module Controller_Forwarding = struct
 	(* *)
 	let remember_for_forwarding (pkt_info: (switchId * packetIn * Types.term) option) : unit = 
 	  in_packet_context := pkt_info;;
-	let clear_remember_for_forwarding () : unit =
+	let clear_remember_for_forwarding () : unit =	  
 	  in_packet_context := None;;
 
 	let begins_with (str1 : string) (str2 : string) : bool = 
