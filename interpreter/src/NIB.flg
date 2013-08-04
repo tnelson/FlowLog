@@ -8,6 +8,7 @@ type start_timer = {seconds, id};
 type timer_expired = {id};
 type startup = {};
 type switch_port = {switch, port};
+type link_down = {sw1, pt1, sw2, pt2};
 
 ///////////////////////////////////////////////////////////
 // Before panicking, make sure that you aren't testing with single,n.
@@ -126,11 +127,21 @@ minus macConnectedAt(pkt: packet, mac, sw, pt) :- not pkt.dlTyp = 0x1001,
 ///////////////////////////////////////////////////////////
 
 // PURPOSE: Notice when links come down and when hosts connect/move
+// Note, timer will do nothing with this. But illustrates reactivity.
+
+action BBtimer(timer: timer_expired, ld: link_down) :-
+timer.id = "tNIB",
+switchTopology(ld.sw1, ld.pt1, ld.sw2, ld.pt2),
+not ucST(ld.sw1, ld.pt1, ld.sw2, ld.pt2);
 
 
-
-
-
+///////////////////////////////////////////////////////////
+// TODO: 3 levels of import per signature:
+// -- "hidden": this signature isn't for export
+// -- "namespace": have to restate in order to trigger action
+// -- "auto": action occurs automatically
+// e.g. if we import nib, we'd like to have these timer events, etc. occur automatically.
+// but if we import a forwarding lib, we might want to filter first.
 ///////////////////////////////////////////////////////////
 
 // MOVE THESE TO ANOTHER MODULE
@@ -163,10 +174,9 @@ plus spanningTree(timer: timer_expired, sw, pt) :-
   timer.id = "tNIB", 
   ucTree(sw, pt);
 
-
-// TODO: housekeeping
-// TODO: symmetry?
-
 ///////////////////////////////////////////////////////////
 
 // PURPOSE: shortest path
+
+// TODO: requires some basic helper BBs like min and <.
+// Focusing on the core functionality for now.
