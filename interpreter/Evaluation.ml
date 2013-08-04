@@ -3,6 +3,7 @@ open Controller_Forwarding;;
 open Xsb_Communication;;
 open Type_Helpers;;
 open Flowlog_Thrift_Out;;
+open OpenFlow0x01_Core;;
 
 let debug = true;;
 
@@ -23,6 +24,7 @@ module Evaluation = struct
 		if debug1 then 
 		  Printf.printf "\n******************\nincoming notif: [%s] of type: %s\n\n%!" 
 		    (Type_Helpers.term_to_string notif) (Type_Helpers.term_type_name (Type_Helpers.type_of_term notif));
+
 		let already_seen = ref [] in
 		match prgm with Types.Program(_, _, _, _, clauses) ->
 		(match notif with Types.Constant(_, ttype) ->
@@ -68,16 +70,25 @@ module Evaluation = struct
 		
 		if debug then Xsb.debug_print_listings ();;
 
-let respond_to_notification (notif : Types.term) (prgm : Types.program) : unit =
+(* XSB is shared state. We also have the remember_for_forwarding and packet_queue business *)
+let xsbmutex = Mutex.create();;
+
+let respond_to_notification (notif : Types.term) (prgm : Types.program) (packet_context: (switchId * packetIn * Types.term) option): unit =
 	  (* Ox is catching our exceptions and continuing. Bad behavior for debugging 
 	     a new codebase! So any time handling a notification throws an exception,
 	     catch it ourselves, print the stack trace, and quit. *)
 	  try
-		respond_to_notification_workhorse notif prgm
+	    Mutex.lock xsbmutex;
+	    Controller_Forwarding.remember_for_forwarding packet_context;
+		respond_to_notification_workhorse notif prgm;
+		(* for the love of sanity, remember to clear this out even if no packets result! *)
+		Controller_Forwarding.clear_remember_for_forwarding();
+		Mutex.unlock xsbmutex;
 	  with exn -> 
 	    Format.printf "Unexpected exception: %s\n----------\n%s\n%!"
         (Printexc.to_string exn)
         (Printexc.get_backtrace ());
+        
         exit(1);;
 
 

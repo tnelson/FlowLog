@@ -81,7 +81,7 @@ object (self)
                                    (Hashtbl.find values (String.lowercase fieldname)))
                                  fieldnames),
                              ntype) in                       
-          Evaluation.respond_to_notification notif_constant the_program;      
+          Evaluation.respond_to_notification notif_constant the_program None;      
     with Failure(msg) ->  Printf.printf "   *** ERROR! Ignoring notification for reason: %s\n%!" msg;     
 
 end

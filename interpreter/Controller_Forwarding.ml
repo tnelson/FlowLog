@@ -179,7 +179,7 @@ module Controller_Forwarding = struct
    		    (match !in_packet_context with
 		  	  | None -> Printf.printf "Flushing... NO INITIAL PACKET!\n%!";
 		              
-		      | Some(sw, in_pk, notif) -> 
+		      | Some(sw, in_pk, _) -> 
 		        Printf.printf "Flushing... FORWARDING PACKET. Switch=%s, Fields= %s\n%!" 
 		          (Int64.to_string sw) 
 		          (Packet.to_string (parse_payload in_pk.input_payload)));

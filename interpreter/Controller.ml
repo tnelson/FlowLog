@@ -31,7 +31,7 @@ module Make_OxModule (Program : PROGRAM) = struct
  
     (* Send the "startup" notification. Enables initialization, etc. in programs *)
     let startup = Types.Constant([], Types.startup_type) in
-	  Evaluation.respond_to_notification startup Program.program;;
+	  Evaluation.respond_to_notification startup Program.program None;;
 
 	
 	let switch_connected (sw : switchId) (feats : OpenFlow0x01.SwitchFeatures.t) : unit =
@@ -39,16 +39,13 @@ module Make_OxModule (Program : PROGRAM) = struct
 	    let port_nums = List.map (fun (x : PortDescription.t)-> x.PortDescription.port_no) feats.SwitchFeatures.ports in
 	    let sw_string = Int64.to_string sw in
 	    let notifs = List.map (fun portid -> Types.Constant([sw_string; string_of_int portid], Types.switch_port_type)) port_nums in
-	    List.iter (fun notif -> Evaluation.respond_to_notification notif Program.program) notifs;;
+	    List.iter (fun notif -> Evaluation.respond_to_notification notif Program.program None) notifs;;
 	    
 	let packet_in (sw : switchId) (xid : xid) (pk : packetIn) : unit =
 		Printf.printf "Packet in on switch %Ld.\n%s\n%!" sw (packetIn_to_string pk);
 		(* pkt_to_notif parses the packet; don't repeat that work *)
-		let notif = (Controller_Forwarding.pkt_to_notif sw pk) in		  
-		  Controller_Forwarding.remember_for_forwarding (Some (sw, pk, notif));
-		  Evaluation.respond_to_notification notif Program.program;
-		  (* for the love of sanity, remember to clear this out even if no packets result! *)
-		  Controller_Forwarding.clear_remember_for_forwarding();;		  
+		let notif = (Controller_Forwarding.pkt_to_notif sw pk) in		  		  
+		  Evaluation.respond_to_notification notif Program.program (Some (sw, pk, notif));;		  
 	
 	let cleanup () : unit = 
 		if debug then print_endline "running cleanup";
