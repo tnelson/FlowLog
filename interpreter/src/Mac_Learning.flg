@@ -13,6 +13,11 @@ pkt.locPt = pt;
 minus learned(pkt : packet, sw, pt, mac) :-
 pkt.locSw = sw,
 pkt.dlSrc = mac,
+// This is to positively constrain the pt variable
+learned(sw, pt, mac),
+// Negations MUST GO LAST!
+// This is ridiculous but XSB may return no results otherwise.
+// TODO:why?
 not pkt.locPt = pt;
 
 action forward(pkt : packet, nwpkt : packet) :-

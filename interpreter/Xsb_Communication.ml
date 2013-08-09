@@ -3,6 +3,7 @@ open Printf;;
 open Types;;
 open Type_Helpers;;
 open Flowlog_Thrift_Out;;
+open Str;;
 
 let debug = true;;
 
@@ -11,6 +12,8 @@ module Xsb = struct
     (* creates a pair channels for talking to xsb, starts xsb, and returns the channels *)
 	let start_xsb () : out_channel * in_channel * in_channel =
 		let xin_channel, xout_channel, error_channel = Unix.open_process_full "xsb" (Unix.environment ()) in
+		(* to prevent errors from accumulating *)
+		Unix.set_nonblock (Unix.descr_of_in_channel error_channel);
 		(xout_channel, xin_channel, error_channel);;
 
 	let ref_out_ch = ref None;;
@@ -32,19 +35,37 @@ module Xsb = struct
 		let out_ch, _ = get_ch () in
 		output_string out_ch "halt.\n";
 		flush out_ch;;
-
-	(* because Tim can't find a non-blocking read similar to read-bytes-avail in Racket,
-	    this halts XSB, then terminates  *)
-	let debug_print_errors_and_exit () : unit =
-	  halt_xsb();	    	    
+	
+	let print_or_flush_errors (print_too: bool) : unit =
 	  let errstr = ref "" in
 	  try
 	    while true do
-            errstr := !errstr ^ (String.make 1 (input_char (match !ref_err_ch with 
-                                               | Some(ch) -> ch;
-                                               | _ -> raise (End_of_file))));                      
-	      done
-	  with End_of_file -> Printf.printf "%s\n%!" !errstr; exit(1);;
+            errstr := !errstr ^ (String.make 1 (input_char
+               (match !ref_err_ch with 
+                   | Some(ch) -> ch;
+                   | _ -> raise (End_of_file))));   
+	    done
+	  with | End_of_file -> if print_too then Printf.printf "%s\n%!" !errstr;
+	       | Sys_blocked_io -> if print_too then Printf.printf "%s\n%!" !errstr;
+	  if print_too then Printf.printf "-------------------------------------------------\n%!";;
+
+    (* we cannot read a line at a time, since XSB will not give a newline on errors *)
+	let get_line_gingerly (in_ch: in_channel) (out_ch: out_channel) (orig: string): string =
+		let next_str = ref "" in	    	    
+        while not (Type_Helpers.ends_with !next_str "\n") do
+  		    next_str := (!next_str) ^ (String.make 1 (input_char in_ch));		 
+  		  		 
+  		  	(*Printf.printf "glg: %s\n%!" !next_str;*)
+		    if (Type_Helpers.ends_with !next_str "| ?- | ?-") then 
+		    begin
+		    	(* we may have asked an extra semicolon and caused a syntax error. *)
+		    	if debug then Printf.printf "XSB Error. Asking again.\n%!";
+		  		output_string out_ch (orig ^ "\n");
+		    	flush out_ch;
+		    	next_str := "";
+		  	end
+		done;
+		!next_str;;
 
 	(* Prints the XSB listings currently asserted to stdout.
 	   This function is useful for confirming that XSB knows what we think it knows. *)
@@ -53,13 +74,18 @@ module Xsb = struct
 		let out_ch, in_ch = get_ch () in
 		output_string out_ch ("listing.\n"); flush out_ch;
 
-		let next_str = ref (input_line in_ch) in
-		  Printf.printf "%s\n%!" !next_str;
-		  while not (Type_Helpers.ends_with (String.trim !next_str) "yes") do
-			next_str := input_line in_ch;
+		let next_str = ref "" in
+		  while not (Type_Helpers.ends_with (String.trim !next_str) "yes") do		  	
+			next_str := get_line_gingerly in_ch out_ch "listing.\n";
+			next_str := String.trim (Str.global_replace (Str.regexp "| \\?-") "" !next_str);
+			next_str := String.trim (Str.global_replace (Str.regexp "\n\n") "\n" !next_str);
 			Printf.printf "%s\n%!" !next_str;
 		  done;
-		  Printf.printf "-------------------------------------------------\n%!";;
+		  Printf.printf "-------------------------------------------------\n%!";
+		  (* to turn on error printing, pass true. 
+		     we flush the error stream every notification to prevent it from filling up,
+		     which would cause XSB to block. *)
+		  print_or_flush_errors false;;		  
 
 
 	(* This takes in a string command (not query, this doesn't deal with the semicolons).
@@ -81,15 +107,15 @@ module Xsb = struct
 
 
 		while (not (Type_Helpers.ends_with (String.trim !next_str) "yes") && not (Type_Helpers.ends_with (String.trim !next_str) "no")) do		
-			next_str := input_line in_ch;
+        	(*next_str := input_line in_ch;*)
+          (* get a char at a time, because errors won't send a newline *)
+          next_str := get_line_gingerly in_ch out_ch str;		  
+		  next_str := String.trim (Str.global_replace (Str.regexp "| \\?-") "" !next_str);
 
-			(* Do not use this: it won't work. But it is useful for debugging situations with weird XSB output. *)
-			(*next_str := (!next_str) ^ (String.make 1 (input_char in_ch));*)
-
-            if debug then Printf.printf "DEBUG: send_assert %s getting response. Line was: %s\n%!" str (!next_str);
-			answer := (!answer ^ "\n" ^ String.trim !next_str);
+          if debug then Printf.printf "DEBUG: send_assert %s getting response. Line was: %s\n%!" str (!next_str);
+   	      answer := (!answer ^ "\n" ^ String.trim !next_str);
 		done;
-		(* if debug then Printf.printf "send_assert answer: %s\n%!" (String.trim !answer); *)
+		if debug then Printf.printf "send_assert answer: %s\n%!" (String.trim !answer); 
 		String.trim !answer;;
 
 
@@ -120,42 +146,39 @@ module Xsb = struct
 		let out_ch, in_ch = get_ch () in
 		output_string out_ch (str ^ "\n");
 		flush out_ch;
-		(*let first_line = input_line in_ch in
-		if ((ends_with (String.trim first_line) "no") || (ends_with (String.trim first_line) "yes")) then [] else*)
+		
 		let answer = ref [] in
-
-		let next_str = ref (input_line in_ch) in
-
-		(* Do not use this: it won't work. But it is useful for debugging situations with weird XSB output. 
-           Note the debug_print_errors_and_exit() call---catches error case (which has no endline at end of input) *)
-        (*let next_str = ref "" in
-		while not (Type_Helpers.ends_with !next_str "\n") do
-		  next_str := (!next_str) ^ (String.make 1 (input_char in_ch));
-		  Printf.printf "next_str=%s\n%!" !next_str;
-		  if (Type_Helpers.ends_with !next_str "| ?- | ?-") then debug_print_errors_and_exit();
-		done;*)
-		
+		let next_str = ref "" in        		
 		let counter = ref 0 in
-		while not (Type_Helpers.ends_with (String.trim !next_str) "no") do
-			if debug then Printf.printf "DEBUG: send_query %s getting response. Line was: %s\n%!" str (!next_str);
-			if (!counter mod num_vars = 0) then
-			(output_string out_ch ";\n";
-			flush out_ch);
-			counter := !counter + 1;
+		while not (Type_Helpers.ends_with !next_str "no") do
 
-			next_str := input_line in_ch;
-		
-        (*next_str := "";
-        while not (Type_Helpers.ends_with !next_str "\n") do
-		  next_str := (!next_str) ^ (String.make 1 (input_char in_ch));
-		  Printf.printf "next_str=%s\n%!" !next_str;
-		  if (Type_Helpers.ends_with !next_str "| ?- | ?-") then debug_print_errors_and_exit();
-		done;*)
+			(*next_str := (input_line in_ch);			*)
+            next_str := get_line_gingerly in_ch out_ch str;		  		
+			next_str := String.trim (Str.global_replace (Str.regexp "| \\?-") "" !next_str);
 
-			answer := (remove_from_end (String.trim !next_str) "no") :: !answer;
+			if debug then Printf.printf "%d > '%s'\n%!" !counter !next_str;
+			(* the last line won't be followed by a newline until we give it a ;. 
+				TODO: Worry that since we don't know how many blocks total, we may send an extra ;. *)
+			
+			(* need to account for "X=3no" as well as "no" *)
+
+			if (String.length !next_str > 0) then (*  && not (Type_Helpers.ends_with !next_str "no") then*)
+			begin
+				if (!counter mod num_vars = (num_vars - 2)) then
+				begin
+			  	if debug then Printf.printf "time for semicolon. at %d, of %d\n%!" !counter num_vars;
+			  	output_string out_ch ";\n";
+			  	flush out_ch;
+				end;			
+				counter := !counter + 1;			
+
+				(* If we have a value to save *)
+				if !next_str <> "no" then 
+					answer := (remove_from_end !next_str "no") :: !answer;			        	
+			end;
 			(* TODO If num_vars is wrong, this will freeze. Can we improve? *)
 		done;
-		if debug then Printf.printf "send_query finished. answers: \n%s\n%!" (String.concat ", " !answer);
+		if debug then Printf.printf "send_query finished. answers: [%s]\n%!" (String.concat ", " !answer);		
 		List.map (fun (l : string list) -> List.map after_equals l) (group (List.rev !answer) num_vars);;
 
 end
@@ -206,19 +229,23 @@ module Communication = struct
 		let _ = send_message ("assert((" ^ (Type_Helpers.signature_to_string s) ^ ")).") num_vars in ();;	
 
 	let rec split_list (num : int) (l : 'a list) : 'a list * 'a list =
-		if num < 0 then raise (Failure "num should be nonnegative") else
+		if num < 0 then raise (Failure "split_list: num should be nonnegative") else
 		if num = 0 then ([], l) else
 		match l with
-		| [] -> raise (Failure "num is bigger than the length of the list");
+		| [] -> raise (Failure "split_list: num is bigger than the length of the list");
 		| h :: t -> let first_recur, rest_recur = split_list (num - 1) t in (h :: first_recur, rest_recur);;
 
+	(* Take the raw results from XSB and produce notification constants*)
 	let rec group_into_constants (types : Types.term_type list) (sl : string list) : Types.term list =
+	    (*if debug then Printf.printf "group_into_constants: types=[%s] sl=[%s]\n%!"
+	            (Type_Helpers.list_to_string Type_Helpers.term_type_name types)
+	            (Type_Helpers.list_to_string (fun x -> x) sl);*)
 		match types with
 		| [] -> if sl = [] then [] else raise (Failure "More strings than fit into the types");
 		| Types.Type(_, fields) as t :: tail ->
 			let (first_bunch, rest) = split_list (List.length fields) sl in
 			Types.Constant(first_bunch, t) :: group_into_constants tail rest;
-		| _ -> raise (Failure "deferd type");;
+		| _ -> raise (Failure "group_into_constants: deferred type");;
 
 	let get_queries (prgm : Types.program) (cls : Types.clause) : (Types.atom * Types.blackbox) list =
 		match prgm with Types.Program(_, _, blackboxes, _, _) ->
@@ -243,6 +270,7 @@ module Communication = struct
   (* TODO: tons of code-duplication here *)
 
 	let query_signature (prgm : Types.program) (s : Types.signature) : (Types.term list) list =
+	    if debug then Printf.printf "Query signature: %s\n%!" (Type_Helpers.signature_to_string s);
 		match s with Types.Signature(_, _, _, args) ->
 		let num_vars = List.length (List.fold_right (fun t acc -> add_unique_var t acc) args []) in
 		match prgm with Types.Program(_, _, _, _, prgm_clauses) ->

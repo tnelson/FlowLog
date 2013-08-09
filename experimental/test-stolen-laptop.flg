@@ -1,0 +1,109 @@
+
+// What does Stolen Laptop look like? Focus on what it needs to DO (i.e. don't get distracted by syntax)
+// this contains more than just SL, because want to understand good spread of functionality
+
+
+// [if both in/out same type, separate declarations]
+
+incoming stolen_laptop_report {mac} -> stolen_laptop_report(mac);
+incoming stolen_laptop_cancel {mac} -> stolen_laptop_cancel(mac);
+incoming timer_expired {id} -> timer_expired(id);
+
+// built-in type... may not have to declare. standard packet relation?
+// incoming packet -> packet()
+// same with outgoing forward and emit. built-in. 
+// outgoing forward <- forward
+// outgoign emit <- emit
+// diff. between forward and emit (preservation of buffer ID, payload) handled by runtime.
+
+// The point is: built-ins should be built in. forward. emit. packets. startup. etc. etc. etc.
+// this removes the need for confusing "send to X... who is X for forward?"
+
+outgoing stolen_laptop_seen {mac, swid, time} @ 127.0.0.1 5050 
+  <- notify_police(mac, swid, time);
+outgoing start_timer {seconds, id} @ 127.0.0.1 9091 
+  <- notify_start_timer(seconds, id);
+
+///////////////////////////////////////////////////////////////////////////
+
+// decl queries, with appropriate effects
+// how do these differ? by effect or contract?
+
+// Do the relations change between evaluations? 
+// Do the relations change between invocations? nondetermininistic?
+// (Affects optimizer)
+
+// fixed domain/range? pure relational?
+
+query time { X } @ 127.0.0.1 9091 <-> get_time(X); 
+query add {X, Y, Z} @ 127.0.0.1 1234 <-> do_add(X, Y, Z); 
+query getroute {const dlDst, const swid, outpt} <-> do_getroute(dlDst, swid, outpt);
+
+// add: makes sense to say do_add(3, X, 4). but not so for getroute.
+// But wait. For safety, we could have this:
+query add {const X, const Y, Z} @ 127.0.0.1 1234 <-> do_add(X, Y, Z); 
+query sub {const X, const Y, Z} @ 127.0.0.1 1234 <-> do_subtr(X, Y, Z); 
+// or something to specify 2 inputs must be constant. (that seems clumsy though)
+
+// Note: can get separate nonces in the OUTER layer this way. No confusion in the DLog.
+query nonce { var X } @ 127.0.0.1 9091 <-> get_nonce1(X);
+query nonce { var X } @ 127.0.0.1 9091 <-> get_nonce2(X);
+
+// not necessarily const X. might want to do something for ALL blacklisted. not necessarily var.
+query blacklisted { X } @ 127.0.0.1 4321 <-> get_blacklisted(X);
+
+
+// some optimization may introduce datalog clauses. (auto carry over true
+// functional results, for instance)
+
+// note that explicit declaration here avoids ambiguity of type/relationname/etc that 
+// we had to do ugly things in XSB to work around
+
+
+// do we want to force declaration of state EDBs (as opposed to just trigger and outputs?)
+// I think we do. 
+
+state stolen: 1; // arity only, or types?
+state learned: 3; // vs state learned(int, int, int48)
+
+
+///////////////////////////////////////////////////////////////////////////
+
+// Now for the datalog. Surface language probably restricts some innate freedom here (e.g. T = current time, T+1 accessed by +/-. T-anything, T+>1 not accessible.)
+
+// forward(pkt : packet) :- Mac_learning.forward(pkt, newpkt);
+forward(pkt) :- Mac_learning.forward(pkt);
+
+// ^^^ These trigger relations must be accessible from all namespaces. 
+
+// QUESTION: But adding +1 ---> no longer guaranteed termination (in general)
+// What if we used -1 instead, with 0 as base?
+// meh. without triggers in the trigger relations, won't be a problem. T_d will pause.
+// yet the datalog part denotes a database. 
+// if sequence of events at each time, of COURSE sequence of IDBs. 
+
+// FLOWLOG requires additional constraints on recursion.
+// T, T+1 only, with constrained use (T+1 only to set up next state)
+// non-recursive except for that boilerplate w/ T+1
+
+// State transitions are explicit. (This is boilerplate, can auto produce)
+stolen(T+1, mac) :- stolen(T, mac), not -stolen(T, mac);
+stolen(T+1, mac) :- +stolen(T, mac);
+// plus stolen(mac) :- stolen_laptop_report(rep), report.mac = mac;
++stolen(T, mac) :- stolen_laptop_report(T, rep), rep.mac = mac; // <-- collapse or expand types?
+// minus stolen(cancel: stolen_laptop_cancel, mac) :- cancel.mac = mac;
+-stolen(T, mac) :- stolen_laptop_cancel(T, rep), rep.mac = mac; 
+
+//action BBpolice(pkt : packet, found: stolen_laptop_found) :- 
+//  stolen(pkt.dlSrc),
+//  found.mac = pkt.dlSrc,
+//  found.swid = pkt.locSw,
+//  BBTimer.time(found.time),
+//  not ratelim(found.mac);
+
+stolen_laptop_found(T, mac, swid, time) :-
+  packetIn(T, pkt),
+  stolen(T, pkt,dlSrc), not ratelim(T, mac),
+  mac = pkt.dlSrc, swid = pkt.locSw, get_time(T, time);
+
+
