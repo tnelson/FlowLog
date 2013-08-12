@@ -1,0 +1,108 @@
+uctc_flowlog : THEORY
+  BEGIN
+    SWITCH: TYPE   
+    INPROBE((T: nat),(S1: SWITCH),(S2: SWITCH)): bool
+
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Some finite number of probes received
+    % note: TWO WAY impl here. 
+
+    % definitional instead of axiomatic? can we do this?
+    ENDSBY((T: nat)): bool =     
+      FORALL (S:nat),(S1:SWITCH),(S2:SWITCH):
+        S>T IMPLIES NOT INPROBE(S,S1,S2)
+
+  
+    % the prover won't use axioms unless they are introduced as lemmas!
+    % but rewrote above definitionally, so dont need to declare a lemma
+    test_endtime: THEOREM 
+      forall (SW1: SWITCH), (SW2: SWITCH), (S,ENDTIME: nat):
+      ENDSBY(ENDTIME) AND S > ENDTIME IMPLIES 
+        NOT INPROBE(S, SW1, SW2)
+
+   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+   % make trigger rel explicit via time  
+   % note the split: reference prior/next only for inductive case
+   uctc((NOW: nat), (SW1: SWITCH), (SW2: SWITCH)): INDUCTIVE bool = 
+     INPROBE(NOW, SW1, SW2) % probe recvd from sw1 to sw2 (OVERSIMPLIFICATION)  
+     OR INPROBE(NOW,SW2,SW1)
+     OR
+     (NOW > 0 AND
+      (  
+         uctc(NOW-1, SW1, SW2) % carryover
+      OR (EXISTS (SWX: SWITCH): INPROBE(NOW, SW1, SWX) AND uctc(NOW-1,SWX,SW2)) 
+      OR (EXISTS (SWX: SWITCH): uctc(NOW-1,SW1,SWX) AND INPROBE(NOW, SWX, SW2))
+      ))
+      
+
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  % For the proof, construct the "real" TC
+  % given all the incoming probes. 
+  % ASSUMES: probes fully represent the connections
+
+  realconns((SW1: SWITCH), (SW2: SWITCH)): bool =
+    EXISTS (T:nat): INPROBE(T, SW1, SW2)    
+
+% easier inductive
+%  realconnsat((T:nat), (SW1: SWITCH), (SW2: SWITCH)): bool =
+%    EXISTS (S:nat): S <= T AND INPROBE(S, SW1, SW2)    
+
+  realconnsat((T:nat), (SW1: SWITCH), (SW2: SWITCH)): INDUCTIVE bool = 
+    INPROBE(T, SW1, SW2) OR (T > 0 AND realconnsat(T-1, SW1, SW2))
+
+  % grind works by itself
+  test1: THEOREM forall (SW1: SWITCH), (SW2: SWITCH) :
+    realconns(SW1, SW2) IFF EXISTS(T:nat): INPROBE(T, SW1, SW2)
+
+  % needs an expand in addition to grind
+  test2: THEOREM forall (SW1: SWITCH), (SW2: SWITCH) :
+    realconns(SW1, SW2) IMPLIES exists(T:nat) : uctc(T, SW1, SW2)
+
+  realtc((SW1: SWITCH), (SW2: SWITCH)): INDUCTIVE bool = 
+    ((realconns(SW1, SW2)) 
+      OR
+      (EXISTS (SWX: SWITCH): realconns(SW1, SWX) AND realtc(SWX,SW2))) 
+    
+  %% Generalized real TC to use the edges given "so far"
+  %% ...Realty Cat? 
+  realtcat((T: nat), (SW1: SWITCH), (SW2: SWITCH)): INDUCTIVE bool =    
+    ((realconnsat(T, SW1, SW2)) 
+      OR (T > 0 AND realtcat(T-1, SW1, SW2))
+      OR (EXISTS (SWX: SWITCH): T > 0 AND realconnsat(T, SW1, SWX) AND realtcat(T-1, SWX,SW2))) 
+    % note the T-1 in final case. easy to forget.
+
+  all_edges_symmetric: AXIOM 
+    FORALL (SW1: SWITCH), (SW2: SWITCH), (T: nat) :
+      INPROBE(T, SW1, SW2) IMPLIES EXISTS (T2: nat) :
+        INPROBE(T2, SW2, SW1)
+   
+
+  equiv1: THEOREM FORALL (SW1: SWITCH), (SW2: SWITCH), (ENDTIME: nat) :
+    ENDSBY(ENDTIME) and realtc(SW1, SW2) IMPLIES uctc(ENDTIME, SW1, SW2)
+
+
+  %% 15 subgoals for case 2 of 3? ugh
+  equiv1_helperA: THEOREM FORALL (SW1: SWITCH), (SW2: SWITCH), (T: nat) :
+   realtcat(T, SW1, SW2) IMPLIES uctc(T, SW1, SW2)
+
+
+
+  % flatten, inst at T!1
+  equiv2_helperA: THEOREM FORALL (SW1: SWITCH), (SW2: SWITCH), (T:nat) :
+    INPROBE(T, SW1, SW2) IMPLIES realtc(SW1, SW2)
+  % same as A, but need to introduce lemma all_edges_symmetric and then grind
+  equiv2_helperB: THEOREM FORALL (SW1: SWITCH), (SW2: SWITCH), (T:nat):
+    INPROBE(T, SW1, SW2) IMPLIES realtc(SW2, SW1)
+
+  % similar to above
+  equiv2_helperC: THEOREM FORALL (SW1: SWITCH), (SW2: SWITCH), (T1,T2,T3:nat), (SWX: SWITCH):
+    INPROBE(T1, SW1, SWX) and INPROBE(T2,SWX,SW2)  IMPLIES realtc(SW1, SW2)
+
+  
+  % needs induction. (also needs the axiom).
+  % but how to get it the induction it needs?
+  equiv2: THEOREM FORALL (SW1: SWITCH), (SW2: SWITCH), (ENDTIME: nat) :
+    ENDSBY(ENDTIME) AND uctc(ENDTIME, SW1, SW2) IMPLIES realtc(SW1, SW2)
+
+    
+  END uctc_flowlog
