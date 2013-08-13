@@ -1,0 +1,144 @@
+maclearning_test: THEORY
+  BEGIN
+
+%%%%%%%%% Types
+
+PACKET : TYPE = [# locSw: nat, locPt: nat, dlSrc: nat, dlDst: nat, dlTyp: nat, nwSrc: nat, nwDst: nat, nwProto: nat #]
+SWITCH_PORT: TYPE = [# switch: nat, port: nat #]
+
+%%%%%%%%% Trigger relations 
+
+EVpacket((t: nat), (pk: PACKET)): bool
+EVswitchport((t: nat), (sp: SWITCH_PORT)): bool
+
+%%%%%%%%% +/- relations. note NOT inductive
+
+minus_learned((t: nat), (sw: nat), (pt: nat), (mac: nat)): bool = 
+  exists (pkt: PACKET) : EVpacket(t, pkt) 
+  and locSw(pkt) = sw and dlSrc(pkt) = mac and not locPt(pkt) = pt
+  % actual prog has learned(sw,pt,mac) in it
+
+plus_learned((t: nat), (sw: nat), (pt: nat), (mac: nat)): bool = 
+  exists (pkt: PACKET) : EVpacket(t, pkt) 
+  and locSw(pkt) = sw and dlSrc(pkt) = mac and locPt(pkt) = pt
+
+plus_switch_has_port((t: nat), (sw: nat), (pt: nat)): bool = 
+  exists (sp: SWITCH_PORT) : EVswitchport(t, sp) 
+  and switch(sp) = sw and port(sp) = pt
+
+minus_switch_has_port((t: nat), (sw: nat), (pt: nat)): bool = 
+  false
+
+%%%%%%%%% State relations (manipulated by +/- relations)
+
+learned((t: nat), (sw: nat), (pt: nat), (mac: nat)): INDUCTIVE bool = 
+  (t > 0 and learned(t-1, sw, pt, mac) and not minus_learned(t, sw, pt, mac)) or
+  plus_learned(t, sw, pt, mac)
+
+switch_has_port((t: nat), (sw: nat), (pt: nat)): INDUCTIVE bool = 
+  (t > 0 and switch_has_port(t-1, sw, pt) and not minus_switch_has_port(t, sw, pt)) or
+  plus_switch_has_port(t, sw, pt)
+
+
+%%%%%%%%% forwarding. not inductive
+
+forward((t: nat), (new:PACKET)): bool = 
+  exists (pkt: PACKET) : EVpacket(t, pkt) and
+  ((
+     learned(t, locSw(pkt), locPt(new), dlDst(pkt))
+   )
+   OR
+   (
+     exists (any₁ : nat) :
+       switch_has_port(t, locSw(pkt), locPt(new)) and
+       not learned(t, locSw(pkt), any₁, dlDst(pkt)) and
+       not locPt(pkt) = locPt(new)
+   ))
+  
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% AXIOMS
+% Must come before theorems to be introduced via (lemma <name>)
+
+single_packet: AXIOM
+  forall (t: nat), (p: PACKET), (p2: PACKET):  
+        EVpacket(t, p) and EVpacket(t, p2) implies p=p2
+
+single_sp: AXIOM
+  forall (t: nat), (sp: SWITCH_PORT), (sp2: SWITCH_PORT):  
+    EVswitchport(t, sp) and EVswitchport(t, sp2) implies sp=sp2
+
+% not quite right: only one event PERIOD per time.
+
+% Theorems
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% How easily can we re-produce the verification in HotSDN?
+% DONT SAY "REPRODUCE!" this is all indepedent of topology.
+
+%
+% requires knowledge of how plus/minus interact
+%
+
+% ***PROVEN***
+% no induction!
+% skosimp
+% (expand plus_learned) (expand minus_learned) // NO expand learned
+% skosimp
+% (inst 2 "pkt!1")
+% assert
+%consistency_invariant_1: THEOREM
+%  forall (t: nat) , (sw: nat), (pt1: nat), (pt2: nat), (mac: nat): 
+%    (learned(t-1, sw, pt1, mac) and plus_learned(t, sw, pt2, mac) and not pt1 = pt2) 
+%    implies
+%    (minus_learned(t, sw, pt1, mac))
+
+% ***PROVEN***
+% pluslearned doesnt try to add inconsistent things in same state
+% skosimp/expand/skosimp*
+% (lemma single_packet)
+% (inst -1 "t!1" "pkt!1" "pkt!2")
+% (assert)
+%consistency_invariant_2: THEOREM
+%  forall (t: nat) , (sw: nat), (pt1: nat), (pt2: nat), (mac: nat): 
+%    (plus_learned(t, sw, pt1, mac) and plus_learned(t, sw, pt2, mac)) implies pt1 = pt2
+  
+% skosimp and expand
+% grind –> 2 subgoals (seems like these are base + ind?)
+% 1: lemma single_packet -> inst -1 "t!1" "pkt!1" "pkt!2" -> grind. done.
+% 2: [if had both pt1 and pt2 before, then either a packet is arriving to delete or or other (spurious!) or pt1=pt2]
+% 2: 
+consistency: THEOREM 
+  forall (t: nat), (sw: nat), (pt1: nat), (pt2: nat), (mac: nat): 
+    learned(t, sw, pt1, mac) and learned(t, sw, pt2, mac) implies pt1 = pt2
+
+% 1: skosimp to get easy case
+%2: skosimp to get forall -> forall
+% skosimp again.
+% (inst -1 "sw!1" "pt1!1" "pt2!1" "mac!1")
+
+%%% todo
+% don't expand -1. expand -2 and -3. how? (expand "learned" -2) etc.
+% assert 
+% then can apply -1, plus "plus learned never overlaps" thm as lemma
+% not enough? l+l, p+p, l+p, p+l? 
+
+%  (lemma consistency_invariant_1)
+%(inst -1 "1 + j!1" "sw!1" "pt1!1" "pt2!1" "mac!1")
+% assert
+
+% grind yields 2 sub-sub-goals. both look flat.
+
+% (lemma single_packet)
+%(inst -1 "1 + j!1" "pkt!1" "pkt!3")
+% REPEAT: also to 1 and 2
+
+% same deal for case 2
+
+% for base case...
+
+% how would we do this in coq?
+
+
+  END maclearning_test
+
+% induct just splits into 2 cases and rewrites: t=0, forall j: a(j) implies a(j+1)

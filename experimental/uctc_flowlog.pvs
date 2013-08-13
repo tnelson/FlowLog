@@ -20,6 +20,16 @@ uctc_flowlog : THEORY
       ENDSBY(ENDTIME) AND S > ENDTIME IMPLIES 
         NOT INPROBE(S, SW1, SW2)
 
+   %% why not write
+
+  %plus ucTC(p: packet, sw1, sw2) :- p.dlTyp = 0x1001,
+  %  p.locSw = sw2, p.dlSrc = sw1;
+  %plus ucTC(p: packet, sw1, sw2) :- p.dlTyp = 0x1001,
+  %  ucTC(p.dlSrc, p.locSw), ucTC(p.locSw, sw2); // pkt arrived at intermediate step
+
+  % because CANT. Because updates to TC relation happen too late.
+  % in this way, lack of recursion, even restricted recursion, makes proving HARDER. 
+
    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
    % make trigger rel explicit via time  
    % note the split: reference prior/next only for inductive case
@@ -33,6 +43,9 @@ uctc_flowlog : THEORY
       OR (EXISTS (SWX: SWITCH): INPROBE(NOW, SW1, SWX) AND uctc(NOW-1,SWX,SW2)) 
       OR (EXISTS (SWX: SWITCH): uctc(NOW-1,SW1,SWX) AND INPROBE(NOW, SWX, SW2))
       ))
+
+
+  % only inductive for prior state reference
       
 
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -43,13 +56,6 @@ uctc_flowlog : THEORY
   realconns((SW1: SWITCH), (SW2: SWITCH)): bool =
     EXISTS (T:nat): INPROBE(T, SW1, SW2)    
 
-% easier inductive
-%  realconnsat((T:nat), (SW1: SWITCH), (SW2: SWITCH)): bool =
-%    EXISTS (S:nat): S <= T AND INPROBE(S, SW1, SW2)    
-
-  realconnsat((T:nat), (SW1: SWITCH), (SW2: SWITCH)): INDUCTIVE bool = 
-    INPROBE(T, SW1, SW2) OR (T > 0 AND realconnsat(T-1, SW1, SW2))
-
   % grind works by itself
   test1: THEOREM forall (SW1: SWITCH), (SW2: SWITCH) :
     realconns(SW1, SW2) IFF EXISTS(T:nat): INPROBE(T, SW1, SW2)
@@ -58,17 +64,18 @@ uctc_flowlog : THEORY
   test2: THEOREM forall (SW1: SWITCH), (SW2: SWITCH) :
     realconns(SW1, SW2) IMPLIES exists(T:nat) : uctc(T, SW1, SW2)
 
-  realtc((SW1: SWITCH), (SW2: SWITCH)): INDUCTIVE bool = 
-    ((realconns(SW1, SW2)) 
-      OR
-      (EXISTS (SWX: SWITCH): realconns(SW1, SWX) AND realtc(SWX,SW2))) 
+%  realtc((SW1: SWITCH), (SW2: SWITCH)): INDUCTIVE bool = 
+%    ((realconns(SW1, SW2)) 
+%      OR
+%      (EXISTS (SWX: SWITCH): realconns(SW1, SWX) AND realtc(SWX,SW2))) 
     
   %% Generalized real TC to use the edges given "so far"
-  %% ...Realty Cat? 
   realtcat((T: nat), (SW1: SWITCH), (SW2: SWITCH)): INDUCTIVE bool =    
-    ((realconnsat(T, SW1, SW2)) 
-      OR (T > 0 AND realtcat(T-1, SW1, SW2))
-      OR (EXISTS (SWX: SWITCH): T > 0 AND realconnsat(T, SW1, SWX) AND realtcat(T-1, SWX,SW2))) 
+         INPROBE(T, SW1, SW2) % fresh arrival length=1
+      OR (T > 0 AND realtcat(T-1, SW1, SW2)) % knew before (includes prior length=1)
+      OR (EXISTS (SWX: SWITCH): T > 0 AND realtcat(T, SW1, SWX) AND realtcat(T-1, SWX,SW2))
+
+
     % note the T-1 in final case. easy to forget.
 
   all_edges_symmetric: AXIOM 
@@ -77,32 +84,34 @@ uctc_flowlog : THEORY
         INPROBE(T2, SW2, SW1)
    
 
-  equiv1: THEOREM FORALL (SW1: SWITCH), (SW2: SWITCH), (ENDTIME: nat) :
-    ENDSBY(ENDTIME) and realtc(SW1, SW2) IMPLIES uctc(ENDTIME, SW1, SW2)
+%  equiv1: THEOREM FORALL (SW1: SWITCH), (SW2: SWITCH), (ENDTIME: nat) :
+%    ENDSBY(ENDTIME) and realtc(SW1, SW2) IMPLIES uctc(ENDTIME, SW1, SW2)
 
 
-  %% 15 subgoals for case 2 of 3? ugh
+  % PROVE SOMETHING STRONGER TO ASSIST PROOF: 
+  % At every time step, the real TC from edges so far contains the uctc.  
   equiv1_helperA: THEOREM FORALL (SW1: SWITCH), (SW2: SWITCH), (T: nat) :
    realtcat(T, SW1, SW2) IMPLIES uctc(T, SW1, SW2)
 
+% is this truly an "easy property", then? 
 
 
   % flatten, inst at T!1
-  equiv2_helperA: THEOREM FORALL (SW1: SWITCH), (SW2: SWITCH), (T:nat) :
-    INPROBE(T, SW1, SW2) IMPLIES realtc(SW1, SW2)
+  %equiv2_helperA: THEOREM FORALL (SW1: SWITCH), (SW2: SWITCH), (T:nat) :
+  %  INPROBE(T, SW1, SW2) IMPLIES realtc(SW1, SW2)
   % same as A, but need to introduce lemma all_edges_symmetric and then grind
-  equiv2_helperB: THEOREM FORALL (SW1: SWITCH), (SW2: SWITCH), (T:nat):
-    INPROBE(T, SW1, SW2) IMPLIES realtc(SW2, SW1)
+  %equiv2_helperB: THEOREM FORALL (SW1: SWITCH), (SW2: SWITCH), (T:nat):
+  %  INPROBE(T, SW1, SW2) IMPLIES realtc(SW2, SW1)
 
   % similar to above
-  equiv2_helperC: THEOREM FORALL (SW1: SWITCH), (SW2: SWITCH), (T1,T2,T3:nat), (SWX: SWITCH):
-    INPROBE(T1, SW1, SWX) and INPROBE(T2,SWX,SW2)  IMPLIES realtc(SW1, SW2)
+  %equiv2_helperC: THEOREM FORALL (SW1: SWITCH), (SW2: SWITCH), (T1,T2,T3:nat), (SWX: SWITCH):
+  %  INPROBE(T1, SW1, SWX) and INPROBE(T2,SWX,SW2)  IMPLIES realtc(SW1, SW2)
 
   
   % needs induction. (also needs the axiom).
   % but how to get it the induction it needs?
-  equiv2: THEOREM FORALL (SW1: SWITCH), (SW2: SWITCH), (ENDTIME: nat) :
-    ENDSBY(ENDTIME) AND uctc(ENDTIME, SW1, SW2) IMPLIES realtc(SW1, SW2)
+  %equiv2: THEOREM FORALL (SW1: SWITCH), (SW2: SWITCH), (ENDTIME: nat) :
+  %  ENDSBY(ENDTIME) AND uctc(ENDTIME, SW1, SW2) IMPLIES realtc(SW1, SW2)
 
     
   END uctc_flowlog
