@@ -139,6 +139,61 @@ consistency: THEOREM
 % how would we do this in coq?
 
 
+% Need to model the network state now, don't we? 
+
+
+% property 2: pres. connectivity (pkt arrives at X, will get to its destination)
+
+% property 3: no loops
+
+% property 4: eventually never flood (quiescence?)
+
+
+%%%%
+% CAN'T use EVpacket to "store" network state.
+
+% arbitrary topology
+topo ( (t, sw1, pt1, sw2, pt2: nat) ): bool
+
+% relation to hold packets currently on network
+NSpackets( (t: nat), (p: PACKET) ): bool
+
+%axiom: "what's in EVpacket is a subset of NSpackets" (paired with single_packet, means selection of 1 pkt)
+network_packet1: AXIOM forall (t: nat), (pkt: PACKET):
+  EVpacket(t, pkt) implies NSpackets(t, pkt)
+
+%axiom: "if something isn't taken care of, it can't just vanish"
+network_packet2: AXIOM forall (t, t2: nat), (pkt: PACKET):
+  NSpackets(t, pkt) and not EVpacket(t, pkt) implies NSpackets(t+1, pkt)
+
+%axiom: "NSpackets includes prior state's forward"
+network_forwarding: AXIOM forall (t: nat), (pkt: PACKET):
+  forward(t, pkt) implies NSpackets(t+1, pkt)
+
+network_one_initial_only: AXIOM 
+  (exists (init: PACKET): NSpackets(0, init))
+  and (forall (p1, p2: PACKET) : NSpackets(0, p1) and NSpackets(0, p2) implies p1 = p2)
+  and (forall (t: nat), (pkt: PACKET) : forward(t, pkt) iff NSpackets(t+1, pkt))
+
+%axiom: "The topology is connected"
+%network_connected: AXIOM 
+%% or just explicit connections for now?
+
+% packet is never repeated at same location
+% (not necessarily true, even with network_one_initial_only)
+norepeats: THEOREM forall (pkt: PACKET) (t, t2: nat):
+  NSpackets(t, pkt) and t2 > t implies not NSpackets(t2, pkt)
+
+% for every packet that appears, there exists some time after which it never appears again.
+noloops: THEOREM forall (pkt: PACKET) (t: nat):
+  NSpackets(t, pkt) implies 
+    (exists (t2: nat): t2 > t and forall (t3: nat): (t3 > t2 implies not NSpackets(t3, pkt)))
+
+
+% Is there any issue with the fact that these axioms aren't assumed unless invoked?
+
+
+
   END maclearning_test
 
 % induct just splits into 2 cases and rewrites: t=0, forall j: a(j) implies a(j+1)
