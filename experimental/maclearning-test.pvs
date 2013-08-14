@@ -166,6 +166,9 @@ network_packet1: AXIOM forall (t: nat), (pkt: PACKET):
 network_packet2: AXIOM forall (t, t2: nat), (pkt: PACKET):
   NSpackets(t, pkt) and not EVpacket(t, pkt) implies NSpackets(t+1, pkt)
 
+% WRONG: not applying topo. 
+% WRONG: no restriction on topo length!
+
 %axiom: "NSpackets includes prior state's forward"
 network_forwarding: AXIOM forall (t: nat), (pkt: PACKET):
   forward(t, pkt) implies NSpackets(t+1, pkt)
