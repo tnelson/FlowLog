@@ -1,8 +1,16 @@
 
 
+
+\newcommand{\alloyelt}[1]{{\tt #1}}
+\newcommand{\alloyterm}[1]{{\tt #1}}
+\newcommand{\alloycmd}[1]{{\bf #1}}
+
+
 \section{Surface Syntax}
 
 A Flowlog program consists of a pair $(R, L)$ 
+
+\mynote{not up to date! concrete syntax still under discussion}
 
 Together the \fl{incoming}, \fl{outgoing}, and \fl{remote}
 declarations define an \emph{interface} for the module.
@@ -11,32 +19,6 @@ declarations define an \emph{interface} for the module.
 
 \begin{flowlog}
 
-  incoming stolen_laptop_report {mac} -> stolen_laptop_report(mac);
-  incoming stolen_laptop_cancel {mac} -> stolen_laptop_cancel(mac);
-  incoming timer_expired {id} -> timer_expired(id);
-  incoming builtin packet -> EVpacket
-  incoming builtin switchToPort -> EVswitchToPort
-
-  outgoing builtin forward <- DOforward
-  outgoing builtin emit <- DOemit
-  
-  outgoing stolen_laptop_seen {mac, swid, time} @ 127.0.0.1 5050 
-    <- DOnotify_police(mac, swid, time);
-  outgoing start_timer {seconds, id} @ 127.0.0.1 9091 
-    <- DOnotify_start_timer(seconds, id);
-
-  query time { X } @ 127.0.0.1 9091 <-> 
-    GETtime(X); 
-  query getroute {const dlDst, const swid, outpt} <-> 
-    GETroute(dlDst, swid, outpt);
-
-  query add {const X, const Y, Z} @ 127.0.0.1 1234 <-> 
-    GETadd(X, Y, Z); 
-  query sub {const X, const Y, Z} @ 127.0.0.1 1234 <-> 
-    GETsubtr(X, Y, Z); 
-
-  // Declare these to facilitate easier add/removal
-  table stolen {mac};
 
 \end{flowlog}
 
@@ -55,8 +37,8 @@ declarations define an \emph{interface} for the module.
 
 \section{Core Syntax}
 
-A desugared Flowlog program is a pair $(D, L)$ in which $D$ is a set
-of data-definitions and $L$ is a Datalog-with-negation program with
+A desugared Flowlog program is a pair $(R, L)$ in which $R$ is a set
+of reactive pipes and $L$ is a Datalog-with-negation program with
 the following additional syntactic requirements:
 
 \begin{enumerate}
@@ -89,16 +71,9 @@ additional limitations.
   +stolen(T, mac) :- stolen_laptop_report(T, rep), rep.mac = mac; // <-- collapse or expand types?
   -stolen(T, mac) :- stolen_laptop_cancel(T, rep), rep.mac = mac; 
 
-//action BBpolice(pkt : packet, found: stolen_laptop_found) :- 
-//  stolen(pkt.dlSrc),
-//  found.mac = pkt.dlSrc,
-//  found.swid = pkt.locSw,
-//  BBTimer.time(found.time),
-//  not ratelim(found.mac);
-
-stolen_laptop_found(T, mac, swid, time) :-
-  packetIn(T, pkt),
-  stolen(T, pkt,dlSrc), not ratelim(T, mac),
+stolen_laptop_found(T, mac, swid, time) :-
+  packetIn(T, pkt),
+  stolen(T, pkt,dlSrc), not ratelim(T, mac),
   mac = pkt.dlSrc, swid = pkt.locSw, get_time(T, time);
 \end{flowlog}
 
@@ -114,8 +89,14 @@ is finite. Indeed, the inclusion of a $successor$ relation seems to
 imply otherwise. 
 
 
+\mynote{prove that the runtime only needs to be aware of the current
+  state, maintained by asserts and retracts. this would let us retain
+  pieces of the current (space limited) implementation }
 
-
+\mynote{partial evaluation? how would this turn into flow tables? what
+  happens to this in the presence of BB queries? What if an external
+  notification changes the state, and then there's a delay before the
+  new table entries appear?}
 
 
 
