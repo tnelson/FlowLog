@@ -33,8 +33,15 @@ sig EVtimerexpired extends Event
                   { id: one TimerID }
 
 // State for MAC learning. Policy is induced from this.
-abstract sig State { maclearned: Switch -> PhysicalPort -> MacAddr,
+// (Don't make this abstract, or emptyState will be the only valid state.)
+sig State { maclearned: Switch -> PhysicalPort -> MacAddr,
                                   switchhasport: Switch -> PhysicalPort }
+
+one sig emptyState extends State {} 
+fact emptyIsEmpty {
+	(no emptyState.maclearned) and 
+	(no emptyState.switchhasport)
+}
 
 // Prevent garbage results: extensional equivalence
 fact StateExtensional { all st1, st2: State | st1.maclearned = st2.maclearned implies st1 = st2}
@@ -55,6 +62,9 @@ fact EVtimerexpiredExtensional { all ev1, ev2: EVtimerexpired | ev1.id = ev2.id 
 pred minusLearned [st: State, ev: Event, sw: Switch, pt: PhysicalPort, mac: MacAddr] {
 // !!! Safe?
 	ev.locSw = sw && mac = ev.dlSrc
+
+// For checking consistency check
+// no st // FOR TEST ONLY: FALSE
 }
 
 // AUTO-GENERATED
@@ -120,6 +130,9 @@ pred outputPolicy2[st: State, ev: Event, newev: Event] {
 
 ////////////////////////////////
 // CHANGE IMPACT
+// (1) SSSH is still new b/c state+behavior together
+// (2) verification of inductive step in state properties (e.g. consistency)
+// (3) verification of inductive step in behavioral properties ???
 ////////////////////////////////
 
 // Single state, single hop: 
@@ -140,20 +153,45 @@ pred changeImpactSSSH[] {
 // !!! MORE: function from st,ev -> st violates OSEPL.
 
 
-run { changeImpactSSSH[] } 
+run changeImpactSSSH for 5
+
+// Question + TODO: can prove *state* invariants "flatly", right? Yes:
+// inductive step: assumpt(st1) and transition(st1, st2) implies assumpt(st2)
+// base step: assumpt(empty-state)
+
+// so for instance, we may have bad states that send packets bad places, but still be
+// able to prove that no such state is reachable via the above (which would show that 
+// reachable states were a *subset* of the valid states)
+
+//////////////////////////////////////////////////////////////////////////////////
+////// Easy one: consistency:
+// (!!! TODO: check OSEPL counts) 
+
+// (to check this, make minusLearned never true)
+
+pred consistentMAC[st: State] {
+	all sw: Switch, pt, pt2: PhysicalPort, mac: MacAddr | 
+		(sw -> pt -> mac) in st.maclearned && (sw -> pt2 -> mac) in st.maclearned
+		implies pt = pt2
+}
+assert ConsistencyOfMAC {
+	// Inductive
+	all st: State, st2: State, ev: Event | 
+		(consistentMAC[st] && transitionFunction[st, ev, st2]) implies consistentMAC[st2]
+    // Base
+	consistentMAC[emptyState]		
+}
+check ConsistencyOfMAC for 4 but 3 State // needs to be 3 (empty + pre + post)
+//////////////////////////////////////////////////////////////////////////////////
 
 
-// Question: Is single-packet CIA valuable?
-// Question: What complications/advantages from trace CIA?
+//////////////////////////////////////////////////////////////////////////////////
 
-// Question: What is the other "policy" (read: program) to compare in a trace situation?
-// (This is what led to the different-kinds-of-CIA question.)
-// Since we are change-impact-analyzing a program, 
-//   the changes can be in the packet handling or in the state changes.
+
+
+//////////////////////////////////////////////////////////////////////////////////
 
 // Question + TODO: topology!
 // What happens with this packet as it surges through the network? 
 // (Don't need multiple "initial" packets to need traces.
 //    Controller state shifts as even one packet moves through, touching multiple switches.)
-
-
