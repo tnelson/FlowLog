@@ -26,5 +26,6 @@ pred NaiveTC {
 
 // Last state's TC is the real TC
 assert Test { NaiveTC[] implies last.tc = ^succ }
-check Test for 5
+// check Test but 
+check Test for 6 but 6 Time
 

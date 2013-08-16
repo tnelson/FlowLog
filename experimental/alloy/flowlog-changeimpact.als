@@ -1,145 +1,147 @@
 module NetCore/MACCIA
 
-// This module is about change-impact over mac-learning. We have transition-functions,
-// so proper exploration of change-impact may require >1 such function. We want scenarios
-// that can have traces, so we need ordering. Since we can multiple traces being compared,
-// we need multiple orderings:
-open util/ordering [StateF1] as ord1
-open util/ordering [StateF2] as ord2
-
-// TN: Attempting to understand how change impact works in this domain
-//  and also how it connects with a stateful idiom like mac learning.
-
-// Arjun's reframe didn't include modification, 
-// but that seems critical, so added it in similar-to-Haskell way.
-
-// This model uses a lot of set-comprehension. Can be slow?
-
-// Note: I'm worried that MAC-learn and NAT will be easy to model, but
-// rate-limiting will not be, due to high integers.
-/////////////////////////////////////////////////////////////////////////////////////////////////
+// Don't worry about state reachability/comparing traces for now. Just flat change-impact:
 
 // Vastly oversimplifying the structure of packet-headers to 
 // keep the model clean. Only using the fields that I need. 
 // Also using one instead of lone to simplify
 
+////////////////////////////////////////////////////////////////////////////////////////////////
+// TYPES
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+sig Event {}
+
 sig Switch {}
 sig MacAddr {}
-sig Packet { srcMAC: one MacAddr,
-                     destMAC: one MacAddr}
-sig Loc { switch: one Switch,
-               port: one PhysicalPort}
-
-// Removed AllPorts -- want to be able to say "broadcast EXCEPT on incoming port"?
-// Equivalent is to leave port unconstrained in fwd action
-// TODO: Discuss this drop w/ AG
+sig IPAddr {}
+sig EthTyp {}
 sig PhysicalPort {} 
+sig NwProtocol {}
+sig EVpacket extends Event
+                  { locSw: one Switch,
+                     locPt: one PhysicalPort,
+                     dlSrc: one MacAddr,
+                     dlDst: one MacAddr,
+                     dlTyp: one EthTyp,
+                     nwSrc: one IPAddr,
+                     nwDst: one IPAddr,
+                     nwProto: one NwProtocol }
 
-abstract sig Action {}
-sig Forward extends Action {to: some PhysicalPort, 
-                                               modified: one Packet}
-// Note: codebase implies that this can't modify before sending?
-one sig Controller extends Action {} 
-
-sig LocPacket { packet: one Packet,
-                          loc: one Loc }
-
-////////////////////////////////////////////////////////////////////////////////////////////////
-// STATE TRANSITIONS
-////////////////////////////////////////////////////////////////////////////////////////////////
+sig TimerID {}
+sig EVtimerexpired extends Event
+                  { id: one TimerID }
 
 // State for MAC learning. Policy is induced from this.
-abstract sig State { maclearned: Switch -> PhysicalPort -> MacAddr}
-// Note "in" not "extends": allows overlap, which is vital.
-sig StateF1 in State {}
-sig StateF2 in State {}
+abstract sig State { maclearned: Switch -> PhysicalPort -> MacAddr,
+                                  switchhasport: Switch -> PhysicalPort }
+
+// Prevent garbage results: extensional equivalence
+fact StateExtensional { all st1, st2: State | st1.maclearned = st2.maclearned implies st1 = st2}
+fact EVpacketExtensional { all pkt1, pkt2: EVpacket | 
+        (pkt1.locSw = pkt2.locSw && pkt1.dlSrc = pkt2.dlSrc && pkt1.dlDst = pkt2.dlDst &&
+         pkt1.dlTyp = pkt2.dlTyp && pkt1.nwSrc = pkt2.nwSrc && pkt1.nwDst = pkt2.nwDst &&
+         pkt1.nwProto = pkt2.nwProto && pkt1.locPt = pkt2.locPt) implies pkt1=pkt2}
+fact EVtimerexpiredExtensional { all ev1, ev2: EVtimerexpired | ev1.id = ev2.id implies ev1 = ev2 } 
+
+////////////////////////////////////////////////////////////////////////////////////////////////
+// PROGRAM 1: STATE TRANSITIONS AND POLICY
+////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Note that there are TWO transition functions here, to examine how change-impact
 // works over state change. In a more basic model, we'd only need one.
 
-pred transitionFunction [st: State, pkt: LocPacket, st': State] {
-  // FRAME
+// AUTO-GENERATED
+pred minusLearned [st: State, ev: Event, sw: Switch, pt: PhysicalPort, mac: MacAddr] {
+// !!! Safe?
+	ev.locSw = sw && mac = ev.dlSrc
+}
+
+// AUTO-GENERATED
+pred plusLearned [st: State, ev: Event, sw: Switch, pt: PhysicalPort, mac: MacAddr] {
+	ev.locSw = sw && ev.locPt = pt && ev.dlSrc = mac
+}
+
+pred transitionFunction [st: State, ev: Event, st': State] {
+  // FRAME (BOILERPLATE)
   st'.maclearned = st.maclearned
-  // MAC-LEARNING
-              - (pkt.loc.switch -> PhysicalPort -> pkt.packet.srcMAC)
-              +(pkt.loc.switch -> pkt.loc.port -> pkt.packet.srcMAC)
+  // ONE LINE FOR EACH STATE RELATION
+  	 - { sw: Switch, pt: PhysicalPort, mac: MacAddr | minusLearned[st, ev, sw, pt, mac] } 
+     +{ sw: Switch, pt: PhysicalPort, mac: MacAddr |  plusLearned[st, ev, sw, pt, mac] }                
 } 
 
-pred transitionFunction2 [st: State, pkt: LocPacket, st': State] {
-  transitionFunction[st, pkt, st'] // no difference
-}
-
-// One unique initial state, and the orderings start there.
-fact InitialState {
-  no ord1/first.maclearned
-  no ord2/first.maclearned
-  one { st: State | no st.maclearned }
-}
-
-// We need this, lest unbounded-universals eat our results. Even more: can mess up change-impact if not.
-fact tracesSameLength {
-	#ord1/next == #ord2/next
-}
-
-// Connect the states. Notice that this formalization allows
-// Packets to be "re-used", in that they represent the logical
-// packet header, not actual instances of packets in the multiset sense.
-fact EnforceTransitions {
-  // Grouped together because need to match trigger packets. But beware unbounded-universals:
-  all st: State, st1': st.ord1/next, st2': st.ord2/next {
-	some samepkt: LocPacket | transitionFunction[st, samepkt, st1'] and 
-                                        	   transitionFunction2[st, samepkt, st2']
-  }
-}
-
-
-////////////////////////////////////////////////////////////////////////////////////////////////
-// PACKET-HANDLING POLICY
-////////////////////////////////////////////////////////////////////////////////////////////////
-
-// Helper functions that generate policy from state
-// (use policyAtState to produce the top-level policy) 
-
-fun routePolicy(st: State): (LocPacket -> Action) {
+pred outputPolicy1[st: State, ev: Event, newev: Event] {
+  // RULE 1
   // If known, send only to that port.
-  { p : LocPacket, act: Forward |  (p.loc.switch -> act.to -> p.packet.destMAC) in st.maclearned &&
-                                                         act.modified == p.packet }
+	(
+		(ev.locSw -> newev.locPt -> ev.dlDst) in st.maclearned &&
+  		newev.locSw = ev.locSw && newev.dlSrc = ev.dlSrc && newev.dlDst = ev.dlDst &&
+         newev.dlTyp = ev.dlTyp && newev.nwSrc = ev.nwSrc && newev.nwDst = ev.nwDst &&
+         newev.nwProto = ev.nwProto
+	)
+ 	or
+  // (OR) RULE 2
   // Otherwise, flood
-  +
-  { p : LocPacket, act: Forward |  (p.loc.switch -> PhysicalPort -> p.packet.destMAC) not in st.maclearned &&
-                                                         act.modified == p.packet //&&
-                                                         //act.to == AllPorts 
-  }
-}
-
-fun routePolicy2(st: State): (LocPacket -> Action) {
-// Intending to not use AllPorts, but instead all ports but arrival port.
-// But there is a bug: if the learned MAC really does point back to the same port, traffic 
-//   will be dropped entirely!
-  { p: LocPacket, act: Forward | (p -> act) in routePolicy[st] 
-                                                and act.to != p.loc.port} 
-
+	(
+		(ev.locSw -> PhysicalPort -> ev.dlDst) not in st.maclearned &&
+		newev.locPt != ev.locPt && (ev.locSw-> newev.locPt) in st.switchhasport &&
+  		newev.locSw = ev.locSw && newev.dlSrc = ev.dlSrc && newev.dlDst = ev.dlDst &&
+         newev.dlTyp = ev.dlTyp && newev.nwSrc = ev.nwSrc && newev.nwDst = ev.nwDst &&
+         newev.nwProto = ev.nwProto
+	)
 }
 
 
-// Note the VITAL use of negation here! Need to be able to say:
-// "If I have not learned this, keep trying to learn it."
-fun learnPolicy(st: State): (LocPacket -> Action) {
-  { p : LocPacket | (p.loc.switch -> p.loc.port -> p.packet.srcMAC) not in st.maclearned }-> Controller
+////////////////////////////////////////////////////////////////////////////////////////////////
+// PROGRAM 2: STATE TRANSITIONS AND POLICY
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+pred transitionFunction2 [st: State, ev: Event, st': State] {
+  transitionFunction[st, ev, st'] // no difference
 }
 
-fun policyAtState(st: State): (LocPacket -> Action) {
-  routePolicy[st] + learnPolicy[st]
+pred outputPolicy2[st: State, ev: Event, newev: Event] {
+	(
+		(ev.locSw -> newev.locPt -> ev.dlDst) in st.maclearned &&
+  		newev.locSw = ev.locSw && newev.dlSrc = ev.dlSrc && newev.dlDst = ev.dlDst &&
+         newev.dlTyp = ev.dlTyp && newev.nwSrc = ev.nwSrc && newev.nwDst = ev.nwDst &&
+         newev.nwProto = ev.nwProto
+	)
+ 	or
+	(
+		(ev.locSw -> PhysicalPort -> ev.dlDst) not in st.maclearned &&
+		newev.locPt != ev.locPt && (ev.locSw -> newev.locPt) in st.switchhasport &&
+  		newev.locSw = ev.locSw && newev.dlSrc = ev.dlSrc && newev.dlDst = ev.dlDst &&
+         newev.dlTyp = ev.dlTyp && newev.nwSrc = ev.nwSrc && newev.nwDst = ev.nwDst &&
+         newev.nwProto = ev.nwProto
+	)
+    
 }
-fun policyAtState2(st: State): (LocPacket -> Action) {
-  routePolicy2[st] + learnPolicy[st]
-}
 
-
-
-////////////////////////////////
 ////////////////////////////////
 // CHANGE IMPACT
+////////////////////////////////
+
+// Single state, single hop: 
+// "On what packets and states will these two policies disagree?"
+// This is "standard" Margrave change-impact, with the state predicate(s) as EDBs
+// (But more complex because looking for change in new state as well as change in output)
+pred changeImpactSSSH[] {
+    some ev: Event, st: State | 
+		(some newst1, newst2: State | transitionFunction[st, ev, newst1] and 
+                                                            transitionFunction2[st, ev, newst2] and
+                                                            newst1 != newst2) 
+         or
+		some outev : Event |     (outputPolicy1[st, ev, outev] and not outputPolicy2[st, ev, outev])
+                                            or (outputPolicy2[st, ev, outev] and not outputPolicy1[st, ev, outev])
+}
+
+// !!! Very slow re: FOL. Try to rewrite as relational.
+// !!! MORE: function from st,ev -> st violates OSEPL.
+
+
+run { changeImpactSSSH[] } 
+
 
 // Question: Is single-packet CIA valuable?
 // Question: What complications/advantages from trace CIA?
@@ -155,30 +157,3 @@ fun policyAtState2(st: State): (LocPacket -> Action) {
 //    Controller state shifts as even one packet moves through, touching multiple switches.)
 
 
-// Single state, single hop: 
-// "On what packets and states will these two policies disagree?"
-// This is "standard" Margrave change-impact, with the state predicate(s) as EDBs
-pred changeImpactSSSH[pkt: LocPacket, st: State] {
-	some act: Action | (pkt ->act) in ((policyAtState[st] + policyAtState2[st]) - 
-                                                      (policyAtState[st] & policyAtState2[st]))
-}
-
-// Trace, single hop:
-// "On what traces will these two policies disagree re: the final step?"
-// Final step may be packet disposition or state change.
-pred changeImpactTRSH[] {
-	// Case 1: packet disposition changed between policies on LAST STATE
-	(some pkt : LocPacket | changeImpactSSSH[pkt, ord1/last]) 
-	or
-	// Case 2: state transition changed at very end:
-	let st1 = ord1/last, st2 = ord2/last | (st1 != st2) 
-
-// ??? Is it safe to use "some" to extract "a" packet between states? 
-// ??? We've already used it above in the axioms. Risk we could get 2 different packets here? (does it even matter?)
-
-}
-
-/////////////////////
-//run { #State > 1} for 5 but 2 State
-//run { #State > 1 and some pkt: LocPacket, st: State | changeImpactSSSH[pkt, st] } for 5 but 2 State
-run { #State > 1 and changeImpactTRSH[] } for 5 but 2 State
