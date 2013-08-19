@@ -192,6 +192,24 @@ check ConsistencyOfMAC for 4 but 3 State // needs to be 3 (empty + pre + post)
 
 //////////////////////////////////////////////////////////////////////////////////
 
+// if non-flooded, then redux in distance:
+pred redux[st: State] {
+	all p,p2: Packet | rrule1[p, st, p2] implies 
+		dist[p2.loc, p2.dlDst] < dist[p.loc, p.dlDst]
+}
+assert directedIsDirectedRight {
+	all st: State, st2: State, ev: Event | 
+		(redux[st] && transitionFunction[st, ev, st2]) implies redux[st2]
+    // The base case is kinda useless here, because never have directed fwd in this state
+    // (antecedent is trivially true)
+	redux[emptyState]		
+}
+check directedIsDirectedRight for 4 but 3 State // needs to be 3 (empty + pre + post)
+
+// if doing flooded, need exists (SOME packet gets closer) and thus run up
+// against unbounded universal quantifier
+
+
 
 
 //////////////////////////////////////////////////////////////////////////////////
