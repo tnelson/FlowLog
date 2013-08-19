@@ -80,25 +80,30 @@ pred transitionFunction [st: State, ev: Event, st': State] {
      +{ sw: Switch, pt: PhysicalPort, mac: MacAddr |  plusLearned[st, ev, sw, pt, mac] }                
 } 
 
-pred outputPolicy1[st: State, ev: Event, newev: Event] {
-  // RULE 1
-  // If known, send only to that port.
-	(
+pred rrule1[st: State, ev: Event, newev: Event] {
+// RULE 1
+// If known, send only to that port.
 		(ev.locSw -> newev.locPt -> ev.dlDst) in st.maclearned &&
   		newev.locSw = ev.locSw && newev.dlSrc = ev.dlSrc && newev.dlDst = ev.dlDst &&
          newev.dlTyp = ev.dlTyp && newev.nwSrc = ev.nwSrc && newev.nwDst = ev.nwDst &&
          newev.nwProto = ev.nwProto
-	)
- 	or
+}
+
+pred rrule2[st: State, ev: Event, newev: Event] {
   // (OR) RULE 2
   // Otherwise, flood
-	(
 		(ev.locSw -> PhysicalPort -> ev.dlDst) not in st.maclearned &&
 		newev.locPt != ev.locPt && (ev.locSw-> newev.locPt) in st.switchhasport &&
   		newev.locSw = ev.locSw && newev.dlSrc = ev.dlSrc && newev.dlDst = ev.dlDst &&
          newev.dlTyp = ev.dlTyp && newev.nwSrc = ev.nwSrc && newev.nwDst = ev.nwDst &&
          newev.nwProto = ev.nwProto
-	)
+}
+
+pred outputPolicy1[st: State, ev: Event, newev: Event] {
+
+// can't just say rrule1 + rrule2
+rrule1[st, ev, newev] or rrule2[st, ev, newev]
+  
 }
 
 
@@ -149,8 +154,18 @@ pred changeImpactSSSH[] {
                                             or (outputPolicy2[st, ev, outev] and not outputPolicy1[st, ev, outev])
 }
 
-// !!! Very slow re: FOL. Try to rewrite as relational.
-// !!! MORE: function from st,ev -> st violates OSEPL.
+// TODO: Alloy is usually slower via FOL. Try to rewrite as relational?
+
+// BEWARE: Don't explicitly say that there is a function from (st,ev)->st. 
+//   as that will violate OSEPL. "transitionFunction" is a misnomer. It's just a 
+//   relation here, and is not constrained to be total. 
+
+// However, totality of transition (but not [naively?] uniqueness) can be checked via OSEPL, since 
+// assert(all st, all ev, exists st)
+// becomes pred(exists st, exists ev, all st).
+// but
+// assert(all st, all ev, exists st, all st)
+// becomes pred(exists st, exists ev, all st, exists st).
 
 
 run changeImpactSSSH for 5
@@ -192,10 +207,29 @@ check ConsistencyOfMAC for 4 but 3 State // needs to be 3 (empty + pre + post)
 
 //////////////////////////////////////////////////////////////////////////////////
 
+// How far? This requires an (abstract) topology
+// Note: a location here MUST have both switch and port. Port IDs are shared.
+one sig Topo {
+	wires: (Switch -> PhysicalPort) -> (Switch -> PhysicalPort),
+	endpoints: Switch -> PhysicalPort -> MacAddr
+}
+{
+	all sw,sw2: Switch, p,p2: PhysicalPort, m: MacAddr |
+		(sw->p->m in endpoints) iff not (sw->p->sw2->p2 in wires)
+}
+
+pred dist[s: Switch, m: MacAddr]
+{
+	// Issue with TC: need a binary relation. But wires is 4-ary in order to
+	// prevent "loc" from being a sig (and thus capping locations at k, rather than k^2)
+// test
+//	s -> m in ^wires
+}
+
 // if non-flooded, then redux in distance:
 pred redux[st: State] {
-	all p,p2: Packet | rrule1[p, st, p2] implies 
-		dist[p2.loc, p2.dlDst] < dist[p.loc, p.dlDst]
+	all p,p2: EVpacket | rrule1[st, p, p2] implies 
+		dist[p2.locSw, p2.dlDst] < dist[p.loc, p.dlDst]
 }
 assert directedIsDirectedRight {
 	all st: State, st2: State, ev: Event | 
