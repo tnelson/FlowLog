@@ -1,75 +1,67 @@
 
-The big question: 
-
-Do tuples in incoming rels contain events or raw values?
-Do tuples in outgoing rels contain events or raw values?
-
-Answer seems to be events for incoming, raws for outgoing---but
-packets are the exception. So two ambiguities...
-
-
-
 Split for at least two reasons:
 
 (1) Separation of concerns;
 (2) Support virtualization better. 
 
+
+
+// incoming relations are always unary and can hold complex values. 
+// outgoing relations can hold either complex or raw values, and need not be unary
+// state relations hold raw values and need not be unary
+
+
 //////////
 // Declarations and interface
 //////////
 
-TABLE stolen(mac); 
-REMOTE TABLE get_time(t); // reactive part says how to handle
+// EVENT, OUTGOING, etc. for packet handling is all built in.
 
-// Outgoing relations 
-OUTGOING notify-police(mac, swid, time);
+EVENT stolen-laptop-report {mac};
+EVENT stolen-laptop-cancel {mac};
+EVENT stolen-laptop-found {mac, swid, time};
 
-// Incoming relations always unary
-INCOMING laptop-stolen;
-INCOMING laptop-recovered;
+TABLE stolen(int48); 
+REMOTE TABLE get_time(int); 
+
+OUTGOING notify-police(int48, int, int);
+INCOMING laptop-stolen(stolen-laptop-report); 
+INCOMING laptop-recovered(stolen-laptop-cancel);
 
 //////////
 // Reactive
 //////////
 
-INCOMING stolen-laptop-report THEN
-  INSERT INTO laptop-stolen;
-INCOMING stolen-laptop-cancel THEN
-  INSERT INTO laptop-recovered;
+INCOMING stolen-laptop-report THEN INSERT INTO laptop-stolen;
+INCOMING stolen-laptop-cancel THEN INSERT INTO laptop-recovered;
 
 OUTGOING notify-police(mac, swid, t) THEN
-  SEND EVENT stolen-laptop-found {mac=mac, swid=swid, time=t} 
+  SEND EVENT stolen-laptop-found {mac:=mac, swid:=swid, time:=t} 
   TO 127.0.0.1 5050;
 
 REMOTE TABLE get_time 
   FROM time AT 127.0.0.1 9091
   TIMEOUT 1 seconds;
 
-// Timeouts, etc. to be used to optimize 
-// (especially re: proactive compilation!)
+// To do proactive compilation well, we need to optimize. Hence timeout above.
 // Default: must refresh every evaluation
-// TIMEOUT: must refresh every k seconds
-// PURE: never have to refresh
-// We could have a "WILL-CALL" too, allowing the BB to say when its state
-// has changed. But that'd have to be global, overeager, and might be
-// too much traffic. 
+// TIMEOUT: must refresh every k seconds (so can last across evaluations)
+// PURE: never have to refresh (used for addition, etc)
 
 //////////
 // Rules
 //////////
 
-ON laptop-recovered can:
-  DELETE (can.mac) FROM stolen; // no need for WHERE clause here
+ON laptop-recovered(rec):
+  DELETE (rec.mac) FROM stolen;
 
-ON laptop-stolen rep:
-  INSERT (can.mac) INTO stolen;
+ON laptop-stolen(stolen):
+  INSERT (stolen.mac) INTO stolen;
 
-ON packet pkt: 
-  FORWARD new WHERE 
-    Mac-learning.FORWARD(new) ON pkt;  // this syntax needs work
+ON packet-in(pkt): 
+  DO forward(new) WHERE 
+    Mac-learning.forward(new) ON pkt;
 
-  // Implicit *3*-way join here (stolen, get_time, pkt)
-  // Should DO just become INSERT as in other rules?
   DO notify-police(pkt.dlSrc, pkt.locSw, time) WHERE 
     stolen(pkt.dlSrc) AND 
     get_time(time);

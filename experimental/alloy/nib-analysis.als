@@ -42,7 +42,10 @@ sig EVtimerexpired extends Event
 // Controller state for NIB
 sig State 
 { 
-	ucST: Switch -> PhysicalPort,
+	// (sw1, pt1) connected to (sw2, pt2) in the tree.
+	ucST: Switch -> Switch -> PhysicalPort -> PhysicalPort,
+
+	// True transitive-closure (no forced symmetry)
 	ucTC: Switch -> Switch
 }
 
@@ -74,35 +77,6 @@ fact EVtimerexpiredExtensional { all ev1, ev2: EVtimerexpired | ev1.id = ev2.id 
 
 // TODO: can we delete either of the symmetric cases?
 pred plus_ucTC[st: State, ev: EVprobe, sw1: Switch, sw2: Switch] {
-/*	(ev.locSw = sw2 and ev.srcSw = sw1)
-	or
-  	(ev.locSw = sw1 and ev.srcSw = sw2)
-
-	or
-	(ev.locSw->sw2 in st.ucTC and ev.srcSw = sw1)
-	or
-	(sw1->ev.srcSw in st.ucTC and ev.locSw = sw2)
-
-    // END original 4 rules
-
-	// MODIFICATION: 
-	or
-	(ev.srcSw->sw2 in st.ucTC and ev.locSw = sw1)
-	or
-	(sw1->ev.locSw in st.ucTC and ev.srcSw = sw2)
-
-	// Modification: each edge always causes 2 loops! (assuming symmetry)
-	(ev.locSw = sw2 and ev.locSw = sw1)
-	or
-  	(ev.srcSw = sw2 and ev.srcSw = sw1)
-
-	// heh, and one more pair that was missing! 
-	or
-	(sw1->ev.srcSw in st.ucTC and ev.locSw->sw2 in st.ucTC)
-	or 
-	(sw1->ev.locSw in st.ucTC and ev.srcSw->sw2 in st.ucTC)*/
-// above is force-symmetric TC
-
 	// There are four rules _required_ to do true stepwise TC:
 
 	// Base
@@ -115,14 +89,15 @@ pred plus_ucTC[st: State, ev: EVprobe, sw1: Switch, sw2: Switch] {
 	(sw1->ev.srcSw in st.ucTC and ev.locSw->sw2 in st.ucTC)
 
 	// The initial NIB program lacked the bridge rule.
-
 }
 
-// MODIFIED! 2nd rule to catch symmetric case, and stopped using TC
-pred plus_ucST[st: State, ev: EVprobe, sw: Switch, pt: PhysicalPort] {
+// MODIFIED! stopped using TC, and now complete path in one edge
+pred plus_ucST[st: State, ev: EVprobe, sw: Switch, sw2: Switch, pt: PhysicalPort, pt2: PhysicalPort] {
 //	not ev.srcSw->ev.locSw in st.ucTC and
-	no st.ucST[ev.srcSw] or no st.ucST[ev.locSw] 
-	((ev.srcSw = sw and ev.srcPt = pt) or (ev.locSw = sw and ev.locPt = pt))
+	(no st.ucST[ev.srcSw] and ev.srcSw = sw and ev.srcPt = pt and ev.locSw = sw2 and ev.locPt = pt2)
+//	or (no st.ucST[ev.locSw] and ev.locSw = sw and ev.locPt = pt and ev.srcSw = sw2 and ev.srcPt = pt2)
+	
+// rule blow-up if want to be fully symmetric
 }
 
 pred minus_ucTC[st: State, ev: EVprobe, sw: Switch, sw2: Switch] {
@@ -130,7 +105,7 @@ pred minus_ucTC[st: State, ev: EVprobe, sw: Switch, sw2: Switch] {
 	st != st
 }
 
-pred minus_ucST[st: State, ev: EVprobe, sw: Switch, pt: PhysicalPort] {
+pred minus_ucST[st: State, ev: EVprobe,  sw: Switch, sw2: Switch, pt: PhysicalPort, pt2: PhysicalPort] {
 	// EMPTY WOULD MEAN *TRUE*
 	st != st
 }
@@ -142,8 +117,8 @@ pred transitionFunction [st: State, ev: Event, st': State] {
   	 - { sw: Switch, sw2: Switch | minus_ucTC[st, ev, sw, sw2] } 
      +{ sw: Switch, sw2: Switch | plus_ucTC[st, ev, sw, sw2] }                
   st'.ucST = st.ucST
-  	 - { sw: Switch, pt: PhysicalPort | minus_ucST[st, ev, sw, pt] } 
-     +{ sw: Switch, pt: PhysicalPort | plus_ucST[st, ev, sw, pt] }      
+  	 - { sw: Switch, sw2: Switch, pt: PhysicalPort, pt2: PhysicalPort | minus_ucST[st, ev, sw, sw2, pt, pt2] } 
+     +{ sw: Switch, sw2: Switch, pt: PhysicalPort, pt2: PhysicalPort | plus_ucST[st, ev, sw, sw2, pt, pt2] }      
 } 
 
 // TODO: timer, finalization, resets
@@ -211,33 +186,77 @@ check isTCReallyTC for 0 but 6 Switch, 2 State, 1 Event,
 0 IPAddr, 0 EthTyp, 0 NwProtocol,
 0 TimerID, 0 EVtimerexpired, 0 EVpacket
 
+///////////////////////////
+
+assert spanningTreePreservedTree {
+	all st: State, st2: State, ev: EVprobe | 
+		transitionFunction[st, ev, st2] and some (st2.ucST - st.ucST) and wellFormedST[st2] implies
+// this breaks OSEPL when negated
+//		one (st2.ucST - st.ucST) and
+		let seenBefore = st.ucST.PhysicalPort.PhysicalPort.Switch + st.ucST.PhysicalPort.PhysicalPort[Switch] |
+		((st2.ucST - st.ucST).PhysicalPort.PhysicalPort.Switch + 
+          (st2.ucST - st.ucST).PhysicalPort.PhysicalPort[Switch]) not in seenBefore
+}
+check spanningTreePreservedTree for 3 but 2 State, 1 Event
+
+pred containsLoopFreeTC[st: State] {
+	let loops = { sw: Switch, sw2: Switch | sw=sw2} |
+		(st.ucTC + ~(st.ucTC))-loops in ^((st.ucST.PhysicalPort.PhysicalPort) + ~(st.ucST.PhysicalPort.PhysicalPort))
+}
+pred wellFormedST[st: State] {
+	let loops = { sw: Switch, sw2: Switch | sw=sw2} |
+		no st.ucST.PhysicalPort.PhysicalPort & loops and
+		all sw: Switch, pt: PhysicalPort | 
+			// ucST: sw, sw, pt, pt. 
+			lone st.ucST.PhysicalPort.pt.Switch.sw and
+			lone st.ucST[sw][pt]
+	// and no cycles
+}
+assert isSpanningTreeUsesTC {
+	all st: State, st2: State, ev: EVprobe | 
+		transitionFunction[st, ev, st2] and containsLoopFreeTC[st] and wellFormedST[st] implies			
+			 containsLoopFreeTC[st2] and wellFormedST[st]
+}
+check isSpanningTreeUsesTC for 3 but 2 State, 1 Event
+
+// STC app not very useful here, since it doesn't support e.g. no (st2.ucST - st.ucST)
+// (neither no nor complex relational expressions)
+
 // DO add when needed
 // If added, added safe
-assert isSpanningTree {
-	// Inductive step
-	all st: State, st2: State, ev: Event | 
-		transitionFunction[st, ev, st2] implies			
-			// If there is a change
-			some (st2.ucST - st.ucST) implies 
+/*assert isSpanningTree {
+	all st: State, st2: State, ev: EVprobe | 
+		transitionFunction[st, ev, st2] and some (st2.ucST - st.ucST) implies			
+		// When we've added something...
+		(		
+			// ...all new additions spring from this event
+			// ...and the event has some as-yet unknown endpt.
+			(st2.ucST - st.ucST)  in ((ev.locSw -> ev.locPt) + ev.srcSw -> ev.srcPt)
+			and
+			no (st.ucST)[ev.locSw] or no (st.ucST)[ev.srcSw]
+			// ^ forall pt | not st.ucST[p.locSw, pt]
+			// (so far that's almost reading off the defn)
+			
+    	) 
 
-			(ev in EVprobe and 
-			// is this a prob. for FMT? run through webapp?
-             some newsw : (st2.ucST - st.ucST).PhysicalPort |
-			 	no st.ucST[newsw]
-            	      ) 
+// exists state, state, event
+// some new <sw,pt> and...
+// 
+
+// annoying to prove because don't have both switches in same tuple, so have to
+// fall back to the event fields. ugly.
+
+
+// The domain restriction of e1 to e2 contains all tuples in e1 that 
+// start with an element in the set e2. e1 <: e2. Range restriction 
+// e1 :> e2 uses ENDS, not start.
 
    	// Base step is obvious. Not worth expanding universe by 1 more state
-}
+}*/
 
 // All probe events exists switch (field accessor) does not cause a cycle with
 // all probe events exists switch (from formula)
 
-// A St, St, Ev |
-//    A Sw or
-//      exists sw (some newsw: the justification)
-//        forall sw  (no st.ucST[newsw]) <---- problem 
-//        
-
-check isSpanningTree for 7 but 2 State, 1 Event // "1 Event" is a >50% redux in cars and clauses.
+//check isSpanningTree for 10 but 2 State, 1 Event // "1 Event" is a >50% redux in cars and clauses.
 // ??? TODO: calculate bounds via FMT
 
