@@ -10,3 +10,8 @@ ocamlyacc -b../parser parser.mly
 echo "Adding header to mli file..."
 sed -i '1iopen Types.Types;;' ../parser.mli
 sed -i '1iopen Type_Helpers;;' ../parser.mli
+
+ocamllex -o ../Surface_Lexer.ml Surface_Lexer.mll
+ocamlyacc -b../Surface_Parser Surface_Parser.mly
+sed -i 'liopen Flowlog_Types;;' ../Surface_Parser.mli
+

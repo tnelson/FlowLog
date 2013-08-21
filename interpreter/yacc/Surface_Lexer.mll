@@ -1,5 +1,5 @@
 {
-open Parser;;       (* The tokens are defined in parser.mli *)
+open Surface_Parser;;       (* The tokens are defined in this mli *)
 
 (* NOTE: To get case-insensitivity, make sure to lowercase the stream before passing in. *)
 
@@ -8,7 +8,8 @@ open Parser;;       (* The tokens are defined in parser.mli *)
 
 }
 rule token = parse
-    [' ' '\t' '\n' '\r'] { token lexbuf }    
+    [' ' '\t' '\r'] { token lexbuf }    
+  | "\n" { Lexing.new_line lexbuf; token lexbuf }
   | "//" [^ '\n']* { token lexbuf }
   | eof { EOF }
 
@@ -29,6 +30,8 @@ rule token = parse
   | "where" { WHERE }
   | "timeout" { TIMEOUT }
   | "pure" { PURE }
+  | "then" { THEN }
+  | "on" { ON }
 
   | "not" { NOT }
   | "or" { OR }
@@ -52,5 +55,5 @@ rule token = parse
   | '"' { DOUBLEQUOTE }
   | ['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9'] as dotted_ip { DOTTED_IP(dotted_ip)}
   | ['0'-'9']+ | '0''x'(['0'-'9']+) as number { NUMBER(number) }
-  | ['a'-'z''A'-'Z''_''0'-'9']+ as name { NAME(name) }
+  | ['a'-'z''A'-'Z''_''0'-'9''-']+ as name { NAME(name) }
   | _ as c { Printf.printf "Unknown character: %c\n" c; token lexbuf;}
