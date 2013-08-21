@@ -16,9 +16,9 @@ open Printf
               | FOr of formula * formula;;
 
   type action = 
-              | ADelete of string * string list * formula 
-              | AInsert of string * string list * formula 
-              | ADo of string * string list * formula;;
+              | ADelete of string * term list * formula 
+              | AInsert of string * term list * formula 
+              | ADo of string * term list * formula;;
 
   type refresh = 
       (* number, units *)
@@ -75,28 +75,49 @@ open Printf
       | FFalse -> "false"
       | FEquals(t1, t2) -> (string_of_term t1) ^ " or "^ (string_of_term t2)
       | FNot(f) ->  "(not "^(string_of_formula f)^")"
-      | FAtom(modname, relname, tlargs) -> modname^"."^relname^"("^(String.concat "," (List.map string_of_term tlargs))^")"
+      | FAtom("", relname, tlargs) -> 
+          relname^"("^(String.concat "," (List.map string_of_term tlargs))^")"
+      | FAtom(modname, relname, tlargs) -> 
+          modname^"."^relname^"("^(String.concat "," (List.map string_of_term tlargs))^")"
       | FAnd(f1, f2) -> (string_of_formula f1) ^ " and "^ (string_of_formula f2)
       | FOr(f1, f2) -> (string_of_formula f1) ^ " or "^ (string_of_formula f2)
+  
+  let action_string outrel argterms fmla: string = 
+    let argstring = (String.concat "," (List.map string_of_term argterms)) in
+      outrel^"("^argstring^") WHERE "^(string_of_formula fmla);;
 
   let string_of_rule (r: srule): string =
     match r with 
       | Rule(trigrel, trigvar, act) -> 
         match act with 
-          | ADelete(outrel, argnames, fmla) ->  
-            "ON "^trigrel^"("^trigvar^"): DELETE "^
-             outrel^"("^(String.concat "," argnames)^") WHERE "^(string_of_formula fmla);
-          | AInsert(outrel, argnames, fmla) ->
-            "ON "^trigrel^"("^trigvar^"): INSERT "^
-             outrel^"("^(String.concat "," argnames)^") WHERE "^(string_of_formula fmla);
-          | ADo(outrel, argnames, fmla) ->  
-            "ON "^trigrel^"("^trigvar^"): DO "^
-            outrel^"("^(String.concat "," argnames)^") WHERE "^(string_of_formula fmla);;
+          | ADelete(outrel, argterms, fmla) ->  
+            "ON "^trigrel^"("^trigvar^"): DELETE "^(action_string outrel argterms fmla);                         
+          | AInsert(outrel, argterms, fmla) ->
+            "ON "^trigrel^"("^trigvar^"): INSERT "^(action_string outrel argterms fmla);
+          | ADo(outrel, argterms, fmla) ->  
+            "ON "^trigrel^"("^trigvar^"): DO "^(action_string outrel argterms fmla);;
 
+  let string_of_declaration (d: sdecl): string =
+    match d with 
+      | DeclTable(tname, argtypes) -> "TABLE "^tname^(String.concat "," argtypes);
+      | DeclRemoteTable(tname, argtypes) -> "REMOTE TABLE "^tname^" "^(String.concat "," argtypes);
+      | DeclInc(tname, argtype) -> "INCOMING "^tname^" "^argtype;
+      | DeclOut(tname, argtypes) -> "OUTGOING "^tname^(String.concat "," argtypes);
+      | DeclEvent(evname, argnames) -> "EVENT "^evname^" "^(String.concat "," argnames);;
+
+  let string_of_reactive (r: sreactive): string =
+    match r with       
+      | ReactRemote(tblname, qname, ip, port, refresh) ->
+        tblname^" (remote) = "^qname^" @ "^ip^" "^port;
+      | ReactOut(outrel, args, evtype, assignments, ip, port) ->
+        outrel^"("^(String.concat "," args)^") (output rel) = "^evtype^" @ "^ip^" "^port;
+      | ReactInc(evtype, relname) -> 
+        relname^" (input rel) "^evtype;;
+  
   let string_of_stmt (stmt: stmt): string = 
     match stmt with 
-      | SReactive(rstmt) -> "REACT";
-      | SDecl(dstmt) -> "DECL";
+      | SReactive(rstmt) -> (string_of_reactive rstmt);
+      | SDecl(dstmt) -> (string_of_declaration dstmt);
       | SRule(rstmt) -> (string_of_rule rstmt);;
 
   let pretty_print_program (ast: flowlog_ast): unit =

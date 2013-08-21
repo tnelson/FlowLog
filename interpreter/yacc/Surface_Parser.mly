@@ -50,6 +50,9 @@
   
   %start main
 
+  %type <term list> term_list
+  %type <string list> name_list
+
   %left AND 
   %left OR
   %left IMPLIES
@@ -85,11 +88,9 @@
   reactive_stmt:              
             | REMOTE TABLE NAME FROM NAME AT DOTTED_IP NUMBER refresh_clause SEMICOLON 
               {ReactRemote($3, $5, $7, $8, $9)}             
-            //| OUTGOING NAME LPAREN RPAREN PERIOD
-            // THEN 
-             // SEND EVENT NAME LCURLY possempty_assign_list RCURLY TO DOTTED_IP NUMBER SEMICOLON 
-             // {ReactOut($2, $4, $9, $11, $14, $15)} 
-             //{()}
+            | OUTGOING NAME LPAREN name_list RPAREN THEN 
+              SEND EVENT NAME LCURLY possempty_assign_list RCURLY TO DOTTED_IP NUMBER SEMICOLON 
+              {ReactOut($2, $4, $9, $11, $14, $15)}              
             | INCOMING NAME THEN INSERT INTO NAME SEMICOLON 
               {ReactInc($2, $6)};
   
@@ -120,7 +121,7 @@
             | term EQUALS term {FEquals($1, $3)} 
             | term NOTEQUALS term {FNot(FEquals($1, $3))} 
             | NAME LPAREN term_list RPAREN {FAtom("", $1, $3)} 
-            | NAME PERIOD NAME LPAREN term_list RPAREN {FAtom($1, $3, $5)} 
+            | NAME PERIOD NAME LPAREN term_list RPAREN ON NAME {FAtom($1, $3, $5)} 
             | NOT formula {FNot($2)} 
             | formula AND formula {FAnd($1, $3)} 
             | formula OR formula {FOr($1, $3)} 

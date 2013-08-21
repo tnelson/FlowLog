@@ -25,10 +25,8 @@ INCOMING laptop-recovered(stolen-laptop-cancel);
 INCOMING stolen-laptop-report THEN INSERT INTO laptop-stolen;
 INCOMING stolen-laptop-cancel THEN INSERT INTO laptop-recovered;
 
-//OUTGOING ;
-//OUTGOING notify-police(mac, swid, t) .
-// THEN 
-// SEND EVENT stolen-laptop-found {mac:=mac, swid:=swid, time:=t} TO 127.0.0.1 5050;
+OUTGOING notify-police(mac, swid, t) THEN 
+  SEND EVENT stolen-laptop-found {mac:=mac, swid:=swid, time:=t} TO 127.0.0.1 5050;
 
 REMOTE TABLE get_time 
   FROM time AT 127.0.0.1 9091
@@ -43,11 +41,11 @@ REMOTE TABLE get_time
 // Rules
 //////////
 
-//ON laptop-recovered(rec):
-//  DELETE (rec.mac) FROM stolen;
+ON laptop-recovered(rec):
+  DELETE (rec.mac) FROM stolen;
 
-//ON laptop-stolen(stolen):
-//  INSERT (stolen.mac) INTO stolen;
+ON laptop-stolen(stolen):
+  INSERT (stolen.mac) INTO stolen;
 
 on foo(bar):
   insert (x) into zot;
@@ -56,8 +54,6 @@ ON packet-in(pkt):
   DO forward(new) WHERE 
     Mac-learning.forward(new) ON pkt;
 
-  //DO notify-police(pkt.dlSrc, pkt.locSw, time) WHERE 
-//    stolen(pkt.dlSrc) AND 
-    //get_time(time);
-
-    EVENT delete ;
+  DO notify-police(pkt.dlSrc, pkt.locSw, time) WHERE 
+    stolen(pkt.dlSrc) AND 
+    get_time(time);  
