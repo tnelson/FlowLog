@@ -2,56 +2,8 @@
   (*open Types.Types;;
   open Type_Helpers;;*)
 
+  open Flowlog_Types;;
 
-  type term = 
-              | TConst of string 
-              | TVar of string 
-              | TField of string * string;;  
-
-  type formula = 
-              | FTrue 
-              | FFalse 
-              | FEquals of formula * formula 
-              | FNot of formula 
-              | FAtom of string * term list 
-              | FAnd of formula * formula 
-              | FOr of formula * formula;
-
-  type action = 
-              | ADelete of string * string list * formula 
-              | AInsert of string * string list * formula 
-              | ADo of string * string list * formula;
-
-  type refresh = 
-      | RefreshTimeout of int 
-      | RefreshPure
-      | RefreshEvery;
-
-  type assignment = 
-      | Assign string * string;
-
-  type sreactive = 
-      | ReactRemote of string * string list * spec_remote option;
-      | ReactOut of string * string list * spec_out option;
-      | ReactIn of string * string * spec_in option;
-
-  type spec_remote = 
-      | Remote of string * int * int * refresh;
-  type spec_out = 
-      | ReactSend of string * assignment list * int * int;
-  type spec_in =
-      | ReactInsert of string;
-
-  type sdecl = 
-      | DeclTable of string * string list    
-      | DeclEvent of string * string list;
-  type srule = 
-      | Rule of string * string * action;
-  type stmt = 
-      | sreactive | sdecl | srule;
-
-  type flowlog_ast = 
-      | AST of string list * stmt list;
 
 %}
 
@@ -109,7 +61,7 @@
   %nonassoc NOT
   %right EQUALS NOTEQUALS
 
-  %type <AST> main
+  %type <flowlog_ast> main
   
   %%
 
@@ -118,9 +70,9 @@
   import: IMPORT NAME SEMICOLON {$2};
 
   stmt: 
-            | reactive_stmt {$1} 
-            | decl_stmt {$1} 
-            | rule_stmt {$1};
+            | reactive_stmt {[SReactive($1)]} 
+            | decl_stmt {[SDecl($1)]} 
+            | rule_stmt {List.map (fun r -> SRule(r)) $1};
 
   decl_stmt: 
             | TABLE NAME LPAREN name_list RPAREN SEMICOLON {DeclTable($2, $4)} 
@@ -128,8 +80,8 @@
 
   reactive_stmt:              
             | REMOTE TABLE NAME LPAREN name_list RPAREN optional_remote_table SEMICOLON {ReactRemote($3, $5, $7)} 
-            | OUTGOING NAME LPAREN name_list RPAREN optional_outgoing_then SEMICOLON {ReactOut($2, $4, 6)} 
-            | INCOMING NAME LPAREN NAME RPAREN optional_incoming_then SEMICOLON {ReactInc($2, $4)};
+            | OUTGOING NAME LPAREN name_list RPAREN optional_outgoing_then SEMICOLON {ReactOut($2, $4, $6)} 
+            | INCOMING NAME LPAREN NAME RPAREN optional_incoming_then SEMICOLON {ReactInc($2, $4, $6)};
 
   optional_remote_table: 
             | FROM NAME AT DOTTED_IP NUMBER refresh_clause {Some(Remote($2, $4, $5, $6))}
@@ -146,11 +98,11 @@
   assign: NAME COLONEQUALS NAME {Assign($1, $3)};
 
   refresh_clause:
-            | TIMEOUT NUMBER {RefreshTimeout($2)} 
+            | TIMEOUT NUMBER NAME {RefreshTimeout(int_of_string($2), $3)} 
             | PURE {RefreshPure} 
             | {RefreshEvery};
 
-  rule_stmt: on_clause COLON action_clause_list {List.map (fun act -> Rule(hd $1, hd (tl $1), act)) $3};
+  rule_stmt: on_clause COLON action_clause_list {List.map (fun act -> Rule(List.hd $1, List.hd (List.tl $1), act)) $3};
 
   on_clause: ON NAME LPAREN NAME RPAREN {[$2;$4]};
 
@@ -172,35 +124,35 @@
             | NOT formula {FNot($2)} 
             | formula AND formula {FAnd($1, $3)} 
             | formula OR formula {FOr($1, $3)} 
-            | LPAREN formula RPAREN {$2)} 
+            | LPAREN formula RPAREN {$2} 
             | formula IMPLIES formula {FOr(FNot($1), $3)} 
             | formula IFF formula {FOr(FAnd($1, $3), FAnd(FNot($1), FNot($3)))};
   term: 
             | NAME {TVar($1)} 
             | NUMBER {TConst($1)} 
             | DOUBLEQUOTE NAME DOUBLEQUOTE {TConst($2)} 
-            | NAME PERIOD NAME {TField($1, $3)]};
+            | NAME PERIOD NAME {TField($1, $3)};
 
   term_list: 
             | term {[$1]} 
-            | term COMMA term_list {$1 @ $3};
+            | term COMMA term_list {$1 :: $3};
 
   name_list: 
             | NAME {[$1]} 
-            | NAME COMMA name_list {$1 @ $3};
+            | NAME COMMA name_list {$1 :: $3};
 
   action_clause_list: 
             | action_clause {[$1]}  
-            | action_clause action_clause_list {$1 @ $2};
+            | action_clause action_clause_list {$1 :: $2};
 
   assign_list: 
             | assign {[$1]} 
-            | assign COMMA assign_list {$1 @ $3};
+            | assign COMMA assign_list {$1 :: $3};
 
   stmt_list: 
-            | stmt {[$1]} 
+            | stmt {$1} 
             | stmt stmt_list {$1 @ $2};
 
   import_list: 
             | import {[$1]} 
-            | import import_list {$1 @ $2};
+            | import import_list {$1 :: $2};

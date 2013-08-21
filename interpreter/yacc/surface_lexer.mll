@@ -1,5 +1,5 @@
 {
-open Parser;;       (* The type token is defined in parser.mli *)
+open Parser;;       (* The tokens are defined in parser.mli *)
 
 (* NOTE: To get case-insensitivity, make sure to lowercase the stream before passing in. *)
 
