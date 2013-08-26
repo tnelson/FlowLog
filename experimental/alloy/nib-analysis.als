@@ -92,10 +92,14 @@ pred plus_ucTC[st: State, ev: EVprobe, sw1: Switch, sw2: Switch] {
 }
 
 // MODIFIED! stopped using TC, and now complete path in one edge
+// !!! This actually won't work. ;) Because we aren't doing B's alg. We have no
+// luxury of saying "the spanning TREE". We're stuck building a forest. Need TC!
 pred plus_ucST[st: State, ev: EVprobe, sw: Switch, sw2: Switch, pt: PhysicalPort, pt2: PhysicalPort] {
+// WILL WORK
 //	not ev.srcSw->ev.locSw in st.ucTC and
+// BROKEN
 	(no st.ucST[ev.srcSw] and ev.srcSw = sw and ev.srcPt = pt and ev.locSw = sw2 and ev.locPt = pt2)
-//	or (no st.ucST[ev.locSw] and ev.locSw = sw and ev.locPt = pt and ev.srcSw = sw2 and ev.srcPt = pt2)
+	or (no st.ucST[ev.locSw] and ev.locSw = sw and ev.locPt = pt and ev.srcSw = sw2 and ev.srcPt = pt2)
 	
 // rule blow-up if want to be fully symmetric
 }
@@ -188,75 +192,42 @@ check isTCReallyTC for 0 but 6 Switch, 2 State, 1 Event,
 
 ///////////////////////////
 
-assert spanningTreePreservedTree {
-	all st: State, st2: State, ev: EVprobe | 
-		transitionFunction[st, ev, st2] and some (st2.ucST - st.ucST) and wellFormedST[st2] implies
-// this breaks OSEPL when negated
-//		one (st2.ucST - st.ucST) and
-		let seenBefore = st.ucST.PhysicalPort.PhysicalPort.Switch + st.ucST.PhysicalPort.PhysicalPort[Switch] |
-		((st2.ucST - st.ucST).PhysicalPort.PhysicalPort.Switch + 
-          (st2.ucST - st.ucST).PhysicalPort.PhysicalPort[Switch]) not in seenBefore
-}
-check spanningTreePreservedTree for 3 but 2 State, 1 Event
 
-pred containsLoopFreeTC[st: State] {
-	let loops = { sw: Switch, sw2: Switch | sw=sw2} |
-		(st.ucTC + ~(st.ucTC))-loops in ^((st.ucST.PhysicalPort.PhysicalPort) + ~(st.ucST.PhysicalPort.PhysicalPort))
+// Preserve the two following conditions across transitions:
+// 1: The TC of the tree is ucTC. (maximally spanning, discon when necessary)
+// 2: TC(tree - any edge) != ucTC (tree: all edges are cut edgess)
+// note that we cannot say "#edges = #nodes - 1" because we're building 
+// a forest. it'd be "#edges <= #nodes - 1" 
+
+pred isLoopFreeUCTC[st: State] {
+	^(st.ucST.PhysicalPort.PhysicalPort) - {n1, n2: Switch | n1=n2} 
+    = 
+	st.ucTC - {n1, n2: Switch | n1=n2}
 }
+
+pred allEdgesCuts[st: State] {
+	all sw1, sw2: Switch | sw1 -> sw2 in st.ucST.PhysicalPort.PhysicalPort 
+    	implies ^(st.ucST.PhysicalPort.PhysicalPort - (sw1 -> sw2))
+                   != st.ucTC - {n1, n2: Switch | n1=n2}
+// DO NOT try {n,n : Switch}. Shadowing results in full product
+}
+
 pred wellFormedST[st: State] {
-	let loops = { sw: Switch, sw2: Switch | sw=sw2} |
-		no st.ucST.PhysicalPort.PhysicalPort & loops and
-		all sw: Switch, pt: PhysicalPort | 
-			// ucST: sw, sw, pt, pt. 
-			lone st.ucST.PhysicalPort.pt.Switch.sw and
-			lone st.ucST[sw][pt]
-	// and no cycles
+	// Exclude bad starting span trees, like [0, 0,x,x] [1,1,y,y]
+	all sw : Switch | not (sw->sw) in st.ucST.PhysicalPort.PhysicalPort
 }
+
 assert isSpanningTreeUsesTC {
 	all st: State, st2: State, ev: EVprobe | 
-		transitionFunction[st, ev, st2] and containsLoopFreeTC[st] and wellFormedST[st] implies			
-			 containsLoopFreeTC[st2] and wellFormedST[st]
+		transitionFunction[st, ev, st2] and wellFormedST[st] and isLoopFreeUCTC[st] and allEdgesCuts[st] implies			
+        	wellFormedST[st2] and isLoopFreeUCTC[st2] and allEdgesCuts[st2]
 }
-check isSpanningTreeUsesTC for 3 but 2 State, 1 Event
+check isSpanningTreeUsesTC for 3 but 2 State, 1 Event, 4 Switch
 
-// STC app not very useful here, since it doesn't support e.g. no (st2.ucST - st.ucST)
-// (neither no nor complex relational expressions)
-
-// DO add when needed
-// If added, added safe
-/*assert isSpanningTree {
-	all st: State, st2: State, ev: EVprobe | 
-		transitionFunction[st, ev, st2] and some (st2.ucST - st.ucST) implies			
-		// When we've added something...
-		(		
-			// ...all new additions spring from this event
-			// ...and the event has some as-yet unknown endpt.
-			(st2.ucST - st.ucST)  in ((ev.locSw -> ev.locPt) + ev.srcSw -> ev.srcPt)
-			and
-			no (st.ucST)[ev.locSw] or no (st.ucST)[ev.srcSw]
-			// ^ forall pt | not st.ucST[p.locSw, pt]
-			// (so far that's almost reading off the defn)
-			
-    	) 
-
-// exists state, state, event
-// some new <sw,pt> and...
-// 
-
-// annoying to prove because don't have both switches in same tuple, so have to
-// fall back to the event fields. ugly.
 
 
 // The domain restriction of e1 to e2 contains all tuples in e1 that 
 // start with an element in the set e2. e1 <: e2. Range restriction 
 // e1 :> e2 uses ENDS, not start.
 
-   	// Base step is obvious. Not worth expanding universe by 1 more state
-}*/
-
-// All probe events exists switch (field accessor) does not cause a cycle with
-// all probe events exists switch (from formula)
-
-//check isSpanningTree for 10 but 2 State, 1 Event // "1 Event" is a >50% redux in cars and clauses.
-// ??? TODO: calculate bounds via FMT
-
+// Base step is obvious. Not worth expanding universe by 1 more state
