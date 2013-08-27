@@ -57,3 +57,8 @@ ON packet-in(pkt):
   DO notify-police(pkt.dlSrc, pkt.locSw, time) WHERE 
     stolen(pkt.dlSrc) AND 
     get_time(time);  
+
+ON fozzie-in(pkt): 
+  DO kermit-out(new) WHERE 
+    muppets.foo(new) ON pkt AND
+    (R(pkt.x) OR P(pkt.x, pkt.y));

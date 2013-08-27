@@ -154,6 +154,25 @@ let rec extract_disj_list (f: formula): formula list =
         | FOr(f1, f2) -> (extract_disj_list f1) @ (extract_disj_list f2);
         | _ -> [f];;
 
+let rec nnf (f: formula): formula =
+  match f with 
+        | FTrue -> f
+        | FFalse -> f
+        | FEquals(t1, t2) -> f
+        | FAtom(modstr, relstr, argterms) -> f
+        | FOr(f1, f2) -> FOr(nnf f1, nnf f2)
+        | FAnd(f1, f2) -> FAnd(nnf f1, nnf f2)
+        | FNot(f2) -> 
+          match f2 with
+            | FTrue -> FFalse
+            | FFalse -> FTrue
+            | FEquals(t1, t2) -> f
+            | FAtom(modstr, relstr, argterms) -> f            
+            | FNot(f3) -> f3            
+            | FOr(f1, f2) -> FAnd(nnf (FNot f1), nnf (FNot f2))
+            | FAnd(f1, f2) -> FOr(nnf (FNot f1), nnf (FNot f2));;
+            
+(* Assume: NNF before calling this *)
 let rec disj_to_top (f: formula): formula = 
     match f with 
         | FTrue -> f;
@@ -161,19 +180,22 @@ let rec disj_to_top (f: formula): formula =
         | FEquals(t1, t2) -> f;
         | FAtom(modstr, relstr, argterms) -> f;
         | FOr(f1, f2) -> f;
-        | FNot(f2) -> 
-            (* De-Morgan's law if necessary *)
-            let f2ds = extract_disj_list (disj_to_top f2) in
-                if (length f2ds) < 2 then f
-                (* start w/ first disj. don't cheat w/ FTrue.
-                Note: (FNot(hd f2ds)) not FNot(hd f2ds) *)
-                else fold_left (fun acc subf -> FAnd(FNot(subf), acc)) (FNot(hd f2ds)) (tl f2ds)                
+        | FNot(f2) -> f; (* since guaranteed to be in NNF *)            
         | FAnd(f1, f2) -> 
             (* Distributive law if necessary *)
             let f1ds = extract_disj_list (disj_to_top f1) in
             let f2ds = extract_disj_list (disj_to_top f2) in
+
+            (*printf "f: %s\n%!" (string_of_formula f);
+            printf "f1ds: %s\n%!" (String.concat "; " (map string_of_formula f1ds));
+            printf "f2ds: %s\n%!" (String.concat "; " (map string_of_formula f2ds));*)
+
             let pairs = product_of_lists f1ds f2ds in
                 (* again, start with first pair, not FFalse *)
                 let (firstfmla1, firstfmla2) = (hd pairs) in
-                fold_left (fun acc (subf1, subf2) -> FOr(FAnd(subf1, subf2), acc)) (FAnd(firstfmla1, firstfmla2)) (tl pairs);;
+               (*printf "PAIRS: %s\n%!" (String.concat "," (map (fun (f1, f2) -> (string_of_formula f1)^" "^(string_of_formula f2)) pairs));*)
+                fold_left (fun acc (subf1, subf2) ->  (*(printf "%s %s: %s\n%!" (string_of_formula subf1) (string_of_formula subf2)) (string_of_formula  (FOr(acc, FAnd(subf1, subf2))));*)
+                                                      FOr(acc, FAnd(subf1, subf2))) 
+                          (FAnd(firstfmla1, firstfmla2)) 
+                          (tl pairs);;
         
