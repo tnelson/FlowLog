@@ -1,11 +1,13 @@
-open Surface_Parser;;
-open Surface_Lexer;;
-open Flowlog_Types;;
-open Printf;;
+open Surface_Parser
+open Surface_Lexer
+open Flowlog_Types
+open Printf
+open Arg
+open Flowlog_To_Alloy
 
 (* Use ExtList.List instead -- provides filter_map, but also tail-recursive combine *)
 (*open List;;*)
-open ExtList.List;;
+open ExtList.List
 
 (* Thanks to Jon Harrop on caml-list *)
 let from_case_insensitive_channel ic =
@@ -86,9 +88,21 @@ let desugared_program_of_ast (ast: flowlog_ast): flowlog_program =
             let clauses = (fold_left (fun acc r -> (clauses_of_rule r) @ acc) [] the_rules) in 
                 {decls = the_decls; reacts = the_reacts; clauses = clauses};;
 
-let filename = try Sys.argv.(1) with exn -> raise (Failure "Input a .flg file name.");;
-let ast = read_ast filename;;
-let program = desugared_program_of_ast ast;;
+(* usage message *)
+let usage = Printf.sprintf "Usage: %s [-alloy] file.flg" (Filename.basename Sys.argv.(0));;
+let alloy = ref false;;
+let args = ref [];;
+let speclist = [
+  ("-alloy", Arg.Unit (fun () -> alloy := true), ": convert to Alloy");];;
 
-printf "-----------\n%!";;
-List.iter (fun cl -> printf "%s\n\n%!" (string_of_clause cl)) program.clauses;;
+let main () =
+  let collect arg = args := !args @ [arg] in
+  let _ = Arg.parse speclist collect usage in
+  let filename = try hd !args with exn -> raise (Failure "Input a .flg file name.") in  
+  let ast = read_ast filename in
+  let program = desugared_program_of_ast ast in    
+    printf "-----------\n%!";
+    List.iter (fun cl -> printf "%s\n\n%!" (string_of_clause cl)) program.clauses;
+    if !alloy then write_as_alloy program (filename^".als");;
+
+main();;
