@@ -1,4 +1,5 @@
 open Printf
+open ExtList.List
 
   type term = 
               | TConst of string 
@@ -60,7 +61,19 @@ open Printf
   type flowlog_ast = 
       | AST of string list * stmt list;;
 
+(*************************************************************)  
 
+  (* Split out a formula by ORs for use with XSB *)
+  (* In new semantics, no longer have "on" in clause body. It just gets made an EDB fact. *)
+  (* REQUIRE: head, body fmlas atomic or equality *)
+  type clause = { orig_rule: srule; 
+                  head: formula;
+                  body: formula; (* should be always conjunctive *)
+                  };;
+
+  type flowlog_program = {  decls: sdecl list; 
+                            reacts: sreactive list; 
+                            clauses: clause list; };;
 (*************************************************************)
 
   let string_of_term (t: term) : string = 
@@ -125,3 +138,42 @@ open Printf
       | AST(imports, stmts) ->
         List.iter (fun imp -> printf "IMPORT %s;\n%!" imp) imports;
         List.iter (fun stmt -> printf "%s\n%!" (string_of_stmt stmt)) stmts;;
+
+  let string_of_clause (cl: clause): string =
+    "CLAUSE: "^(string_of_formula cl.head)^" :- "^(string_of_formula cl.body)^"\n"^
+    "FROM RULE: "^(string_of_rule cl.orig_rule);;
+
+(*************************************************************)
+
+let product_of_lists lst1 lst2 = 
+  List.concat (List.map (fun e1 -> List.map (fun e2 -> (e1,e2)) lst2) lst1);;
+
+(* all disjunctions need to be pulled to top already *)
+let rec extract_disj_list (f: formula): formula list =    
+    match f with 
+        | FOr(f1, f2) -> (extract_disj_list f1) @ (extract_disj_list f2);
+        | _ -> [f];;
+
+let rec disj_to_top (f: formula): formula = 
+    match f with 
+        | FTrue -> f;
+        | FFalse -> f;
+        | FEquals(t1, t2) -> f;
+        | FAtom(modstr, relstr, argterms) -> f;
+        | FOr(f1, f2) -> f;
+        | FNot(f2) -> 
+            (* De-Morgan's law if necessary *)
+            let f2ds = extract_disj_list (disj_to_top f2) in
+                if (length f2ds) < 2 then f
+                (* start w/ first disj. don't cheat w/ FTrue.
+                Note: (FNot(hd f2ds)) not FNot(hd f2ds) *)
+                else fold_left (fun acc subf -> FAnd(FNot(subf), acc)) (FNot(hd f2ds)) (tl f2ds)                
+        | FAnd(f1, f2) -> 
+            (* Distributive law if necessary *)
+            let f1ds = extract_disj_list (disj_to_top f1) in
+            let f2ds = extract_disj_list (disj_to_top f2) in
+            let pairs = product_of_lists f1ds f2ds in
+                (* again, start with first pair, not FFalse *)
+                let (firstfmla1, firstfmla2) = (hd pairs) in
+                fold_left (fun acc (subf1, subf2) -> FOr(FAnd(subf1, subf2), acc)) (FAnd(firstfmla1, firstfmla2)) (tl pairs);;
+        

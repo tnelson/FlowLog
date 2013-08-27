@@ -114,7 +114,7 @@
   optional_fmla: 
             | WHERE formula {$2} 
             | {FTrue};
-
+  
   formula: 
             | TRUE {FTrue}  
             | FALSE {FFalse} 
