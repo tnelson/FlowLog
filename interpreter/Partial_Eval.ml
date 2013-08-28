@@ -1,6 +1,7 @@
 open Flowlog_Types
 open NetCore_Types
 open ExtList.List
+open Printf;
 
 let is_forward_clause (cl: clause): bool =
 	match cl.head with 
@@ -15,6 +16,7 @@ let is_forward_clause (cl: clause): bool =
 %    but R(newpkt.dlSrc, pkt.dlDst) is ok
 %    ^^^ this may result in multiple packets being sent. but that's fine.
 %    SPECIAL CASE: newpkt.locPt != pkt.locPt. Means to use AllPorts.
+% (4) pkt.x = pkt.y --- can't do equality in netcore preds
 *)
 
 (* Any assignment to a newpkt field must either be 
@@ -104,6 +106,7 @@ let rec common_existential_check (sofar: string list) (f: formula): string list 
       		unique (flatten (map ext_helper tlargs));;	
 
 let validate_clause (cl: clause): unit =
+  printf "MISSING: check to disallow pkt.x = pkt.y checks. these won't fit into OF either.\n%!";
 	ignore (common_existential_check [] cl.body);	
 	match cl.head with 
 		| FAtom("", "forward", [TVar(newpktname)]) ->
