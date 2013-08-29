@@ -2,8 +2,8 @@ open NetCore_Types
 open Printf
 open Packet
 open OpenFlow0x01
+(*open OpenFlow0x01_Core*)
 open Lwt
-open Pa_lwt
 open NetCore_Pattern
 open NetCore_Wildcard
 open NetCore_Controller
@@ -15,10 +15,18 @@ let make () =
     (* stream of policies, with function to push new policies on *)
 	let (policies, push) = Lwt_stream.create () in
 
-	let updateFromPacket (sw: switchId) (pt: port) (pkt: Packet.packet) : action =
-		(* Update the policy (how?) *)
+	let updateFromPacket (sw: switchId) (pt: port) (pkt: Packet.packet) : NetCore_Types.action =
+		
 
-		(* Do nothing more *) 
+    (* Update the policy (how?) *)
+
+
+
+    printf "Packet in on switch %Ld.\n%s\n%!" sw (to_string pkt);
+		
+
+
+    (* Do nothing more *) 
 		[] in
 
 	(* Policy to send some packets to testhandler *)
@@ -37,7 +45,7 @@ let make () =
 
 	let initpol: pol = ITE(apred,
 	                Action([ControllerAction(updateFromPacket)]), 
-	                Action([])) in
+	                Action([ControllerAction(updateFromPacket)])) in
 
     printf "policy is:\n%s\n%!" (NetCore_Pretty.string_of_pol initpol);
 
@@ -49,7 +57,7 @@ let make () =
 let listenPort = ref 6633;;
 
 let main () = 
-    (* >> is anonymous bind from Pa_lwt. So why isn't this working? *)	 
+    (* >> is from Lwt's Pa_lwt. But you MUST have -syntax camlp4o or it won't be recoginized. *)	 
       OpenFlow0x01_Platform.init_with_port !listenPort >>
         let (gen_stream, stream) = make()  in
         (* streams for incoming/exiting packets *)
