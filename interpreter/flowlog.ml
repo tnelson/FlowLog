@@ -1,9 +1,18 @@
 open Surface_Parser
 open Surface_Lexer
 open Flowlog_Types
+open Partial_Eval
 open Printf
 open Arg
 open Flowlog_To_Alloy
+
+open NetCore_Types
+open Packet
+open OpenFlow0x01
+open Lwt
+open NetCore_Pattern
+open NetCore_Wildcard
+open NetCore_Controller
 
 (* Use ExtList.List instead -- provides filter_map, but also tail-recursive combine *)
 (*open List;;*)
@@ -102,6 +111,16 @@ let simplify_clauses (p: flowlog_program) =
   let newclauses = map simplify_clause p.clauses in
     {decls = p.decls; reacts = p.reacts; clauses = newclauses};;
 
+let listenPort = ref 6633;;
+
+let run_flowlog (p: flowlog_program): unit Lwt.t =  
+  (* >> is from Lwt's Pa_lwt. But you MUST have -syntax camlp4o or it won't be recoginized. *)   
+  OpenFlow0x01_Platform.init_with_port !listenPort >>
+    let (gen_stream, stream) = make_policy_stream p in
+    (* streams for incoming/exiting packets *)
+    let (pkt_stream, push_pkt) = Lwt_stream.create () in
+      Lwt.pick [gen_stream; NetCore_Controller.start_controller pkt_stream stream];;
+
 let main () =
   let collect arg = args := !args @ [arg] in
   let _ = Arg.parse speclist collect usage in
@@ -110,6 +129,9 @@ let main () =
   let program = simplify_clauses (desugared_program_of_ast ast) in    
     printf "-----------\n%!";
     List.iter (fun cl -> printf "%s\n\n%!" (string_of_clause cl)) program.clauses;
-    if !alloy then write_as_alloy program (filename^".als");;
 
-main();;
+    if !alloy then write_as_alloy program (filename^".als")
+    else Lwt_main.run (run_flowlog program);;
+
+
+ main();;

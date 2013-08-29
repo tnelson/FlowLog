@@ -158,29 +158,98 @@ let partial_evaluation (cl: clause): clause =
 
 (***************************************************************************************)
 
-let flat_policy_from_flat_clause (cl: clause): pol = 	
+let flat_policy_from_flat_clause (cl: clause) (callback: get_packet_handler option): pol = 
+  (* can't just say "if action is fwd, it's a fwd clause" because 
+     this may be an approximation to an un-compilable clause, which needs
+     interpretation at the controller! *)  
+
+  let my_action_list = match callback with
+              | Some(f) -> [ControllerAction(f)]
+              | _ ->  [] in (* TODO: convert to Fwd switch action (set!) *)
+
+  let mypred = Nothing in (* TODO *)
+  (* do nothing if pred isn't matched*)  
+    ITE(mypred,
+        Action(my_action_list), 
+        Action([]));;
+
 	Filter(Nothing);;
 
 (***************************************************************************************)
 
 (* Side effect: reads current state in XSB *)
 (* Throws exception rather than using option type: more granular error result *)
-let clause_to_netcore (cl: clause): pol =
-	(* Step 1: validate clause set: no forbidden joins or assignments *)
-    validate_clause cl ;
+let clause_to_netcore (callback: get_packet_handler option) (cl: clause): pol =
+	(* Step 1: validate clause set: no forbidden joins or assignments 
+    this is now done at start of process to separate what can be compiled from what can't *)
+  (* )  validate_clause cl ;*)
+  
 	(* Step 2: perform partial evaluation [side effect: access XSB state] *)
 	let pecl = partial_evaluation cl in
 	(* Step 3: produce a flat netcore policy 
 	   (This includes dealing with special case pkt.locPt != newpkt.locPt *)
-		flat_policy_from_flat_clause pecl;;
+		flat_policy_from_flat_clause pecl callback;;
+
+(* Used to pre-filter controller notifications as much as possible *)
+let strip_to_valid (cl: clause): clause =
+  cl;; (* TODO: remove atoms that make clause body uncompilable *)
 
 (* return the union of policies for each clause *)
-let forwarding_behavior_to_netcore (p: flowlog_program): pol =	
-	let fwd_clauses = (filter is_forward_clause p.clauses) in
-	let clause_pols = map clause_to_netcore fwd_clauses in
-		if length clause_pols = 0 then 
-			Filter(Nothing)
-		else 
-			fold_left (fun acc pol -> Union(acc, pol)) 
-				(hd clause_pols) (tl clause_pols);;
+(* Side effect: reads current state in XSB *)
+let clauses_to_netcore (clauses: clause list) (callback: get_packet_handler option): pol =
+  let clause_pols = match callback with
+      | Some(f) -> map (clause_to_netcore callback) (map strip_to_valid clauses)
+      | None ->    map (clause_to_netcore None) clauses in
+    if length clause_pols = 0 then 
+      Filter(Nothing)
+    else 
+      fold_left (fun acc pol -> Union(acc, pol)) 
+        (hd clause_pols) (tl clause_pols);;  
+
+let can_compile_clause (cl: clause): bool =
+  try 
+    validate_clause cl;
+    true
+  with 
+    | IllegalFieldModification(_) -> false
+    | IllegalAssignmentViaEquals(_) -> false
+    | IllegalAtomMustBePositive(_) -> false
+    | IllegalExistentialUse(_) -> false
+    | IllegalEquality(_,_) -> false;;
+
+let subtract (biglst: 'a list) (toremove: 'a list): 'a list =
+  (filter (fun ele -> not (mem ele toremove)) biglst);;
+
+(* Side effect: reads current state in XSB *)
+let program_to_netcore (p: flowlog_program) (callback: get_packet_handler): (pol * pol) =
+  let fwd_clauses = (filter is_forward_clause p.clauses) in
+  let non_fwd_clauses = subtract p.clauses fwd_clauses in
+  let can_compile_fwd_clauses = (filter can_compile_clause fwd_clauses) in
+  let cant_compile_fwd_clauses = subtract fwd_clauses can_compile_fwd_clauses in
+    (clauses_to_netcore can_compile_fwd_clauses None,
+     clauses_to_netcore (cant_compile_fwd_clauses @ non_fwd_clauses) (Some callback));;
+
+let make_policy_stream (p: flowlog_program) =
+  printf "Making policy and stream...\n%!";
+
+  (* stream of policies, with function to push new policies on *)
+  let (policies, push) = Lwt_stream.create () in
+
+  (* The callback to be invoked when the policy says to send pkt to controller *)
+  let rec updateFromPacket (sw: switchId) (pt: port) (pkt: Packet.packet) : NetCore_Types.action =    
+    (* Update the policy via the push function *)
+    printf "Packet in on switch %Ld.\n%s\n%!" sw (Packet.to_string pkt);
+    let (newfwdpol, newnotifpol) = program_to_netcore p updateFromPacket in
+    let newpol = Union(newfwdpol, newnotifpol) in
+      push (Some newpol);        
+      printf "NEW policy is:\n%s\n%!" (NetCore_Pretty.string_of_pol newpol);
+      (* Do nothing more *) 
+      [] in
+  
+    let (initfwdpol, initnotifpol) = program_to_netcore p updateFromPacket in
+    let initpol = Union(initfwdpol, initnotifpol) in
+      printf "INITIAL policy is:\n%s\n%!" (NetCore_Pretty.string_of_pol initpol);
+      (* cargo-cult hacking invocation. why call this? *)
+      NetCore_Stream.from_stream initpol policies;;
+
 

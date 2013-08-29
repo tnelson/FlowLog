@@ -1,1 +1,1 @@
-true : package(oUnit), package(extlib), package(netcore), package(str), package(packet), package(openflow), package(ox), package(thrift), thread
+true : package(lwt), package(lwt.syntax), package(oUnit), package(extlib), package(netcore), package(str), package(packet), package(openflow), package(ox), package(thrift), thread, syntax(camlp4o)
