@@ -3,9 +3,10 @@ open Printf
 open Packet
 open OpenFlow0x01
 open Lwt
-(*open NetCore_Action.Output*)
-(*open NetCore_Pattern*)
-(*open NetCore_Controller*)
+open Pa_lwt
+open NetCore_Pattern
+open NetCore_Wildcard
+open NetCore_Controller
 
 let make () = 
 
@@ -42,20 +43,24 @@ let make () =
 
     (* cargo-cult hacking invocation. why call this? *)
     NetCore_Stream.from_stream initpol policies;;
-(*)    (initpol, policies);;*)
+(*    (initpol, policies);;*)
 
 
 let listenPort = ref 6633;;
 
 let main () = 
-	(* >>= is bind, not sure what >> is? *)
-      (*OpenFlow0x01_Platform.init_with_port !listenPort >>*)
-      OpenFlow0x01_Platform.init_with_port !listenPort >>=
+    (* >> is anonymous bind from Pa_lwt. So why isn't this working? *)	 
+      OpenFlow0x01_Platform.init_with_port !listenPort >>
         let (gen_stream, stream) = make()  in
         (* streams for incoming/exiting packets *)
         let (pkt_stream, push_pkt) = Lwt_stream.create () in
-        Lwt.pick [gen_stream; NetCore_Controller.start_controller pkt_stream stream] in
-        Lwt_main.run (main ())
+        Lwt.pick [gen_stream; NetCore_Controller.start_controller pkt_stream stream];;
+
+Lwt_main.run (main ())
+
+
+
+
 		
         
 
