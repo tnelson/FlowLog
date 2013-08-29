@@ -8,14 +8,28 @@ let is_forward_clause (cl: clause): bool =
 	| FAtom("", "forward", _) -> true
 	| _ -> false;;
 
+(* 
+  ALLOWED atomic fmlas:
+
+  // assume in clause body. assume NNF. assume vars have been substituted out as much as possible
+
+  (1) equality: between new and old, same field. NOT negated
+  (2) equality: special case NOT(newpkt.locPt = pkt.locPt)
+  (3) equality: new = const
+  (4) equality: old = const
+  
+  
+  (5) atom: 
+*)
+
 (* FORBIDDEN (pass to controller always):
-% (1) joins over existentials [can do better]
-% (2) assigns to newpkt fields not supported for modif. in OF [up to openflow to allow]
+% (1) joins over existentials [can do better here, no hard constraint]
+% (2) assigns to newpkt fields not supported for modif. in OF, like nwProto [up to openflow to allow]
 % (3) assigns to allowed newpkt field in pkt-dependent way, not state-dep way 
 %    e.g. newpkt.dlSrc = pkt.dlDst
 %    but R(newpkt.dlSrc, pkt.dlDst) is ok
 %    ^^^ this may result in multiple packets being sent. but that's fine.
-%    SPECIAL CASE: newpkt.locPt != pkt.locPt. Means to use AllPorts.
+%    SPECIAL CASE: newpkt.locPt != pkt.locPt is allowed. Means to use AllPorts.
 % (4) pkt.x = pkt.y --- can't do equality in netcore preds
 *)
 

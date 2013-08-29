@@ -78,7 +78,7 @@ open ExtList.List
 
   let string_of_term (t: term) : string = 
     match t with
-      | TConst(s) -> "TConst"^s^")" 
+      | TConst(s) -> "TConst("^s^")" 
       | TVar(s) -> "TVar("^s^")"
       | TField(varname, fname) -> "TField("^varname^"."^fname^")" ;;
 
@@ -86,7 +86,7 @@ open ExtList.List
     match f with
       | FTrue -> "true"
       | FFalse -> "false"
-      | FEquals(t1, t2) -> (string_of_term t1) ^ " or "^ (string_of_term t2)
+      | FEquals(t1, t2) -> (string_of_term t1) ^ " = "^ (string_of_term t2)
       | FNot(f) ->  "(not "^(string_of_formula f)^")"
       | FAtom("", relname, tlargs) -> 
           relname^"("^(String.concat "," (List.map string_of_term tlargs))^")"
@@ -198,4 +198,72 @@ let rec disj_to_top (f: formula): formula =
                                                       FOr(acc, FAnd(subf1, subf2))) 
                           (FAnd(firstfmla1, firstfmla2)) 
                           (tl pairs);;
-        
+
+(* For every non-negated equality that has one TVar in it, produces a tuple for substitution *)    
+let rec gather_nonneg_equalities_involving_vars (f: formula) (neg: bool): (term * term) list =
+  match f with 
+        | FTrue -> []
+        | FFalse -> []
+        | FEquals((TVar(_) as thevar), t)                 
+        | FEquals(t, (TVar(_) as thevar)) 
+          when (not neg) && (not (thevar = t)) -> 
+            [(thevar, t)]
+        | FEquals(_, _) -> []
+        | FAtom(modstr, relstr, argterms) -> []
+        | FOr(f1, f2) -> 
+            unique ((gather_nonneg_equalities_involving_vars f1 neg) @ 
+                    (gather_nonneg_equalities_involving_vars f2 neg))
+        | FAnd(f1, f2) -> 
+            unique ((gather_nonneg_equalities_involving_vars f1 neg) @ 
+                    (gather_nonneg_equalities_involving_vars f2 neg))
+        | FNot(f2) -> 
+            (gather_nonneg_equalities_involving_vars f2 (not neg));; 
+
+(* f[v -> t] *)
+let rec substitute_term (f: formula) (v: term) (t: term): formula = 
+    match f with
+        | FTrue -> f
+        | FFalse -> f
+        | FEquals(t1, t2) ->
+          (* Remove fmlas which will be "x=x"; avoids inf. loop. *)
+          if t1 = v && t2 = t then FTrue
+          else if t2 = v && t1 = t then FTrue
+          else if t1 = v then FEquals(t, t2)
+          else if t2 = v then FEquals(t1, t)
+          else f
+        | FAtom(modstr, relstr, argterms) -> 
+          let newargterms = map (fun arg -> 
+              (*(printf "***** %s\n%!" (string_of_term arg));*)
+              if v = arg then t else arg) argterms in
+            FAtom(modstr, relstr, newargterms)
+        | FOr(f1, f2) ->         
+            let subs1 = substitute_term f1 v t in
+            let subs2 = substitute_term f2 v t in
+            if subs1 = FFalse then subs2 
+            else if subs2 = FFalse then subs1            
+            else FOr(subs1, subs2)       
+        | FAnd(f1, f2) ->
+            (* remove superfluous FTrues/FFalses *) 
+            let subs1 = substitute_term f1 v t in
+            let subs2 = substitute_term f2 v t in
+            if subs1 = FTrue then subs2 
+            else if subs2 = FTrue then subs1            
+            else FAnd(subs1, subs2)       
+        | FNot(f2) -> 
+            FNot(substitute_term f2 v t);;
+
+(* assume a clause body *)
+let rec minimize_variables (f: formula): formula = 
+  (* OPTIMIZATION: don't need to do gathering step repeatedly: *)
+  let var_equals_fmlas = gather_nonneg_equalities_involving_vars f false in
+    (*printf "at fmla = %s\n%!" (string_of_formula f);        
+    iter (fun pr -> let (t1, t2) = pr in (printf "pair: %s, %s\n%!" 
+            (string_of_term t1) (string_of_term t2))) var_equals_fmlas;*)
+
+    if length var_equals_fmlas < 1 then
+      f
+    else 
+      let (x, t) = hd var_equals_fmlas in  
+      let newf = (substitute_term f x t) in
+        minimize_variables newf;;
+

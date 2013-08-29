@@ -2,16 +2,33 @@ open OUnit
 open Flowlog_Types
 open Partial_Eval
 open Printf
+open ExtList.List
 
 (**********************************************************************)
-(* Formula Wrangling: NNF, disjunction lifting, ...*)
+(* Formula Wrangling: NNF, disjunction lifting, substitution ...*)
 (**********************************************************************)
 
 let rx =  (FAtom("", "R", [(TVar "x")]));;
 let ry =  (FAtom("", "R", [(TVar "y")]));;
 let pxy = (FAtom("", "P", [(TVar "x"); (TVar "y")]));;
+let pxx = (FAtom("", "P", [(TVar "x"); (TVar "x")]));;
+let pyy = (FAtom("", "P", [(TVar "y"); (TVar "y")]));;
+let px7 = (FAtom("", "P", [(TVar "x"); (TConst "7")]));;
 let nrx = (FNot rx);;
 let nry = (FNot ry);;
+
+let dummy_rule = Rule("foo", "bar", ADo("R", [], FTrue));;
+let newpkt = TVar("newpkt");;
+let xvar = TVar("x");;
+let yvar = TVar("y");;
+let zvar = TVar("z");;
+let const5 = TConst("5");;
+let const7 = TConst("7");;
+let constfoo = TConst("foo");;
+let newpktdlsrc = TField("newpkt", "dlSrc");;
+let newpktdldst = TField("newpkt", "dlDst");;
+let oldpktdlsrc = TField("pkt", "dlSrc");;
+let oldpktdldst = TField("pkt", "dlDst");;
 
              (*	 printf "%s\n%!" (string_of_formula (nnf (FOr((FNot (FOr(rx, ry))), pxy))));;
              	 printf "%s\n%!" (string_of_formula (disj_to_top (nnf (FOr((FNot (FOr(rx, ry))), pxy)))));;*)
@@ -44,17 +61,50 @@ let test_disj_to_top () =
              	 (disj_to_top (nnf (FOr(FNot(FOr(rx, ry)), pxy))))
              	 (FOr((FAnd(nrx, nry)), pxy));;
 
+let gather_printer (lst: (term * term) list): string = 
+  String.concat ";" (map (fun apair -> let (t1, t2) = apair in 
+    (string_of_term t1)^","^(string_of_term t1)) lst);;
+
+let test_minimize_variables () =
+    assert_equal ~printer:gather_printer
+                 ~msg:"gather1"
+                [(xvar, yvar)]
+                (gather_nonneg_equalities_involving_vars (FEquals(xvar, yvar)) false);
+
+    (* This process does not guarantee logical equivalence.
+       It guarantees logical equivalence in sig with fewer variables. 
+       Hence x=y --> true, because if x=y then y=y then true *)    
+    assert_equal ~printer:string_of_formula  
+                 ~msg:"minimize1"
+                (minimize_variables (FEquals(xvar, yvar)))
+                FTrue;
+    (* negated equality isn't used in substitution *)
+    assert_equal ~printer:string_of_formula  
+                 ~msg:"minimize2"
+                (minimize_variables (FAnd(pxy, (FNot (FEquals(xvar, yvar))))))
+                (FAnd(pxy, (FNot (FEquals(xvar, yvar)))));                
+    (* But P(x, y) & x=y produces P(x, x) *)
+    assert_equal ~printer:string_of_formula  
+                 ~msg:"minimize3"
+                (minimize_variables (FAnd(pxy, (FEquals(xvar, yvar)))))
+                pyy;
+    (* follow chain of equalities *)
+    assert_equal ~printer:string_of_formula  
+                 ~msg:"minimize4"
+                (minimize_variables (FAnd(FEquals(xvar, zvar), (FAnd(pxy, (FEquals(zvar, yvar)))))))
+                pyy;
+    (* ...for constants *)
+    assert_equal ~printer:string_of_formula  
+                 ~msg:"minimize5"
+                (minimize_variables (FAnd(FEquals(yvar, zvar), (FAnd(pxy, (FEquals(zvar, const7)))))))
+                px7;
+
+              ;;            
+
 (**********************************************************************)
 (* Partial Evaluation *)
 (**********************************************************************)
 
-let dummy_rule = Rule("foo", "bar", ADo("R", [], FTrue));;
-let newpkt = TVar("newpkt");;
-let xvar = TVar("xvar");;
-let newpktdlsrc = TField("newpkt", "dlSrc");;
-let newpktdldst = TField("newpkt", "dlDst");;
-let oldpktdlsrc = TField("pkt", "dlSrc");;
-let oldpktdldst = TField("pkt", "dlDst");;
 let cl1 = {orig_rule = dummy_rule; 
            head = FAtom("", "forward", [newpkt]);
            body = FEquals(newpktdlsrc, oldpktdldst)};;
@@ -88,6 +138,7 @@ let test_pe_valid () =
 
  let suite = "Flowlog tests" >::: ["test_disj_to_top" >:: test_disj_to_top;
                                    "test_nnf" >:: test_nnf;
+                                   "test_minimize_variables" >:: test_minimize_variables;
                                    "test_pe_valid" >:: test_pe_valid;
                                   ];;
  let _ = run_test_tt ~verbose:true suite;;
