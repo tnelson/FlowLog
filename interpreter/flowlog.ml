@@ -95,12 +95,19 @@ let args = ref [];;
 let speclist = [
   ("-alloy", Arg.Unit (fun () -> alloy := true), ": convert to Alloy");];;
 
+let simplify_clause (cl: clause): clause =   
+    {head = cl.head; orig_rule = cl.orig_rule; body = minimize_variables cl.body};;
+
+let simplify_clauses (p: flowlog_program) =
+  let newclauses = map simplify_clause p.clauses in
+    {decls = p.decls; reacts = p.reacts; clauses = newclauses};;
+
 let main () =
   let collect arg = args := !args @ [arg] in
   let _ = Arg.parse speclist collect usage in
   let filename = try hd !args with exn -> raise (Failure "Input a .flg file name.") in  
   let ast = read_ast filename in
-  let program = desugared_program_of_ast ast in    
+  let program = simplify_clauses (desugared_program_of_ast ast) in    
     printf "-----------\n%!";
     List.iter (fun cl -> printf "%s\n\n%!" (string_of_clause cl)) program.clauses;
     if !alloy then write_as_alloy program (filename^".als");;

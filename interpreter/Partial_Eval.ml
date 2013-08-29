@@ -12,11 +12,7 @@ let is_forward_clause (cl: clause): bool =
   ALLOWED atomic fmlas:
 
   // assume in clause body. assume NNF. assume vars have been substituted out as much as possible
-
-  (1) equality: between new and old, same field. NOT negated
-  (2) equality: special case NOT(newpkt.locPt = pkt.locPt)
-  (3) equality: new = const
-  (4) equality: old = const
+  // means that such vars that DO occur can never appear as x=y or x=const.
   
   
   (5) atom: 
@@ -42,6 +38,7 @@ exception IllegalFieldModification of formula;;
 exception IllegalAssignmentViaEquals of formula;;
 exception IllegalAtomMustBePositive of formula;;
 exception IllegalExistentialUse of formula;;
+exception IllegalEquality of (term * term);;
 
 let packet_fields = ["locSw";"locPt";"dlSrc";"dlDst";"dlTyp";"nwSrc";"nwDst";"nwProto"];;
 let legal_to_modify_packet_fields = ["locPt";"dlSrc";"dlDst";"dlTyp";"nwSrc";"nwDst"];;
@@ -51,13 +48,33 @@ let legal_field_to_modify (fname: string): bool =
 
 (* 2 & 3 *) 
 let rec forbidden_assignment_check (newpkt: string) (f: formula) (innot: bool): unit = 
-	let check_legal_fields = function  
-							| TField(newpkt, fld) -> 
+ 	  let check_legal_newpkt_fields = function  
+							| TField(varname, fld)
+                when varname = newpkt -> 
       				   			if not (legal_field_to_modify fld) then
       	 					   		raise (IllegalFieldModification f)
       	 					| _ -> () 
       	 				in
-    let check_same_field_if_newpkt (newpkt: string) (t1:term) (t2:term) : unit = 
+    (* use of negation on equality: ok if [pkt.x = 5], [new.pt = old.pt], [newpkt.x = 5] *)
+    let check_legal_negation (t1: term) (t2: term): unit =
+      let dangerous = (match (t1, t2) with 
+          | (TField(v1, f1), TField(v2, f2)) ->
+            f1 <> "locPt" || f2 <> "locPt"
+          | (TField(v1, f1), TConst(cstr)) -> v1 = newpkt
+          | _ -> false) in 
+      (*(printf "check_legal_negation: %s %s %b %b\n%!" (string_of_term t1) (string_of_term t2) innot dangerous);*)
+      if (innot && dangerous) then raise (IllegalEquality(t1,t2))
+    in
+
+    let check_not_same_pkt (t1: term) (t2: term): unit =
+      match (t1, t2) with 
+        | (TField(v, f), TField(v2, f2)) when v = v2 ->
+              raise (IllegalEquality(t1,t2))
+        | _ -> ()
+    in
+
+
+    let check_same_field_if_newpkt (t1:term) (t2:term) : unit = 
     	match (t1, t2) with
 			   | (TField(var1, fld1), TField(var2, fld2))
 			     	when var1 = newpkt || var2 = newpkt ->
@@ -82,12 +99,20 @@ let rec forbidden_assignment_check (newpkt: string) (f: formula) (innot: bool): 
       		 forbidden_assignment_check newpkt f2 innot;
       	| FNot(f) -> forbidden_assignment_check newpkt f (not innot);
     	| FEquals(t1, t2) -> 
-    		check_legal_fields t1; 
-    		check_legal_fields t2;
-    		check_same_field_if_newpkt newpkt t1 t2;
+        (* ALLOWED: 
+        (1) equality: between new and old, same field. NOT negated
+        (2) equality: special case NOT(newpkt.locPt = pkt.locPt)
+        (3) equality: new = const
+        (4) equality: old = const *)
+        check_legal_negation t1 t2; (* if negated, must be special case *)
+    		check_legal_newpkt_fields t1; (* not trying to set an unsettable field *)
+    		check_legal_newpkt_fields t2;
+    		check_same_field_if_newpkt t1 t2; (* can't swap fields, etc. w/o controller *)
+        check_not_same_pkt t1 t2;
+
       	| FAtom(modname, relname, tlargs) ->       		
       		(* new field must be legal for modification by openflow *)
-      		iter check_legal_fields tlargs;
+      		iter check_legal_newpkt_fields tlargs;
       		(* if involves a newpkt, must be positive *)    
       		if (innot && (ExtList.List.exists (function | TField(newpkt, _) -> true | _ -> false) tlargs)) then  	
       			raise (IllegalAtomMustBePositive f);;      		
@@ -120,7 +145,6 @@ let rec common_existential_check (sofar: string list) (f: formula): string list 
       		unique (flatten (map ext_helper tlargs));;	
 
 let validate_clause (cl: clause): unit =
-  printf "MISSING: check to disallow pkt.x = pkt.y checks. these won't fit into OF either.\n%!";
 	ignore (common_existential_check [] cl.body);	
 	match cl.head with 
 		| FAtom("", "forward", [TVar(newpktname)]) ->

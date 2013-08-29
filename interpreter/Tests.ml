@@ -29,6 +29,8 @@ let newpktdlsrc = TField("newpkt", "dlSrc");;
 let newpktdldst = TField("newpkt", "dlDst");;
 let oldpktdlsrc = TField("pkt", "dlSrc");;
 let oldpktdldst = TField("pkt", "dlDst");;
+let newpktlocpt = TField("newpkt", "locPt");;
+let oldpktlocpt = TField("pkt", "locPt");;
 
              (*	 printf "%s\n%!" (string_of_formula (nnf (FOr((FNot (FOr(rx, ry))), pxy))));;
              	 printf "%s\n%!" (string_of_formula (disj_to_top (nnf (FOr((FNot (FOr(rx, ry))), pxy)))));;*)
@@ -121,7 +123,15 @@ let body5 = FAnd(FAtom("", "R", [newpktdlsrc; xvar]), FAtom("", "R", [xvar; newp
 let cl5 = {orig_rule = dummy_rule; 
            head = FAtom("", "forward", [newpkt]);
            body = body5};;
-
+let cl6 = {orig_rule = dummy_rule; 
+           head = FAtom("", "forward", [newpkt]);
+           body = FAnd(FAtom("", "R", [newpktdlsrc; xvar]), FEquals(oldpktdldst, oldpktdlsrc))};;
+let cl7 = {orig_rule = dummy_rule; 
+           head = FAtom("", "forward", [newpkt]);
+           body = FAnd(FAtom("", "R", [newpktdlsrc; xvar]), FNot(FEquals(newpktdldst,oldpktdldst)))};;
+let cl8 = {orig_rule = dummy_rule; 
+           head = FAtom("", "forward", [newpkt]);
+           body = FAnd(FAtom("", "R", [newpktdlsrc; xvar]), FNot(FEquals(newpktlocpt,oldpktlocpt)))};;
 
 let test_pe_valid () =
     assert_raises ~msg:"cl1" (IllegalAssignmentViaEquals (FEquals(newpktdlsrc, oldpktdldst))) (fun _ -> validate_clause cl1);
@@ -129,6 +139,10 @@ let test_pe_valid () =
     assert_equal  ~msg:"cl3" (validate_clause cl3) ();
     assert_equal  ~msg:"cl4" (validate_clause cl4) ();
     assert_raises ~msg:"cl5" (IllegalExistentialUse (FAtom("", "R", [xvar; newpktdldst]))) (fun _ -> validate_clause cl5);
+    assert_raises ~msg:"cl6" (IllegalEquality(oldpktdldst,oldpktdlsrc)) (fun _ -> validate_clause cl6);
+    assert_raises ~msg:"cl7" (IllegalEquality(newpktdldst,oldpktdldst)) (fun _ -> validate_clause cl7);
+    assert_equal  ~msg:"cl8" (validate_clause cl8) ();
+    
 
 ;;
 
