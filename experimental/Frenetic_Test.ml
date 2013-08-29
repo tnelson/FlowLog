@@ -10,7 +10,7 @@ open NetCore_Controller
 
 let make () = 
 
-    printf "Making...\n%!";
+    printf "Making policy and stream...\n%!";
 
     (* stream of policies, with function to push new policies on *)
 	let (policies, push) = Lwt_stream.create () in
@@ -18,12 +18,27 @@ let make () =
 	let updateFromPacket (sw: switchId) (pt: port) (pkt: Packet.packet) : NetCore_Types.action =
 		
 
-    (* Update the policy (how?) *)
-
-
+    (* Update the policy via the push function *)
 
     printf "Packet in on switch %Ld.\n%s\n%!" sw (to_string pkt);
-		
+
+  let allnomod = {
+    outDlSrc = None;
+    outDlDst = None;
+    outDlVlan = None;
+    outDlVlanPcp = None;
+    outNwSrc = None;
+    outNwDst = None;
+    outNwTos = None;
+    outTpSrc = None;
+    outTpDst = None;
+    outPort = All; } in 
+
+    (*push (Some (Action([])));*)
+    let newpol = (Action([SwitchAction(allnomod)])) in
+      push (Some newpol);
+    
+		 printf "policy is:\n%s\n%!" (NetCore_Pretty.string_of_pol newpol);
 
 
     (* Do nothing more *) 

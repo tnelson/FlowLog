@@ -1,7 +1,7 @@
 open Flowlog_Types
 open NetCore_Types
 open ExtList.List
-open Printf;
+open Printf
 
 let is_forward_clause (cl: clause): bool =
 	match cl.head with 
