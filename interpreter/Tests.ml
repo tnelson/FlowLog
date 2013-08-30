@@ -1,5 +1,6 @@
 open OUnit
 open Flowlog_Types
+open Flowlog_Helpers
 open Partial_Eval
 open Printf
 open ExtList.List
@@ -12,6 +13,7 @@ let rx =  (FAtom("", "R", [(TVar "x")]));;
 let ry =  (FAtom("", "R", [(TVar "y")]));;
 let pxy = (FAtom("", "P", [(TVar "x"); (TVar "y")]));;
 let pxx = (FAtom("", "P", [(TVar "x"); (TVar "x")]));;
+let pxz = (FAtom("", "P", [(TVar "x"); (TVar "z")]));;
 let pyy = (FAtom("", "P", [(TVar "y"); (TVar "y")]));;
 let px7 = (FAtom("", "P", [(TVar "x"); (TConst "7")]));;
 let nrx = (FNot rx);;
@@ -100,6 +102,22 @@ let test_minimize_variables () =
                  ~msg:"minimize5"
                 (minimize_variables (FAnd(FEquals(yvar, zvar), (FAnd(pxy, (FEquals(zvar, const7)))))))
                 px7;
+    (* but don't get rid of exempts *)
+    assert_equal ~printer:string_of_formula  
+                 ~msg:"minimize6"
+                (minimize_variables ~exempt:[yvar] (FAnd(FEquals(yvar, zvar), (FAnd(pxz, (FEquals(zvar, const7)))))))
+                (FAnd(px7, FEquals(yvar, const7)));
+    (* make sure exempt on only one side doesn't prevent subsing out other side *)
+    assert_equal ~printer:string_of_formula  
+                 ~msg:"minimize7"
+                (minimize_variables ~exempt:[yvar] (FAnd(FEquals(zvar, yvar), (FAnd(pxz, (FEquals(const7, zvar)))))))
+                (FAnd(px7, FEquals(const7, yvar)));
+    (* If conflicting constants? UNSAT! *)
+    assert_equal ~printer:string_of_formula  
+                 ~msg:"minimize8"
+                (minimize_variables (FAnd(FEquals(zvar, const5), (FEquals(const7, zvar)))))
+                FFalse;
+
 
               ;;            
 

@@ -153,25 +153,31 @@ open ExtList.List
 (*************************************************************)
 
 
-(* For every non-negated equality that has one TVar in it, produces a tuple for substitution *)    
-let rec gather_nonneg_equalities_involving_vars (f: formula) (neg: bool): (term * term) list =
+(* For every non-negated equality that has one TVar in it
+   that is NOT in the exempt list, produces a tuple for substitution.
+   (Exempt list is so that vars in the head of a clause won't get substituted out) *)    
+let rec gather_nonneg_equalities_involving_vars 
+  ?(exempt: term list = []) (f: formula) (neg: bool): (term * term) list =
   match f with 
         | FTrue -> []
         | FFalse -> []
-        | FEquals((TVar(_) as thevar), t)                 
+        (* Make sure to use WHEN here, not a condition after ->. Suppose exempt=[y] and y=x. Want 2nd option to apply. *)
+        | FEquals((TVar(_) as thevar), t) 
+          when (not neg) && (not (thevar = t)) && (not (mem thevar exempt)) -> 
+            [(thevar, t)] 
         | FEquals(t, (TVar(_) as thevar)) 
-          when (not neg) && (not (thevar = t)) -> 
+          when (not neg) && (not (thevar = t)) && (not (mem thevar exempt)) -> 
             [(thevar, t)]
         | FEquals(_, _) -> []
         | FAtom(modstr, relstr, argterms) -> []
         | FOr(f1, f2) -> 
-            unique ((gather_nonneg_equalities_involving_vars f1 neg) @ 
-                    (gather_nonneg_equalities_involving_vars f2 neg))
+            unique ((gather_nonneg_equalities_involving_vars ~exempt:exempt f1 neg) @ 
+                    (gather_nonneg_equalities_involving_vars ~exempt:exempt f2 neg))
         | FAnd(f1, f2) -> 
-            unique ((gather_nonneg_equalities_involving_vars f1 neg) @ 
-                    (gather_nonneg_equalities_involving_vars f2 neg))
+            unique ((gather_nonneg_equalities_involving_vars ~exempt:exempt f1 neg) @ 
+                    (gather_nonneg_equalities_involving_vars ~exempt:exempt f2 neg))
         | FNot(f2) -> 
-            (gather_nonneg_equalities_involving_vars f2 (not neg));; 
+            (gather_nonneg_equalities_involving_vars ~exempt:exempt f2 (not neg));; 
 
 (* f[v -> t] *)
 let rec substitute_term (f: formula) (v: term) (t: term): formula = 
@@ -206,18 +212,18 @@ let rec substitute_term (f: formula) (v: term) (t: term): formula =
         | FNot(f2) -> 
             FNot(substitute_term f2 v t);;
 
-(* assume a clause body *)
-let rec minimize_variables (f: formula): formula = 
+(* assume a clause body. exempt gives the terms that are in the head, and thus need to not be removed *)
+let rec minimize_variables ?(exempt: term list = []) (f: formula): formula = 
   (* OPTIMIZATION: don't need to do gathering step repeatedly: *)
-  let var_equals_fmlas = gather_nonneg_equalities_involving_vars f false in
-    (*printf "at fmla = %s\n%!" (string_of_formula f);        
+  let var_equals_fmlas = gather_nonneg_equalities_involving_vars ~exempt:exempt f false in
+    printf "at fmla = %s\n%!" (string_of_formula f);        
     iter (fun pr -> let (t1, t2) = pr in (printf "pair: %s, %s\n%!" 
-            (string_of_term t1) (string_of_term t2))) var_equals_fmlas;*)
+            (string_of_term t1) (string_of_term t2))) var_equals_fmlas;
 
     if length var_equals_fmlas < 1 then
       f
     else 
       let (x, t) = hd var_equals_fmlas in  
       let newf = (substitute_term f x t) in
-        minimize_variables newf;;
+        minimize_variables ~exempt:exempt newf;;
 
