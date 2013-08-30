@@ -34,3 +34,34 @@ let get_head_vars (cls : clause) : term list =
 
 let get_all_clause_vars (cls : clause) : term list =
 	unique ((get_vars_and_fieldvars cls.head ) @ (get_vars_and_fieldvars cls.body));;
+
+let rec build_and (fs: formula list): formula = 
+	if length fs > 1 then
+		FAnd((hd fs), build_and (tl fs))
+	else if length fs = 1 then
+		(hd fs)
+	else
+		FTrue;;
+
+let rec build_or (fs: formula list): formula = 
+	if length fs > 1 then
+		FOr((hd fs), build_or (tl fs))
+	else if length fs = 1 then
+		(hd fs)
+	else
+		FFalse;;
+
+let after_equals (str : string) : string =
+	let equals_index = try String.index str '=' with Not_found -> -1 in
+		String.trim (String.sub str (equals_index + 1) (String.length str - equals_index - 1));;
+
+(* XSB returns tuples like ["5", "3", "foo"]. 
+   In the context of some variables TVar(x), etc.
+   Produce [FEquals(TVar(x), TConst("5")), ...] *)
+let reassemble_xsb_equality (tlargs: term list) (tuple: string list) : formula list =  
+    map2 (fun aterm astr -> 
+    	  if (String.get astr 0) = '_' then
+		    failwith "reassemble_xsb_equality"
+		  else
+    		FEquals(aterm, TConst(astr)))
+    	 tlargs tuple;;

@@ -1,4 +1,5 @@
 open Flowlog_Types
+open Flowlog_Helpers
 open NetCore_Types
 open ExtList.List
 open Printf
@@ -157,7 +158,7 @@ let validate_clause (cl: clause): unit =
 (* Replace state references with constant matrices *)
 let rec partial_evaluation (f: formula): formula = 
   (* assume valid clause body for PE *)
-  printf "partial_evaluation: ...\n%!";
+  printf "partial_evaluation on %s\n%!" (string_of_formula f);
   match f with 
     | FTrue -> f
     | FFalse -> f
@@ -166,10 +167,14 @@ let rec partial_evaluation (f: formula): formula =
     | FNot(f) -> FNot(partial_evaluation f)
     | FOr(f1, f2) -> failwith "partial_evaluation"              
     | FAtom(modname, relname, tlargs) ->  
-      let results: (string list) list = Communication.get_state f in
-        iter (fun sl -> printf "%s\n%!" (String.concat "," sl)) results;
-
-	f;;
+      let xsbresults: (string list) list = Communication.get_state f in
+        (*iter (fun sl -> printf "result: %s\n%!" (String.concat "," sl)) results;*)
+        let disjuncts = map 
+          (fun sl -> build_and (reassemble_xsb_equality tlargs sl)) 
+          xsbresults in
+        let fresult = build_or disjuncts in
+        printf "... result was: %s\n%!" (string_of_formula fresult);
+        fresult;;
 
 (***************************************************************************************)
 

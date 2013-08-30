@@ -136,12 +136,9 @@ module Xsb = struct
 						then (f :: f1) :: r1
 						else [f] :: (f1 :: r1);;
 
-	let after_equals (str : string) : string =
-		let equals_index = try String.index str '=' with Not_found -> -1 in
-		String.trim (String.sub str (equals_index + 1) (String.length str - equals_index - 1));;
-
-	(* Takes a string query (thing with semicolon answers), the number of variables involved.
-	 It writes the query to xsb and returns a list of lists with all of the results. *)
+	(* Takes a string query (thing with semicolon answers), 
+	 and the number of variables involved.
+	 It writes the query to xsb and returns the results as a list of tuples. *)
 	let send_query (str : string) (num_vars : int) : (string list) list =
 	    if debug then Printf.printf "send_query: %s (#vars: %d)\n%!" str num_vars;
 		let out_ch, in_ch = get_ch () in
@@ -300,6 +297,8 @@ module Communication = struct
 	(* assuming all implicitly defined clauses have been added to list of clauses *)
 	let start_program (prgm : flowlog_program) : unit =
 		printf "Starting Flowlog Program...\n%!";
+		(* prevent XSB from locking up if unknown relation seen. will assume false if unknown now.*)
+		ignore (send_message "set_prolog_flag(unknown, fail)." 0);
 		List.iter start_clause prgm.clauses;;
 
 end
