@@ -9,6 +9,8 @@ open Flowlog_To_Alloy
 open NetCore_Types
 open Packet
 open OpenFlow0x01
+open OpenFlow0x01_Platform
+open OpenFlow0x01_Core
 open Lwt
 open NetCore_Pattern
 open NetCore_Wildcard
@@ -113,7 +115,34 @@ let simplify_clauses (p: flowlog_program) =
   let newclauses = map simplify_clause p.clauses in
     {decls = p.decls; reacts = p.reacts; clauses = newclauses};;
 
+
 let listenPort = ref 6633;;
+
+(*
+let switch_connected (sw : switchId) (feats : OpenFlow0x01.SwitchFeatures.t) : unit =
+  Printf.printf "Switch %Ld connected.\n%!" sw;;
+ (* let port_nums = List.map (fun (x : PortDescription.t)-> x.PortDescription.port_no) feats.SwitchFeatures.ports in
+  let sw_string = Int64.to_string sw in
+  let notifs = List.map (fun portid -> Types.Constant([sw_string; string_of_int portid], Types.switch_port_type)) port_nums in
+  List.iter (fun notif -> Evaluation.respond_to_notification notif Program.program None) notifs;;
+*)
+
+(* infinitely recursive function that listens for switch connection messages 
+   Cribbed nearly verbatim from Ox lib by Tim on Aug 29 2013
+   since we're moving from Ox to Frenetic as a base *)
+let rec handle_switch_reg () = 
+    let open Message in
+    let open FlowMod in
+    lwt feats = OpenFlow0x01_Platform.accept_switch () in 
+    let sw = feats.SwitchFeatures.switch_id in 
+    (*lwt _ = Log.info_f "switch %Ld connected" sw in*)
+    lwt _ = OpenFlow0x01_Platform.send_to_switch sw 0l (FlowModMsg delete_all_flows) in
+    lwt _ = OpenFlow0x01_Platform.send_to_switch sw 1l BarrierRequest in
+    (* JNF: wait for barrier reply? *)
+    let _ = switch_connected sw feats in 
+    Lwt.async (fun () -> switch_thread sw);
+    handle_switch_reg();;
+*)
 
 let run_flowlog (p: flowlog_program): unit Lwt.t =  
   (* Start up XSB, etc. *)
@@ -127,7 +156,8 @@ let run_flowlog (p: flowlog_program): unit Lwt.t =
   let startup = Types.Constant([], Types.startup_type) in
     Evaluation.respond_to_notification startup Program.program None;;
 *)
-  (* TODO: How to catch switch connection events in Frenetic? Was easy in Ox. *)
+
+  (* Catch switch-connect events: *)
 
   (* Start the policy stream *)
   (* >> is from Lwt's Pa_lwt. But you MUST have -syntax camlp4o or it won't be recoginized. *)   
@@ -135,7 +165,10 @@ let run_flowlog (p: flowlog_program): unit Lwt.t =
     let (gen_stream, stream) = make_policy_stream p in
     (* streams for incoming/exiting packets *)
     let (pkt_stream, push_pkt) = Lwt_stream.create () in
-      Lwt.pick [gen_stream; NetCore_Controller.start_controller pkt_stream stream];;
+      Lwt.pick [gen_stream;
+                NetCore_Controller.start_controller pkt_stream stream;
+               (* handle_switch_reg*)
+               ];;
 
 let main () =
   let collect arg = args := !args @ [arg] in
