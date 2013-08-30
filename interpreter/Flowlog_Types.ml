@@ -76,17 +76,18 @@ open ExtList.List
                             clauses: clause list; };;
 (*************************************************************)
 
+  (* If verbose flag is not set, prepare for XSB. Otherwise, add extra info for debug. *)
   let string_of_term ?(verbose:bool = false) (t: term): string = 
     match t with
       | TConst(s) -> 
         if verbose then "TConst("^s^")" 
-        else s
+        else (String.lowercase s)
       | TVar(s) ->
         if verbose then "TVar("^s^")"
-        else s
+        else (String.uppercase s)
       | TField(varname, fname) -> 
         if verbose then "TField("^varname^"."^fname^")" 
-        else varname^"__"^fname;;
+        else (String.uppercase (varname^"__"^fname));;
 
   let rec string_of_formula ?(verbose:bool = false) (f: formula): string = 
     match f with

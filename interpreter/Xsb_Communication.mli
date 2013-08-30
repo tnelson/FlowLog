@@ -13,5 +13,6 @@ module Communication : sig
 	(*val query_signature : Types.program -> Types.signature -> (Types.term list) list;;
 	val retract_signature : Types.signature -> unit;;
 	val assert_signature : Types.signature -> unit;;*)
+	val get_state : formula -> (string list) list;;
 	val start_program : flowlog_program -> unit;; 
 end

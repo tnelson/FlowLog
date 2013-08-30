@@ -190,6 +190,7 @@ end
 module Communication = struct
 	(* assertion, number of answers to expect (number of variables in clause) *)
 	(* if this is a query with 0 variables, will call send_assert and thus need to provide [] vs [[]] *)
+	(* VITAL: The CALLER must add the terminating period to message. *)
 	let send_message (message : string) (num_ans : int) : (string list) list =
 		if debug then (printf "send_message: %s (expected: %d)\n%!" message num_ans);
 		if num_ans > 0 then
@@ -198,6 +199,10 @@ module Communication = struct
 	        let yn = Xsb.send_assert message in
 		        if (ends_with yn "yes") then [[]]
 		        else []
+
+	(* Perfectly valid to ask "r(X, 2)" here. *)
+	let get_state (f: formula): (string list) list =
+		send_message ((string_of_formula f)^".") (length (get_vars_and_fieldvars f));;
 (*
 	(* ignoring blackbox queries for the moment *)
 	let retract_signature (s : Types.signature) : unit =
@@ -269,14 +274,6 @@ module Communication = struct
 	let clause_to_xsb (cls: clause): string =
 		(string_of_formula cls.head)^" :- "^(string_of_formula cls.body);;
 
-(*	let get_all_vars (cls : clause) : term list =		
-		fold_right (fun a acc -> match a with
-				| Types.Equals(_, t1, t2) -> add_unique_var t1 (add_unique_var t2 acc);
-				| Types.Apply(_, _, _, tl) -> List.fold_right add_unique_var tl acc;
-				| Types.Bool(_) -> acc)
-		  (list_of_body cls.body) 
-		  (fold_right add_unique_var args []);;
-*)
 (*
 	(* Returns x :: l if x not already in l *)
 	let add_unique (x : 'a) (l : 'a list) : 'a list =
@@ -292,17 +289,11 @@ module Communication = struct
 		| _ -> acc;;
 	
 *)
-	let get_head_vars (cls : clause) : term list =		
-		match cls.head with
-		| FAtom(modname, relname, tlargs) ->
-			filter (function | TVar(_) -> true | _ -> false) tlargs
-		| _ -> failwith "get_head_vars";;	
 
 	let start_clause (cls : clause) : unit =
 		(*if debug then print_endline ("start_clause: assert((" ^ (Type_Helpers.clause_to_string cls) ^ ")).");
 		if debug then (List.iter (fun t -> (Printf.printf "var: %s\n%!" (Type_Helpers.term_to_string t))) (get_vars cls));*)
-		(*ignore (send_message ("assert((" ^ (clause_to_xsb cls) ^ ")).") (length (get_head_vars cls)));*)
-		ignore (send_message ("assert((" ^ (clause_to_xsb cls) ^ ")).") 0);
+		ignore (send_message ("assert((" ^ (clause_to_xsb cls) ^ ")).") (length (get_all_clause_vars cls)));
 		();;
 		
 

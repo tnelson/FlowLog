@@ -2,6 +2,7 @@ open Flowlog_Types
 open NetCore_Types
 open ExtList.List
 open Printf
+open Xsb_Communication
 
 let is_forward_clause (cl: clause): bool =
 	match cl.head with 
@@ -131,18 +132,18 @@ let rec common_existential_check (sofar: string list) (f: formula): string list 
 
 	match f with
 		| FTrue -> []
-    	| FFalse -> []
-    	| FAnd(f1, f2) ->
-      		 let lhs_uses = common_existential_check sofar f1 in
-      		 	(* unique is in ExtLst.List --- removes duplicates *)
-      		 	unique (lhs_uses @ common_existential_check (lhs_uses @ sofar) f2)
-      	| FOr(f1, f2) -> failwith "common_existential_check"      		 
-      	| FNot(f) -> common_existential_check sofar f 
-    	| FEquals(t1, t2) -> 
-    		(* equals formulas don't represent a join. do nothing *)
-    		sofar
-      	| FAtom(modname, relname, tlargs) ->  
-      		unique (flatten (map ext_helper tlargs));;	
+   	| FFalse -> []
+   	| FAnd(f1, f2) ->
+     		 let lhs_uses = common_existential_check sofar f1 in
+     		 	(* unique is in ExtLst.List --- removes duplicates *)
+     		 	unique (lhs_uses @ common_existential_check (lhs_uses @ sofar) f2)
+  	| FOr(f1, f2) -> failwith "common_existential_check"      		 
+  	| FNot(f) -> common_existential_check sofar f 
+   	| FEquals(t1, t2) -> 
+   		(* equals formulas don't represent a join. do nothing *)
+   		sofar
+   	| FAtom(modname, relname, tlargs) ->  
+    		unique (flatten (map ext_helper tlargs));;	
 
 let validate_clause (cl: clause): unit =
 	ignore (common_existential_check [] cl.body);	
@@ -153,8 +154,22 @@ let validate_clause (cl: clause): unit =
 
 (***************************************************************************************)
 
-let partial_evaluation (cl: clause): clause = 
-	cl;;
+(* Replace state references with constant matrices *)
+let rec partial_evaluation (f: formula): formula = 
+  (* assume valid clause body for PE *)
+  printf "partial_evaluation: ...\n%!";
+  match f with 
+    | FTrue -> f
+    | FFalse -> f
+    | FEquals(t1, t2) -> f
+    | FAnd(f1, f2) -> FAnd(partial_evaluation f1, partial_evaluation f2)
+    | FNot(f) -> FNot(partial_evaluation f)
+    | FOr(f1, f2) -> failwith "partial_evaluation"              
+    | FAtom(modname, relname, tlargs) ->  
+      let results: (string list) list = Communication.get_state f in
+        iter (fun sl -> printf "%s\n%!" (String.concat "," sl)) results;
+
+	f;;
 
 (***************************************************************************************)
 
@@ -182,12 +197,11 @@ let flat_policy_from_flat_clause (cl: clause) (callback: get_packet_handler opti
 let clause_to_netcore (callback: get_packet_handler option) (cl: clause): pol =
 	(* Step 1: validate clause set: no forbidden joins or assignments 
     this is now done at start of process to separate what can be compiled from what can't *)
-  (* )  validate_clause cl ;*)
-  
+  (* )  validate_clause cl ;*)  
 	(* Step 2: perform partial evaluation [side effect: access XSB state] *)
-	let pecl = partial_evaluation cl in
-	(* Step 3: produce a flat netcore policy 
-	   (This includes dealing with special case pkt.locPt != newpkt.locPt *)
+  (* Step 3: produce a flat netcore policy 
+   (This includes dealing with special case pkt.locPt != newpkt.locPt *)
+	let pecl = { head = cl.head; orig_rule = cl.orig_rule; body = partial_evaluation cl.body } in  
 		flat_policy_from_flat_clause pecl callback;;
 
 (* Used to pre-filter controller notifications as much as possible *)
