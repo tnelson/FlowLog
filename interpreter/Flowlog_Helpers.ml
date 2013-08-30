@@ -65,3 +65,81 @@ let reassemble_xsb_equality (tlargs: term list) (tuple: string list) : formula l
 		  else
     		FEquals(aterm, TConst(astr)))
     	 tlargs tuple;;
+
+
+let is_forward_clause (cl: clause): bool =
+	match cl.head with 
+	| FAtom("", "forward", _) -> true
+	| _ -> false;;
+
+let rec uses_relation (modname: string) (relname: string) (f: formula): bool =
+	match f with
+		| FTrue -> false
+		| FFalse -> false
+		| FEquals(t1, t2) -> false		
+		| FAnd(f1, f2) -> (uses_relation modname relname f1) || (uses_relation modname relname f2)			
+		| FOr(f1, f2) -> (uses_relation modname relname f1) || (uses_relation modname relname f2)			
+		| FNot(innerf) -> uses_relation modname relname innerf			
+		| FAtom(modname, relname, tlargs) ->
+			relname = relname && modname = modname;;
+
+let is_packet_triggered_clause (cl: clause): bool =
+  uses_relation "" "packet-in" cl.body;;
+
+let product_of_lists lst1 lst2 = 
+  List.concat (List.map (fun e1 -> List.map (fun e2 -> (e1,e2)) lst2) lst1);;
+
+let rec conj_to_list (f: formula): formula list =
+	match f with
+		| FAnd(f1, f2) -> (conj_to_list f1) @ (conj_to_list f2);
+		| _ -> [f];;
+
+let rec disj_to_list (f: formula): formula list =    
+    match f with 
+        | FOr(f1, f2) -> (disj_to_list f1) @ (disj_to_list f2);
+        | _ -> [f];;		
+
+let rec nnf (f: formula): formula =
+  match f with 
+        | FTrue -> f
+        | FFalse -> f
+        | FEquals(t1, t2) -> f
+        | FAtom(modstr, relstr, argterms) -> f
+        | FOr(f1, f2) -> FOr(nnf f1, nnf f2)
+        | FAnd(f1, f2) -> FAnd(nnf f1, nnf f2)
+        | FNot(f2) -> 
+          match f2 with
+            | FTrue -> FFalse
+            | FFalse -> FTrue
+            | FEquals(t1, t2) -> f
+            | FAtom(modstr, relstr, argterms) -> f            
+            | FNot(f3) -> f3            
+            | FOr(f1, f2) -> FAnd(nnf (FNot f1), nnf (FNot f2))
+            | FAnd(f1, f2) -> FOr(nnf (FNot f1), nnf (FNot f2));;
+            
+(* Assume: NNF before calling this *)
+let rec disj_to_top (f: formula): formula = 
+    match f with 
+        | FTrue -> f;
+        | FFalse -> f;
+        | FEquals(t1, t2) -> f;
+        | FAtom(modstr, relstr, argterms) -> f;
+        | FOr(f1, f2) -> f;
+        | FNot(f2) -> f; (* since guaranteed to be in NNF *)            
+        | FAnd(f1, f2) -> 
+            (* Distributive law if necessary *)
+            let f1ds = disj_to_list (disj_to_top f1) in
+            let f2ds = disj_to_list (disj_to_top f2) in
+
+            (*printf "f: %s\n%!" (string_of_formula f);
+            printf "f1ds: %s\n%!" (String.concat "; " (map string_of_formula f1ds));
+            printf "f2ds: %s\n%!" (String.concat "; " (map string_of_formula f2ds));*)
+
+            let pairs = product_of_lists f1ds f2ds in
+                (* again, start with first pair, not FFalse *)
+                let (firstfmla1, firstfmla2) = (hd pairs) in
+               (*printf "PAIRS: %s\n%!" (String.concat "," (map (fun (f1, f2) -> (string_of_formula f1)^" "^(string_of_formula f2)) pairs));*)
+                fold_left (fun acc (subf1, subf2) ->  (*(printf "%s %s: %s\n%!" (string_of_formula subf1) (string_of_formula subf2)) (string_of_formula  (FOr(acc, FAnd(subf1, subf2))));*)
+                                                      FOr(acc, FAnd(subf1, subf2))) 
+                          (FAnd(firstfmla1, firstfmla2)) 
+                          (tl pairs);;

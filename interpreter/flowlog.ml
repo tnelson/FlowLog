@@ -1,6 +1,7 @@
 open Surface_Parser
 open Surface_Lexer
 open Flowlog_Types
+open Flowlog_Helpers
 open Partial_Eval
 open Printf
 open Arg
@@ -65,14 +66,6 @@ let build_finished_program (filename : string) : Types.program =
 *)
 
 (**************************************************************************)
-(* TEMPORARY: Grafting in new parser. All this will change due to swap to Frenetic from Ox. *)
-
-(*module Parsed_Program : PROGRAM = struct
-	let filename = try Sys.argv.(1) with exn -> raise (Failure "Input a .flg filename in the current directory.");;
-    let program = build_finished_program filename;;
-end*)
-
-(*module Run = Controller.Make_Controller (Parsed_Program);;*)
 
 let build_clause (r: srule) (in_atom: formula) (relname: string) (terms: term list) (prefix: string) (conj: formula): clause =
     let head = FAtom("", prefix^"_"^relname, terms) in
@@ -84,14 +77,14 @@ let clauses_of_rule (r: srule): clause list =
     let atom_for_on = FAtom("", increlname, [TVar(incterm)]) in (* local atom, no module name *)
     match act with 
         | ADelete(relname, terms, condition) -> 
-            map (build_clause r atom_for_on relname terms "minus") (extract_disj_list (disj_to_top condition));
+            map (build_clause r atom_for_on relname terms "minus") (disj_to_list (disj_to_top condition));
         | AInsert(relname, terms, condition) -> 
-            map (build_clause r atom_for_on relname terms "plus") (extract_disj_list (disj_to_top condition));
+            map (build_clause r atom_for_on relname terms "plus") (disj_to_list (disj_to_top condition));
         | ADo(relname, terms, condition) -> 
-            map (build_clause r atom_for_on relname terms "do") (extract_disj_list (disj_to_top condition));;     
+            map (build_clause r atom_for_on relname terms "do") (disj_to_list (disj_to_top condition));;     
 
 let desugared_program_of_ast (ast: flowlog_ast): flowlog_program =
-    printf "*** REMINDER: IMPORTS NOT YET HANDLED! ***\n%!";
+    printf "*** REMINDER: IMPORTS NOT YET HANDLED! (Remember to handle in partial eval, too.) ***\n%!"; (* TODO *)
     match ast with AST(imports, stmts) ->
         (* requires extlib *)
         let the_decls  = filter_map (function SDecl(d) -> Some d     | _ -> None) stmts in 
@@ -151,7 +144,7 @@ let run_flowlog (p: flowlog_program): unit Lwt.t =
   (* Listen for incoming notifications via RPC *)
   (*Flowlog_Thrift_In.start_listening p;;
  *)
-(*)
+(*
   (* Send the "startup" notification. Enables initialization, etc. in programs *)
   let startup = Types.Constant([], Types.startup_type) in
     Evaluation.respond_to_notification startup Program.program None;;

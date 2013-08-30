@@ -5,10 +5,7 @@ open ExtList.List
 open Printf
 open Xsb_Communication
 
-let is_forward_clause (cl: clause): bool =
-	match cl.head with 
-	| FAtom("", "forward", _) -> true
-	| _ -> false;;
+
 
 (* 
   ALLOWED atomic fmlas:
@@ -158,7 +155,6 @@ let validate_clause (cl: clause): unit =
 (* Replace state references with constant matrices *)
 let rec partial_evaluation (f: formula): formula = 
   (* assume valid clause body for PE *)
-  printf "partial_evaluation on %s\n%!" (string_of_formula f);
   match f with 
     | FTrue -> f
     | FFalse -> f
@@ -167,6 +163,7 @@ let rec partial_evaluation (f: formula): formula =
     | FNot(f) -> FNot(partial_evaluation f)
     | FOr(f1, f2) -> failwith "partial_evaluation"              
     | FAtom(modname, relname, tlargs) ->  
+      printf "partial_evaluation on atomic %s\n%!" (string_of_formula f);
       let xsbresults: (string list) list = Communication.get_state f in
         (*iter (fun sl -> printf "result: %s\n%!" (String.concat "," sl)) results;*)
         let disjuncts = map 
@@ -178,36 +175,98 @@ let rec partial_evaluation (f: formula): formula =
 
 (***************************************************************************************)
 
-let flat_policy_from_flat_clause (cl: clause) (callback: get_packet_handler option): pol = 
+(*type output = {
+  outDlSrc : dlAddr match_modify;
+  outDlDst : dlAddr match_modify;
+  outDlVlan : dlVlan match_modify;
+  outDlVlanPcp : dlVlanPcp match_modify;
+  outNwSrc : nwAddr match_modify;
+  outNwDst : nwAddr match_modify;
+  outNwTos : nwTos match_modify;
+  outTpSrc : tpPort match_modify;
+  outTpDst : tpPort match_modify;
+  outPort : port 
+}*)
+
+let rec build_switch_actions (oldpkt: string) (body: formula): action =
+  (* list of SwitchAction(output)*)
+  let atoms = conj_to_list body in
+  printf ">>> bsa: %s\n%!" (String.concat " ; " (map string_of_formula atoms));
+
+  (* TODO: This includes dealing with special case pkt.locPt != newpkt.locPt *)
+
+  [];;
+
+let rec build_switch_pred (oldpkt: string) (body: formula): pred =
+  Nothing;; (* todo *)
+
+(* todo: lots of code overlap in these functions. should unify *)
+(* returns the var the old packet was bound to, and the trimmed fmla *)
+let rec trim_packet_from_body (body: formula): (string * formula) =
+  match body with
+    | FTrue -> ("", body)
+    | FFalse -> ("", body)
+    | FEquals(t1, t2) -> ("", body)
+    | FAnd(f1, f2) -> 
+      let (var1, trimmed1) = trim_packet_from_body f1 in
+      let (var2, trimmed2) = trim_packet_from_body f2 in
+      let trimmed = if trimmed1 = FTrue then 
+                      trimmed2 
+                    else if trimmed2 = FTrue then
+                      trimmed1 
+                    else
+                      FAnd(trimmed1, trimmed2) in
+      if (var1 = var2) || var1 = "" then
+        (var2, trimmed)
+      else if var2 = "" then
+        (var1, trimmed)
+      else failwith "trim_packet_from_clause: multiple variables used in packet-in"    
+    | FNot(f) ->
+      let (v, t) = trim_packet_from_body f in
+        (v, FNot(t))
+    | FOr(f1, f2) -> failwith "trim_packet_from_clause"              
+    | FAtom("", "packet-in", [TVar(varstr)]) ->  
+      (varstr, FTrue)
+    | _ -> ("", body);;    
+
+
+let policy_of_conjunction (oldpkt: string) (callback: get_packet_handler option) (body: formula): pol = 
   (* can't just say "if action is fwd, it's a fwd clause" because 
      this may be an approximation to an un-compilable clause, which needs
-     interpretation at the controller! *)  
-
+     interpretation at the controller! Instead trust callback to carry that info. *)  
+      
   let my_action_list = match callback with
-              | Some(f) -> [ControllerAction(f)]
-              | _ ->  [] in (* TODO: convert to Fwd switch action (set!) *)
+            | Some(f) -> [ControllerAction(f)]            
+            | _ -> build_switch_actions oldpkt body in 
 
-  let mypred = Nothing in (* TODO *)
-  (* do nothing if pred isn't matched*)  
+  let mypred = build_switch_pred oldpkt body in 
+
     ITE(mypred,
         Action(my_action_list), 
         Action([]));;
-
-	Filter(Nothing);;
-
+  	
 (***************************************************************************************)
 
 (* Side effect: reads current state in XSB *)
 (* Throws exception rather than using option type: more granular error result *)
-let clause_to_netcore (callback: get_packet_handler option) (cl: clause): pol =
-	(* Step 1: validate clause set: no forbidden joins or assignments 
-    this is now done at start of process to separate what can be compiled from what can't *)
-  (* )  validate_clause cl ;*)  
-	(* Step 2: perform partial evaluation [side effect: access XSB state] *)
-  (* Step 3: produce a flat netcore policy 
-   (This includes dealing with special case pkt.locPt != newpkt.locPt *)
-	let pecl = { head = cl.head; orig_rule = cl.orig_rule; body = partial_evaluation cl.body } in  
-		flat_policy_from_flat_clause pecl callback;;
+let clause_to_netcore (callback: get_packet_handler option) (cl: clause): pol =   
+    match cl.head with
+      | FAtom(_, _, _) ->
+        let pebody = partial_evaluation cl.body in
+        let (oldpkt, trimmedbody) = trim_packet_from_body pebody in 
+        (* partial eval may insert disjunctions because of multiple tuples to match 
+           so we need to pull those disjunctions up and create multiple policies *)
+        (* todo: this is pretty inefficient for large numbers of tuples. do better? *)
+        let bodies = disj_to_list (disj_to_top trimmedbody) in 
+        (* anything not the old packet is a RESULT variable.
+           Remember that we know this clause is packet-triggered, but
+           we have no constraints on what gets produced. Maybe a bunch of 
+           non-packet variables e.g. +R(x, y, z) ... *)
+        fold_left (fun acc body -> 
+                    (Union (acc, policy_of_conjunction oldpkt callback body)))
+                  (policy_of_conjunction oldpkt callback (hd bodies))
+                  (tl bodies)
+      | _ -> failwith "clause_to_netcore";;
 
 (* Used to pre-filter controller notifications as much as possible *)
 let strip_to_valid (cl: clause): clause =
@@ -229,7 +288,7 @@ let can_compile_clause (cl: clause): bool =
   try 
     validate_clause cl;
     true
-  with 
+  with (* catch only "expected" exceptions *)
     | IllegalFieldModification(_) -> false
     | IllegalAssignmentViaEquals(_) -> false
     | IllegalAtomMustBePositive(_) -> false
@@ -240,13 +299,14 @@ let subtract (biglst: 'a list) (toremove: 'a list): 'a list =
   (filter (fun ele -> not (mem ele toremove)) biglst);;
 
 (* Side effect: reads current state in XSB *)
+(* Set up policies for all packet-triggered clauses *)
 let program_to_netcore (p: flowlog_program) (callback: get_packet_handler): (pol * pol) =
   let fwd_clauses = (filter is_forward_clause p.clauses) in
-  let non_fwd_clauses = subtract p.clauses fwd_clauses in
+  let non_fwd_clauses_by_packets = (filter is_packet_triggered_clause (subtract p.clauses fwd_clauses)) in
   let can_compile_fwd_clauses = (filter can_compile_clause fwd_clauses) in
   let cant_compile_fwd_clauses = subtract fwd_clauses can_compile_fwd_clauses in
     (clauses_to_netcore can_compile_fwd_clauses None,
-     clauses_to_netcore (cant_compile_fwd_clauses @ non_fwd_clauses) (Some callback));;
+     clauses_to_netcore (cant_compile_fwd_clauses @ non_fwd_clauses_by_packets) (Some callback));;
 
 let make_policy_stream (p: flowlog_program) =
   printf "Making policy and stream...\n%!";
