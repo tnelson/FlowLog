@@ -1,10 +1,19 @@
 
-The code for the interpreter goes here. F
+The code for the interpreter goes here.
 
-Test cases (Flowlog source) are in the src subfolder.
+Test cases (Flowlog source) are in the <examples> subfolder.
 
-In order for the makefile to work, be certain that you've pulled the latest frenetic repo and done:
+You'll need to install: packet, openflow, and frenetic packages, along with
+their dependencies. The best way to do this is via their repos, rather than
+using opam. 
+
 
 make clean
 make reinstall
+
+If that doesn't work, try:
+
+make clean
+make
+sudo make install
 

@@ -1,9 +1,10 @@
-open Unix;;
-open Printf;;
-open Types;;
-open Type_Helpers;;
-open Flowlog_Thrift_Out;;
-open Str;;
+open Unix
+open Printf
+open Flowlog_Types
+open Flowlog_Helpers
+open Flowlog_Thrift_Out
+open Str
+open ExtList.List
 
 let debug = true;;
 
@@ -52,11 +53,11 @@ module Xsb = struct
     (* we cannot read a line at a time, since XSB will not give a newline on errors *)
 	let get_line_gingerly (in_ch: in_channel) (out_ch: out_channel) (orig: string): string =
 		let next_str = ref "" in	    	    
-        while not (Type_Helpers.ends_with !next_str "\n") do
+        while not (ends_with !next_str "\n") do
   		    next_str := (!next_str) ^ (String.make 1 (input_char in_ch));		 
   		  		 
   		  	(*Printf.printf "glg: %s\n%!" !next_str;*)
-		    if (Type_Helpers.ends_with !next_str "| ?- | ?-") then 
+		    if (ends_with !next_str "| ?- | ?-") then 
 		    begin
 		    	(* we may have asked an extra semicolon and caused a syntax error. *)
 		    	if debug then Printf.printf "XSB Error. Asking again.\n%!";
@@ -75,7 +76,7 @@ module Xsb = struct
 		output_string out_ch ("listing.\n"); flush out_ch;
 
 		let next_str = ref "" in
-		  while not (Type_Helpers.ends_with (String.trim !next_str) "yes") do		  	
+		  while not (ends_with (String.trim !next_str) "yes") do		  	
 			next_str := get_line_gingerly in_ch out_ch "listing.\n";
 			next_str := String.trim (Str.global_replace (Str.regexp "| \\?-") "" !next_str);
 			next_str := String.trim (Str.global_replace (Str.regexp "\n\n") "\n" !next_str);
@@ -99,14 +100,14 @@ module Xsb = struct
 		let next_str = ref "" in		
 
         (*let next_str = ref "" in
-		while not (Type_Helpers.ends_with !next_str "\n") do
+		while not (ends_with !next_str "\n") do
 		  next_str := (!next_str) ^ (String.make 1 (input_char in_ch));
 		  Printf.printf "next_str=%s\n%!" !next_str;
-		  if (Type_Helpers.ends_with !next_str "| ?- | ?-") then debug_print_errors_and_exit();
+		  if (ends_with !next_str "| ?- | ?-") then debug_print_errors_and_exit();
 		done;*)
 
 
-		while (not (Type_Helpers.ends_with (String.trim !next_str) "yes") && not (Type_Helpers.ends_with (String.trim !next_str) "no")) do		
+		while (not (ends_with (String.trim !next_str) "yes") && not (ends_with (String.trim !next_str) "no")) do		
         	(*next_str := input_line in_ch;*)
           (* get a char at a time, because errors won't send a newline *)
           next_str := get_line_gingerly in_ch out_ch str;		  
@@ -121,7 +122,7 @@ module Xsb = struct
 
 	(* Removes str2 from the end of str1 if its there, otherwise returns str1 *)
 	let remove_from_end (str1 : string) (str2 : string) : string = 
-		if Type_Helpers.ends_with str1 str2
+		if ends_with str1 str2
 		then String.sub str1 0 ((String.length str1) - (String.length str2))
 		else str1;; 
 
@@ -150,7 +151,7 @@ module Xsb = struct
 		let answer = ref [] in
 		let next_str = ref "" in        		
 		let counter = ref 0 in
-		while not (Type_Helpers.ends_with !next_str "no") do
+		while not (ends_with !next_str "no") do
 
 			(*next_str := (input_line in_ch);			*)
             next_str := get_line_gingerly in_ch out_ch str;		  		
@@ -162,7 +163,7 @@ module Xsb = struct
 			
 			(* need to account for "X=3no" as well as "no" *)
 
-			if (String.length !next_str > 0) then (*  && not (Type_Helpers.ends_with !next_str "no") then*)
+			if (String.length !next_str > 0) then (*  && not (ends_with !next_str "no") then*)
 			begin
 				if (!counter mod num_vars = (num_vars - 2)) then
 				begin
@@ -187,35 +188,17 @@ end
 (* Provides functions for high level communication with XSB. *)
 (* Right now ignoring queries. *)
 module Communication = struct
-
 	(* assertion, number of answers to expect (number of variables in clause) *)
 	(* if this is a query with 0 variables, will call send_assert and thus need to provide [] vs [[]] *)
 	let send_message (message : string) (num_ans : int) : (string list) list =
+		if debug then (printf "send_message: %s (expected: %d)\n%!" message num_ans);
 		if num_ans > 0 then
-		                Xsb.send_query message num_ans 
-		              else let yn = Xsb.send_assert message in
-		                if (Type_Helpers.ends_with yn "yes") then [[]]
-		                else []
-
-	(* Returns x :: l if x not already in l *)
-	let add_unique (x : 'a) (l : 'a list) : 'a list = if List.mem x l then l else x :: l;;
-	
-	(* Same as add_unique but only if x is a Variable *)
-	let add_unique_var (t : Types.term) (acc : Types.term list) : Types.term list = 
-		match t with
-		| Types.Constant(_, _) -> acc;
-		| Types.Variable(name, Types.Type(_, fields)) -> List.fold_right (fun field acc1 -> add_unique (Types.Field_ref(name, field)) acc1) fields acc;
-		| Types.Field_ref(_, _) -> add_unique t acc;
-		| _ -> acc;;
-	
-	let get_vars (cls : Types.clause) : Types.term list =
-		match cls with Types.Clause(Types.Signature(_, _, _, args), body) ->
-		List.fold_right (fun a acc -> match a with
-				| Types.Equals(_, t1, t2) -> add_unique_var t1 (add_unique_var t2 acc);
-				| Types.Apply(_, _, _, tl) -> List.fold_right add_unique_var tl acc;
-				| Types.Bool(_) -> acc;) body (List.fold_right add_unique_var args []);;
-
-
+		    Xsb.send_query message num_ans 
+	    else 
+	        let yn = Xsb.send_assert message in
+		        if (ends_with yn "yes") then [[]]
+		        else []
+(*
 	(* ignoring blackbox queries for the moment *)
 	let retract_signature (s : Types.signature) : unit =
 		match s with Types.Signature(_, _, _, args) ->
@@ -282,17 +265,50 @@ module Communication = struct
 		let types = List.map Type_Helpers.type_of_term (List.filter (function Types.Constant(_,_) -> false; | _ -> true;) args) in
 		List.map (fun sl -> group_into_constants types sl) strings;;
 
+*)
+	let clause_to_xsb (cls: clause): string =
+		(string_of_formula cls.head)^" :- "^(string_of_formula cls.body);;
 
-	let start_clause (cls : Types.clause) : unit =
-		if debug then print_endline ("start_clause: assert((" ^ (Type_Helpers.clause_to_string cls) ^ ")).");
-		if debug then (List.iter (fun t -> (Printf.printf "var: %s\n%!" (Type_Helpers.term_to_string t))) (get_vars cls));
-		let _ = send_message ("assert((" ^ (Type_Helpers.clause_to_string cls) ^ ")).") (List.length (get_vars cls)) in ();;
+(*	let get_all_vars (cls : clause) : term list =		
+		fold_right (fun a acc -> match a with
+				| Types.Equals(_, t1, t2) -> add_unique_var t1 (add_unique_var t2 acc);
+				| Types.Apply(_, _, _, tl) -> List.fold_right add_unique_var tl acc;
+				| Types.Bool(_) -> acc)
+		  (list_of_body cls.body) 
+		  (fold_right add_unique_var args []);;
+*)
+(*
+	(* Returns x :: l if x not already in l *)
+	let add_unique (x : 'a) (l : 'a list) : 'a list =
+	  if List.mem x l then l else x :: l;;
+	
+	(* Same as add_unique but only if x is a Variable *)
+	let add_unique_var (t : term) (acc : term list) : term list = 
+		match t with
+		| TConst(_) -> acc;
+		| TVar(name) -> 
+			List.fold_right (fun field acc1 -> add_unique (Types.Field_ref(name, field)) acc1) fields acc;
+		| Types.Field_ref(_, _) -> add_unique t acc;
+		| _ -> acc;;
+	
+*)
+	let get_head_vars (cls : clause) : term list =		
+		match cls.head with
+		| FAtom(modname, relname, tlargs) ->
+			filter (function | TVar(_) -> true | _ -> false) tlargs
+		| _ -> failwith "get_head_vars";;	
+
+	let start_clause (cls : clause) : unit =
+		(*if debug then print_endline ("start_clause: assert((" ^ (Type_Helpers.clause_to_string cls) ^ ")).");
+		if debug then (List.iter (fun t -> (Printf.printf "var: %s\n%!" (Type_Helpers.term_to_string t))) (get_vars cls));*)
+		(*ignore (send_message ("assert((" ^ (clause_to_xsb cls) ^ ")).") (length (get_head_vars cls)));*)
+		ignore (send_message ("assert((" ^ (clause_to_xsb cls) ^ ")).") 0);
+		();;
 		
 
 	(* assuming all implicitly defined clauses have been added to list of clauses *)
-	let start_program (prgm : Types.program) : unit =
-		print_endline "starting program.";
-		match prgm with Types.Program(_, _, _, _, clauses) ->
-		List.iter start_clause clauses;;
+	let start_program (prgm : flowlog_program) : unit =
+		printf "Starting Flowlog Program...\n%!";
+		List.iter start_clause prgm.clauses;;
 
 end

@@ -1,4 +1,5 @@
-open Types;;
+open Types
+open Flowlog_Types
 
 module Xsb : sig
 	val start_xsb : unit -> out_channel * in_channel * in_channel;;
@@ -9,8 +10,8 @@ module Xsb : sig
 end
 
 module Communication : sig
-	val query_signature : Types.program -> Types.signature -> (Types.term list) list;;
+	(*val query_signature : Types.program -> Types.signature -> (Types.term list) list;;
 	val retract_signature : Types.signature -> unit;;
-	val assert_signature : Types.signature -> unit;;
-	val start_program : Types.program -> unit;; 
+	val assert_signature : Types.signature -> unit;;*)
+	val start_program : flowlog_program -> unit;; 
 end

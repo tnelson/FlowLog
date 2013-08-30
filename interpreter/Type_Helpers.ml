@@ -11,12 +11,6 @@ module TermSet = Set.Make(
 
 (* Provides printing functions and conversion functions both for pretty printing and communication with XSB. *)
 module Type_Helpers = struct
-
-	(* True if string str1 ends with string str2 *)
-	let ends_with (str1 : string) (str2 : string) : bool = 
-		if String.length str2 > String.length str1
-		then false
-		else (String.sub str1 ((String.length str1) - (String.length str2)) (String.length str2)) = str2;;
     
 	let list_to_string (conversion : 'a -> string) (l : 'a list) : string = 
 		String.concat "," (List.filter (fun s -> s <> "") (List.map conversion l));;

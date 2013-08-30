@@ -1,7 +1,7 @@
 open Types;;
 
 module Type_Helpers : sig
-	val ends_with : string -> string -> bool;;
+	(*val ends_with : string -> string -> bool;;*)
 
 	val list_to_string : ('a -> string) -> 'a list -> string;;
 

@@ -14,6 +14,8 @@ open NetCore_Pattern
 open NetCore_Wildcard
 open NetCore_Controller
 
+open Xsb_Communication
+
 (* Use ExtList.List instead -- provides filter_map, but also tail-recursive combine *)
 (*open List;;*)
 open ExtList.List
@@ -114,6 +116,20 @@ let simplify_clauses (p: flowlog_program) =
 let listenPort = ref 6633;;
 
 let run_flowlog (p: flowlog_program): unit Lwt.t =  
+  (* Start up XSB, etc. *)
+  Communication.start_program p;
+ 
+  (* Listen for incoming notifications via RPC *)
+  (*Flowlog_Thrift_In.start_listening p;;
+ *)
+(*)
+  (* Send the "startup" notification. Enables initialization, etc. in programs *)
+  let startup = Types.Constant([], Types.startup_type) in
+    Evaluation.respond_to_notification startup Program.program None;;
+*)
+  (* TODO: How to catch switch connection events in Frenetic? Was easy in Ox. *)
+
+  (* Start the policy stream *)
   (* >> is from Lwt's Pa_lwt. But you MUST have -syntax camlp4o or it won't be recoginized. *)   
   OpenFlow0x01_Platform.init_with_port !listenPort >>
     let (gen_stream, stream) = make_policy_stream p in
@@ -131,7 +147,15 @@ let main () =
     List.iter (fun cl -> printf "%s\n\n%!" (string_of_clause cl)) program.clauses;
 
     if !alloy then write_as_alloy program (filename^".als")
-    else Lwt_main.run (run_flowlog program);;
-
-
+    else 
+      Sys.catch_break true;
+      try
+        Lwt_main.run (run_flowlog program)
+      with exn ->
+        Xsb.halt_xsb ();
+        Format.printf "Unexpected exception: %s\n%s\n%!"
+          (Printexc.to_string exn)
+          (Printexc.get_backtrace ());
+        exit 1;;
+    
  main();;

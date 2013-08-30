@@ -76,24 +76,30 @@ open ExtList.List
                             clauses: clause list; };;
 (*************************************************************)
 
-  let string_of_term (t: term) : string = 
+  let string_of_term ?(verbose:bool = false) (t: term): string = 
     match t with
-      | TConst(s) -> "TConst("^s^")" 
-      | TVar(s) -> "TVar("^s^")"
-      | TField(varname, fname) -> "TField("^varname^"."^fname^")" ;;
+      | TConst(s) -> 
+        if verbose then "TConst("^s^")" 
+        else s
+      | TVar(s) ->
+        if verbose then "TVar("^s^")"
+        else s
+      | TField(varname, fname) -> 
+        if verbose then "TField("^varname^"."^fname^")" 
+        else varname^"__"^fname;;
 
-  let rec string_of_formula (f: formula) : string = 
+  let rec string_of_formula ?(verbose:bool = false) (f: formula): string = 
     match f with
       | FTrue -> "true"
       | FFalse -> "false"
-      | FEquals(t1, t2) -> (string_of_term t1) ^ " = "^ (string_of_term t2)
-      | FNot(f) ->  "(not "^(string_of_formula f)^")"
+      | FEquals(t1, t2) -> (string_of_term ~verbose:verbose t1) ^ " = "^ (string_of_term ~verbose:verbose t2)
+      | FNot(f) ->  "(not "^(string_of_formula ~verbose:verbose f)^")"
       | FAtom("", relname, tlargs) -> 
-          relname^"("^(String.concat "," (List.map string_of_term tlargs))^")"
+          relname^"("^(String.concat "," (List.map (string_of_term ~verbose:verbose) tlargs))^")"
       | FAtom(modname, relname, tlargs) -> 
-          modname^"."^relname^"("^(String.concat "," (List.map string_of_term tlargs))^")"
-      | FAnd(f1, f2) -> (string_of_formula f1) ^ " and "^ (string_of_formula f2)
-      | FOr(f1, f2) -> (string_of_formula f1) ^ " or "^ (string_of_formula f2)
+          modname^"/"^relname^"("^(String.concat "," (List.map (string_of_term ~verbose:verbose) tlargs))^")"
+      | FAnd(f1, f2) -> (string_of_formula ~verbose:verbose f1) ^ ", "^ (string_of_formula ~verbose:verbose f2)
+      | FOr(f1, f2) -> (string_of_formula ~verbose:verbose f1) ^ " or "^ (string_of_formula ~verbose:verbose f2)
   
   let action_string outrel argterms fmla: string = 
     let argstring = (String.concat "," (List.map string_of_term argterms)) in
