@@ -145,9 +145,10 @@ let rec common_existential_check (sofar: string list) (f: formula): string list 
     		unique (flatten (map ext_helper tlargs));;	
 
 let validate_clause (cl: clause): unit =
+  printf "Validating clause: %s\n%!" (string_of_clause cl);
 	ignore (common_existential_check [] cl.body);	
 	match cl.head with 
-		| FAtom("", "forward", [TVar(newpktname)]) ->
+		| FAtom("", "do_forward", [TVar(newpktname)]) ->
 			forbidden_assignment_check newpktname cl.body false
 		| _ -> failwith "validate_clause";;
 
@@ -176,27 +177,82 @@ let rec partial_evaluation (f: formula): formula =
 
 (***************************************************************************************)
 
-(*type output = {
-  outDlSrc : dlAddr match_modify;
-  outDlDst : dlAddr match_modify;
+let rec build_switch_actions (oldpkt: string) (body: formula): action =
+  let create_port_actions (actlist: action) (lit: formula): action =
+    match lit with 
+    | FFalse -> actlist
+    | FTrue -> failwith "create_port_actions: passed true"
+    | FNot(FEquals(TField(var1, fld1), TField(var2, fld2))) -> 
+      if var1 = oldpkt && fld1 = "locpt" && fld2 = "locpt" then         
+        [SwitchAction({id with outPort = NetCore_Pattern.All})] @ actlist 
+      else if var2 = oldpkt && fld2 = "locpt" && fld1 = "locpt" then 
+        [SwitchAction({id with outPort = NetCore_Pattern.All})] @ actlist 
+      else failwith ("create_port_actions: bad negation: "^(string_of_formula body))
+
+    | FEquals(TField(var1, fld1), TField(var2, fld2)) ->
+      if fld1 <> fld2 then 
+        failwith ("create_port_actions: invalid fields: "^fld1^" "^fld2)
+      else 
+        actlist
+    
+    | FEquals(TField(avar, afld), TConst(aval)) 
+    | FEquals(TConst(aval), TField(avar, afld)) -> 
+      if afld = "locpt" then         
+        [SwitchAction({id with outPort = NetCore_Pattern.Physical(Int32.of_string aval)})] @ actlist 
+      else       
+        actlist
+    | _ -> failwith ("create_port_actions: "^(string_of_formula body)) in
+
+(*
+  TODO: 
   outDlVlan : dlVlan match_modify;
-  outDlVlanPcp : dlVlanPcp match_modify;
-  outNwSrc : nwAddr match_modify;
-  outNwDst : nwAddr match_modify;
-  outNwTos : nwTos match_modify;
-  outTpSrc : tpPort match_modify;
-  outTpDst : tpPort match_modify;
-  outPort : port 
+  outDlVlanPcp : dlVlanPcp match_modify;  
 }*)
 
-let rec build_switch_actions (oldpkt: string) (body: formula): action =
+
+    let enhance_action_atom (afld: string) (aval: string) (anact: action_atom): action_atom =
+    match anact with
+      SwitchAction(oldout) ->
+        match afld with 
+          | "locpt" -> SwitchAction({oldout with outPort = NetCore_Pattern.Physical(Int32.of_string aval)})
+          | "dlsrc" -> SwitchAction({oldout with outDlSrc = (Int64.of_string aval) })
+          | "dldst" -> SwitchAction({oldout with outDlDst = (Int64.of_string aval) })
+          | "dltyp" -> SwitchAction({oldout with outDlTyp = (int_of_string aval) })
+          | "nwsrc" -> SwitchAction({oldout with outNwSrc = (Int32.of_string aval) })
+          | "nwdst" -> SwitchAction({oldout with outNwDst = (Int32.of_string aval) })
+          | "nwproto" -> SwitchAction({oldout with outNwProto = (int_of_string aval) })
+          | _ -> failwith ("enhance_action_atom: "^afld^" -> "^aval) in
+  
+
+  let create_mod_actions (actlist: action) (lit: formula): action =
+    match lit with 
+    | FFalse -> actlist
+    | FTrue -> failwith "create_mod_actions: passed true"
+    | FNot(_) -> 
+      failwith ("create_mod_actions: bad negation: "^(string_of_formula body))
+    | FEquals(TField(var1, fld1), TField(var2, fld2)) ->
+      failwith ("create_mod_actions: invalid equality "^(string_of_formula body))
+
+    | FEquals(TField(avar, afld), TConst(aval)) 
+    | FEquals(TConst(aval), TField(avar, afld)) -> 
+      if avar <> oldpkt then         
+        (* since this is a FORWARD, must be over whatever we named newpkt *)
+        map (enhance_action_atom afld aval) actlist
+      else       
+        actlist (* ignore involving newpkt *)
+
+    | _ -> failwith ("create_mod_actions: "^(string_of_formula body)) in  
+
+
   (* list of SwitchAction(output)*)
+  (* - this is only called for FORWARDING rules. so only newpkt should be involved *)
+  (* - assume: no negated equalities except the special case pkt.locpt != newpkt.locpt *)  
   let atoms = conj_to_list body in
-  printf ">>> bsa: %s\n%!" (String.concat " ; " (map string_of_formula atoms));
-
-  (* TODO: This includes dealing with special case pkt.locPt != newpkt.locPt *)
-
-  [];;
+    printf "  >> build_switch_actions: %s\n%!" (String.concat " ; " (map (string_of_formula ~verbose:true) atoms));
+    let port_actions = fold_left create_port_actions [] atoms in
+    let complete_actions = fold_left create_mod_actions port_actions atoms in
+  (* TODO: This includes dealing with special case pkt.locPt != newpkt.locPt *)      
+      complete_actions;;
 
 open NetCore_Pattern
 open NetCore_Wildcard
@@ -329,7 +385,7 @@ let pkt_triggered_clauses_to_netcore (clauses: clause list) (callback: get_packe
       fold_left (fun acc pol -> Union(acc, pol)) 
         (hd clause_pols) (tl clause_pols);;  
 
-let can_compile_clause (cl: clause): bool =
+let can_compile_clause (cl: clause): bool =  
   try 
     validate_clause cl;
     true
@@ -346,16 +402,17 @@ let subtract (biglst: 'a list) (toremove: 'a list): 'a list =
 (* Side effect: reads current state in XSB *)
 (* Set up policies for all packet-triggered clauses *)
 let program_to_netcore (p: flowlog_program) (callback: get_packet_handler): (pol * pol) =
+  printf "\n\n---------------------------------\nCompiling as able...\n%!";
   let fwd_clauses = (filter is_forward_clause p.clauses) in
+  (*iter (fun cl -> printf "    FWD: %s\n%!" (string_of_clause cl)) fwd_clauses;*)
   let non_fwd_clauses_by_packets = (filter is_packet_triggered_clause (subtract p.clauses fwd_clauses)) in
-  (*iter (fun cl -> printf "    CLAUSE: %s\n%!" (string_of_clause cl)) non_fwd_clauses_by_packets;*)
-  let can_compile_fwd_clauses = (filter can_compile_clause fwd_clauses) in
-  let cant_compile_fwd_clauses = subtract fwd_clauses can_compile_fwd_clauses in
-    (pkt_triggered_clauses_to_netcore can_compile_fwd_clauses None,
+  let can_fully_compile_fwd_clauses = (filter can_compile_clause fwd_clauses) in
+  
+  let cant_compile_fwd_clauses = subtract fwd_clauses can_fully_compile_fwd_clauses in
+    (pkt_triggered_clauses_to_netcore can_fully_compile_fwd_clauses None,
      pkt_triggered_clauses_to_netcore (cant_compile_fwd_clauses @ non_fwd_clauses_by_packets) (Some callback));;
 
-let make_policy_stream (p: flowlog_program) =
-  printf "Making policy and stream...\n%!";
+let make_policy_stream (p: flowlog_program) =  
 
   (* stream of policies, with function to push new policies on *)
   let (policies, push) = Lwt_stream.create () in

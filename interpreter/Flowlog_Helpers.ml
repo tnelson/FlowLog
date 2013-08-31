@@ -68,9 +68,9 @@ let reassemble_xsb_equality (tlargs: term list) (tuple: string list) : formula l
     	 tlargs tuple;;
 
 
-let is_forward_clause (cl: clause): bool =
+let is_forward_clause (cl: clause): bool =    
 	match cl.head with 
-	| FAtom("", "forward", _) -> true
+	| FAtom("", "do_forward", _) -> true    
 	| _ -> false;;
 
 let rec uses_relation (goal_modname: string) (goal_relname: string) (f: formula): bool =
