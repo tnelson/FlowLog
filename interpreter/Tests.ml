@@ -27,12 +27,12 @@ let zvar = TVar("z");;
 let const5 = TConst("5");;
 let const7 = TConst("7");;
 let constfoo = TConst("foo");;
-let newpktdlsrc = TField("newpkt", "dlSrc");;
-let newpktdldst = TField("newpkt", "dlDst");;
-let oldpktdlsrc = TField("pkt", "dlSrc");;
-let oldpktdldst = TField("pkt", "dlDst");;
-let newpktlocpt = TField("newpkt", "locPt");;
-let oldpktlocpt = TField("pkt", "locPt");;
+let newpktdlsrc = TField("newpkt", "dlsrc");;
+let newpktdldst = TField("newpkt", "dldst");;
+let oldpktdlsrc = TField("pkt", "dlsrc");;
+let oldpktdldst = TField("pkt", "dldst");;
+let newpktlocpt = TField("newpkt", "locpt");;
+let oldpktlocpt = TField("pkt", "locpt");;
 
              (*	 printf "%s\n%!" (string_of_formula (nnf (FOr((FNot (FOr(rx, ry))), pxy))));;
              	 printf "%s\n%!" (string_of_formula (disj_to_top (nnf (FOr((FNot (FOr(rx, ry))), pxy)))));;*)

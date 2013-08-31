@@ -47,6 +47,7 @@ rule token = parse
   | ';' { SEMICOLON }
   | '=' { EQUALS }
   | "<>" { NOTEQUALS }
+  | "!=" { NOTEQUALS } 
   | '{' { LCURLY }
   | '}' { RCURLY }
   | ',' { COMMA }

@@ -103,8 +103,8 @@ open ExtList.List
       | FOr(f1, f2) -> (string_of_formula ~verbose:verbose f1) ^ " or "^ (string_of_formula ~verbose:verbose f2)
   
   let action_string outrel argterms fmla: string = 
-    let argstring = (String.concat "," (List.map string_of_term argterms)) in
-      outrel^"("^argstring^") WHERE "^(string_of_formula fmla);;
+    let argstring = (String.concat "," (List.map (string_of_term ~verbose:true) argterms)) in
+      outrel^"("^argstring^") WHERE "^(string_of_formula ~verbose:true fmla);;
 
   let string_of_rule (r: srule): string =
     match r with 
@@ -147,7 +147,7 @@ open ExtList.List
         List.iter (fun stmt -> printf "%s\n%!" (string_of_stmt stmt)) stmts;;
 
   let string_of_clause (cl: clause): string =
-    "CLAUSE: "^(string_of_formula cl.head)^" :- "^(string_of_formula cl.body)^"\n"^
+    "CLAUSE: "^(string_of_formula ~verbose:true cl.head)^" :- "^(string_of_formula ~verbose:true cl.body)^"\n"^
     "FROM RULE: "^(string_of_rule cl.orig_rule);;
 
 (*************************************************************)

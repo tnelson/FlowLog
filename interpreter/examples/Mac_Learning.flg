@@ -1,34 +1,62 @@
-blackbox forward;
 
-module Mac_Learning:
+TABLE learned(int, int, int); 
 
-type packet = {locSw, locPt, dlSrc, dlDst, dlTyp, nwSrc, nwDst, nwProto};
-type switch_port = {switch, port};
+// all the events used here are built-in
 
-plus learned(pkt : packet, sw, pt, mac) :-
-pkt.locSw = sw,
-pkt.dlSrc = mac,
-pkt.locPt = pt;
+//blackbox forward;
 
-minus learned(pkt : packet, sw, pt, mac) :-
-pkt.locSw = sw,
-pkt.dlSrc = mac,
+//module Mac_Learning:
+
+//type packet = {locSw, locPt, dlSrc, dlDst, dlTyp, nwSrc, nwDst, nwProto};
+//type switch_port = {switch, port};
+
+ON packet-in(pkt):
+	// *** Will need to add learned(sw, pt, mac) 
+    // and not as appropriate.
+  INSERT (pkt.locSw, pkt.locPt, pkt.dlSrc) INTO learned;  
+  DELETE (pkt.locSw, pt, pkt.dlSrc) FROM learned WHERE
+  	not pt = pkt.locPt;
+
+  DO forward(new) WHERE 
+    learned(pkt.locSw, new.locPt, pkt.dlDst)
+    OR
+    (NOT learned(pkt.locSw, any, pkt.dlDst) AND
+     NOT pkt.locPt = newpkt.locPt AND
+     switch_has_port(pkt.locSw, newpkt.locPt));
+
+     // for testing
+  DO forward(new) WHERE
+  	pkt.locSw = 1 AND
+  	pkt.dlSrc = 1 AND new.locPt != pkt.locPt;
+
+ON switch-port-in(swpt):
+	INSERT (swpt.sw, swpt.pt) INTO switch_has_port;
+
+  
+//plus learned(pkt : packet, sw, pt, mac) :-
+//pkt.locSw = sw,
+//pkt.dlSrc = mac,
+//pkt.locPt = pt;
+
+//minus learned(pkt : packet, sw, pt, mac) :-
+//pkt.locSw = sw,
+//pkt.dlSrc = mac,
 // This is to positively constrain the pt variable
-learned(sw, pt, mac),
+//learned(sw, pt, mac),
 // Negations MUST GO LAST!
 // This is ridiculous but XSB may return no results otherwise.
 // TODO:why?
-not pkt.locPt = pt;
+//not pkt.locPt = pt;
 
-action forward(pkt : packet, nwpkt : packet) :-
-learned(pkt.locSw, nwpkt.locPt, pkt.dlDst);
+//action forward(pkt : packet, nwpkt : packet) :-
+//learned(pkt.locSw, nwpkt.locPt, pkt.dlDst);
 
-plus switch_has_port(sw_pt : switch_port, sw, pt) :-
-sw_pt.switch = sw,
-sw_pt.port = pt;
+//plus switch_has_port(sw_pt : switch_port, sw, pt) :-
+//sw_pt.switch = sw,
+//sw_pt.port = pt;
 
 // omg different var name! but it's ok!
-action forward(pkt : packet, newpkt : packet) :-
-switch_has_port(pkt.locSw, newpkt.locPt),
-not learned(pkt.locSw, any, pkt.dlDst),
-not pkt.locPt = newpkt.locPt;
+//action forward(pkt : packet, newpkt : packet) :-
+//switch_has_port(pkt.locSw, newpkt.locPt),
+//not learned(pkt.locSw, any, pkt.dlDst),
+//not pkt.locPt = newpkt.locPt;

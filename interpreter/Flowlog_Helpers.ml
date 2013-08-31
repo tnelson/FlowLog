@@ -73,16 +73,16 @@ let is_forward_clause (cl: clause): bool =
 	| FAtom("", "forward", _) -> true
 	| _ -> false;;
 
-let rec uses_relation (modname: string) (relname: string) (f: formula): bool =
+let rec uses_relation (goal_modname: string) (goal_relname: string) (f: formula): bool =
 	match f with
 		| FTrue -> false
 		| FFalse -> false
 		| FEquals(t1, t2) -> false		
-		| FAnd(f1, f2) -> (uses_relation modname relname f1) || (uses_relation modname relname f2)			
-		| FOr(f1, f2) -> (uses_relation modname relname f1) || (uses_relation modname relname f2)			
-		| FNot(innerf) -> uses_relation modname relname innerf			
+		| FAnd(f1, f2) -> (uses_relation goal_modname goal_relname f1) || (uses_relation goal_modname goal_relname f2)			
+		| FOr(f1, f2) -> (uses_relation goal_modname goal_relname f1) || (uses_relation goal_modname goal_relname f2)			
+		| FNot(innerf) -> uses_relation goal_modname goal_relname innerf			
 		| FAtom(modname, relname, tlargs) ->
-			relname = relname && modname = modname;;
+			relname = goal_relname && modname = goal_modname;;
 
 let is_packet_triggered_clause (cl: clause): bool =
   uses_relation "" "packet-in" cl.body;;

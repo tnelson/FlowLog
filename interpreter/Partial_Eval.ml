@@ -39,8 +39,9 @@ exception IllegalAtomMustBePositive of formula;;
 exception IllegalExistentialUse of formula;;
 exception IllegalEquality of (term * term);;
 
-let packet_fields = ["locSw";"locPt";"dlSrc";"dlDst";"dlTyp";"nwSrc";"nwDst";"nwProto"];;
-let legal_to_modify_packet_fields = ["locPt";"dlSrc";"dlDst";"dlTyp";"nwSrc";"nwDst"];;
+(* all lowercased by parser *)
+let packet_fields = ["locsw";"locpt";"dlsrc";"dldst";"dltyp";"nwsrc";"nwdst";"nwproto"];;
+let legal_to_modify_packet_fields = ["locpt";"dlsrc";"dldst";"dltyp";"nwsrc";"nwdst"];;
 
 let legal_field_to_modify (fname: string): bool =
 	mem fname legal_to_modify_packet_fields;;
@@ -58,7 +59,7 @@ let rec forbidden_assignment_check (newpkt: string) (f: formula) (innot: bool): 
     let check_legal_negation (t1: term) (t2: term): unit =
       let dangerous = (match (t1, t2) with 
           | (TField(v1, f1), TField(v2, f2)) ->
-            f1 <> "locPt" || f2 <> "locPt"
+            f1 <> "locpt" || f2 <> "locpt"
           | (TField(v1, f1), TConst(cstr)) -> v1 = newpkt
           | _ -> false) in 
       (*(printf "check_legal_negation: %s %s %b %b\n%!" (string_of_term t1) (string_of_term t2) innot dangerous);*)
@@ -206,36 +207,40 @@ open NetCore_Wildcard
 let build_switch_pred (oldpkt: string) (body: formula): pred =  
 let field_to_pattern (fld: string) (aval:string): NetCore_Pattern.t =         
   match fld with (* switch handled via different pred type *)
-    | "locPt" -> {all with ptrnInPort = WildcardExact (Physical(Int32.of_string aval)) }
-    | "dlSrc" -> {all with ptrnDlSrc = WildcardExact (Int64.of_string aval) }
-    | "dlDst" -> {all with ptrnDlDst = WildcardExact (Int64.of_string aval) }
-    | "dlTyp" -> {all with ptrnDlTyp = WildcardExact (int_of_string aval) }
-    | "nwSrc" -> {all with ptrnNwSrc = WildcardExact (Int32.of_string aval) }
-    | "nwDst" ->  {all with ptrnNwDst = WildcardExact (Int32.of_string aval) }
-    | "nwProto" -> {all with ptrnNwProto = WildcardExact (int_of_string aval) }
-    | _ -> failwith "field_to_pattern" in
+    | "locpt" -> {all with ptrnInPort = WildcardExact (Physical(Int32.of_string aval)) }
+    | "dlsrc" -> {all with ptrnDlSrc = WildcardExact (Int64.of_string aval) }
+    | "dldst" -> {all with ptrnDlDst = WildcardExact (Int64.of_string aval) }
+    | "dltyp" -> {all with ptrnDlTyp = WildcardExact (int_of_string aval) }
+    | "nwsrc" -> {all with ptrnNwSrc = WildcardExact (Int32.of_string aval) }
+    | "nwdst" ->  {all with ptrnNwDst = WildcardExact (Int32.of_string aval) }
+    | "nwproto" -> {all with ptrnNwProto = WildcardExact (int_of_string aval) }
+    | _ -> failwith ("field_to_pattern: "^fld^" -> "^aval) in
     (* TODO: dlVLan, dlVLanPCP *)
 
-  let eq_to_pred (eqf: formula): pred option =
+  let rec eq_to_pred (eqf: formula): pred option =
     match eqf with
+      | FNot(atom) -> 
+        (match eq_to_pred atom with
+        | None -> None
+        | Some(p) -> Some(Not(p)))
+
       (* only match oldpkt.<field> here*)        
-       FNot(FEquals((TField(varname, fld)), (TConst(aval)))) when varname = oldpkt ->
-        if fld = "locSw" then Some(OnSwitch(Int64.of_string aval))
-        else Some(Hdr(field_to_pattern fld aval))
       | FEquals(TConst(aval), TField(varname, fld)) when varname = oldpkt ->
-        if fld = "locSw" then Some(Not(OnSwitch(Int64.of_string aval)))  
-        else Some(Not(Hdr(field_to_pattern fld aval)))
+        if fld = "locsw" then Some(OnSwitch(Int64.of_string aval))  
+        else Some(Hdr(field_to_pattern fld aval))
+      | FEquals(TField(varname, fld),TConst(aval)) when varname = oldpkt ->
+        if fld = "locsw" then Some(OnSwitch(Int64.of_string aval))  
+        else Some(Hdr(field_to_pattern fld aval))
+
       | FTrue -> Some(Everything)
-      | FFalse -> Some(Nothing)
-      | _ -> failwith ("build_switch_pred: "^(string_of_formula eqf)) in
+      | FFalse -> Some(Nothing)      
+      | _ -> None (* something for action, not pred *) in
+      (*| _  -> failwith ("build_switch_pred: "^(string_of_formula ~verbose:true eqf)) in*)
 
   (* After PE, should be only equalities and negated equalities. Should be just a conjunction *)
   let eqlist = conj_to_list body in 
-    (* only extract involving oldpkt *)
-     (*| Hdr of ptrn
-  | OnSwitch of switchId*)
     let predlist = filter_map eq_to_pred eqlist in
-      fold_left (fun acc pred -> match pred with | Nothing -> acc | _ -> And(acc, pred)) Everything predlist;; 
+      fold_left (fun acc pred -> match pred with | Nothing -> Nothing | Everything -> acc | _ -> And(acc, pred)) Everything predlist;; 
 
 (* todo: lots of code overlap in these functions. should unify *)
 (* removes the packet-in atom (since that's meaningless here). 
@@ -287,15 +292,17 @@ let policy_of_conjunction (oldpkt: string) (callback: get_packet_handler option)
 
 (* Side effect: reads current state in XSB *)
 (* Throws exception rather than using option type: more granular error result *)
-let clause_to_netcore (callback: get_packet_handler option) (cl: clause): pol =   
+let pkt_triggered_clause_to_netcore (callback: get_packet_handler option) (cl: clause): pol =   
     match cl.head with
       | FAtom(_, _, _) ->
-        let pebody = partial_evaluation cl.body in
-        let (oldpkt, trimmedbody) = trim_packet_from_body pebody in 
+        let (oldpkt, trimmedbody) = trim_packet_from_body cl.body in 
+        printf "Trimmed packet from body: (%s, %s)\n%!" oldpkt (string_of_formula trimmedbody);
+        let pebody = partial_evaluation trimmedbody in
+                
         (* partial eval may insert disjunctions because of multiple tuples to match 
            so we need to pull those disjunctions up and create multiple policies *)
         (* todo: this is pretty inefficient for large numbers of tuples. do better? *)
-        let bodies = disj_to_list (disj_to_top trimmedbody) in 
+        let bodies = disj_to_list (disj_to_top pebody) in 
         (* anything not the old packet is a RESULT variable.
            Remember that we know this clause is packet-triggered, but
            we have no constraints on what gets produced. Maybe a bunch of 
@@ -304,7 +311,7 @@ let clause_to_netcore (callback: get_packet_handler option) (cl: clause): pol =
                     (Union (acc, policy_of_conjunction oldpkt callback body)))
                   (policy_of_conjunction oldpkt callback (hd bodies))
                   (tl bodies)
-      | _ -> failwith "clause_to_netcore";;
+      | _ -> failwith "pkt_triggered_clause_to_netcore";;
 
 (* Used to pre-filter controller notifications as much as possible *)
 let strip_to_valid (cl: clause): clause =
@@ -312,10 +319,10 @@ let strip_to_valid (cl: clause): clause =
 
 (* return the union of policies for each clause *)
 (* Side effect: reads current state in XSB *)
-let clauses_to_netcore (clauses: clause list) (callback: get_packet_handler option): pol =
+let pkt_triggered_clauses_to_netcore (clauses: clause list) (callback: get_packet_handler option): pol =
   let clause_pols = match callback with
-      | Some(f) -> map (clause_to_netcore callback) (map strip_to_valid clauses)
-      | None ->    map (clause_to_netcore None) clauses in
+      | Some(f) -> map (pkt_triggered_clause_to_netcore callback) (map strip_to_valid clauses)
+      | None ->    map (pkt_triggered_clause_to_netcore None) clauses in
     if length clause_pols = 0 then 
       Filter(Nothing)
     else 
@@ -341,10 +348,11 @@ let subtract (biglst: 'a list) (toremove: 'a list): 'a list =
 let program_to_netcore (p: flowlog_program) (callback: get_packet_handler): (pol * pol) =
   let fwd_clauses = (filter is_forward_clause p.clauses) in
   let non_fwd_clauses_by_packets = (filter is_packet_triggered_clause (subtract p.clauses fwd_clauses)) in
+  (*iter (fun cl -> printf "    CLAUSE: %s\n%!" (string_of_clause cl)) non_fwd_clauses_by_packets;*)
   let can_compile_fwd_clauses = (filter can_compile_clause fwd_clauses) in
   let cant_compile_fwd_clauses = subtract fwd_clauses can_compile_fwd_clauses in
-    (clauses_to_netcore can_compile_fwd_clauses None,
-     clauses_to_netcore (cant_compile_fwd_clauses @ non_fwd_clauses_by_packets) (Some callback));;
+    (pkt_triggered_clauses_to_netcore can_compile_fwd_clauses None,
+     pkt_triggered_clauses_to_netcore (cant_compile_fwd_clauses @ non_fwd_clauses_by_packets) (Some callback));;
 
 let make_policy_stream (p: flowlog_program) =
   printf "Making policy and stream...\n%!";

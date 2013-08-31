@@ -53,10 +53,10 @@
   %type <term list> term_list
   %type <string list> name_list
 
-  %left AND 
-  %left OR
-  %left IMPLIES
   %left IFF
+  %left IMPLIES
+  %left OR
+  %left AND  
   %nonassoc NOT
   %right EQUALS NOTEQUALS
 
