@@ -179,6 +179,14 @@ let rec gather_nonneg_equalities_involving_vars
         | FNot(f2) -> 
             (gather_nonneg_equalities_involving_vars ~exempt:exempt f2 (not neg));; 
 
+exception SubstitutionLedToInconsistency of formula;;
+
+(* If about to substitute in something like 5=7, abort because the whole conjunction is unsatisfiable *)
+let equals_if_consistent (t1: term) (t2: term): formula =
+  match (t1, t2) with
+    | (TConst(str1), TConst(str2)) when str1 <> str2 -> raise (SubstitutionLedToInconsistency((FEquals(t1, t2))))
+    | _ -> FEquals(t1, t2);;
+
 (* f[v -> t] *)
 let rec substitute_term (f: formula) (v: term) (t: term): formula = 
     match f with
@@ -187,9 +195,9 @@ let rec substitute_term (f: formula) (v: term) (t: term): formula =
         | FEquals(t1, t2) ->
           (* Remove fmlas which will be "x=x"; avoids inf. loop. *)
           if t1 = v && t2 = t then FTrue
-          else if t2 = v && t1 = t then FTrue
-          else if t1 = v then FEquals(t, t2)
-          else if t2 = v then FEquals(t1, t)
+          else if t2 = v && t1 = t then FTrue          
+          else if t1 = v then equals_if_consistent t t2
+          else if t2 = v then equals_if_consistent t1 t
           else f
         | FAtom(modstr, relstr, argterms) -> 
           let newargterms = map (fun arg -> 
@@ -216,14 +224,21 @@ let rec substitute_term (f: formula) (v: term) (t: term): formula =
 let rec minimize_variables ?(exempt: term list = []) (f: formula): formula = 
   (* OPTIMIZATION: don't need to do gathering step repeatedly: *)
   let var_equals_fmlas = gather_nonneg_equalities_involving_vars ~exempt:exempt f false in
-    printf "at fmla = %s\n%!" (string_of_formula f);        
+    (*printf "at fmla = %s\n%!" (string_of_formula f);        
     iter (fun pr -> let (t1, t2) = pr in (printf "pair: %s, %s\n%!" 
-            (string_of_term t1) (string_of_term t2))) var_equals_fmlas;
+            (string_of_term t1) (string_of_term t2))) var_equals_fmlas;    *)
 
     if length var_equals_fmlas < 1 then
       f
     else 
-      let (x, t) = hd var_equals_fmlas in  
-      let newf = (substitute_term f x t) in
-        minimize_variables ~exempt:exempt newf;;
+    (* select equalities involving constants first, so we don't lose their context *)
+      let constpairs = filter (function | (TVar(_), TConst(_)) -> true | _ -> false) var_equals_fmlas in 
+      let (x, t) = if length constpairs > 0 then hd constpairs else hd var_equals_fmlas in  
+
+      (* subst process will discover inconsistency due to multiple vals e.g. x=7, x=9, and throw exception *)
+      try
+        let newf = (substitute_term f x t) in
+          (*printf "will subs out %s to %s. New is: %s.\n%!" (string_of_term x) (string_of_term t) (string_of_formula newf);*)
+          minimize_variables ~exempt:exempt newf
+        with SubstitutionLedToInconsistency(_) -> FFalse;;
 

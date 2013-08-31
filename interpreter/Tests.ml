@@ -102,16 +102,21 @@ let test_minimize_variables () =
                  ~msg:"minimize5"
                 (minimize_variables (FAnd(FEquals(yvar, zvar), (FAnd(pxy, (FEquals(zvar, const7)))))))
                 px7;
+    (* x->7, y->x needs to fully reduce. don't "lose" the target for the y (i.e. each step of subs must be global) *)
+    assert_equal ~printer:string_of_formula  
+                 ~msg:"minimize9"
+                (minimize_variables ~exempt:[yvar] (FAnd(FEquals(xvar, const7), (FEquals(yvar, xvar)))))
+                (FEquals(yvar, const7));
     (* but don't get rid of exempts *)
     assert_equal ~printer:string_of_formula  
                  ~msg:"minimize6"
                 (minimize_variables ~exempt:[yvar] (FAnd(FEquals(yvar, zvar), (FAnd(pxz, (FEquals(zvar, const7)))))))
-                (FAnd(px7, FEquals(yvar, const7)));
+                (FAnd(FEquals(yvar, const7), px7));
     (* make sure exempt on only one side doesn't prevent subsing out other side *)
     assert_equal ~printer:string_of_formula  
                  ~msg:"minimize7"
                 (minimize_variables ~exempt:[yvar] (FAnd(FEquals(zvar, yvar), (FAnd(pxz, (FEquals(const7, zvar)))))))
-                (FAnd(px7, FEquals(const7, yvar)));
+                (FAnd(FEquals(const7, yvar), px7));
     (* If conflicting constants? UNSAT! *)
     assert_equal ~printer:string_of_formula  
                  ~msg:"minimize8"
