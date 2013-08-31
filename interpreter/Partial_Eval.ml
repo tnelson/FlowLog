@@ -197,11 +197,49 @@ let rec build_switch_actions (oldpkt: string) (body: formula): action =
 
   [];;
 
-let rec build_switch_pred (oldpkt: string) (body: formula): pred =
-  Nothing;; (* todo *)
+open NetCore_Pattern
+open NetCore_Wildcard
+
+
+(* worst ocaml error ever: used "val" for varname. *)
+
+let build_switch_pred (oldpkt: string) (body: formula): pred =  
+let field_to_pattern (fld: string) (aval:string): NetCore_Pattern.t =         
+  match fld with (* switch handled via different pred type *)
+    | "locPt" -> {all with ptrnInPort = WildcardExact (Physical(Int32.of_string aval)) }
+    | "dlSrc" -> {all with ptrnDlSrc = WildcardExact (Int64.of_string aval) }
+    | "dlDst" -> {all with ptrnDlDst = WildcardExact (Int64.of_string aval) }
+    | "dlTyp" -> {all with ptrnDlTyp = WildcardExact (int_of_string aval) }
+    | "nwSrc" -> {all with ptrnNwSrc = WildcardExact (Int32.of_string aval) }
+    | "nwDst" ->  {all with ptrnNwDst = WildcardExact (Int32.of_string aval) }
+    | "nwProto" -> {all with ptrnNwProto = WildcardExact (int_of_string aval) }
+    | _ -> failwith "field_to_pattern" in
+    (* TODO: dlVLan, dlVLanPCP *)
+
+  let eq_to_pred (eqf: formula): pred option =
+    match eqf with
+      (* only match oldpkt.<field> here*)        
+       FNot(FEquals((TField(varname, fld)), (TConst(aval)))) when varname = oldpkt ->
+        if fld = "locSw" then Some(OnSwitch(Int64.of_string aval))
+        else Some(Hdr(field_to_pattern fld aval))
+      | FEquals(TConst(aval), TField(varname, fld)) when varname = oldpkt ->
+        if fld = "locSw" then Some(Not(OnSwitch(Int64.of_string aval)))  
+        else Some(Not(Hdr(field_to_pattern fld aval)))
+      | FTrue -> Some(Everything)
+      | FFalse -> Some(Nothing)
+      | _ -> failwith ("build_switch_pred: "^(string_of_formula eqf)) in
+
+  (* After PE, should be only equalities and negated equalities. Should be just a conjunction *)
+  let eqlist = conj_to_list body in 
+    (* only extract involving oldpkt *)
+     (*| Hdr of ptrn
+  | OnSwitch of switchId*)
+    let predlist = filter_map eq_to_pred eqlist in
+      fold_left (fun acc pred -> match pred with | Nothing -> acc | _ -> And(acc, pred)) Everything predlist;; 
 
 (* todo: lots of code overlap in these functions. should unify *)
-(* returns the var the old packet was bound to, and the trimmed fmla *)
+(* removes the packet-in atom (since that's meaningless here). 
+   returns the var the old packet was bound to, and the trimmed fmla *)
 let rec trim_packet_from_body (body: formula): (string * formula) =
   match body with
     | FTrue -> ("", body)
