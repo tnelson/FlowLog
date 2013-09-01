@@ -67,6 +67,12 @@ let reassemble_xsb_equality (tlargs: term list) (tuple: string list) : formula l
     		FEquals(aterm, TConst(astr)))
     	 tlargs tuple;;
 
+let subtract (biglst: 'a list) (toremove: 'a list): 'a list =
+  (filter (fun ele -> not (mem ele toremove)) biglst);;
+
+let list_intersection (l1: 'a list) (l2: 'a list): 'a list = 
+  filter (fun ele1 -> (mem ele1 l2)) l1;;
+
 
 let is_forward_clause (cl: clause): bool =    
 	match cl.head with 

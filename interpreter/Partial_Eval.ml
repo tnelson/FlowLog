@@ -78,7 +78,7 @@ let rec forbidden_assignment_check (newpkt: string) (f: formula) (innot: bool): 
 
     let check_not_same_pkt (t1: term) (t2: term): unit =
       match (t1, t2) with 
-        | (TField(v, f), TField(v2, f2)) when v = v2 ->
+        | (TField(v, f), TField(v2, f2)) when v = v2 && f2 <> f ->
               raise (IllegalEquality(t1,t2))
         | _ -> ()
     in
@@ -119,6 +119,7 @@ let rec forbidden_assignment_check (newpkt: string) (f: formula) (innot: bool): 
     		check_legal_newpkt_fields t2;
     		check_same_field_if_newpkt t1 t2; (* can't swap fields, etc. w/o controller *)
         check_not_same_pkt t1 t2;
+        check_netcore_temp_limit_eq t1 t2;
 
       	| FAtom(modname, relname, tlargs) ->       		
       		(* new field must be legal for modification by openflow *)
@@ -130,6 +131,8 @@ let rec forbidden_assignment_check (newpkt: string) (f: formula) (innot: bool): 
 (* returns list of existentials used by f. Will throw exception if re-used in new *atomic* fmla.
 	assume this is a clause fmla (no disjunction) *)
 let rec common_existential_check (newpkt: string) (sofar: string list) (f: formula): string list =
+  (* If extending this method beyond just FORWARD clauses, remember that any var in the head
+      is "safe" to cross literals. *)
 	let ext_helper (t: term): (string list) =
 		match t with 
 			| TVar(v) -> 
@@ -364,7 +367,8 @@ let policy_of_conjunction (oldpkt: string) (callback: get_packet_handler option)
 (* Side effect: reads current state in XSB *)
 (* Throws exception rather than using option type: more granular error result *)
 let pkt_triggered_clause_to_netcore (callback: get_packet_handler option) (cl: clause): pol =   
-    match cl.head with
+    printf "\n--- Packet triggered clause to netcore on: \n%s\n%!" (string_of_clause cl);
+    match cl.head with 
       | FAtom(_, _, _) ->
         let (oldpkt, trimmedbody) = trim_packet_from_body cl.body in 
         printf "Trimmed packet from body: (%s, %s)\n%!" oldpkt (string_of_formula trimmedbody);
@@ -378,23 +382,60 @@ let pkt_triggered_clause_to_netcore (callback: get_packet_handler option) (cl: c
            Remember that we know this clause is packet-triggered, but
            we have no constraints on what gets produced. Maybe a bunch of 
            non-packet variables e.g. +R(x, y, z) ... *)
-        fold_left (fun acc body -> 
-                    (Union (acc, policy_of_conjunction oldpkt callback body)))
-                  (policy_of_conjunction oldpkt callback (hd bodies))
-                  (tl bodies)
+        let result = fold_left (fun acc body -> 
+                         (Union (acc, policy_of_conjunction oldpkt callback body)))
+                      (policy_of_conjunction oldpkt callback (hd bodies))
+                      (tl bodies) in 
+          printf "--- Result policy: %s\n%!" (NetCore_Pretty.string_of_pol result);
+          result
       | _ -> failwith "pkt_triggered_clause_to_netcore";;
 
 (* Used to pre-filter controller notifications as much as possible *)
 let rec strip_to_valid (cl: clause): clause =
-  (* repeatedly validate_clause to find problem, trim problem, repeat until the clause is ok *)
-    try 
-      validate_clause cl 
-    with
-      (* only common existentials and pkt.x=pkt.y don't involve newpkt*)
-      | IllegalAssignmentViaEquals(_) -> false
-      | IllegalExistentialUse(_) -> false
-    let newcl = 
-    strip_to_valid newcl;; 
+  (* for now, naive solution: remove offensive literals outright. easy to prove correctness 
+    of goal: result is a fmla that is implied by the real body. *)
+    (* acc contains formula built so far, plus the variables seen *)
+    let safeargs = (match cl.head with | FAtom(_, _, args) -> args | _ -> failwith "strip_to_valid") in
+      printf "   --- Removing literals from  clause body for validity...\n%!";
+      let may_strip_literal (acc: formula * term list) (lit: formula): (formula * term list) = 
+        let (fmlasofar, seen) = acc in         
+
+        match lit with 
+        | FTrue -> acc
+        | FFalse -> (FFalse, seen)
+        | FNot(FTrue) -> (FFalse, seen)
+        | FNot(FFalse) -> acc
+
+        (* pkt.x = pkt.y  <--- can't be done in OF 1.0. just remove. *)
+        | FEquals(TField(v, f), TField(v2, f2)) when v = v2 && f2 <> f -> acc            
+        | FNot(FEquals(TField(v, f), TField(v2, f2))) when v = v2 && f2 <> f -> acc            
+
+        (* If this atom involves an already-seen variable not in tlargs, remove it *)
+        | FAtom (_, _, atomargs)  
+        | FNot(FAtom (_, _, atomargs)) ->
+          if length (list_intersection (subtract atomargs safeargs) seen) > 0 then 
+            (* removing this atom, so a fresh term shouldnt be remembered *)
+            acc 
+          else if fmlasofar = FTrue then
+             (fmlasofar, (unique (seen @ atomargs)))
+          else 
+            (FAnd(fmlasofar, lit), (unique (seen @ atomargs))) 
+
+        | FOr(_, _) -> failwith "may_strip_literal: unsupported disjunction"
+
+        (* everything else, just build the conjunction *)        
+        | _ -> 
+          if fmlasofar = FTrue then (lit, seen)
+          else (FAnd(fmlasofar, lit), seen)
+        in 
+
+      let literals = conj_to_list cl.body in
+        match literals with 
+        | [] -> cl
+        | _ ->
+          let (final_formula, seen) = fold_left may_strip_literal (FTrue, []) literals in
+          printf "   --- Final body was:\n%s\n%!" (string_of_formula final_formula);
+          {head = cl.head; orig_rule = cl.orig_rule; body = final_formula};;
 
 (* return the union of policies for each clause *)
 (* Side effect: reads current state in XSB *)
@@ -419,9 +460,6 @@ let can_compile_clause (cl: clause): bool =
     | IllegalExistentialUse(_) -> false
     | IllegalModToNewpkt(_, _) -> false
     | IllegalEquality(_,_) -> false;;
-
-let subtract (biglst: 'a list) (toremove: 'a list): 'a list =
-  (filter (fun ele -> not (mem ele toremove)) biglst);;
 
 (* Side effect: reads current state in XSB *)
 (* Set up policies for all packet-triggered clauses *)
