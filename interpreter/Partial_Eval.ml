@@ -37,6 +37,7 @@ exception IllegalFieldModification of formula;;
 exception IllegalAssignmentViaEquals of formula;;
 exception IllegalAtomMustBePositive of formula;;
 exception IllegalExistentialUse of formula;;
+exception IllegalModToNewpkt of (term * term);;
 exception IllegalEquality of (term * term);;
 
 (* all lowercased by parser *)
@@ -48,6 +49,15 @@ let legal_field_to_modify (fname: string): bool =
 
 (* 2 & 3 *) 
 let rec forbidden_assignment_check (newpkt: string) (f: formula) (innot: bool): unit = 
+    
+    let check_netcore_temp_limit_eq (t1: term) (t2: term): unit = 
+      match (t1, t2) with 
+      | (TField(v1, f1), TConst(cstr)) ->
+        (* can't modify packet fields right now *)
+        if v1 = newpkt then raise (IllegalModToNewpkt(t1,t2))
+      | _ -> ()
+    in
+
  	  let check_legal_newpkt_fields = function  
 							| TField(varname, fld)
                 when varname = newpkt -> 
@@ -55,7 +65,7 @@ let rec forbidden_assignment_check (newpkt: string) (f: formula) (innot: bool): 
       	 					   		raise (IllegalFieldModification f)
       	 					| _ -> () 
       	 				in
-    (* use of negation on equality: ok if [pkt.x = 5], [new.pt = old.pt], [newpkt.x = 5] *)
+    (* use of negation on equality: ok if [pkt.x = 5], [new.pt = old.pt] *)
     let check_legal_negation (t1: term) (t2: term): unit =
       let dangerous = (match (t1, t2) with 
           | (TField(v1, f1), TField(v2, f2)) ->
@@ -119,25 +129,30 @@ let rec forbidden_assignment_check (newpkt: string) (f: formula) (innot: bool): 
 
 (* returns list of existentials used by f. Will throw exception if re-used in new *atomic* fmla.
 	assume this is a clause fmla (no disjunction) *)
-let rec common_existential_check (sofar: string list) (f: formula): string list =
+let rec common_existential_check (newpkt: string) (sofar: string list) (f: formula): string list =
 	let ext_helper (t: term): (string list) =
 		match t with 
 			| TVar(v) -> 
 				if mem v sofar then raise (IllegalExistentialUse f)
 				else [v]
 			| TConst(_) -> []
-			| TField(_,_) -> [] 
+			(* | TField(,_) -> [] *)
+      (* netcore limitation in recent version, going away soon *)
+      | TField(fvar,ffld) -> 
+          if fvar = newpkt then 
+            raise (IllegalModToNewpkt(t, t))
+          else [] 
 		in
 
 	match f with
 		| FTrue -> []
    	| FFalse -> []
    	| FAnd(f1, f2) ->
-     		 let lhs_uses = common_existential_check sofar f1 in
+     		 let lhs_uses = common_existential_check newpkt sofar f1 in
      		 	(* unique is in ExtLst.List --- removes duplicates *)
-     		 	unique (lhs_uses @ common_existential_check (lhs_uses @ sofar) f2)
+     		 	unique (lhs_uses @ common_existential_check newpkt (lhs_uses @ sofar) f2)
   	| FOr(f1, f2) -> failwith "common_existential_check"      		 
-  	| FNot(f) -> common_existential_check sofar f 
+  	| FNot(f) -> common_existential_check newpkt sofar f 
    	| FEquals(t1, t2) -> 
    		(* equals formulas don't represent a join. do nothing *)
    		sofar
@@ -146,9 +161,9 @@ let rec common_existential_check (sofar: string list) (f: formula): string list 
 
 let validate_clause (cl: clause): unit =
   printf "Validating clause: %s\n%!" (string_of_clause cl);
-	ignore (common_existential_check [] cl.body);	
 	match cl.head with 
 		| FAtom("", "do_forward", [TVar(newpktname)]) ->
+      ignore (common_existential_check newpktname [] cl.body);  
 			forbidden_assignment_check newpktname cl.body false
 		| _ -> failwith "validate_clause";;
 
@@ -210,19 +225,19 @@ let rec build_switch_actions (oldpkt: string) (body: formula): action =
 }*)
 
 
-    let enhance_action_atom (afld: string) (aval: string) (anact: action_atom): action_atom =
-    match anact with
-      SwitchAction(oldout) ->
-        match afld with 
-          | "locpt" -> SwitchAction({oldout with outPort = NetCore_Pattern.Physical(Int32.of_string aval)})
-          | "dlsrc" -> SwitchAction({oldout with outDlSrc = (Int64.of_string aval) })
-          | "dldst" -> SwitchAction({oldout with outDlDst = (Int64.of_string aval) })
-          | "dltyp" -> SwitchAction({oldout with outDlTyp = (int_of_string aval) })
-          | "nwsrc" -> SwitchAction({oldout with outNwSrc = (Int32.of_string aval) })
-          | "nwdst" -> SwitchAction({oldout with outNwDst = (Int32.of_string aval) })
-          | "nwproto" -> SwitchAction({oldout with outNwProto = (int_of_string aval) })
-          | _ -> failwith ("enhance_action_atom: "^afld^" -> "^aval) in
-  
+  (* TODO: Netcore will support this soon (8/31) *)
+  (*let enhance_action_atom (afld: string) (aval: string) (anact: action_atom): action_atom =
+  match anact with
+    SwitchAction(oldout) ->
+      match afld with 
+        | "locpt" -> SwitchAction({oldout with outPort = NetCore_Pattern.Physical(Int32.of_string aval)})
+        | "dlsrc" -> SwitchAction({oldout with outDlSrc = (Int64.of_string aval) })
+        | "dldst" -> SwitchAction({oldout with outDlDst = (Int64.of_string aval) })
+        | "dltyp" -> SwitchAction({oldout with outDlTyp = (int_of_string aval) })
+        | "nwsrc" -> SwitchAction({oldout with outNwSrc = (Int32.of_string aval) })
+        | "nwdst" -> SwitchAction({oldout with outNwDst = (Int32.of_string aval) })
+        | "nwproto" -> SwitchAction({oldout with outNwProto = (int_of_string aval) })
+        | _ -> failwith ("enhance_action_atom: "^afld^" -> "^aval) in
 
   let create_mod_actions (actlist: action) (lit: formula): action =
     match lit with 
@@ -242,7 +257,7 @@ let rec build_switch_actions (oldpkt: string) (body: formula): action =
         actlist (* ignore involving newpkt *)
 
     | _ -> failwith ("create_mod_actions: "^(string_of_formula body)) in  
-
+*)
 
   (* list of SwitchAction(output)*)
   (* - this is only called for FORWARDING rules. so only newpkt should be involved *)
@@ -250,7 +265,7 @@ let rec build_switch_actions (oldpkt: string) (body: formula): action =
   let atoms = conj_to_list body in
     printf "  >> build_switch_actions: %s\n%!" (String.concat " ; " (map (string_of_formula ~verbose:true) atoms));
     let port_actions = fold_left create_port_actions [] atoms in
-    let complete_actions = fold_left create_mod_actions port_actions atoms in
+    let complete_actions = port_actions in (*fold_left create_mod_actions port_actions atoms in*)
   (* TODO: This includes dealing with special case pkt.locPt != newpkt.locPt *)      
       complete_actions;;
 
@@ -370,8 +385,16 @@ let pkt_triggered_clause_to_netcore (callback: get_packet_handler option) (cl: c
       | _ -> failwith "pkt_triggered_clause_to_netcore";;
 
 (* Used to pre-filter controller notifications as much as possible *)
-let strip_to_valid (cl: clause): clause =
-  cl;; (* TODO: remove atoms that make clause body uncompilable *)
+let rec strip_to_valid (cl: clause): clause =
+  (* repeatedly validate_clause to find problem, trim problem, repeat until the clause is ok *)
+    try 
+      validate_clause cl 
+    with
+      (* only common existentials and pkt.x=pkt.y don't involve newpkt*)
+      | IllegalAssignmentViaEquals(_) -> false
+      | IllegalExistentialUse(_) -> false
+    let newcl = 
+    strip_to_valid newcl;; 
 
 (* return the union of policies for each clause *)
 (* Side effect: reads current state in XSB *)
@@ -394,6 +417,7 @@ let can_compile_clause (cl: clause): bool =
     | IllegalAssignmentViaEquals(_) -> false
     | IllegalAtomMustBePositive(_) -> false
     | IllegalExistentialUse(_) -> false
+    | IllegalModToNewpkt(_, _) -> false
     | IllegalEquality(_,_) -> false;;
 
 let subtract (biglst: 'a list) (toremove: 'a list): 'a list =
