@@ -4,6 +4,8 @@ open Flowlog_Helpers
 open Partial_Eval
 open Printf
 open ExtList.List
+open NetCore_Types
+open NetCore_Pattern
 
 (**********************************************************************)
 (* Formula Wrangling: NNF, disjunction lifting, substitution ...*)
@@ -168,11 +170,33 @@ let test_pe_valid () =
     assert_raises  ~msg:"cl7" (IllegalEquality(newpktdldst,oldpktdldst)) (fun _ -> validate_clause cl7);
     assert_equal   ~msg:"cl8" (validate_clause cl8) ();;
 
+let cl9 = {orig_rule = dummy_rule; 
+           head = FAtom("", "plus_foo", [xvar]);
+           body = FAnd(FAtom("", "R", [yvar; xvar]), (FNot(FAtom("", "R", [yvar; const7]))))};;
+let cl9b = {orig_rule = dummy_rule; 
+            head = FAtom("", "plus_foo", [xvar]);
+            body = FAtom("", "R", [yvar; xvar])};;
+let cl10 = {orig_rule = dummy_rule; 
+           head = FAtom("", "plus_foo", [xvar]);
+           body = FAnd((FNot(FEquals(oldpktdldst, oldpktdlsrc))), FAnd(FAtom("", "P", [oldpktdldst]), FAtom("", "R", [yvar; xvar; oldpktdldst])))};;
+let cl10b = {orig_rule = dummy_rule; 
+            head = FAtom("", "plus_foo", [xvar]);
+            body = FAnd(FAtom("", "P", [oldpktdldst]), FAtom("", "R", [yvar; xvar; oldpktdldst]))};;
+
 let test_strip_to_valid () = 
     (* invalid because of bad newpkt assignment. now we only care about the predicate. so OK as is. *)
-    assert_equal ~msg:"cl1" (strip_to_valid cl1) cl1;;
+    assert_equal ~msg:"cl1" ~printer:string_of_clause cl1 (strip_to_valid "pkt" cl1);;
+    assert_equal ~msg:"cl9" ~printer:string_of_clause cl9b (strip_to_valid "pkt" cl9);;
+    (* remove bad equality, don't count FIELDS of oldpkt var*)
+    assert_equal ~msg:"cl10" ~printer:string_of_clause cl10b (strip_to_valid "pkt" cl10);;
+let allhdrs = Hdr(all);;
 
-
+(*let test_build_switch_pred () = 
+    let (old_cl1, trimmed_cl1) = trim_packet_from_body cl1.body in
+      assert_equal ~printer:NetCore_Pretty.string_of_pred ~msg:"cl1" 
+        (build_switch_pred old_cl1 trimmed_cl1) 
+        allhdrs;;
+*)
 (**********************************************************************)
 (* SUITE DEFINITION *)
 (**********************************************************************)
@@ -182,5 +206,6 @@ let test_strip_to_valid () =
                                    "test_minimize_variables" >:: test_minimize_variables;
                                    "test_pe_valid" >:: test_pe_valid;
                                    "test_strip_to_valid" >:: test_strip_to_valid;
+                                   (*"test_build_switch_pred" >:: test_build_switch_pred;*)
                                   ];;
  let _ = run_test_tt ~verbose:true suite;;
