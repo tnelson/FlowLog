@@ -292,7 +292,10 @@ let field_to_pattern (fld: string) (aval:string): NetCore_Pattern.t =
       | FNot(atom) -> 
         (match eq_to_pred atom with
         | None -> None
-        | Some(p) -> Some(Not(p)))
+        | Some(p) -> 
+          if p = Everything then Some Nothing
+          else if p = Nothing then Some Everything
+          else Some(Not(p)))
 
       (* only match oldpkt.<field> here*)        
       | FEquals(TConst(aval), TField(varname, fld)) when varname = oldpkt ->
@@ -310,7 +313,11 @@ let field_to_pattern (fld: string) (aval:string): NetCore_Pattern.t =
   (* After PE, should be only equalities and negated equalities. Should be just a conjunction *)
   let eqlist = conj_to_list body in 
     let predlist = filter_map eq_to_pred eqlist in
-      fold_left (fun acc pred -> match pred with | Nothing -> Nothing | Everything -> acc | _ -> And(acc, pred)) Everything predlist;; 
+      fold_left (fun acc pred -> match pred with 
+              | Nothing -> Nothing
+              | Everything -> acc
+              | _ when acc = Everything -> pred 
+              | _ -> And(acc, pred)) Everything predlist;; 
 
 (* todo: lots of code overlap in these functions. should unify *)
 (* removes the packet_in atom (since that's meaningless here). 
@@ -354,9 +361,10 @@ let policy_of_conjunction (oldpkt: string) (callback: get_packet_handler option)
 
   let mypred = build_switch_pred oldpkt body in 
 
-    ITE(mypred,
+  Seq(Filter(mypred), Action(my_action_list));;
+(*    ITE(mypred,
         Action(my_action_list), 
-        Action([]));;
+        Action([]));;*)
   	
 (***************************************************************************************)
 
@@ -446,7 +454,7 @@ let pkt_triggered_clause_to_netcore (callback: get_packet_handler option) (cl: c
                          (Union (acc, policy_of_conjunction oldpkt callback body)))
                       (policy_of_conjunction oldpkt callback (hd bodies))
                       (tl bodies) in 
-          printf "--- Result policy: %s\n%!" (NetCore_Pretty.string_of_pol result);
+          printf "--- Result policy: %s\n%!" (NetCore_Pretty.string_of_pol result);          
           result
       | _ -> failwith "pkt_triggered_clause_to_netcore";;
 
@@ -504,6 +512,90 @@ let pkt_to_event (sw : switchId) (pt: port) (pkt : Packet.packet) : event =
     let _ = if debug then print_endline ("dlTyp: " ^ (string_of_int (dlTyp pkt_payload))) in*)    
     {typeid="packet"; values=construct_map values};;
 
+let event_with_assn (p: flowlog_program) (tup: string list) (ev : event) (assn: assignment): event =
+  (* for this assignment, plug in the appropriate value in tup *)
+  let const = (nth (index assn.atupvar (get_)) tup) in 
+  {ev with values=(StringMap.add assn.afield const ev.values)};;
+
+
+let forward_packet (context: (switchId * port * Packet.packet) option) (ev: event): unit =
+  printf "forwarding: %s\n%!" (string_of_event ev);
+  ();;
+
+let emit_packet (ev: event): unit =
+  printf "emitting: %s\n%!" (string_of_event ev);
+  ();;
+
+let send_event (ev: event) (ip: string) (pt: string): unit =
+  printf "sending: %s\n%!" (string_of_event ev);
+  ();;
+
+
+let execute_output (p: flowlog_program) (context: (switchId * port * Packet.packet) option) (defn: sreactive): unit =
+  match defn with 
+    | ReactOut(relname, arglist, outtype, assigns, spec) ->
+     
+      let execute_tuple (tup: string list): unit =
+        (* arglist orders the xsb results. assigns says how to use them, spec how to send them. *)
+        let initev = (match spec with 
+                  | OutForward | OutEmit -> {typeid = "packet"; values=StringMap.empty}      
+                  | OutLoopback -> failwith "loopback unsupported currently"
+                  | OutSend(ip, pt) -> {typeid=outtype; values=StringMap.empty}) in        
+        let ev = fold_left (event_with_assn p tup) initev assigns in
+          match spec with 
+            | OutForward -> forward_packet context ev
+            | OutEmit -> emit_packet ev
+            | OutLoopback -> failwith "loopback unsupported currently"
+            | OutSend(ip, pt) -> send_event ev ip pt in
+
+      (* query xsb for this output relation *)  
+      let xsb_results = Communication.get_state (FAtom("", relname, map (fun s -> TVar(s)) arglist)) in        
+        (* execute the results *)
+        iter execute_tuple xsb_results 
+    | _ -> failwith "execute_output";;
+
+(* XSB query on plus or minus for table *)
+let change_table_how (p: flowlog_program) (toadd: bool) (tbldecl: sdecl): formula list =
+  match tbldecl with
+    | DeclTable(relname, argtypes) -> 
+      let modrelname = if toadd then (plus_prefix^"_"^relname) else (minus_prefix^"_"^relname) in
+      let varlist = init (length argtypes) (fun i -> TVar("X"^string_of_int i)) in
+      let xsb_results = Communication.get_state (FAtom("", modrelname, varlist)) in
+      map (fun strtup -> FAtom("", relname, map (fun sval -> TConst(sval)) strtup)) xsb_results
+    | _ -> failwith "change_table_how";;
+
+
+
+(* separate to own module once works for sw/pt *)
+let respond_to_notification (p: flowlog_program) (notif: event) (context: (switchId * port * Packet.packet) option): unit =
+  printf "~~~~ RESPONDING TO NOTIFICATION ABOVE ~~~~~~~~~~~~~~~~~~~\n%!";
+  (* populate the EDB with event *)  
+  Communication.assert_event p notif;
+
+  (* Update remote state if needed*)
+  (* TODO *)
+
+  (* for all declared outgoing events ...*)
+  let outgoing_defns = get_output_defns p in
+    iter (execute_output p context) outgoing_defns;
+
+  (* for all declared tables +/- *)
+  let table_decls = get_local_tables p in
+  let to_assert = flatten (map (change_table_how p true) table_decls) in
+  let to_retract = flatten (map (change_table_how p false) table_decls) in
+  printf "  *** WILL ADD: %s\n%!" (String.concat " ; " (map string_of_formula to_assert));
+  printf "  *** WILL DELETE: %s\n%!" (String.concat " ; " (map string_of_formula to_retract));
+  (* update state as dictated by +/- *)
+  iter Communication.assert_formula to_assert;
+  iter Communication.retract_formula to_retract;
+
+  Xsb.debug_print_listings();
+
+  (* depopulate event EDB *)
+  Communication.retract_event p notif;
+  printf "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n%!";
+  ();;
+
 let make_policy_stream (p: flowlog_program) =  
 
   (* stream of policies, with function to push new policies on *)
@@ -515,7 +607,9 @@ let make_policy_stream (p: flowlog_program) =
       let (newfwdpol, newnotifpol) = program_to_netcore p updateFromPacket in
       printf "NEW FWD policy: %s\n%!" (NetCore_Pretty.string_of_pol newfwdpol);
       printf "NEW NOTIF policy: %s\n%!" (NetCore_Pretty.string_of_pol newnotifpol);
-      let newpol = Union(newfwdpol, newnotifpol) in
+      (*let newpol = Union(newfwdpol, newnotifpol) in*)
+      let newpol = Action([ControllerAction(updateFromPacket)]) in
+
         push (Some newpol);              
     and
       
@@ -526,16 +620,18 @@ let make_policy_stream (p: flowlog_program) =
 
       (* Parse the packet and send it to XSB. Deal with the results *)
       let notif = (pkt_to_event sw pt pkt) in           
-      (* Evaluation.respond_to_notification notif Program.program (Some (sw, pk, notif));*)
-      printf "... notif: %s\n%!" (string_of_event notif);
-      trigger_policy_recreation_thunk();
-      (* Do nothing more: (the callback returns action set) *) 
-      [] in
+        printf "... notif: %s\n%!" (string_of_event notif);
+        respond_to_notification p notif (Some (sw, pt, pkt));      
+        trigger_policy_recreation_thunk();
+        (* Do nothing more: (the callback returns action set) *) 
+        [] in
   
     let (initfwdpol, initnotifpol) = program_to_netcore p updateFromPacket in
     printf "INITIAL FWD policy is:\n%s\n%!" (NetCore_Pretty.string_of_pol initfwdpol);
     printf "INITIAL NOTIF policy is:\n%s\n%!" (NetCore_Pretty.string_of_pol initnotifpol);
-    let initpol = Union(initfwdpol, initnotifpol) in      
+    (*let initpol = Union(initfwdpol, initnotifpol) in      *)
+    let initpol = Action([ControllerAction(updateFromPacket)]) in
+      push (Some initpol);
       (* cargo-cult hacking invocation. why call this? *)
       (trigger_policy_recreation_thunk, NetCore_Stream.from_stream initpol policies);;
 

@@ -303,11 +303,13 @@ module Communication = struct
 			let subargs = fold_left (fun acc lst -> acc @ lst) [] subsarglists in
 			FAtom(modname, relname, subargs);;
 
-	let assert_formula (tup: formula): unit = 
-		ignore (send_message ("assert("^(string_of_formula tup)^").") 0);;
-
 	let retract_formula (tup: formula): unit = 
 		ignore (send_message ("retract("^(string_of_formula tup)^").") 0);;
+
+	let assert_formula (tup: formula): unit = 
+		(* avoid storing multiples of same tuple *)
+		retract_formula tup; 
+		ignore (send_message ("assert("^(string_of_formula tup)^").") 0);;
 
 	let assert_event (p: flowlog_program) (notif: event): unit =		 
 			assert_formula (inc_event_to_formula p notif);;

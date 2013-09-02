@@ -27,7 +27,7 @@ open ExtList.List
       | RefreshPure
       | RefreshEvery;;
 
-  type assignment = {afield: string; avalue: string};;      
+  type assignment = {afrom: string; ato: string};;      
 
   type spec_out = 
       | OutForward
@@ -277,7 +277,7 @@ let built_in_decls = [DeclInc(packet_in_relname, "packet");
                       DeclEvent("packet", packet_fields);
                       DeclEvent("switch_port", swpt_fields)];;
 
-let create_id_assign (k: string): assignment = {afield=k; avalue=k};;
+let create_id_assign (k: string): assignment = {afield=k; atupvar=k};;
 
 let built_in_reacts = [ ReactInc("packet", packet_in_relname); 
                         ReactInc("switch_port", switch_reg_relname); 
