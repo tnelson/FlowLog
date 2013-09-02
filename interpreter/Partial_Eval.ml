@@ -40,10 +40,6 @@ exception IllegalExistentialUse of formula;;
 exception IllegalModToNewpkt of (term * term);;
 exception IllegalEquality of (term * term);;
 
-(* all lowercased by parser *)
-let packet_fields = ["locsw";"locpt";"dlsrc";"dldst";"dltyp";"nwsrc";"nwdst";"nwproto"];;
-let legal_to_modify_packet_fields = ["locpt";"dlsrc";"dldst";"dltyp";"nwsrc";"nwdst"];;
-
 let legal_field_to_modify (fname: string): bool =
 	mem fname legal_to_modify_packet_fields;;
 
@@ -53,8 +49,8 @@ let rec forbidden_assignment_check (newpkt: string) (f: formula) (innot: bool): 
     let check_netcore_temp_limit_eq (t1: term) (t2: term): unit = 
       match (t1, t2) with 
       | (TField(v1, f1), TConst(cstr)) ->
-        (* can't modify packet fields right now *)
-        if v1 = newpkt then raise (IllegalModToNewpkt(t1,t2))
+        (* can't modify packet fields right now. *CAN* set the port, of course. *)
+        if (v1 = newpkt) && (f1 <> "locpt") then raise (IllegalModToNewpkt(t1,t2))
       | _ -> ()
     in
 

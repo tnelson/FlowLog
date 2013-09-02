@@ -10,7 +10,7 @@ TABLE learned(int, int, int);
 //type packet = {locSw, locPt, dlSrc, dlDst, dlTyp, nwSrc, nwDst, nwProto};
 //type switch_port = {switch, port};
 
-ON packet-in(pkt):
+ON packet_in(pkt):
 	// *** Will need to add learned(sw, pt, mac) 
     // and not as appropriate.
   INSERT (pkt.locSw, pkt.locPt, pkt.dlSrc) INTO learned;  
@@ -29,7 +29,7 @@ ON packet-in(pkt):
   	pkt.locSw = 1 AND
   	pkt.dlSrc = 1 AND new.locPt != pkt.locPt;
 
-ON switch-port-in(swpt):
+ON switch_port_in(swpt):
 	INSERT (swpt.sw, swpt.pt) INTO switch_has_port;
 
   

@@ -146,9 +146,9 @@ open ExtList.List
         List.iter (fun imp -> printf "IMPORT %s;\n%!" imp) imports;
         List.iter (fun stmt -> printf "%s\n%!" (string_of_stmt stmt)) stmts;;
 
-  let string_of_clause (cl: clause): string =
-    "CLAUSE: "^(string_of_formula ~verbose:true cl.head)^" :- "^(string_of_formula ~verbose:true cl.body)^"\n"^
-    "FROM RULE: "^(string_of_rule cl.orig_rule);;
+  let string_of_clause ?(verbose: bool = false) (cl: clause): string =
+    "CLAUSE: "^(string_of_formula ~verbose:verbose cl.head)^" :- "^(string_of_formula ~verbose:verbose cl.body)^"\n"^
+    (if verbose then "FROM RULE: "^(string_of_rule cl.orig_rule) else "");;
 
 (*************************************************************)
 
@@ -241,4 +241,11 @@ let rec minimize_variables ?(exempt: term list = []) (f: formula): formula =
           (*printf "will subs out %s to %s. New is: %s.\n%!" (string_of_term x) (string_of_term t) (string_of_formula newf);*)
           minimize_variables ~exempt:exempt newf
         with SubstitutionLedToInconsistency(_) -> FFalse;;
+
+
+(* all lowercased by parser *)
+let packet_fields = ["locsw";"locpt";"dlsrc";"dldst";"dltyp";"nwsrc";"nwdst";"nwproto"];;
+let legal_to_modify_packet_fields = ["locpt";"dlsrc";"dldst";"dltyp";"nwsrc";"nwdst"];;
+
+let swpt_fields = ["sw";"pt"];;
 

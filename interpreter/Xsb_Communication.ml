@@ -154,7 +154,7 @@ module Xsb = struct
             next_str := get_line_gingerly in_ch out_ch str;		  		
 			next_str := String.trim (Str.global_replace (Str.regexp "| \\?-") "" !next_str);
 
-			if debug then Printf.printf "%d > '%s'\n%!" !counter !next_str;
+			(*if debug then Printf.printf "%d > '%s'\n%!" !counter !next_str;*)
 			(* the last line won't be followed by a newline until we give it a ;. 
 				TODO: Worry that since we don't know how many blocks total, we may send an extra ;. *)
 			
@@ -268,6 +268,7 @@ module Communication = struct
 		List.map (fun sl -> group_into_constants types sl) strings;;
 
 *)
+
 	let clause_to_xsb (cls: clause): string =
 		(string_of_formula cls.head)^" :- "^(string_of_formula cls.body);;
 
@@ -287,18 +288,78 @@ module Communication = struct
 	
 *)
 
-	let start_clause (cls : clause) : unit =
+	(* Substitute notif vars for their fields and produce a string for XSB to consume *)
+
+	let is_io_rel (prgm: flowlog_program) (modname: string) (relname: string): bool =
+		(* exists is ocaml's ormap *)
+		exists (function 			
+				| DeclInc(rname, argtype) when rname = relname -> true 
+				| DeclOut(rname, argtypelst) when rname = relname -> true
+				| _ -> false) 
+			  prgm.decls;;      
+
+	let get_fields_for_type (prgm: flowlog_program) (etype: string): string list =
+		 	let decl = find (function 			
+				| DeclEvent(evname, evtypelst) when evname = etype -> true 
+				| _ -> false) prgm.decls in 
+			match decl with 
+				| DeclEvent(evname, evfieldlst) -> 
+					evfieldlst
+				| _ -> failwith "get_fields_for_type";;
+
+
+	let get_io_fields_for_index (prgm: flowlog_program) (relname: string) (idx: int): string list =
+		let decl = find (function 			
+				| DeclInc(rname, argtype) when rname = relname -> true 
+				| DeclOut(rname, argtypelst) when rname = relname -> true
+				| _ -> false) prgm.decls in 
+			match decl with 
+				| DeclInc(rname, argtype) when rname = relname -> 
+					get_fields_for_type prgm argtype
+				| DeclOut(rname, argtypelst) when rname = relname ->
+					get_fields_for_type prgm (nth argtypelst idx)
+				| _ -> failwith "get_io_fields_for_index";;
+
+	let decls_expand_fields (prgm: flowlog_program) (modname: string) (relname: string) (i: int) (t: term): term list =
+		match t with 
+			| TVar(vname) when is_io_rel prgm modname relname -> 
+				map (fun fldname -> TField(vname, fldname)) (get_io_fields_for_index prgm relname i)
+			| _ -> [t];;
+				
+	let rec subs_xsb_formula (prgm: flowlog_program) (f: formula): formula = 
+		match f with
+		| FTrue -> FTrue
+		| FFalse -> FFalse
+		| FNot(innerf) -> FNot(subs_xsb_formula prgm innerf)
+		| FAnd(f1, f2) -> FAnd(subs_xsb_formula prgm f1, subs_xsb_formula prgm f2)
+		| FOr(f1, f2) -> FOr(subs_xsb_formula prgm f1, subs_xsb_formula prgm f2)
+		| FEquals(_, _) -> f
+		| FAtom(modname, relname, tlargs) -> 			
+			let subsarglists = mapi (decls_expand_fields prgm modname relname) tlargs in
+			let subargs = fold_left (fun acc lst -> acc @ lst) [] subsarglists in
+			FAtom(modname, relname, subargs);;
+
+	let start_clause (prgm: flowlog_program) (cls : clause) : unit =
 		(*if debug then print_endline ("start_clause: assert((" ^ (Type_Helpers.clause_to_string cls) ^ ")).");
 		if debug then (List.iter (fun t -> (Printf.printf "var: %s\n%!" (Type_Helpers.term_to_string t))) (get_vars cls));*)
-		ignore (send_message ("assert((" ^ (clause_to_xsb cls) ^ ")).") (length (get_all_clause_vars cls)));
+		let new_head = subs_xsb_formula prgm cls.head in
+		let new_body = subs_xsb_formula prgm cls.body in
+		printf "start_clause substituted: %s :- %s" (string_of_formula new_head)(string_of_formula new_body);
+		let subs_cls = {head = new_head; 
+		                body = new_body;
+						orig_rule = cls.orig_rule}  in
+			printf "subs cls: %s\n%!" (string_of_clause cls);
+			ignore (send_message ("assert((" ^ (clause_to_xsb subs_cls) ^ ")).") 
+				                 (length (get_all_clause_vars subs_cls)));
 		();;
 		
 
 	(* assuming all implicitly defined clauses have been added to list of clauses *)
 	let start_program (prgm : flowlog_program) : unit =
-		printf "Starting Flowlog Program...\n%!";
+		printf "-------------------\nStarting Flowlog Program...\n%!";		
 		(* prevent XSB from locking up if unknown relation seen. will assume false if unknown now.*)
 		ignore (send_message "set_prolog_flag(unknown, fail)." 0);
-		List.iter start_clause prgm.clauses;;
+		List.iter (start_clause prgm) prgm.clauses;
+		Xsb.debug_print_listings();;
 
 end

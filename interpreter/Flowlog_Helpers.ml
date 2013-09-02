@@ -150,3 +150,7 @@ let rec disj_to_top (f: formula): formula =
                                                       FOr(acc, FAnd(subf1, subf2))) 
                           (FAnd(firstfmla1, firstfmla2)) 
                           (tl pairs);;
+
+
+(*****************************************************)
+

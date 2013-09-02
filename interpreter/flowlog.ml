@@ -83,14 +83,23 @@ let clauses_of_rule (r: srule): clause list =
         | ADo(relname, terms, condition) -> 
             map (build_clause r atom_for_on relname terms "do") (disj_to_list (disj_to_top condition));;     
 
+let built_in_decls = [DeclInc("packet_in", "packet"); 
+                      DeclInc("switch_port_in", "switch_port"); 
+                      DeclOut("do_forward", ["packet"]);
+                      DeclOut("do_emit", ["packet"]);
+
+                      DeclEvent("packet", packet_fields);
+                      DeclEvent("switch_port", swpt_fields)];;
+
 let desugared_program_of_ast (ast: flowlog_ast): flowlog_program =
     printf "*** REMINDER: IMPORTS NOT YET HANDLED! (Remember to handle in partial eval, too.) ***\n%!"; (* TODO *)
     match ast with AST(imports, stmts) ->
         (* requires extlib *)
-        let the_decls  = filter_map (function SDecl(d) -> Some d     | _ -> None) stmts in 
+        let the_decls  = built_in_decls @ 
+                         filter_map (function SDecl(d) -> Some d     | _ -> None) stmts in 
         let the_reacts = filter_map (function SReactive(r) -> Some r | _ -> None) stmts in 
         let the_rules  = filter_map (function SRule(r) -> Some r     | _ -> None) stmts in 
-
+        
             let clauses = (fold_left (fun acc r -> (clauses_of_rule r) @ acc) [] the_rules) in 
                 {decls = the_decls; reacts = the_reacts; clauses = clauses};;
 
