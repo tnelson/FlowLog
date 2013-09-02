@@ -74,7 +74,12 @@ open ExtList.List
   type flowlog_program = {  decls: sdecl list; 
                             reacts: sreactive list; 
                             clauses: clause list; };;
+
+  type event = { typeid: string; values: string list};;
+
 (*************************************************************)
+  let string_of_event (notif: event): string =
+    notif.typeid^": ["^(String.concat ";" notif.values)^"]";;
 
   (* If verbose flag is not set, prepare for XSB. Otherwise, add extra info for debug. *)
   let string_of_term ?(verbose:bool = false) (t: term): string = 
@@ -244,8 +249,19 @@ let rec minimize_variables ?(exempt: term list = []) (f: formula): formula =
 
 
 (* all lowercased by parser *)
+let packet_in_relname = "packet_in";;
+let switch_reg_relname = "switch_port_in";;
 let packet_fields = ["locsw";"locpt";"dlsrc";"dldst";"dltyp";"nwsrc";"nwdst";"nwproto"];;
 let legal_to_modify_packet_fields = ["locpt";"dlsrc";"dldst";"dltyp";"nwsrc";"nwdst"];;
 
 let swpt_fields = ["sw";"pt"];;
+
+let built_in_decls = [DeclInc(packet_in_relname, "packet"); 
+                      DeclInc(switch_reg_relname, "switch_port"); 
+                      DeclOut("do_forward", ["packet"]);
+                      DeclOut("do_emit", ["packet"]);
+
+                      DeclEvent("packet", packet_fields);
+                      DeclEvent("switch_port", swpt_fields)];;
+
 

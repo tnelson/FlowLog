@@ -83,14 +83,6 @@ let clauses_of_rule (r: srule): clause list =
         | ADo(relname, terms, condition) -> 
             map (build_clause r atom_for_on relname terms "do") (disj_to_list (disj_to_top condition));;     
 
-let built_in_decls = [DeclInc("packet_in", "packet"); 
-                      DeclInc("switch_port_in", "switch_port"); 
-                      DeclOut("do_forward", ["packet"]);
-                      DeclOut("do_emit", ["packet"]);
-
-                      DeclEvent("packet", packet_fields);
-                      DeclEvent("switch_port", swpt_fields)];;
-
 let desugared_program_of_ast (ast: flowlog_ast): flowlog_program =
     printf "*** REMINDER: IMPORTS NOT YET HANDLED! (Remember to handle in partial eval, too.) ***\n%!"; (* TODO *)
     match ast with AST(imports, stmts) ->
@@ -120,19 +112,39 @@ let simplify_clauses (p: flowlog_program) =
 
 let listenPort = ref 6633;;
 
-(*
-let switch_connected (sw : switchId) (feats : OpenFlow0x01.SwitchFeatures.t) : unit =
-  Printf.printf "Switch %Ld connected.\n%!" sw;;
- (* let port_nums = List.map (fun (x : PortDescription.t)-> x.PortDescription.port_no) feats.SwitchFeatures.ports in
+(* separate to own module once works for sw/pt *)
+let respond_to_notification (p: flowlog_program) (notif: event) (context: (switchId * Packet.packet) option): unit =
+  (* populate the EDB with event *)  
+  Communication.assert_event p notif;
+  (* for all declared outgoing events ...*)
+  let outgoing_rels = [] in
+    iter (fun relname -> ()) 
+      outgoing_rels;
+
+  (* for all declared tables +/- *)
+  let to_assert = [] in
+  let to_retract = [] in
+  (* update state as dictated by +/- *)
+  map (Communication.assert_fact p) to_assert;
+  map (Communication.retract_fact p) to_retract;
+
+  (* depopulate event EDB *)
+  Communication.retract_event p notif;
+  ();;
+
+
+let switch_connected (p: flowlog_program) (sw : switchId) (feats : OpenFlow0x01.SwitchFeatures.t) : unit =
+  Printf.printf "Switch %Ld connected.\n%!" sw;
+  let port_nums = map (fun (x : PortDescription.t)-> x.PortDescription.port_no) feats.SwitchFeatures.ports in
   let sw_string = Int64.to_string sw in
-  let notifs = List.map (fun portid -> Types.Constant([sw_string; string_of_int portid], Types.switch_port_type)) port_nums in
-  List.iter (fun notif -> Evaluation.respond_to_notification notif Program.program None) notifs;;
-*)
+  let notifs = map (fun portid -> {typeid="switch_port"; values=[sw_string; (string_of_int portid)]}) port_nums in
+  printf "SWITCH REGISTERED! %s\n%!" (String.concat ", " (map string_of_event notifs));;
+  List.iter (fun notif -> respond_to_notification p notif None) notifs;;
 
 (* infinitely recursive function that listens for switch connection messages 
    Cribbed nearly verbatim from Ox lib by Tim on Aug 29 2013
    since we're moving from Ox to Frenetic as a base *)
-let rec handle_switch_reg () = 
+let rec handle_switch_reg (p: flowlog_program) = 
     let open Message in
     let open FlowMod in
     lwt feats = OpenFlow0x01_Platform.accept_switch () in 
@@ -141,23 +153,21 @@ let rec handle_switch_reg () =
     lwt _ = OpenFlow0x01_Platform.send_to_switch sw 0l (FlowModMsg delete_all_flows) in
     lwt _ = OpenFlow0x01_Platform.send_to_switch sw 1l BarrierRequest in
     (* JNF: wait for barrier reply? *)
-    let _ = switch_connected sw feats in 
-    Lwt.async (fun () -> switch_thread sw);
-    handle_switch_reg();;
-*)
+    let _ = switch_connected p sw feats in 
+    (*Lwt.async (fun () -> switch_thread sw);*)
+    handle_switch_reg p;;
+
 
 let run_flowlog (p: flowlog_program): unit Lwt.t =  
   (* Start up XSB, etc. *)
   Communication.start_program p;
  
   (* Listen for incoming notifications via RPC *)
-  (*Flowlog_Thrift_In.start_listening p;;
- *)
-(*
+  (*Flowlog_Thrift_In.start_listening p;; *)
+
   (* Send the "startup" notification. Enables initialization, etc. in programs *)
-  let startup = Types.Constant([], Types.startup_type) in
-    Evaluation.respond_to_notification startup Program.program None;;
-*)
+  (*let startup = Types.Constant([], Types.startup_type) in
+    Evaluation.respond_to_notification startup Program.program None;; *)
 
   (* Catch switch-connect events: *)
 
@@ -169,7 +179,7 @@ let run_flowlog (p: flowlog_program): unit Lwt.t =
     let (pkt_stream, push_pkt) = Lwt_stream.create () in
       Lwt.pick [gen_stream;
                 NetCore_Controller.start_controller pkt_stream stream;
-               (* handle_switch_reg*)
+                handle_switch_reg p
                ];;
 
 let main () =

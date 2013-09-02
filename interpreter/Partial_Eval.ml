@@ -313,7 +313,7 @@ let field_to_pattern (fld: string) (aval:string): NetCore_Pattern.t =
       fold_left (fun acc pred -> match pred with | Nothing -> Nothing | Everything -> acc | _ -> And(acc, pred)) Everything predlist;; 
 
 (* todo: lots of code overlap in these functions. should unify *)
-(* removes the packet-in atom (since that's meaningless here). 
+(* removes the packet_in atom (since that's meaningless here). 
    returns the var the old packet was bound to, and the trimmed fmla *)
 let rec trim_packet_from_body (body: formula): (string * formula) =
   match body with
@@ -333,12 +333,12 @@ let rec trim_packet_from_body (body: formula): (string * formula) =
         (var2, trimmed)
       else if var2 = "" then
         (var1, trimmed)
-      else failwith "trim_packet_from_clause: multiple variables used in packet-in"    
+      else failwith "trim_packet_from_clause: multiple variables used in packet_in"    
     | FNot(f) ->
       let (v, t) = trim_packet_from_body f in
         (v, FNot(t))
     | FOr(f1, f2) -> failwith "trim_packet_from_clause"              
-    | FAtom("", "packet-in", [TVar(varstr)]) ->  
+    | FAtom("", packet_in_relname, [TVar(varstr)]) ->  
       (varstr, FTrue)
     | _ -> ("", body);;    
 
@@ -486,6 +486,23 @@ let program_to_netcore (p: flowlog_program) (callback: get_packet_handler): (pol
     (pkt_triggered_clauses_to_netcore can_fully_compile_fwd_clauses None,
      pkt_triggered_clauses_to_netcore (cant_compile_fwd_clauses @ non_fwd_clauses_by_packets) (Some callback));;
 
+let pkt_to_event (sw : switchId) (pt: port) (pkt : Packet.packet) : event =       
+   let isIp = ((Packet.dlTyp pkt) = 0x0800) in
+   let isArp = ((Packet.dlTyp pkt) = 0x0806) in
+   let strings = [
+    Int64.to_string sw;
+    NetCore_Pretty.string_of_port pt;
+    Int64.to_string pkt.Packet.dlSrc;
+    Int64.to_string pkt.Packet.dlDst;
+    string_of_int (Packet.dlTyp pkt);
+    (* nwSrc/nwDst will throw an exception if you call them on an unsuitable packet *)
+    if (isIp || isArp) then Int32.to_string (Packet.nwSrc pkt) else "0";
+    if (isIp || isArp) then Int32.to_string (Packet.nwDst pkt) else "0";
+    if isIp then (string_of_int (Packet.nwProto pkt)) else "arp"] in
+    (*let _ = if debug then print_endline ("pkt to term list: " ^ (Type_Helpers.list_to_string Type_Helpers.term_to_string ans)) in
+    let _ = if debug then print_endline ("dlTyp: " ^ (string_of_int (dlTyp pkt_payload))) in*)    
+    {typeid="packet"; values=strings};;
+
 let make_policy_stream (p: flowlog_program) =  
 
   (* stream of policies, with function to push new policies on *)
@@ -495,6 +512,12 @@ let make_policy_stream (p: flowlog_program) =
   let rec updateFromPacket (sw: switchId) (pt: port) (pkt: Packet.packet) : NetCore_Types.action =    
     (* Update the policy via the push function *)
     printf "Packet in on switch %Ld.\n%s\n%!" sw (Packet.to_string pkt);
+
+    (* Parse the packet and send it to XSB. Deal with the results *)
+    let notif = (pkt_to_event sw pt pkt) in           
+     (* Evaluation.respond_to_notification notif Program.program (Some (sw, pk, notif));*)
+    printf "... notif had values: %s\n%!" (String.concat ";" notif.values);
+    (* Update the policy *)
     let (newfwdpol, newnotifpol) = program_to_netcore p updateFromPacket in
     let newpol = Union(newfwdpol, newnotifpol) in
       push (Some newpol);        
