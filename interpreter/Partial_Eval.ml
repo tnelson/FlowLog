@@ -509,27 +509,34 @@ let make_policy_stream (p: flowlog_program) =
   (* stream of policies, with function to push new policies on *)
   let (policies, push) = Lwt_stream.create () in
 
-  (* The callback to be invoked when the policy says to send pkt to controller *)
-  let rec updateFromPacket (sw: switchId) (pt: port) (pkt: Packet.packet) : NetCore_Types.action =    
-    (* Update the policy via the push function *)
-    printf "Packet in on switch %Ld.\n%s\n%!" sw (Packet.to_string pkt);
+    (* the thunk needs to know the pkt callback, the pkt callback invokes the thunk. so need "and" *)
+    let rec trigger_policy_recreation_thunk (): unit = 
+      (* Update the policy *)
+      let (newfwdpol, newnotifpol) = program_to_netcore p updateFromPacket in
+      printf "NEW FWD policy: %s\n%!" (NetCore_Pretty.string_of_pol newfwdpol);
+      printf "NEW NOTIF policy: %s\n%!" (NetCore_Pretty.string_of_pol newnotifpol);
+      let newpol = Union(newfwdpol, newnotifpol) in
+        push (Some newpol);              
+    and
+      
+    (* The callback to be invoked when the policy says to send pkt to controller *)
+    updateFromPacket (sw: switchId) (pt: port) (pkt: Packet.packet) : NetCore_Types.action =    
+      (* Update the policy via the push function *)
+      printf "Packet in on switch %Ld.\n%s\n%!" sw (Packet.to_string pkt);
 
-    (* Parse the packet and send it to XSB. Deal with the results *)
-    let notif = (pkt_to_event sw pt pkt) in           
-     (* Evaluation.respond_to_notification notif Program.program (Some (sw, pk, notif));*)
-    printf "... notif: %s\n%!" (string_of_event notif);
-    (* Update the policy *)
-    let (newfwdpol, newnotifpol) = program_to_netcore p updateFromPacket in
-    let newpol = Union(newfwdpol, newnotifpol) in
-      push (Some newpol);        
-      printf "NEW policy is:\n%s\n%!" (NetCore_Pretty.string_of_pol newpol);
-      (* Do nothing more *) 
+      (* Parse the packet and send it to XSB. Deal with the results *)
+      let notif = (pkt_to_event sw pt pkt) in           
+      (* Evaluation.respond_to_notification notif Program.program (Some (sw, pk, notif));*)
+      printf "... notif: %s\n%!" (string_of_event notif);
+      trigger_policy_recreation_thunk();
+      (* Do nothing more: (the callback returns action set) *) 
       [] in
   
     let (initfwdpol, initnotifpol) = program_to_netcore p updateFromPacket in
-    let initpol = Union(initfwdpol, initnotifpol) in
-      printf "INITIAL policy is:\n%s\n%!" (NetCore_Pretty.string_of_pol initpol);
+    printf "INITIAL FWD policy is:\n%s\n%!" (NetCore_Pretty.string_of_pol initfwdpol);
+    printf "INITIAL NOTIF policy is:\n%s\n%!" (NetCore_Pretty.string_of_pol initnotifpol);
+    let initpol = Union(initfwdpol, initnotifpol) in      
       (* cargo-cult hacking invocation. why call this? *)
-      NetCore_Stream.from_stream initpol policies;;
+      (trigger_policy_recreation_thunk, NetCore_Stream.from_stream initpol policies);;
 
 

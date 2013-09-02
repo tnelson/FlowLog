@@ -166,6 +166,7 @@ let change_table_how (p: flowlog_program) (toadd: bool) (tbldecl: sdecl): formul
 
 (* separate to own module once works for sw/pt *)
 let respond_to_notification (p: flowlog_program) (notif: event) (context: (switchId * port * Packet.packet) option): unit =
+  printf "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n%!";
   (* populate the EDB with event *)  
   Communication.assert_event p notif;
 
@@ -190,6 +191,7 @@ let respond_to_notification (p: flowlog_program) (notif: event) (context: (switc
 
   (* depopulate event EDB *)
   Communication.retract_event p notif;
+  printf "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n%!";
   ();;
 
 
@@ -205,7 +207,7 @@ let switch_connected (p: flowlog_program) (sw : switchId) (feats : OpenFlow0x01.
 (* infinitely recursive function that listens for switch connection messages 
    Cribbed nearly verbatim from Ox lib by Tim on Aug 29 2013
    since we're moving from Ox to Frenetic as a base *)
-let rec handle_switch_reg (p: flowlog_program) = 
+let rec handle_switch_reg (p: flowlog_program) (trigger_re_policy_func: unit -> unit) = 
     let open Message in
     let open FlowMod in
     lwt feats = OpenFlow0x01_Platform.accept_switch () in 
@@ -216,7 +218,8 @@ let rec handle_switch_reg (p: flowlog_program) =
     (* JNF: wait for barrier reply? *)
     let _ = switch_connected p sw feats in 
     (*Lwt.async (fun () -> switch_thread sw);*)
-    handle_switch_reg p;;
+      trigger_re_policy_func(); (* trigger re-production of policy, since state may have changed *)
+      handle_switch_reg p trigger_re_policy_func;;
 
 
 let run_flowlog (p: flowlog_program): unit Lwt.t =  
@@ -235,12 +238,12 @@ let run_flowlog (p: flowlog_program): unit Lwt.t =
   (* Start the policy stream *)
   (* >> is from Lwt's Pa_lwt. But you MUST have -syntax camlp4o or it won't be recoginized. *)   
   OpenFlow0x01_Platform.init_with_port !listenPort >>
-    let (gen_stream, stream) = make_policy_stream p in
+    let (trigger_re_policy_func, (gen_stream, stream)) = make_policy_stream p in
     (* streams for incoming/exiting packets *)
     let (pkt_stream, push_pkt) = Lwt_stream.create () in
       Lwt.pick [gen_stream;
                 NetCore_Controller.start_controller pkt_stream stream;
-                handle_switch_reg p
+                handle_switch_reg p trigger_re_policy_func
                ];;
 
 let main () =
