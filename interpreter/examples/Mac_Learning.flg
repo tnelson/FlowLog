@@ -1,5 +1,6 @@
 
 TABLE learned(int, int, int); 
+TABLE switch_has_port(int, int); 
 
 // all the events used here are built-in
 

@@ -303,13 +303,17 @@ module Communication = struct
 			let subargs = fold_left (fun acc lst -> acc @ lst) [] subsarglists in
 			FAtom(modname, relname, subargs);;
 
-	let assert_event (p: flowlog_program) (notif: event): unit =
-		let tuple = inc_event_to_formula p notif in
-			ignore (send_message ("assert("^(string_of_formula tuple)^").") 0);;
+	let assert_formula (tup: formula): unit = 
+		ignore (send_message ("assert("^(string_of_formula tup)^").") 0);;
+
+	let retract_formula (tup: formula): unit = 
+		ignore (send_message ("retract("^(string_of_formula tup)^").") 0);;
+
+	let assert_event (p: flowlog_program) (notif: event): unit =		 
+			assert_formula (inc_event_to_formula p notif);;
 
 	let retract_event (p: flowlog_program) (notif: event): unit = 
-		let tuple = inc_event_to_formula p notif in
-			ignore (send_message ("retract("^(string_of_formula tuple)^").") 0);;
+			retract_formula (inc_event_to_formula p notif);;
 
 	let start_clause (prgm: flowlog_program) (cls : clause) : unit =
 		(*if debug then print_endline ("start_clause: assert((" ^ (Type_Helpers.clause_to_string cls) ^ ")).");

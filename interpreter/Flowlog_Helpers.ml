@@ -154,6 +154,10 @@ let rec disj_to_top (f: formula): formula =
 
 (*****************************************************)
 
+let get_local_tables (prgm: flowlog_program): sdecl list =
+    filter (function | DeclTable(relname, argtypes) -> true | _ -> false ) 
+        prgm.decls;;
+
   let get_output_defns (prgm: flowlog_program): sreactive list =
     filter_map (function      
         | ReactOut(relname, arglist, outtype, assigns, spec) as x -> Some x       
@@ -193,12 +197,13 @@ let rec disj_to_top (f: formula): formula =
   (* ASSUMED: only one in relation per event *)
   let inc_event_to_formula (p: flowlog_program) (notif: event): formula =
     (* event contains k=v mappings and a type. convert to a formula via defns in program*)
+    printf "Converting event to formula: %s\n%!" (string_of_event notif);
     let defn = find (function       
         | ReactInc(typename, relname) when notif.typeid = typename -> true
         | _ -> false ) p.reacts in 
       match defn with 
         | ReactInc(typename, relname) -> 
-          FAtom("", relname, map (fun str -> TConst(str)) (get_fields_for_type p typename))
+          FAtom("", relname, map (fun fld -> TConst(StringMap.find fld notif.values)) (get_fields_for_type p typename))
         | _ -> failwith "inc_event_to_formula";;
 
   let decls_expand_fields (prgm: flowlog_program) (modname: string) (relname: string) (i: int) (t: term): term list =

@@ -77,11 +77,11 @@ let clauses_of_rule (r: srule): clause list =
     let atom_for_on = FAtom("", increlname, [TVar(incterm)]) in (* local atom, no module name *)
     match act with 
         | ADelete(relname, terms, condition) -> 
-            map (build_clause r atom_for_on relname terms "minus") (disj_to_list (disj_to_top condition));
+            map (build_clause r atom_for_on relname terms minus_prefix) (disj_to_list (disj_to_top condition));
         | AInsert(relname, terms, condition) -> 
-            map (build_clause r atom_for_on relname terms "plus") (disj_to_list (disj_to_top condition));
+            map (build_clause r atom_for_on relname terms plus_prefix) (disj_to_list (disj_to_top condition));
         | ADo(relname, terms, condition) -> 
-            map (build_clause r atom_for_on relname terms "do") (disj_to_list (disj_to_top condition));;     
+            map (build_clause r atom_for_on relname terms do_prefix) (disj_to_list (disj_to_top condition));;     
 
 let desugared_program_of_ast (ast: flowlog_ast): flowlog_program =
     printf "*** REMINDER: IMPORTS NOT YET HANDLED! (Remember to handle in partial eval, too.) ***\n%!"; (* TODO *)
@@ -153,6 +153,17 @@ let execute_output (p: flowlog_program) (context: (switchId * port * Packet.pack
         iter execute_tuple xsb_results 
     | _ -> failwith "execute_output";;
 
+(* XSB query on plus or minus for table *)
+let change_table_how (p: flowlog_program) (toadd: bool) (tbldecl: sdecl): formula list =
+  match tbldecl with
+    | DeclTable(relname, argtypes) -> 
+      let modrelname = if toadd then (plus_prefix^"_"^relname) else (minus_prefix^"_"^relname) in
+      let varlist = init (length argtypes) (fun i -> TVar("X"^string_of_int i)) in
+      let xsb_results = Communication.get_state (FAtom("", modrelname, varlist)) in
+      map (fun strtup -> FAtom("", relname, map (fun sval -> TConst(sval)) strtup)) xsb_results
+    | _ -> failwith "change_table_how";;
+
+
 (* separate to own module once works for sw/pt *)
 let respond_to_notification (p: flowlog_program) (notif: event) (context: (switchId * port * Packet.packet) option): unit =
   (* populate the EDB with event *)  
@@ -166,13 +177,17 @@ let respond_to_notification (p: flowlog_program) (notif: event) (context: (switc
     iter (execute_output p context) outgoing_defns;
 
   (* for all declared tables +/- *)
-  (*let tables = get_local_tables p in
-  let to_assert = fold_left (add_assertion true) [] tables in
-  let to_retract = fold_left (add_assertion false) [] tables in
+  let table_decls = get_local_tables p in
+  let to_assert = flatten (map (change_table_how p true) table_decls) in
+  let to_retract = flatten (map (change_table_how p false) table_decls) in
+  printf "  *** WILL ADD: %s\n%!" (String.concat " ; " (map string_of_formula to_assert));
+  printf "  *** WILL DELETE: %s\n%!" (String.concat " ; " (map string_of_formula to_retract));
   (* update state as dictated by +/- *)
-  map (Communication.assert_fact p) to_assert;
-  map (Communication.retract_fact p) to_retract;
-*)
+  iter Communication.assert_formula to_assert;
+  iter Communication.retract_formula to_retract;
+
+  Xsb.debug_print_listings();
+
   (* depopulate event EDB *)
   Communication.retract_event p notif;
   ();;
