@@ -154,3 +154,58 @@ let rec disj_to_top (f: formula): formula =
 
 (*****************************************************)
 
+  let get_output_defns (prgm: flowlog_program): sreactive list =
+    filter_map (function      
+        | ReactOut(relname, arglist, outtype, assigns, spec) as x -> Some x       
+        | _ -> None) 
+        prgm.reacts;;      
+
+  let is_io_rel (prgm: flowlog_program) (modname: string) (relname: string): bool =
+    (* exists is ocaml's ormap *)
+    exists (function      
+        | DeclInc(rname, argtype) when rname = relname -> true 
+        | DeclOut(rname, argtypelst) when rname = relname -> true
+        | _ -> false) 
+        prgm.decls;;      
+
+  let get_fields_for_type (prgm: flowlog_program) (etype: string): string list =
+      let decl = find (function       
+        | DeclEvent(evname, evtypelst) when evname = etype -> true 
+        | _ -> false) prgm.decls in 
+      match decl with 
+        | DeclEvent(evname, evfieldlst) -> 
+          evfieldlst
+        | _ -> failwith "get_fields_for_type";;
+
+  (* in this IO relation, at index idx, there should be something of type T. What are T's fields, in order? *)
+  let get_io_fields_for_index (prgm: flowlog_program) (relname: string) (idx: int): string list =
+    let decl = find (function       
+        | DeclInc(rname, argtype) when rname = relname -> true 
+        | DeclOut(rname, argtypelst) when rname = relname -> true
+        | _ -> false) prgm.decls in 
+      match decl with 
+        | DeclInc(rname, argtype) when rname = relname -> 
+          get_fields_for_type prgm argtype
+        | DeclOut(rname, argtypelst) when rname = relname ->
+          get_fields_for_type prgm (nth argtypelst idx)
+        | _ -> failwith "get_io_fields_for_index";;
+
+  (* ASSUMED: only one in relation per event *)
+  let inc_event_to_formula (p: flowlog_program) (notif: event): formula =
+    (* event contains k=v mappings and a type. convert to a formula via defns in program*)
+    let defn = find (function       
+        | ReactInc(typename, relname) when notif.typeid = typename -> true
+        | _ -> false ) p.reacts in 
+      match defn with 
+        | ReactInc(typename, relname) -> 
+          FAtom("", relname, map (fun str -> TConst(str)) (get_fields_for_type p typename))
+        | _ -> failwith "inc_event_to_formula";;
+
+  let decls_expand_fields (prgm: flowlog_program) (modname: string) (relname: string) (i: int) (t: term): term list =
+    match t with 
+      | TVar(vname) when is_io_rel prgm modname relname -> 
+        map (fun fldname -> TField(vname, fldname)) (get_io_fields_for_index prgm relname i)
+      | _ -> [t];;
+
+let construct_map (bindings: (string * string) list): (string StringMap.t) =
+  fold_left (fun acc (bx, by) -> StringMap.add bx by acc) StringMap.empty bindings

@@ -27,19 +27,19 @@ open ExtList.List
       | RefreshPure
       | RefreshEvery;;
 
-  type assignment = 
-      | Assign of string * string;;
+  type assignment = {afield: string; avalue: string};;      
 
   type spec_out = 
-      | ReactSend of string * assignment list * string * string;;
-  type spec_in =
-      | ReactInsert of string;;
+      | OutForward
+      | OutEmit
+      | OutLoopback
+      | OutSend of string * string;;
 
   type sreactive = 
         (* table name, query name, ip, port, refresh settings *)
       | ReactRemote of string * string * string * string * refresh
         (* out relation name, args, event type name, assignments, ip, port*)
-      | ReactOut of string * string list * string * assignment list * string * string 
+      | ReactOut of string * string list * string * assignment list * spec_out
         (* incoming event type, trigger relation name*)
       | ReactInc of string * string;;
 
@@ -75,11 +75,13 @@ open ExtList.List
                             reacts: sreactive list; 
                             clauses: clause list; };;
 
-  type event = { typeid: string; values: string list};;
+  (* context for values given by decls *)
+  module StringMap = Map.Make(String);;
+  type event = { typeid: string; values: string StringMap.t};;
 
 (*************************************************************)
   let string_of_event (notif: event): string =
-    notif.typeid^": ["^(String.concat ";" notif.values)^"]";;
+    notif.typeid^": ["^(String.concat ";" (map (fun (k, v) -> k^":"^v) (StringMap.bindings notif.values)))^"]";;
 
   (* If verbose flag is not set, prepare for XSB. Otherwise, add extra info for debug. *)
   let string_of_term ?(verbose:bool = false) (t: term): string = 
@@ -130,12 +132,19 @@ open ExtList.List
       | DeclOut(tname, argtypes) -> "OUTGOING "^tname^(String.concat "," argtypes);
       | DeclEvent(evname, argnames) -> "EVENT "^evname^" "^(String.concat "," argnames);;
 
+  let string_of_outspec (spec: spec_out) =
+    match spec with 
+      | OutForward -> "forward"      
+      | OutEmit -> "emit"
+      | OutLoopback -> "loopback"
+      | OutSend(ip, pt) -> ip^":"^pt;;  
+
   let string_of_reactive (r: sreactive): string =
     match r with       
       | ReactRemote(tblname, qname, ip, port, refresh) ->
         tblname^" (remote) = "^qname^" @ "^ip^" "^port;
-      | ReactOut(outrel, args, evtype, assignments, ip, port) ->
-        outrel^"("^(String.concat "," args)^") (output rel) = "^evtype^" @ "^ip^" "^port;
+      | ReactOut(outrel, args, evtype, assignments, spec) ->
+        outrel^"("^(String.concat "," args)^") (output rel) = "^evtype^" @ "^(string_of_outspec spec);
       | ReactInc(evtype, relname) -> 
         relname^" (input rel) "^evtype;;
   
@@ -263,5 +272,14 @@ let built_in_decls = [DeclInc(packet_in_relname, "packet");
 
                       DeclEvent("packet", packet_fields);
                       DeclEvent("switch_port", swpt_fields)];;
+
+let create_id_assign (k: string): assignment = {afield=k; avalue=k};;
+
+let built_in_reacts = [ ReactInc("packet", packet_in_relname); 
+                        ReactInc("switch_port", switch_reg_relname); 
+                        ReactOut("do_forward", packet_fields, "packet", map create_id_assign packet_fields, OutForward); 
+                        ReactOut("do_emit", packet_fields, "packet", map create_id_assign packet_fields, OutEmit);                         
+                      ];;
+
 
 

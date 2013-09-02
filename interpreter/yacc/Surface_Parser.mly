@@ -90,11 +90,11 @@
               {ReactRemote($3, $5, $7, $8, $9)}             
             | OUTGOING NAME LPAREN name_list RPAREN THEN 
               SEND EVENT NAME LCURLY possempty_assign_list RCURLY TO DOTTED_IP NUMBER SEMICOLON 
-              {ReactOut($2, $4, $9, $11, $14, $15)}              
+              {ReactOut($2, $4, $9, $11, OutSend($14, $15))}              
             | INCOMING NAME THEN INSERT INTO NAME SEMICOLON 
               {ReactInc($2, $6)};
   
-  assign: NAME COLON_EQUALS NAME {Assign($1, $3)};
+  assign: NAME COLON_EQUALS NAME {{afield=$1; avalue=$3}};
 
   refresh_clause:
             | TIMEOUT NUMBER NAME {RefreshTimeout(int_of_string($2), $3)} 

@@ -423,7 +423,7 @@ let yyact = [|
     let _15 = (Parsing.peek_val __caml_parser_env 1 : string) in
     Obj.repr(
 # 93 "Surface_Parser.mly"
-              (ReactOut(_2, _4, _9, _11, _14, _15))
+              (ReactOut(_2, _4, _9, _11, OutSend(_14, _15)))
 # 428 "../Surface_Parser.ml"
                : 'reactive_stmt))
 ; (fun __caml_parser_env ->
@@ -439,7 +439,7 @@ let yyact = [|
     let _3 = (Parsing.peek_val __caml_parser_env 0 : string) in
     Obj.repr(
 # 97 "Surface_Parser.mly"
-                                 (Assign(_1, _3))
+                                 ({afield=_1; avalue=_3})
 # 444 "../Surface_Parser.ml"
                : 'assign))
 ; (fun __caml_parser_env ->

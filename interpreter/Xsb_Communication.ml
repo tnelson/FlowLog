@@ -288,44 +288,8 @@ module Communication = struct
 	
 *)
 
-	(* Substitute notif vars for their fields and produce a string for XSB to consume *)
 
-	let is_io_rel (prgm: flowlog_program) (modname: string) (relname: string): bool =
-		(* exists is ocaml's ormap *)
-		exists (function 			
-				| DeclInc(rname, argtype) when rname = relname -> true 
-				| DeclOut(rname, argtypelst) when rname = relname -> true
-				| _ -> false) 
-			  prgm.decls;;      
-
-	let get_fields_for_type (prgm: flowlog_program) (etype: string): string list =
-		 	let decl = find (function 			
-				| DeclEvent(evname, evtypelst) when evname = etype -> true 
-				| _ -> false) prgm.decls in 
-			match decl with 
-				| DeclEvent(evname, evfieldlst) -> 
-					evfieldlst
-				| _ -> failwith "get_fields_for_type";;
-
-
-	let get_io_fields_for_index (prgm: flowlog_program) (relname: string) (idx: int): string list =
-		let decl = find (function 			
-				| DeclInc(rname, argtype) when rname = relname -> true 
-				| DeclOut(rname, argtypelst) when rname = relname -> true
-				| _ -> false) prgm.decls in 
-			match decl with 
-				| DeclInc(rname, argtype) when rname = relname -> 
-					get_fields_for_type prgm argtype
-				| DeclOut(rname, argtypelst) when rname = relname ->
-					get_fields_for_type prgm (nth argtypelst idx)
-				| _ -> failwith "get_io_fields_for_index";;
-
-	let decls_expand_fields (prgm: flowlog_program) (modname: string) (relname: string) (i: int) (t: term): term list =
-		match t with 
-			| TVar(vname) when is_io_rel prgm modname relname -> 
-				map (fun fldname -> TField(vname, fldname)) (get_io_fields_for_index prgm relname i)
-			| _ -> [t];;
-				
+	(* Substitute notif vars for their fields and produce a string for XSB to consume *)	
 	let rec subs_xsb_formula (prgm: flowlog_program) (f: formula): formula = 
 		match f with
 		| FTrue -> FTrue
@@ -338,6 +302,14 @@ module Communication = struct
 			let subsarglists = mapi (decls_expand_fields prgm modname relname) tlargs in
 			let subargs = fold_left (fun acc lst -> acc @ lst) [] subsarglists in
 			FAtom(modname, relname, subargs);;
+
+	let assert_event (p: flowlog_program) (notif: event): unit =
+		let tuple = inc_event_to_formula p notif in
+			ignore (send_message ("assert("^(string_of_formula tuple)^").") 0);;
+
+	let retract_event (p: flowlog_program) (notif: event): unit = 
+		let tuple = inc_event_to_formula p notif in
+			ignore (send_message ("retract("^(string_of_formula tuple)^").") 0);;
 
 	let start_clause (prgm: flowlog_program) (cls : clause) : unit =
 		(*if debug then print_endline ("start_clause: assert((" ^ (Type_Helpers.clause_to_string cls) ^ ")).");

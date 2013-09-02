@@ -87,10 +87,11 @@ let desugared_program_of_ast (ast: flowlog_ast): flowlog_program =
     printf "*** REMINDER: IMPORTS NOT YET HANDLED! (Remember to handle in partial eval, too.) ***\n%!"; (* TODO *)
     match ast with AST(imports, stmts) ->
         (* requires extlib *)
-        let the_decls  = built_in_decls @ 
-                         filter_map (function SDecl(d) -> Some d     | _ -> None) stmts in 
-        let the_reacts = filter_map (function SReactive(r) -> Some r | _ -> None) stmts in 
-        let the_rules  = filter_map (function SRule(r) -> Some r     | _ -> None) stmts in 
+        let the_decls  =  built_in_decls @ 
+                          filter_map (function SDecl(d) -> Some d     | _ -> None) stmts in 
+        let the_reacts =  built_in_reacts @ 
+                          filter_map (function SReactive(r) -> Some r | _ -> None) stmts in 
+        let the_rules  =  filter_map (function SRule(r) -> Some r     | _ -> None) stmts in 
         
             let clauses = (fold_left (fun acc r -> (clauses_of_rule r) @ acc) [] the_rules) in 
                 {decls = the_decls; reacts = the_reacts; clauses = clauses};;
@@ -112,22 +113,66 @@ let simplify_clauses (p: flowlog_program) =
 
 let listenPort = ref 6633;;
 
+let event_with_assn (p: flowlog_program) (ev : event) (assn: assignment): event =
+  {ev with values=(StringMap.add assn.afield assn.avalue ev.values)};;
+
+
+let forward_packet (context: (switchId * port * Packet.packet) option) (ev: event): unit =
+  printf "forwarding: %s\n%!" (string_of_event ev);
+  ();;
+
+let emit_packet (ev: event): unit =
+  printf "emitting: %s\n%!" (string_of_event ev);
+  ();;
+
+let send_event (ev: event) (ip: string) (pt: string): unit =
+  printf "sending: %s\n%!" (string_of_event ev);
+  ();;
+
+
+let execute_output (p: flowlog_program) (context: (switchId * port * Packet.packet) option) (defn: sreactive): unit =
+  match defn with 
+    | ReactOut(relname, arglist, outtype, assigns, spec) ->
+     
+      let execute_tuple (tup: string list): unit =
+        (* arglist orders the xsb results. assigns says how to use them, spec how to send them. *)
+        let initev = (match spec with 
+                  | OutForward | OutEmit -> {typeid = "packet"; values=StringMap.empty}      
+                  | OutLoopback -> failwith "loopback unsupported currently"
+                  | OutSend(ip, pt) -> {typeid=outtype; values=StringMap.empty}) in
+        let ev = fold_left (event_with_assn p) initev assigns in
+          match spec with 
+            | OutForward -> forward_packet context ev
+            | OutEmit -> emit_packet ev
+            | OutLoopback -> failwith "loopback unsupported currently"
+            | OutSend(ip, pt) -> send_event ev ip pt in
+
+      (* query xsb for this output relation *)  
+      let xsb_results = Communication.get_state (FAtom("", relname, map (fun s -> TVar(s)) arglist)) in        
+        (* execute the results *)
+        iter execute_tuple xsb_results 
+    | _ -> failwith "execute_output";;
+
 (* separate to own module once works for sw/pt *)
-let respond_to_notification (p: flowlog_program) (notif: event) (context: (switchId * Packet.packet) option): unit =
+let respond_to_notification (p: flowlog_program) (notif: event) (context: (switchId * port * Packet.packet) option): unit =
   (* populate the EDB with event *)  
   Communication.assert_event p notif;
+
+  (* Update remote state if needed*)
+  (* TODO *)
+
   (* for all declared outgoing events ...*)
-  let outgoing_rels = [] in
-    iter (fun relname -> ()) 
-      outgoing_rels;
+  let outgoing_defns = get_output_defns p in
+    iter (execute_output p context) outgoing_defns;
 
   (* for all declared tables +/- *)
-  let to_assert = [] in
-  let to_retract = [] in
+  (*let tables = get_local_tables p in
+  let to_assert = fold_left (add_assertion true) [] tables in
+  let to_retract = fold_left (add_assertion false) [] tables in
   (* update state as dictated by +/- *)
   map (Communication.assert_fact p) to_assert;
   map (Communication.retract_fact p) to_retract;
-
+*)
   (* depopulate event EDB *)
   Communication.retract_event p notif;
   ();;
@@ -136,9 +181,10 @@ let respond_to_notification (p: flowlog_program) (notif: event) (context: (switc
 let switch_connected (p: flowlog_program) (sw : switchId) (feats : OpenFlow0x01.SwitchFeatures.t) : unit =
   Printf.printf "Switch %Ld connected.\n%!" sw;
   let port_nums = map (fun (x : PortDescription.t)-> x.PortDescription.port_no) feats.SwitchFeatures.ports in
-  let sw_string = Int64.to_string sw in
-  let notifs = map (fun portid -> {typeid="switch_port"; values=[sw_string; (string_of_int portid)]}) port_nums in
-  printf "SWITCH REGISTERED! %s\n%!" (String.concat ", " (map string_of_event notifs));;
+  let sw_string = Int64.to_string sw in  
+  let notifs = map (fun portid -> {typeid="switch_port"; 
+                                   values=construct_map [("sw", sw_string); ("pt", (string_of_int portid))] }) port_nums in
+  printf "SWITCH REGISTERED! %s\n%!" (String.concat ", " (map string_of_event notifs));
   List.iter (fun notif -> respond_to_notification p notif None) notifs;;
 
 (* infinitely recursive function that listens for switch connection messages 

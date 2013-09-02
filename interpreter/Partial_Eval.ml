@@ -489,19 +489,20 @@ let program_to_netcore (p: flowlog_program) (callback: get_packet_handler): (pol
 let pkt_to_event (sw : switchId) (pt: port) (pkt : Packet.packet) : event =       
    let isIp = ((Packet.dlTyp pkt) = 0x0800) in
    let isArp = ((Packet.dlTyp pkt) = 0x0806) in
-   let strings = [
-    Int64.to_string sw;
-    NetCore_Pretty.string_of_port pt;
-    Int64.to_string pkt.Packet.dlSrc;
-    Int64.to_string pkt.Packet.dlDst;
-    string_of_int (Packet.dlTyp pkt);
+   let values = [
+    ("locsw", Int64.to_string sw);
+    ("locpt", NetCore_Pretty.string_of_port pt);
+    ("dlsrc", Int64.to_string pkt.Packet.dlSrc);
+    ("dldst", Int64.to_string pkt.Packet.dlDst);
+    ("dltyp", string_of_int (Packet.dlTyp pkt));
     (* nwSrc/nwDst will throw an exception if you call them on an unsuitable packet *)
-    if (isIp || isArp) then Int32.to_string (Packet.nwSrc pkt) else "0";
-    if (isIp || isArp) then Int32.to_string (Packet.nwDst pkt) else "0";
-    if isIp then (string_of_int (Packet.nwProto pkt)) else "arp"] in
+    ("nwsrc", if (isIp || isArp) then Int32.to_string (Packet.nwSrc pkt) else "0");
+    ("nwdst", if (isIp || isArp) then Int32.to_string (Packet.nwDst pkt) else "0");
+    ("nwproto", if isIp then (string_of_int (Packet.nwProto pkt)) else "arp")
+    ] in
     (*let _ = if debug then print_endline ("pkt to term list: " ^ (Type_Helpers.list_to_string Type_Helpers.term_to_string ans)) in
     let _ = if debug then print_endline ("dlTyp: " ^ (string_of_int (dlTyp pkt_payload))) in*)    
-    {typeid="packet"; values=strings};;
+    {typeid="packet"; values=construct_map values};;
 
 let make_policy_stream (p: flowlog_program) =  
 
@@ -516,7 +517,7 @@ let make_policy_stream (p: flowlog_program) =
     (* Parse the packet and send it to XSB. Deal with the results *)
     let notif = (pkt_to_event sw pt pkt) in           
      (* Evaluation.respond_to_notification notif Program.program (Some (sw, pk, notif));*)
-    printf "... notif had values: %s\n%!" (String.concat ";" notif.values);
+    printf "... notif: %s\n%!" (string_of_event notif);
     (* Update the policy *)
     let (newfwdpol, newnotifpol) = program_to_netcore p updateFromPacket in
     let newpol = Union(newfwdpol, newnotifpol) in
