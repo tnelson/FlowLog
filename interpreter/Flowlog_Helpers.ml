@@ -159,9 +159,27 @@ let rec disj_to_top (f: formula): formula =
 
 (*****************************************************)
 
-let get_local_tables (prgm: flowlog_program): sdecl list =
+  let get_local_tables (prgm: flowlog_program): sdecl list =
     filter (function | DeclTable(relname, argtypes) -> true | _ -> false ) 
         prgm.decls;;
+(* table name, query name, ip, port, refresh settings *)
+  let get_remote_tables (prgm: flowlog_program): (sreactive * sdecl) list =
+    filter_map (function   
+    	| ReactRemote(relname, qryname, ip, port, refresh) as x -> 
+    		Some (x, find (function 
+    					| DeclRemoteTable(drel, dargs) when drel = relname -> true 
+    					| _ -> false) prgm.decls)
+        | _ -> None) 
+        prgm.reacts;;    
+
+  let get_remote_table (prgm: flowlog_program) (goalrel: string) : (sreactive * sdecl) =
+  	let the_react = find (function   
+    	| ReactRemote(relname, qryname, ip, port, refresh) when relname = goalrel -> true    		
+        | _ -> false) prgm.reacts in
+    let the_decl  = find (function 
+    	| DeclRemoteTable(relname, dargs) when relname = goalrel -> true 
+    	| _ -> false) prgm.decls in
+	(the_react, the_decl);;
 
   let get_output_defns (prgm: flowlog_program): sreactive list =
     filter_map (function      

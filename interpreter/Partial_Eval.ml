@@ -692,6 +692,46 @@ let change_table_how (p: flowlog_program) (toadd: bool) (tbldecl: sdecl): formul
       map (fun strtup -> FAtom("", relname, map (fun sval -> TConst(sval)) strtup)) xsb_results
     | _ -> failwith "change_table_how";;
 
+(* Map query formula to results and time obtained (floating pt in seconds) *)
+let remote_cache = ref FmlaMap.empty;;
+
+let expire_remote_state_in_xsb (p: flowlog_program) : unit =
+
+  (* The cache is keyed by rel/tuple. So R(X, 1) is a DIFFERENT entry from R(1, X). *)
+  let expire_remote (keyfmla: formula) (values: (formula list * float)): unit =  
+    let (xsb_results, timestamp) = values in   
+    match keyfmla with
+      | FAtom(modname, relname, args) -> 
+      begin
+      match get_remote_table p relname with
+        | (ReactRemote(relname, qryname, ip, port, refresh), DeclRemoteTable(drel, dargs)) ->
+          begin
+            match refresh with 
+              | RefreshTimeout(num, units) when units = "seconds" -> 
+                (* expire every num units. TODO: suppt more than seconds *)
+                if Unix.time() > ((float_of_int num) +. timestamp) then begin
+                  printf "Expiring remote for formula (duration expired): %s\n%!" 
+                        (string_of_formula keyfmla);
+                  remote_cache := FmlaMap.remove keyfmla !remote_cache;
+                  iter Communication.retract_formula xsb_results
+                end else 
+                  ();
+              | RefreshPure -> 
+                (* never expire pure tables *) 
+                (); 
+              | RefreshEvery -> 
+                (* expire everything under this table, every evaluation cycle *)
+                printf "Expiring remote for formula: %s\n%!" (string_of_formula keyfmla);
+                remote_cache := FmlaMap.remove keyfmla !remote_cache;
+                iter Communication.retract_formula xsb_results;
+              | RefreshTimeout(_,_) -> failwith "expire_remote_state_in_xsb: bad timeout" 
+          end
+        | _ -> failwith "expire_remote_state_in_xsb: bad defn_decl" 
+      end
+      | _ -> failwith "expire_remote_state_in_xsb: bad key formula" in 
+
+    FmlaMap.iter expire_remote !remote_cache;;
+
 (* separate to own module once works for sw/pt *)
 let respond_to_notification (p: flowlog_program) (notif: event) (context: (switchId * port * Packet.packet) option): unit =
   try
@@ -701,8 +741,8 @@ let respond_to_notification (p: flowlog_program) (notif: event) (context: (switc
   (* populate the EDB with event *) 
     Communication.assert_event p notif;
 
-    (* Update remote state if needed*)
-    (* TODO *)
+    (* Expire remote state if needed*)
+    expire_remote_state_in_xsb p;    
 
     (* for all declared outgoing events ...*)
     let outgoing_defns = get_output_defns p in

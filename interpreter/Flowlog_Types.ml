@@ -79,6 +79,8 @@ open ExtList.List
   module StringMap = Map.Make(String);;
   type event = { typeid: string; values: string StringMap.t};;
 
+  module FmlaMap = Map.Make(struct type t = formula let compare = compare end);;
+
 (*************************************************************)
   let string_of_event (notif: event): string =
     notif.typeid^": ["^(String.concat ";" (map (fun (k, v) -> k^":"^v) (StringMap.bindings notif.values)))^"]";;
