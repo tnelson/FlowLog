@@ -27,7 +27,7 @@ open ExtList.List
       | RefreshPure
       | RefreshEvery;;
 
-  type assignment = {afrom: string; ato: string};;      
+  type assignment = {afield: string; atupvar: string};;      
 
   type spec_out = 
       | OutForward

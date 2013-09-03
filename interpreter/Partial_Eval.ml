@@ -4,6 +4,7 @@ open NetCore_Types
 open ExtList.List
 open Printf
 open Xsb_Communication
+open OpenFlow0x01
 
 
 
@@ -454,7 +455,7 @@ let pkt_triggered_clause_to_netcore (callback: get_packet_handler option) (cl: c
                          (Union (acc, policy_of_conjunction oldpkt callback body)))
                       (policy_of_conjunction oldpkt callback (hd bodies))
                       (tl bodies) in 
-          printf "--- Result policy: %s\n%!" (NetCore_Pretty.string_of_pol result);          
+          (*printf "--- Result policy: %s\n%!" (NetCore_Pretty.string_of_pol result);          *)
           result
       | _ -> failwith "pkt_triggered_clause_to_netcore";;
 
@@ -512,11 +513,14 @@ let pkt_to_event (sw : switchId) (pt: port) (pkt : Packet.packet) : event =
     let _ = if debug then print_endline ("dlTyp: " ^ (string_of_int (dlTyp pkt_payload))) in*)    
     {typeid="packet"; values=construct_map values};;
 
-let event_with_assn (p: flowlog_program) (tup: string list) (ev : event) (assn: assignment): event =
+(* TODO: ugly func, should be cleaned up.*)
+(* augment <ev_so_far> with assignment <assn>, using tuple <tup> for values *)
+let event_with_assn (p: flowlog_program) (tup: string list) (ev_so_far : event) (assn: assignment): event =
   (* for this assignment, plug in the appropriate value in tup *)
-  let const = (nth (index assn.atupvar (get_)) tup) in 
-  {ev with values=(StringMap.add assn.afield const ev.values)};;
-
+  let fieldnames = (get_fields_for_type p ev_so_far.typeid) in
+  let (index, _) = (findi (fun idx ele -> ele = assn.atupvar) fieldnames) in
+  let const = (nth tup index) in 
+  {ev_so_far with values=(StringMap.add assn.afield const ev_so_far.values)};;
 
 let forward_packet (context: (switchId * port * Packet.packet) option) (ev: event): unit =
   printf "forwarding: %s\n%!" (string_of_event ev);
@@ -601,15 +605,32 @@ let make_policy_stream (p: flowlog_program) =
   (* stream of policies, with function to push new policies on *)
   let (policies, push) = Lwt_stream.create () in
 
+    let rec switch_event_handler (swev: switchEvent): unit =
+      match swev with
+      | SwitchUp(sw, feats) ->         
+        let sw_string = Int64.to_string sw in  
+        let notifs = map (fun portid -> {typeid="switch_port"; 
+                                          values=construct_map [("sw", sw_string); ("pt", (Int32.to_string portid))] }) feats.ports in
+        printf "SWITCH %Ld connected. Flowlog events triggered: %s\n%!" sw (String.concat ", " (map string_of_event notifs));
+        List.iter (fun notif -> respond_to_notification p notif None) notifs;
+        trigger_policy_recreation_thunk()
+
+      | SwitchDown(swid) -> 
+        printf "WARNING: switch down. Currently unsupported. TODO: create new event type in Flowlog.\n%!";
+        ()
+    and
+
+    switch_event_handler_policy = HandleSwitchEvent(switch_event_handler) 
+    and
+
     (* the thunk needs to know the pkt callback, the pkt callback invokes the thunk. so need "and" *)
-    let rec trigger_policy_recreation_thunk (): unit = 
+    trigger_policy_recreation_thunk (): unit = 
       (* Update the policy *)
       let (newfwdpol, newnotifpol) = program_to_netcore p updateFromPacket in
       printf "NEW FWD policy: %s\n%!" (NetCore_Pretty.string_of_pol newfwdpol);
       printf "NEW NOTIF policy: %s\n%!" (NetCore_Pretty.string_of_pol newnotifpol);
-      (*let newpol = Union(newfwdpol, newnotifpol) in*)
-      let newpol = Action([ControllerAction(updateFromPacket)]) in
-
+      let newpol = Union(Union(newfwdpol, newnotifpol), switch_event_handler_policy) in
+      (*let newpol = Action([ControllerAction(updateFromPacket); (SwitchAction({id with outPort = NetCore_Pattern.All}))]) in*)
         push (Some newpol);              
     and
       
@@ -629,9 +650,8 @@ let make_policy_stream (p: flowlog_program) =
     let (initfwdpol, initnotifpol) = program_to_netcore p updateFromPacket in
     printf "INITIAL FWD policy is:\n%s\n%!" (NetCore_Pretty.string_of_pol initfwdpol);
     printf "INITIAL NOTIF policy is:\n%s\n%!" (NetCore_Pretty.string_of_pol initnotifpol);
-    (*let initpol = Union(initfwdpol, initnotifpol) in      *)
-    let initpol = Action([ControllerAction(updateFromPacket)]) in
-      push (Some initpol);
+    let initpol = Union(Union(initfwdpol, initnotifpol), switch_event_handler_policy) in      
+    (*let initpol = Action([ControllerAction(updateFromPacket); (SwitchAction({id with outPort = NetCore_Pattern.All}))]) in*)
       (* cargo-cult hacking invocation. why call this? *)
       (trigger_policy_recreation_thunk, NetCore_Stream.from_stream initpol policies);;
 

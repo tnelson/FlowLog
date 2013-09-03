@@ -113,6 +113,7 @@ let simplify_clauses (p: flowlog_program) =
 
 let listenPort = ref 6633;;
 
+(*
 let switch_connected (p: flowlog_program) (sw : switchId) (feats : OpenFlow0x01.SwitchFeatures.t) : unit =
   Printf.printf "Switch %Ld connected.\n%!" sw;
   let port_nums = map (fun (x : PortDescription.t)-> x.PortDescription.port_no) feats.SwitchFeatures.ports in
@@ -125,9 +126,10 @@ let switch_connected (p: flowlog_program) (sw : switchId) (feats : OpenFlow0x01.
 (* infinitely recursive function that listens for switch connection messages 
    Cribbed nearly verbatim from Ox lib by Tim on Aug 29 2013
    since we're moving from Ox to Frenetic as a base *)
-let rec handle_switch_reg (p: flowlog_program) (trigger_re_policy_func: unit -> unit) = 
+let rec handle_switch_reg (p: flowlog_program) (trigger_re_policy_func: unit -> unit): 'a Lwt.t = 
     let open Message in
     let open FlowMod in
+    printf "waiting for switch to connect...\n%!";
     lwt feats = OpenFlow0x01_Platform.accept_switch () in 
     let sw = feats.SwitchFeatures.switch_id in 
     (*lwt _ = Log.info_f "switch %Ld connected" sw in*)
@@ -136,9 +138,10 @@ let rec handle_switch_reg (p: flowlog_program) (trigger_re_policy_func: unit -> 
     (* JNF: wait for barrier reply? *)
     let _ = switch_connected p sw feats in 
     (*Lwt.async (fun () -> switch_thread sw);*)
-      trigger_re_policy_func(); (* trigger re-production of policy, since state may have changed *)
+      trigger_re_policy_func(); (* trigger re-production of policy, since state may have changed *)      
       handle_switch_reg p trigger_re_policy_func;;
 
+*)
 
 let run_flowlog (p: flowlog_program): unit Lwt.t =  
   (* Start up XSB, etc. *)
@@ -157,13 +160,12 @@ let run_flowlog (p: flowlog_program): unit Lwt.t =
     let (trigger_re_policy_func, (gen_stream, stream)) = make_policy_stream p in
     (* streams for incoming/exiting packets *)
     let (pkt_stream, push_pkt) = Lwt_stream.create () in
-      (* pick cancels all threads given if one terminates *)
+      (* pick cancels all threads given if one terminates *)        
      
-      (*Lwt.async (fun () -> handle_switch_reg p trigger_re_policy_func);*)
-     
+      (* DO NOT attempt to copy ox/frenetic's switch connection detection code here. It will clash with 
+         Frenetic's. Instead, register a HandleSwitchEvent policy, which gives us a nice clean callback. *)
       Lwt.pick [gen_stream;
                 NetCore_Controller.start_controller pkt_stream stream;
-                (*handle_switch_reg p trigger_re_policy_func*)
                ];;
 
 let main () =
@@ -178,7 +180,7 @@ let main () =
     if !alloy then write_as_alloy program (filename^".als")
     else 
       Sys.catch_break true;
-      try
+      try        
         Lwt_main.run (run_flowlog program)
       with exn ->
         Xsb.halt_xsb ();

@@ -439,7 +439,7 @@ let yyact = [|
     let _3 = (Parsing.peek_val __caml_parser_env 0 : string) in
     Obj.repr(
 # 97 "Surface_Parser.mly"
-                                 ({afield=_1; avalue=_3})
+                                 ({afield=_1; atupvar=_3})
 # 444 "../Surface_Parser.ml"
                : 'assign))
 ; (fun __caml_parser_env ->

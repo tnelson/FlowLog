@@ -94,7 +94,7 @@
             | INCOMING NAME THEN INSERT INTO NAME SEMICOLON 
               {ReactInc($2, $6)};
   
-  assign: NAME COLON_EQUALS NAME {{afield=$1; avalue=$3}};
+  assign: NAME COLON_EQUALS NAME {{afield=$1; atupvar=$3}};
 
   refresh_clause:
             | TIMEOUT NUMBER NAME {RefreshTimeout(int_of_string($2), $3)} 
