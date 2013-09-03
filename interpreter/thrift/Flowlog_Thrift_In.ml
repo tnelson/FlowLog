@@ -17,6 +17,8 @@ open Flowlog_Helpers
 open Partial_Eval
 open Printf
 
+(*open Lwt*)
+
 (* "Die, Bart, Die!" is German for "The, Bart, The!". -- Sideshow Bob *)
 exception Die;;
 let sod = function
@@ -46,21 +48,24 @@ object (self)
     let values = sod ((sod rpc_notif)#get_values) in
     Printf.printf "received notification. type=%s\n%!" ntypestr;
     lowercase_notif_values values;  (* case insensitive field names *)
-    
     try           
       let fieldlist = map String.lowercase (get_fields_for_type the_program ntypestr) in          
         (* construct a list of terms from the hashtbl in values. use the type as an index *)      
-           
+
       let vals = fold_left (fun acc fld -> 
            if (not (Hashtbl.mem values fld)) then
                raise (Failure ("Field "^fld^" was not included in an incoming event of type: "^ntypestr))
            else
              (fld, Hashtbl.find values fld) :: acc)
          [] fieldlist in
+
         let ev: event = {typeid = ntypestr; values = construct_map vals} in
           respond_to_notification the_program ev None;      
+          guarded_refresh_policy();
 
-    with Failure(msg) ->  Printf.printf "   *** ERROR! Ignoring notification for reason: %s\n%!" msg;     
+    with 
+      | Not_found -> (Printf.printf "   *** Nothing to be done with this notification.\n%!")     
+      | Failure(msg) -> (Printf.printf "   *** ERROR! Ignoring notification for reason: %s\n%!" msg)
 
 end
 
@@ -92,7 +97,9 @@ let start_listening (a_program : flowlog_program) : unit =
   in
     (* first thing: listen for notifications *)
     (* returns handle of thread. ignore result to avoid warning *) 
+
     ignore (Thread.create (fun x -> (server#serve)) 0);
+    (*Lwt.async (fun () -> return (server#serve));*)
     printf "Started to listen for notifications.\n%!";;
 
 

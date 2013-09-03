@@ -6,6 +6,8 @@ open Printf
 open Xsb_Communication
 open OpenFlow0x01
 
+(* XSB is shared state. We also have the remember_for_forwarding and packet_queue business *)
+let xsbmutex = Mutex.create();;
 
 
 (* 
@@ -185,13 +187,15 @@ let rec partial_evaluation (headterms: term list) (f: formula): formula =
     | FOr(f1, f2) -> failwith "partial_evaluation: OR"              
     | FAtom(modname, relname, tlargs) ->  
       printf "partial_evaluation on atomic %s\n%!" (string_of_formula f);
+      Mutex.lock xsbmutex;
       let xsbresults: (string list) list = Communication.get_state f in
+        Mutex.unlock xsbmutex;
         (*iter (fun sl -> printf "result: %s\n%!" (String.concat "," sl)) results;*)        
         let disjuncts = map 
           (fun sl -> build_and (reassemble_xsb_equality headterms tlargs sl)) 
           xsbresults in
         let fresult = build_or disjuncts in
-        printf "... result (converted from xsb) was: %s\n%!" (string_of_formula fresult);
+        printf "... result (converted from xsb) was: %s\n%!" (string_of_formula fresult);        
         fresult;;
 
 (***************************************************************************************)
@@ -354,12 +358,12 @@ let rec trim_packet_from_body (body: formula): (string * formula) =
         (var2, trimmed)
       else if var2 = "" then
         (var1, trimmed)
-      else failwith "trim_packet_from_clause: multiple variables used in packet_in"    
+      else failwith ("trim_packet_from_clause: multiple variables used in packet_in: "^var1^" and "^var2)
     | FNot(f) ->
       let (v, t) = trim_packet_from_body f in
         (v, FNot(t))
     | FOr(f1, f2) -> failwith "trim_packet_from_clause"              
-    | FAtom("", packet_in_relname, [TVar(varstr)]) ->  
+    | FAtom("", relname, [TVar(varstr)]) when relname = packet_in_relname ->  
       (varstr, FTrue)
     | _ -> ("", body);;    
 
@@ -486,6 +490,7 @@ let simplify_netcore_policy (p: pol): pol =
         | (SwitchAction(_), SwitchAction(_)) -> act = actb
           (* VITAL ASSUMPTION: only one callback used here *)
         | (ControllerAction(_), ControllerAction(_)) -> true
+          (* Same assumption --- separate switch event callback *)
         | _ -> false) acts in
 
   let safe_compare_pols (p1: pol) (p2: pol): bool =
@@ -532,6 +537,8 @@ let simplify_netcore_policy (p: pol): pol =
       with UnsatisfiableFlag -> [Nothing]
   in
 
+        (* | (HandleSwitchEvent(_), HandleSwitchEvent(_)) -> true*)
+
   let simplify_netcore_predicate (pr: pred): pred =
     let subpreds = remove_contradictions (unique_list_of_pred_and pr) in       
       fold_left (fun acc apred -> match apred with         
@@ -569,6 +576,7 @@ let simplify_netcore_policy (p: pol): pol =
       | _ -> true in
 
   let plst = (filter has_something_filter (unique_conj_of_union p)) in  
+    (* This is where nothing -> drop comes from *)
     if length plst < 1 then Seq(Filter(Nothing), Action([])) 
     else fold_left (fun acc p -> Union(acc, p)) (hd plst) (tl plst);;
 
@@ -684,37 +692,60 @@ let change_table_how (p: flowlog_program) (toadd: bool) (tbldecl: sdecl): formul
       map (fun strtup -> FAtom("", relname, map (fun sval -> TConst(sval)) strtup)) xsb_results
     | _ -> failwith "change_table_how";;
 
-
-
 (* separate to own module once works for sw/pt *)
 let respond_to_notification (p: flowlog_program) (notif: event) (context: (switchId * port * Packet.packet) option): unit =
+  try
+      Mutex.lock xsbmutex;
   printf "~~~~ RESPONDING TO NOTIFICATION ABOVE ~~~~~~~~~~~~~~~~~~~\n%!";
-  (* populate the EDB with event *)  
-  Communication.assert_event p notif;
 
-  (* Update remote state if needed*)
-  (* TODO *)
+  (* populate the EDB with event *) 
+    Communication.assert_event p notif;
 
-  (* for all declared outgoing events ...*)
-  let outgoing_defns = get_output_defns p in
-    iter (execute_output p context) outgoing_defns;
+    (* Update remote state if needed*)
+    (* TODO *)
 
-  (* for all declared tables +/- *)
-  let table_decls = get_local_tables p in
-  let to_assert = flatten (map (change_table_how p true) table_decls) in
-  let to_retract = flatten (map (change_table_how p false) table_decls) in
-  printf "  *** WILL ADD: %s\n%!" (String.concat " ; " (map string_of_formula to_assert));
-  printf "  *** WILL DELETE: %s\n%!" (String.concat " ; " (map string_of_formula to_retract));
-  (* update state as dictated by +/- *)
-  iter Communication.assert_formula to_assert;
-  iter Communication.retract_formula to_retract;
+    (* for all declared outgoing events ...*)
+    let outgoing_defns = get_output_defns p in
+      iter (execute_output p context) outgoing_defns;
 
-  Xsb.debug_print_listings();
+    (* for all declared tables +/- *)
+    let table_decls = get_local_tables p in
+    let to_assert = flatten (map (change_table_how p true) table_decls) in
+    let to_retract = flatten (map (change_table_how p false) table_decls) in
+    printf "  *** WILL ADD: %s\n%!" (String.concat " ; " (map string_of_formula to_assert));
+    printf "  *** WILL DELETE: %s\n%!" (String.concat " ; " (map string_of_formula to_retract));
+    (* update state as dictated by +/- *)
+    iter Communication.assert_formula to_assert;
+    iter Communication.retract_formula to_retract;
 
-  (* depopulate event EDB *)
-  Communication.retract_event p notif;
-  printf "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n%!";
-  ();;
+    Xsb.debug_print_listings();
+
+    (* depopulate event EDB *)
+    Communication.retract_event p notif;  
+
+    Mutex.unlock xsbmutex;  
+    printf "~~~~~~~~~~~~~~~~~~~FINISHED EVENT~~~~~~~~~~~~~~~\n%!";
+  with
+   | Not_found -> Mutex.unlock xsbmutex; printf "Nothing to do for this event.\n%!";
+   | exn -> 
+      begin  
+      Format.printf "Unexpected exception on event: %s\n----------\n%s\n%!"
+        (Printexc.to_string exn)
+        (Printexc.get_backtrace ());  
+        Xsb.halt_xsb();    
+        exit(101);
+      end;;
+
+  
+
+
+(* (unit->unit) option *)
+let refresh_policy = ref None;;
+
+let guarded_refresh_policy () : unit = 
+  match !refresh_policy with
+    | None -> printf "Policy has not been created yet. Error!\n%!"
+    | Some f -> f();;
 
 let make_policy_stream (p: flowlog_program) =  
 

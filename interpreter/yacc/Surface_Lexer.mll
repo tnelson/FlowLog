@@ -56,5 +56,8 @@ rule token = parse
   | '"' { DOUBLEQUOTE }
   | ['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9'] as dotted_ip { DOTTED_IP(dotted_ip)}
   | ['0'-'9']+ | '0''x'(['0'-'9']+) as number { NUMBER(number) }
-  | ['a'-'z''A'-'Z''_''0'-'9''-']+ as name { NAME(name) }
+  | ['a'-'z''A'-'Z''_''0'-'9']+ as name { NAME(name) }
+  | ['a'-'z''A'-'Z''_''0'-'9''-']+ as name 
+    { Printf.printf "Bad identifier: %s. Cannot use dashes. Use underscore instead.\n%!" name; 
+      token lexbuf; }
   | _ as c { Printf.printf "Unknown character: %c\n" c; token lexbuf;}

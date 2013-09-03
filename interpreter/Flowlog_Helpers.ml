@@ -27,8 +27,11 @@ let rec get_vars (f: formula) : term list =
 	get_terms (function | TVar(_) -> true |  _ -> false) f;;
 (* as get_vars, but includes fields as well *)
 let rec get_vars_and_fieldvars (f: formula) : term list = 
-	printf "gcaf: %s\n%!" (string_of_formula f);
-	get_terms (function | TVar(_) -> true | TField(_,_) -> true | _ -> false) f;;
+	printf "get_vars_and_fieldvars: %s\n%!" (string_of_formula f);
+	let varlist = get_terms 
+		(function | TVar(_) -> true | TField(_,_) -> true | _ -> false) f in
+		printf "result of gvf: %s\n%!" (String.concat ";" (map string_of_term varlist));
+		varlist;;
 
 let get_head_vars (cls : clause) : term list =		
 	get_vars cls.head;;
@@ -197,6 +200,7 @@ let get_local_tables (prgm: flowlog_program): sdecl list =
         | _ -> failwith "get_io_fields_for_index";;
 
   (* ASSUMED: only one in relation per event *)
+  (* raises Not_found if nothing to do for this event *)
   let inc_event_to_formula (p: flowlog_program) (notif: event): formula =
     (* event contains k=v mappings and a type. convert to a formula via defns in program*)
     printf "Converting event to formula: %s\n%!" (string_of_event notif);
@@ -205,7 +209,9 @@ let get_local_tables (prgm: flowlog_program): sdecl list =
         | _ -> false ) p.reacts in 
       match defn with 
         | ReactInc(typename, relname) -> 
-          FAtom("", relname, map (fun fld -> TConst(StringMap.find fld notif.values)) (get_fields_for_type p typename))
+          FAtom("", relname, map (fun fld -> 
+          			TConst(StringMap.find fld notif.values)) 
+        			(get_fields_for_type p typename))	
         | _ -> failwith "inc_event_to_formula";;
 
   let decls_expand_fields (prgm: flowlog_program) (modname: string) (relname: string) (i: int) (t: term): term list =
