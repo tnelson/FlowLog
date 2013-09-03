@@ -5,9 +5,13 @@ open ExtList.List
 open Printf
 open Xsb_Communication
 open OpenFlow0x01
+open Flowlog_Thrift_Out
 
 (* XSB is shared state. We also have the remember_for_forwarding and packet_queue business *)
 let xsbmutex = Mutex.create();;
+
+(* Map query formula to results and time obtained (floating pt in seconds) *)
+let remote_cache = ref FmlaMap.empty;;
 
 
 (* 
@@ -173,22 +177,48 @@ let validate_clause (cl: clause): unit =
 
 (***************************************************************************************)
 
+let rec get_state_maybe_remote (p: flowlog_program) (f: formula): (string list) list =
+  match f with 
+    | FAtom(modname, relname, args) when (is_remote_table p relname) ->
+      (* Is this query still in the cache? Then just use it. *)
+      if FmlaMap.mem f !remote_cache then
+      begin
+        let (cached_results, _) = FmlaMap.find f !remote_cache in
+          cached_results
+      end
+      (* Otherwise, need to call out to the blackbox. *)
+      else
+      begin
+        match get_remote_table p relname with
+          | (ReactRemote(relname, qryname, ip, port, refresh), DeclRemoteTable(drel, dargs)) ->            
+            (* qryname, not relname, when querying *)
+            let bb_results = Flowlog_Thrift_Out.doBBquery qryname ip port args in
+              ignore (FmlaMap.add f (bb_results, Unix.time()) !remote_cache);
+              bb_results 
+
+          | _ -> failwith "get_state_maybe_remote"
+      end
+    | FAtom(modname, relname, args) ->          
+        Communication.get_state f
+    | _ -> failwith "get_state_maybe_remote";;
+  
+
 (* Replace state references with constant matrices *)
-let rec partial_evaluation (headterms: term list) (f: formula): formula = 
+let rec partial_evaluation (p: flowlog_program) (headterms: term list) (f: formula): formula = 
   (* assume valid clause body for PE *)
   match f with 
     | FTrue -> f
     | FFalse -> f
     | FEquals(t1, t2) -> f
-    | FAnd(f1, f2) -> FAnd(partial_evaluation headterms f1, partial_evaluation headterms f2)
+    | FAnd(f1, f2) -> FAnd(partial_evaluation p headterms f1, partial_evaluation p headterms f2)
     | FNot(innerf) -> 
-        let peresult = partial_evaluation headterms innerf in
+        let peresult = partial_evaluation p headterms innerf in
         (match peresult with | FTrue -> FFalse | FFalse -> FTrue | _ -> FNot(peresult))
     | FOr(f1, f2) -> failwith "partial_evaluation: OR"              
     | FAtom(modname, relname, tlargs) ->  
       printf "partial_evaluation on atomic %s\n%!" (string_of_formula f);
       Mutex.lock xsbmutex;
-      let xsbresults: (string list) list = Communication.get_state f in
+      let xsbresults: (string list) list = get_state_maybe_remote p f in
         Mutex.unlock xsbmutex;
         (*iter (fun sl -> printf "result: %s\n%!" (String.concat "," sl)) results;*)        
         let disjuncts = map 
@@ -445,7 +475,7 @@ let rec strip_to_valid (oldpkt: string) (cl: clause): clause =
 
 (* Side effect: reads current state in XSB *)
 (* Throws exception rather than using option type: more granular error result *)
-let pkt_triggered_clause_to_netcore (callback: get_packet_handler option) (cl: clause): pol =   
+let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_handler option) (cl: clause): pol =   
     (match callback with 
       | None -> printf "\n--- Packet triggered clause to netcore (FULL COMPILE) on: \n%s\n%!" (string_of_clause cl)
       | Some(c) -> printf "\n--- Packet triggered clause to netcore (~CONTROLLER~) on: \n%s\n%!" (string_of_clause cl));
@@ -461,7 +491,7 @@ let pkt_triggered_clause_to_netcore (callback: get_packet_handler option) (cl: c
           | None ->    trimmedbody) in
 
         (* Do partial evaluation *)
-        let pebody = partial_evaluation headargs safebody in
+        let pebody = partial_evaluation p headargs safebody in
                 
         (* partial eval may insert disjunctions because of multiple tuples to match 
            so we need to pull those disjunctions up and create multiple policies 
@@ -582,14 +612,14 @@ let simplify_netcore_policy (p: pol): pol =
 
 (* return the union of policies for each clause *)
 (* Side effect: reads current state in XSB *)
-let pkt_triggered_clauses_to_netcore (clauses: clause list) (callback: get_packet_handler option): pol =
-  let clause_pols = map (pkt_triggered_clause_to_netcore callback) clauses in
+let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: clause list) (callback: get_packet_handler option): pol =
+  let clause_pols = map (pkt_triggered_clause_to_netcore p callback) clauses in
     if length clause_pols = 0 then 
       Filter(Nothing)
     else 
-      let p = fold_left (fun acc pol -> Union(acc, pol)) 
+      let thepol = fold_left (fun acc pol -> Union(acc, pol)) 
                 (hd clause_pols) (tl clause_pols) in
-        simplify_netcore_policy p;;
+        simplify_netcore_policy thepol;;
 
 let debug = true;;
 
@@ -616,8 +646,8 @@ let program_to_netcore (p: flowlog_program) (callback: get_packet_handler): (pol
   let can_fully_compile_fwd_clauses = (filter can_compile_clause fwd_clauses) in
   
   let cant_compile_fwd_clauses = subtract fwd_clauses can_fully_compile_fwd_clauses in
-    (pkt_triggered_clauses_to_netcore can_fully_compile_fwd_clauses None,
-     pkt_triggered_clauses_to_netcore (cant_compile_fwd_clauses @ non_fwd_clauses_by_packets) (Some callback));;
+    (pkt_triggered_clauses_to_netcore p can_fully_compile_fwd_clauses None,
+     pkt_triggered_clauses_to_netcore p (cant_compile_fwd_clauses @ non_fwd_clauses_by_packets) (Some callback));;
 
 let pkt_to_event (sw : switchId) (pt: port) (pkt : Packet.packet) : event =       
    let isIp = ((Packet.dlTyp pkt) = 0x0800) in
@@ -655,9 +685,8 @@ let emit_packet (ev: event): unit =
   ();;
 
 let send_event (ev: event) (ip: string) (pt: string): unit =
-  printf "sending: %s\n%!" (string_of_event ev);
-  ();;
-
+  printf "sending: %s\n%!" (string_of_event ev);  
+  doBBnotify ev ip pt;;
 
 let execute_output (p: flowlog_program) (context: (switchId * port * Packet.packet) option) (defn: sreactive): unit =
   match defn with 
@@ -692,13 +721,10 @@ let change_table_how (p: flowlog_program) (toadd: bool) (tbldecl: sdecl): formul
       map (fun strtup -> FAtom("", relname, map (fun sval -> TConst(sval)) strtup)) xsb_results
     | _ -> failwith "change_table_how";;
 
-(* Map query formula to results and time obtained (floating pt in seconds) *)
-let remote_cache = ref FmlaMap.empty;;
-
 let expire_remote_state_in_xsb (p: flowlog_program) : unit =
 
   (* The cache is keyed by rel/tuple. So R(X, 1) is a DIFFERENT entry from R(1, X). *)
-  let expire_remote (keyfmla: formula) (values: (formula list * float)): unit =  
+  let expire_remote (keyfmla: formula) (values: ((string list) list * float)): unit =  
     let (xsb_results, timestamp) = values in   
     match keyfmla with
       | FAtom(modname, relname, args) -> 
@@ -713,7 +739,7 @@ let expire_remote_state_in_xsb (p: flowlog_program) : unit =
                   printf "Expiring remote for formula (duration expired): %s\n%!" 
                         (string_of_formula keyfmla);
                   remote_cache := FmlaMap.remove keyfmla !remote_cache;
-                  iter Communication.retract_formula xsb_results
+                  iter (fun tup -> Communication.retract_formula (reassemble_xsb_atom modname drel tup)) xsb_results
                 end else 
                   ();
               | RefreshPure -> 
@@ -723,7 +749,7 @@ let expire_remote_state_in_xsb (p: flowlog_program) : unit =
                 (* expire everything under this table, every evaluation cycle *)
                 printf "Expiring remote for formula: %s\n%!" (string_of_formula keyfmla);
                 remote_cache := FmlaMap.remove keyfmla !remote_cache;
-                iter Communication.retract_formula xsb_results;
+                iter (fun tup -> Communication.retract_formula (reassemble_xsb_atom modname drel tup)) xsb_results;
               | RefreshTimeout(_,_) -> failwith "expire_remote_state_in_xsb: bad timeout" 
           end
         | _ -> failwith "expire_remote_state_in_xsb: bad defn_decl" 

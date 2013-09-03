@@ -72,6 +72,9 @@ let reassemble_xsb_equality (headterms: term list) (tlargs: term list) (tuple: s
 		    | _ -> FEquals(aterm, TConst(astr)))
     	 tlargs tuple;;
 
+let reassemble_xsb_atom (modname:string) (relname: string) (tuple: string list): formula =
+    FAtom(modname, relname, map (fun x -> TConst(x)) tuple);;
+
 let subtract (biglst: 'a list) (toremove: 'a list): 'a list =
   (filter (fun ele -> not (mem ele toremove)) biglst);;
 
@@ -180,6 +183,12 @@ let rec disj_to_top (f: formula): formula =
     	| DeclRemoteTable(relname, dargs) when relname = goalrel -> true 
     	| _ -> false) prgm.decls in
 	(the_react, the_decl);;
+
+  let is_remote_table (prgm: flowlog_program) (relname: string): bool =   
+    exists (function      
+        | DeclRemoteTable(rname, _) when rname = relname -> true         
+        | _ -> false) 
+        prgm.decls;;      
 
   let get_output_defns (prgm: flowlog_program): sreactive list =
     filter_map (function      
