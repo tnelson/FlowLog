@@ -13,13 +13,20 @@ TABLE switch_has_port(int, int);
 
 ON packet_in(pkt):
 	
-  // ***TODO*** Add these restrictions (which only exist for limiting to-controller traffic) automatically
+  // ***TODO*** Add these restrictions (which only exist for limiting to-controller traffic) 
+  // automatically. But not always easy! Naive learned/notlearned have some issues
+  // in that to use them one sometimes needs complex joins?
+
+  // Instead, bespoke optimizations that can be tested via change impact. (old, unoptimized ==
+  // new, optimized?)
+
   INSERT (pkt.locSw, pkt.locPt, pkt.dlSrc) INTO learned WHERE 
     not learned(pkt.locSw, pkt.locPt, pkt.dlSrc);  
 
   DELETE (pkt.locSw, pt, pkt.dlSrc) FROM learned WHERE
   	not pt = pkt.locPt 
-    AND learned(pkt.locSw, pt, pkt.dlSrc) AND switch_has_port(pkt.locSw, pt);
+    // The optimization requirement: ctrlr will learn something new
+    AND not learned(pkt.locSw, pkt.locPt, pkt.dlSrc);  
 
   DO forward(new) WHERE 
     learned(pkt.locSw, new.locPt, pkt.dlDst)
@@ -29,9 +36,9 @@ ON packet_in(pkt):
      switch_has_port(pkt.locSw, newpkt.locPt));
 
      // for testing
-  DO forward(new) WHERE
-  	pkt.locSw = 1 AND
-  	pkt.dlSrc = 1 AND new.locPt != pkt.locPt;
+//  DO forward(new) WHERE
+  	//pkt.locSw = 1 AND
+  	//pkt.dlSrc = 1 AND new.locPt != pkt.locPt;
 
 ON switch_port_in(swpt):
 	INSERT (swpt.sw, swpt.pt) INTO switch_has_port;

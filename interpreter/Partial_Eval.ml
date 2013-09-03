@@ -474,6 +474,7 @@ let pkt_triggered_clause_to_netcore (callback: get_packet_handler option) (cl: c
                       (policy_of_conjunction oldpkt callback (hd bodies))
                       (tl bodies) in 
           printf "--- Result policy: %s\n%!" (NetCore_Pretty.string_of_pol result);          
+          printf "---------------------\n\n%!";          
           result
       | _ -> failwith "pkt_triggered_clause_to_netcore";;
 
@@ -497,18 +498,79 @@ let simplify_netcore_policy (p: pol): pol =
         for_all (fun actatom1 -> safe_contains_action acts2 actatom1) acts1
     | _ -> failwith ("simplify_netcore_policy:safe_compare_pols "^(NetCore_Pretty.string_of_pol p1)^", "^(NetCore_Pretty.string_of_pol p1)) in
 
+  let rec unique_list_of_pred_and (pr: pred): pred list = 
+    match pr with 
+      | And(pr1, pr2) -> unique (unique_list_of_pred_and pr1 @ unique_list_of_pred_and pr2)
+      | _ -> [pr] in
+
+      (* TODO: efficiency: better to simplify in PE formulas, before creating all
+         these superfluous policies. *)
+  let remove_contradictions (subpreds: pred list): pred list = 
+    (* Hdr(...), OnSwitch(...) If contradictions, this becomes Nothing*)
+    let process_pred = fun acc p -> let (sws, hdrs) = acc in match p with 
+      | OnSwitch(_) as newsw -> 
+        (* TODO: code duplication between pos and neg switch case *)
+        if exists (fun asw -> asw <> newsw) sws then raise UnsatisfiableFlag
+        else (newsw :: sws, hdrs)  
+      | Not(OnSwitch(_)) as newsw ->
+        if exists (fun asw -> asw <> newsw) sws then raise UnsatisfiableFlag
+        else (newsw :: sws, hdrs)
+         
+      | Hdr(_) as newhdr -> 
+        if exists (fun ahdr -> ahdr = Not(newhdr)) hdrs then raise UnsatisfiableFlag
+        else (sws, newhdr :: hdrs)    
+      | Not(Hdr(_) as newhdrneg) as newnot -> 
+        if exists (fun ahdr -> ahdr = newhdrneg) hdrs then raise UnsatisfiableFlag
+        else (sws, newnot :: hdrs)          
+
+      | Everything -> acc
+      | Nothing -> raise UnsatisfiableFlag
+      | _ -> failwith ("remove_contradiction: expected only atomic preds") in
+      try 
+        let _ = fold_left process_pred ([],[]) subpreds in 
+          subpreds
+      with UnsatisfiableFlag -> [Nothing]
+  in
+
+  let simplify_netcore_predicate (pr: pred): pred =
+    let subpreds = remove_contradictions (unique_list_of_pred_and pr) in       
+      fold_left (fun acc apred -> match apred with         
+          | Nothing -> Nothing 
+          | Everything -> acc
+          | _ when acc = Everything -> apred
+          | _ when acc = Nothing -> Nothing
+          | _ -> And(acc, apred)) Everything subpreds in 
+
+  let simplify_netcore_actions (acts: action): action =
+    (* if contains "all", remove every physicalport output. *)
+    let is_allports_action = (fun act -> act = SwitchAction({id with outPort = NetCore_Pattern.All})) in
+    let newacts = 
+      if exists is_allports_action acts then 
+        begin
+          (* TODO Check: what happens with packet mod in actions? _should_ be split out ok.*)
+          (*printf "all action found. removing single-port actions (if any).\n%!";*)
+          filter is_allports_action acts          
+        end
+      else acts in
+    
+
+    newacts in
+
   let rec unique_conj_of_union (p: pol): pol list = 
     match p with 
       | Union(p1, p2) -> unique ~cmp:safe_compare_pols (unique_conj_of_union p1 @ unique_conj_of_union p2)
+      | Seq(Filter(pr), Action(acts)) ->
+        [Seq(Filter(simplify_netcore_predicate pr), Action(simplify_netcore_actions acts))]
       | _ -> [p] in
 
-  let non_false_pred (p: pol): bool = 
-    true in (* todo *)
+  let has_something_filter (p: pol): bool = 
+    match p with 
+      | Seq(Filter(pr), Action(acts)) -> pr <> Nothing
+      | _ -> true in
 
-  let plst = (filter non_false_pred (unique_conj_of_union p)) in  
-    fold_left (fun acc p -> Union(acc, p)) (hd plst) (tl plst);;
-
-
+  let plst = (filter has_something_filter (unique_conj_of_union p)) in  
+    if length plst < 1 then Seq(Filter(Nothing), Action([])) 
+    else fold_left (fun acc p -> Union(acc, p)) (hd plst) (tl plst);;
 
 (* return the union of policies for each clause *)
 (* Side effect: reads current state in XSB *)
