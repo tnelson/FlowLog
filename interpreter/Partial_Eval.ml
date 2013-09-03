@@ -172,26 +172,26 @@ let validate_clause (cl: clause): unit =
 (***************************************************************************************)
 
 (* Replace state references with constant matrices *)
-let rec partial_evaluation (f: formula): formula = 
+let rec partial_evaluation (headterms: term list) (f: formula): formula = 
   (* assume valid clause body for PE *)
   match f with 
     | FTrue -> f
     | FFalse -> f
     | FEquals(t1, t2) -> f
-    | FAnd(f1, f2) -> FAnd(partial_evaluation f1, partial_evaluation f2)
+    | FAnd(f1, f2) -> FAnd(partial_evaluation headterms f1, partial_evaluation headterms f2)
     | FNot(innerf) -> 
-        let peresult = partial_evaluation innerf in
+        let peresult = partial_evaluation headterms innerf in
         (match peresult with | FTrue -> FFalse | FFalse -> FTrue | _ -> FNot(peresult))
-    | FOr(f1, f2) -> failwith "partial_evaluation"              
+    | FOr(f1, f2) -> failwith "partial_evaluation: OR"              
     | FAtom(modname, relname, tlargs) ->  
       printf "partial_evaluation on atomic %s\n%!" (string_of_formula f);
       let xsbresults: (string list) list = Communication.get_state f in
-        (*iter (fun sl -> printf "result: %s\n%!" (String.concat "," sl)) results;*)
+        (*iter (fun sl -> printf "result: %s\n%!" (String.concat "," sl)) results;*)        
         let disjuncts = map 
-          (fun sl -> build_and (reassemble_xsb_equality tlargs sl)) 
+          (fun sl -> build_and (reassemble_xsb_equality headterms tlargs sl)) 
           xsbresults in
         let fresult = build_or disjuncts in
-        printf "... result was: %s\n%!" (string_of_formula fresult);
+        printf "... result (converted from xsb) was: %s\n%!" (string_of_formula fresult);
         fresult;;
 
 (***************************************************************************************)
@@ -220,6 +220,13 @@ let rec build_switch_actions (oldpkt: string) (body: formula): action =
         [SwitchAction({id with outPort = NetCore_Pattern.Physical(Int32.of_string aval)})] @ actlist 
       else       
         actlist
+
+      (* remember: only called for FORWARD/EMIT rules. so safe to do this: *)
+    | FNot(FEquals(TField(avar, afld), TConst(aval)))
+    | FNot(FEquals(TConst(aval), TField(avar, afld))) -> 
+        actlist
+
+
     | _ -> failwith ("create_port_actions: bad lit: "^(string_of_formula lit)) in
 
 (*
@@ -381,7 +388,7 @@ let rec strip_to_valid (oldpkt: string) (cl: clause): clause =
     of goal: result is a fmla that is implied by the real body. *)
     (* acc contains formula built so far, plus the variables seen *)
     let safeargs = (match cl.head with | FAtom(_, _, args) -> args | _ -> failwith "strip_to_valid") in
-      printf "   --- ENFORCING VALIDITY: Removing literals from clause body: %s\n%!" (string_of_formula cl.body);
+      printf "   --- ENFORCING VALIDITY: Removing literals as needed from clause body: %s\n%!" (string_of_formula cl.body);
       let may_strip_literal (acc: formula * term list) (lit: formula): (formula * term list) = 
         let (fmlasofar, seen) = acc in         
 
@@ -440,7 +447,7 @@ let pkt_triggered_clause_to_netcore (callback: get_packet_handler option) (cl: c
       | Some(c) -> printf "\n--- Packet triggered clause to netcore (~CONTROLLER~) on: \n%s\n%!" (string_of_clause cl));
 
     match cl.head with 
-      | FAtom(_, _, _) ->
+      | FAtom(_, _, headargs) ->
         let (oldpkt, trimmedbody) = trim_packet_from_body cl.body in 
         printf "Trimmed packet from body: (%s, %s)\n%!" oldpkt (string_of_formula trimmedbody);
 
@@ -450,13 +457,14 @@ let pkt_triggered_clause_to_netcore (callback: get_packet_handler option) (cl: c
           | None ->    trimmedbody) in
 
         (* Do partial evaluation *)
-        let pebody = partial_evaluation safebody in
+        let pebody = partial_evaluation headargs safebody in
                 
         (* partial eval may insert disjunctions because of multiple tuples to match 
            so we need to pull those disjunctions up and create multiple policies 
            since there may be encircling negation, also need to call nnf *)
         (* todo: this is pretty inefficient for large numbers of tuples. do better? *)
         let bodies = disj_to_list (disj_to_top (nnf pebody)) in 
+        printf "bodies after nnf/disj_to_top = %s\n%!" (String.concat " || " (map string_of_formula bodies));
         (* anything not the old packet is a RESULT variable.
            Remember that we know this clause is packet-triggered, but
            we have no constraints on what gets produced. Maybe a bunch of 
@@ -465,9 +473,41 @@ let pkt_triggered_clause_to_netcore (callback: get_packet_handler option) (cl: c
                          (Union (acc, policy_of_conjunction oldpkt callback body)))
                       (policy_of_conjunction oldpkt callback (hd bodies))
                       (tl bodies) in 
-          (*printf "--- Result policy: %s\n%!" (NetCore_Pretty.string_of_pol result);          *)
+          printf "--- Result policy: %s\n%!" (NetCore_Pretty.string_of_pol result);          
           result
       | _ -> failwith "pkt_triggered_clause_to_netcore";;
+
+(* Our compilation generates a lot of duplicates sometimes. Remove them. *)
+(* Issue: since callback refs are included in policies, can't compare them with = *)
+let simplify_netcore_policy (p: pol): pol =
+  let safe_contains_action (acts: action) (act: action_atom) =
+    exists (fun actb -> match (act, actb) with 
+        | (SwitchAction(_), SwitchAction(_)) -> act = actb
+          (* VITAL ASSUMPTION: only one callback used here *)
+        | (ControllerAction(_), ControllerAction(_)) -> true
+        | _ -> false) acts in
+
+  let safe_compare_pols (p1: pol) (p2: pol): bool =
+    match (p1, p2) with
+    | (Seq(Filter(pred1), Action(acts1)), Seq(Filter(pred2), Action(acts2))) ->
+        pred1 = pred2 
+        &&
+        for_all (fun actatom2 -> safe_contains_action acts1 actatom2) acts2
+        &&
+        for_all (fun actatom1 -> safe_contains_action acts2 actatom1) acts1
+    | _ -> failwith ("simplify_netcore_policy:safe_compare_pols "^(NetCore_Pretty.string_of_pol p1)^", "^(NetCore_Pretty.string_of_pol p1)) in
+
+  let rec unique_conj_of_union (p: pol): pol list = 
+    match p with 
+      | Union(p1, p2) -> unique ~cmp:safe_compare_pols (unique_conj_of_union p1 @ unique_conj_of_union p2)
+      | _ -> [p] in
+
+  let non_false_pred (p: pol): bool = 
+    true in (* todo *)
+
+  let plst = (filter non_false_pred (unique_conj_of_union p)) in  
+    fold_left (fun acc p -> Union(acc, p)) (hd plst) (tl plst);;
+
 
 
 (* return the union of policies for each clause *)
@@ -477,8 +517,9 @@ let pkt_triggered_clauses_to_netcore (clauses: clause list) (callback: get_packe
     if length clause_pols = 0 then 
       Filter(Nothing)
     else 
-      fold_left (fun acc pol -> Union(acc, pol)) 
-        (hd clause_pols) (tl clause_pols);;  
+      let p = fold_left (fun acc pol -> Union(acc, pol)) 
+                (hd clause_pols) (tl clause_pols) in
+        simplify_netcore_policy p;;
 
 let debug = true;;
 

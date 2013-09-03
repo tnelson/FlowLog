@@ -58,13 +58,15 @@ let after_equals (str : string) : string =
 
 (* XSB returns tuples like ["5", "3", "foo"]. 
    In the context of some variables TVar(x), etc.
-   Produce [FEquals(TVar(x), TConst("5")), ...] *)
-let reassemble_xsb_equality (tlargs: term list) (tuple: string list) : formula list =  
+   Produce [FEquals(TVar(x), TConst("5")), ...] 
+  Ignore terms that are variables NOT in headterms. These are single-use existentials. *)
+let reassemble_xsb_equality (headterms: term list) (tlargs: term list) (tuple: string list) : formula list =  
     map2 (fun aterm astr -> 
-    	  if (String.get astr 0) = '_' then
-		    failwith "reassemble_xsb_equality"
-		  else
-    		FEquals(aterm, TConst(astr)))
+    	if (String.get astr 0) = '_' then
+		    failwith "reassemble_xsb_equality: unconstrained variable"
+      else match aterm with 
+        | TVar(vname) when not (mem aterm headterms) -> FTrue
+		    | _ -> FEquals(aterm, TConst(astr)))
     	 tlargs tuple;;
 
 let subtract (biglst: 'a list) (toremove: 'a list): 'a list =
