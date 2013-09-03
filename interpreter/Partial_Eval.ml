@@ -274,7 +274,7 @@ let rec build_switch_actions (oldpkt: string) (body: formula): action =
   (* - this is only called for FORWARDING rules. so only newpkt should be involved *)
   (* - assume: no negated equalities except the special case pkt.locpt != newpkt.locpt *)  
   let atoms = conj_to_list body in
-    printf "  >> build_switch_actions: %s\n%!" (String.concat " ; " (map (string_of_formula ~verbose:true) atoms));
+   (* printf "  >> build_switch_actions: %s\n%!" (String.concat " ; " (map (string_of_formula ~verbose:true) atoms));*)
     (* if any actions are false, folding is invalidated *)
     try
       let port_actions = fold_left create_port_actions [] atoms in
@@ -464,7 +464,7 @@ let pkt_triggered_clause_to_netcore (callback: get_packet_handler option) (cl: c
            since there may be encircling negation, also need to call nnf *)
         (* todo: this is pretty inefficient for large numbers of tuples. do better? *)
         let bodies = disj_to_list (disj_to_top (nnf pebody)) in 
-        printf "bodies after nnf/disj_to_top = %s\n%!" (String.concat " || " (map string_of_formula bodies));
+        (*printf "bodies after nnf/disj_to_top = %s\n%!" (String.concat " || " (map string_of_formula bodies));*)
         (* anything not the old packet is a RESULT variable.
            Remember that we know this clause is packet-triggered, but
            we have no constraints on what gets produced. Maybe a bunch of 
@@ -473,8 +473,8 @@ let pkt_triggered_clause_to_netcore (callback: get_packet_handler option) (cl: c
                          (Union (acc, policy_of_conjunction oldpkt callback body)))
                       (policy_of_conjunction oldpkt callback (hd bodies))
                       (tl bodies) in 
-          printf "--- Result policy: %s\n%!" (NetCore_Pretty.string_of_pol result);          
-          printf "---------------------\n\n%!";          
+          (*printf "--- Result policy: %s\n%!" (NetCore_Pretty.string_of_pol result);          
+          printf "---------------------\n\n%!";          *)
           result
       | _ -> failwith "pkt_triggered_clause_to_netcore";;
 

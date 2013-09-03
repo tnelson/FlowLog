@@ -148,7 +148,7 @@ let run_flowlog (p: flowlog_program): unit Lwt.t =
   Communication.start_program p;
  
   (* Listen for incoming notifications via RPC *)
-  (*Flowlog_Thrift_In.start_listening p;; *)
+  Flowlog_Thrift_In.start_listening p;
 
   (* Send the "startup" notification. Enables initialization, etc. in programs *)
   (*let startup = Types.Constant([], Types.startup_type) in
