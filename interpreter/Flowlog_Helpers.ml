@@ -91,7 +91,7 @@ let rec uses_relation (goal_modname: string) (goal_relname: string) (f: formula)
 			relname = goal_relname && modname = goal_modname;;
 
 let is_packet_triggered_clause (cl: clause): bool =
-  uses_relation "" "packet-in" cl.body;;
+  uses_relation "" packet_in_relname cl.body;;
 
 let product_of_lists lst1 lst2 = 
   List.concat (List.map (fun e1 -> List.map (fun e2 -> (e1,e2)) lst2) lst1);;

@@ -41,6 +41,8 @@ exception IllegalExistentialUse of formula;;
 exception IllegalModToNewpkt of (term * term);;
 exception IllegalEquality of (term * term);;
 
+exception UnsatisfiableFlag;;
+
 let legal_field_to_modify (fname: string): bool =
 	mem fname legal_to_modify_packet_fields;;
 
@@ -122,7 +124,7 @@ let rec forbidden_assignment_check (newpkt: string) (f: formula) (innot: bool): 
       		(* new field must be legal for modification by openflow *)
       		iter check_legal_newpkt_fields tlargs;
       		(* if involves a newpkt, must be positive *)    
-      		if (innot && (ExtList.List.exists (function | TField(newpkt, _) -> true | _ -> false) tlargs)) then  	
+      		if (innot && (ExtList.List.exists (function | TField(fvar, _) when fvar = newpkt -> true | _ -> false) tlargs)) then  	
       			raise (IllegalAtomMustBePositive f);;      		
 
 (* returns list of existentials used by f. Will throw exception if re-used in new *atomic* fmla.
@@ -177,7 +179,9 @@ let rec partial_evaluation (f: formula): formula =
     | FFalse -> f
     | FEquals(t1, t2) -> f
     | FAnd(f1, f2) -> FAnd(partial_evaluation f1, partial_evaluation f2)
-    | FNot(f) -> FNot(partial_evaluation f)
+    | FNot(innerf) -> 
+        let peresult = partial_evaluation innerf in
+        (match peresult with | FTrue -> FFalse | FFalse -> FTrue | _ -> FNot(peresult))
     | FOr(f1, f2) -> failwith "partial_evaluation"              
     | FAtom(modname, relname, tlargs) ->  
       printf "partial_evaluation on atomic %s\n%!" (string_of_formula f);
@@ -195,8 +199,8 @@ let rec partial_evaluation (f: formula): formula =
 let rec build_switch_actions (oldpkt: string) (body: formula): action =
   let create_port_actions (actlist: action) (lit: formula): action =
     match lit with 
-    | FFalse -> actlist
-    | FTrue -> failwith "create_port_actions: passed true"
+    | FFalse -> raise UnsatisfiableFlag
+    | FTrue -> actlist
     | FNot(FEquals(TField(var1, fld1), TField(var2, fld2))) -> 
       if var1 = oldpkt && fld1 = "locpt" && fld2 = "locpt" then         
         [SwitchAction({id with outPort = NetCore_Pattern.All})] @ actlist 
@@ -216,7 +220,7 @@ let rec build_switch_actions (oldpkt: string) (body: formula): action =
         [SwitchAction({id with outPort = NetCore_Pattern.Physical(Int32.of_string aval)})] @ actlist 
       else       
         actlist
-    | _ -> failwith ("create_port_actions: "^(string_of_formula body)) in
+    | _ -> failwith ("create_port_actions: bad lit: "^(string_of_formula lit)) in
 
 (*
   TODO: 
@@ -264,10 +268,12 @@ let rec build_switch_actions (oldpkt: string) (body: formula): action =
   (* - assume: no negated equalities except the special case pkt.locpt != newpkt.locpt *)  
   let atoms = conj_to_list body in
     printf "  >> build_switch_actions: %s\n%!" (String.concat " ; " (map (string_of_formula ~verbose:true) atoms));
-    let port_actions = fold_left create_port_actions [] atoms in
-    let complete_actions = port_actions in (*fold_left create_mod_actions port_actions atoms in*)
-  (* TODO: This includes dealing with special case pkt.locPt != newpkt.locPt *)      
-      complete_actions;;
+    (* if any actions are false, folding is invalidated *)
+    try
+      let port_actions = fold_left create_port_actions [] atoms in
+      let complete_actions = port_actions in (*fold_left create_mod_actions port_actions atoms in*)      
+      complete_actions
+    with UnsatisfiableFlag -> [];;
 
 open NetCore_Pattern
 open NetCore_Wildcard
@@ -447,9 +453,10 @@ let pkt_triggered_clause_to_netcore (callback: get_packet_handler option) (cl: c
         let pebody = partial_evaluation safebody in
                 
         (* partial eval may insert disjunctions because of multiple tuples to match 
-           so we need to pull those disjunctions up and create multiple policies *)
+           so we need to pull those disjunctions up and create multiple policies 
+           since there may be encircling negation, also need to call nnf *)
         (* todo: this is pretty inefficient for large numbers of tuples. do better? *)
-        let bodies = disj_to_list (disj_to_top pebody) in 
+        let bodies = disj_to_list (disj_to_top (nnf pebody)) in 
         (* anything not the old packet is a RESULT variable.
            Remember that we know this clause is packet-triggered, but
            we have no constraints on what gets produced. Maybe a bunch of 
@@ -494,6 +501,7 @@ let program_to_netcore (p: flowlog_program) (callback: get_packet_handler): (pol
   let fwd_clauses = (filter is_forward_clause p.clauses) in
   (*iter (fun cl -> printf "    FWD: %s\n%!" (string_of_clause cl)) fwd_clauses;*)
   let non_fwd_clauses_by_packets = (filter is_packet_triggered_clause (subtract p.clauses fwd_clauses)) in
+  printf "Non-fwd triggered by packets = %s\n%!" (String.concat " ; " (map string_of_clause non_fwd_clauses_by_packets));
   let can_fully_compile_fwd_clauses = (filter can_compile_clause fwd_clauses) in
   
   let cant_compile_fwd_clauses = subtract fwd_clauses can_fully_compile_fwd_clauses in
