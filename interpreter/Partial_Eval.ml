@@ -139,7 +139,7 @@ let rec common_existential_check (newpkt: string) (sofar: string list) (f: formu
 			(* | TField(,_) -> [] *)
       (* netcore limitation in recent version, going away soon *)
       | TField(fvar,ffld) -> 
-          if fvar = newpkt then 
+          if fvar = newpkt && ffld <> "locpt" then 
             raise (IllegalModToNewpkt(t, t))
           else [] 
 		in
@@ -429,7 +429,10 @@ let rec strip_to_valid (oldpkt: string) (cl: clause): clause =
 (* Side effect: reads current state in XSB *)
 (* Throws exception rather than using option type: more granular error result *)
 let pkt_triggered_clause_to_netcore (callback: get_packet_handler option) (cl: clause): pol =   
-    printf "\n--- Packet triggered clause to netcore on: \n%s\n%!" (string_of_clause cl);
+    (match callback with 
+      | None -> printf "\n--- Packet triggered clause to netcore (FULL COMPILE) on: \n%s\n%!" (string_of_clause cl)
+      | Some(c) -> printf "\n--- Packet triggered clause to netcore (~CONTROLLER~) on: \n%s\n%!" (string_of_clause cl));
+
     match cl.head with 
       | FAtom(_, _, _) ->
         let (oldpkt, trimmedbody) = trim_packet_from_body cl.body in 
@@ -470,17 +473,19 @@ let pkt_triggered_clauses_to_netcore (clauses: clause list) (callback: get_packe
       fold_left (fun acc pol -> Union(acc, pol)) 
         (hd clause_pols) (tl clause_pols);;  
 
+let debug = true;;
+
 let can_compile_clause (cl: clause): bool =  
   try 
     validate_clause cl;
     true
   with (* catch only "expected" exceptions *)
-    | IllegalFieldModification(_) -> false
-    | IllegalAssignmentViaEquals(_) -> false
-    | IllegalAtomMustBePositive(_) -> false
-    | IllegalExistentialUse(_) -> false
-    | IllegalModToNewpkt(_, _) -> false
-    | IllegalEquality(_,_) -> false;;
+    | IllegalFieldModification(_) -> if debug then printf "IllegalFieldModification\n%!"; false
+    | IllegalAssignmentViaEquals(_) -> if debug then printf "IllegalAssignmentViaEquals\n%!"; false
+    | IllegalAtomMustBePositive(_) -> if debug then printf "IllegalAtomMustBePositive\n%!"; false
+    | IllegalExistentialUse(_) -> if debug then printf "IllegalExistentialUse\n%!"; false
+    | IllegalModToNewpkt(_, _) -> if debug then printf "IllegalModToNewpkt\n%!"; false
+    | IllegalEquality(_,_) -> if debug then printf "IllegalEquality\n%!"; false;;
 
 (* Side effect: reads current state in XSB *)
 (* Set up policies for all packet-triggered clauses *)
