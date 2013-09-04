@@ -67,8 +67,9 @@ let build_finished_program (filename : string) : Types.program =
 
 (**************************************************************************)
 
-let build_clause (r: srule) (in_atom: formula) (relname: string) (terms: term list) (prefix: string) (conj: formula): clause =
-    let head = FAtom("", prefix^"_"^relname, terms) in
+let build_clause (r: srule) (in_atom: formula) (relname: string) (terms: term list) (prefix: string option) (conj: formula): clause =
+    let real_relname = (match prefix with | Some p -> (p^"_"^relname) | None -> relname) in
+    let head = FAtom("", real_relname, terms) in
     let body = FAnd(in_atom, conj) in
     {orig_rule = r; head = head; body = body};;
 
@@ -77,11 +78,11 @@ let clauses_of_rule (r: srule): clause list =
     let atom_for_on = FAtom("", increlname, [TVar(incterm)]) in (* local atom, no module name *)
     match act with 
         | ADelete(relname, terms, condition) -> 
-            map (build_clause r atom_for_on relname terms minus_prefix) (disj_to_list (disj_to_top condition));
+            map (build_clause r atom_for_on relname terms (Some minus_prefix)) (disj_to_list (disj_to_top condition));
         | AInsert(relname, terms, condition) -> 
-            map (build_clause r atom_for_on relname terms plus_prefix) (disj_to_list (disj_to_top condition));
+            map (build_clause r atom_for_on relname terms (Some plus_prefix)) (disj_to_list (disj_to_top condition));
         | ADo(relname, terms, condition) -> 
-            map (build_clause r atom_for_on relname terms do_prefix) (disj_to_list (disj_to_top condition));;     
+            map (build_clause r atom_for_on relname terms None) (disj_to_list (disj_to_top condition));;     
 
 let desugared_program_of_ast (ast: flowlog_ast): flowlog_program =
     printf "*** REMINDER: IMPORTS NOT YET HANDLED! (Remember to handle in partial eval, too.) ***\n%!"; (* TODO *)

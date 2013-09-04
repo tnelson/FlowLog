@@ -262,7 +262,6 @@ let rec minimize_variables ?(exempt: term list = []) (f: formula): formula =
 (* all lowercased by parser *)
 let plus_prefix = "plus";;
 let minus_prefix = "minus";;
-let do_prefix = "do";;
 
 let packet_in_relname = "packet_in";;
 let switch_reg_relname = "switch_port_in";;
@@ -273,8 +272,8 @@ let swpt_fields = ["sw";"pt"];;
 
 let built_in_decls = [DeclInc(packet_in_relname, "packet"); 
                       DeclInc(switch_reg_relname, "switch_port"); 
-                      DeclOut(do_prefix^"_forward", ["packet"]);
-                      DeclOut(do_prefix^"_emit", ["packet"]);
+                      DeclOut("forward", ["packet"]);
+                      DeclOut("emit", ["packet"]);
 
                       DeclEvent("packet", packet_fields);
                       DeclEvent("switch_port", swpt_fields)];;
@@ -283,8 +282,8 @@ let create_id_assign (k: string): assignment = {afield=k; atupvar=k};;
 
 let built_in_reacts = [ ReactInc("packet", packet_in_relname); 
                         ReactInc("switch_port", switch_reg_relname); 
-                        ReactOut(do_prefix^"_forward", packet_fields, "packet", map create_id_assign packet_fields, OutForward); 
-                        ReactOut(do_prefix^"_emit", packet_fields, "packet", map create_id_assign packet_fields, OutEmit);                         
+                        ReactOut("forward", packet_fields, "packet", map create_id_assign packet_fields, OutForward); 
+                        ReactOut("emit", packet_fields, "packet", map create_id_assign packet_fields, OutEmit);                         
                       ];;
 
 

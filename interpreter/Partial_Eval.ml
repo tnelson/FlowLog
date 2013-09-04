@@ -170,7 +170,7 @@ let rec common_existential_check (newpkt: string) (sofar: string list) (f: formu
 let validate_clause (cl: clause): unit =
   printf "Validating clause: %s\n%!" (string_of_clause cl);
 	match cl.head with 
-		| FAtom("", "do_forward", [TVar(newpktname)]) ->
+		| FAtom("", "forward", [TVar(newpktname)]) ->
       ignore (common_existential_check newpktname [] cl.body);  
 			forbidden_assignment_check newpktname cl.body false
 		| _ -> failwith "validate_clause";;
@@ -192,9 +192,11 @@ let rec get_state_maybe_remote (p: flowlog_program) (f: formula): (string list) 
         match get_remote_table p relname with
           | (ReactRemote(relname, qryname, ip, port, refresh), DeclRemoteTable(drel, dargs)) ->            
             (* qryname, not relname, when querying *)
-            printf "REFRESHING: %s\n%!" (string_of_formula f);
+            printf "REMOTE STATE --- REFRESHING: %s\n%!" (string_of_formula f);
             let bb_results = Flowlog_Thrift_Out.doBBquery qryname ip port args in
-              ignore (FmlaMap.add f (bb_results, Unix.time()) !remote_cache);
+              remote_cache := FmlaMap.add f (bb_results, Unix.time()) !remote_cache;
+              iter Communication.assert_formula 
+                (map (reassemble_xsb_atom modname relname) bb_results);
               bb_results 
 
           | _ -> failwith "get_state_maybe_remote"
@@ -208,7 +210,7 @@ let pre_load_all_remote_queries (p: flowlog_program): unit =
   let remote_fmlas = 
     filter (function | FAtom(modname, relname, args) when (is_remote_table p relname) -> true
                      | _-> false)
-           (get_atoms_used p) in
+           (get_atoms_used_in_bodies p) in
     iter (fun f -> ignore (get_state_maybe_remote p f)) remote_fmlas;;    
 
 
@@ -678,18 +680,27 @@ let pkt_to_event (sw : switchId) (pt: port) (pkt : Packet.packet) : event =
 
 (* TODO: ugly func, should be cleaned up.*)
 (* augment <ev_so_far> with assignment <assn>, using tuple <tup> for values *)
-let event_with_assn (p: flowlog_program) (tup: string list) (ev_so_far : event) (assn: assignment): event =
+let event_with_assn (p: flowlog_program) (arglist: string list) (tup: string list) (ev_so_far : event) (assn: assignment): event =
   (* for this assignment, plug in the appropriate value in tup *)
-  let fieldnames = (get_fields_for_type p ev_so_far.typeid) in
-  let (index, _) = (findi (fun idx ele -> ele = assn.atupvar) fieldnames) in
-  let const = (nth tup index) in 
-  {ev_so_far with values=(StringMap.add assn.afield const ev_so_far.values)};;
+  printf "event_with_assn %s %s %s %s\n%!" (String.concat ";" tup) (string_of_event ev_so_far) assn.afield assn.atupvar;
+  (*let fieldnames = (get_fields_for_type p ev_so_far.typeid) in  *)  
+  (* fieldnames is fields of *event*. don't use that here. 
+     e.g. 'time=t' will error, expecting time, not t.*)
+  try    
+    let (index, _) = (findi (fun idx ele -> ele = assn.atupvar) arglist) in  
+    let const = (nth tup index) in 
+      {ev_so_far with values=(StringMap.add assn.afield const ev_so_far.values)}
+  with Not_found -> 
+    begin
+      printf "Error assigning event field <%s> from variable <%s>: did not find that variable.\n%!" assn.afield assn.atupvar;
+      exit(102)
+    end;;
 
 let forward_packet (context: (switchId * port * Packet.packet) option) (ev: event): unit =
   printf "forwarding: %s\n%!" (string_of_event ev);
   ();;
 
-let emit_packet (ev: event): unit =
+let emit_packet (ev: event): unit =  
   printf "emitting: %s\n%!" (string_of_event ev);
   ();;
 
@@ -697,17 +708,18 @@ let send_event (ev: event) (ip: string) (pt: string): unit =
   printf "sending: %s\n%!" (string_of_event ev);  
   doBBnotify ev ip pt;;
 
-let execute_output (p: flowlog_program) (context: (switchId * port * Packet.packet) option) (defn: sreactive): unit =
+let execute_output (p: flowlog_program) (context: (switchId * port * Packet.packet) option) (defn: sreactive): unit =  
   match defn with 
-    | ReactOut(relname, arglist, outtype, assigns, spec) ->
+    | ReactOut(relname, argstrlist, outtype, assigns, spec) ->
      
       let execute_tuple (tup: string list): unit =
+        printf "EXECUTING OUTPUT... tuple: %s\n%!" (String.concat ";" tup);
         (* arglist orders the xsb results. assigns says how to use them, spec how to send them. *)
         let initev = (match spec with 
                   | OutForward | OutEmit -> {typeid = "packet"; values=StringMap.empty}      
                   | OutLoopback -> failwith "loopback unsupported currently"
-                  | OutSend(ip, pt) -> {typeid=outtype; values=StringMap.empty}) in        
-        let ev = fold_left (event_with_assn p tup) initev assigns in
+                  | OutSend(ip, pt) -> {typeid=outtype; values=StringMap.empty}) in                
+        let ev = fold_left (event_with_assn p argstrlist tup) initev assigns in          
           match spec with 
             | OutForward -> forward_packet context ev
             | OutEmit -> emit_packet ev
@@ -715,7 +727,7 @@ let execute_output (p: flowlog_program) (context: (switchId * port * Packet.pack
             | OutSend(ip, pt) -> send_event ev ip pt in
 
       (* query xsb for this output relation *)  
-      let xsb_results = Communication.get_state (FAtom("", relname, map (fun s -> TVar(s)) arglist)) in        
+      let xsb_results = Communication.get_state (FAtom("", relname, map (fun s -> TVar(s)) argstrlist)) in        
         (* execute the results *)
         iter execute_tuple xsb_results 
     | _ -> failwith "execute_output";;
@@ -734,6 +746,7 @@ let expire_remote_state_in_xsb (p: flowlog_program) : unit =
 
   (* The cache is keyed by rel/tuple. So R(X, 1) is a DIFFERENT entry from R(1, X). *)
   let expire_remote_if_time (p:flowlog_program) (keyfmla: formula) (values: ((string list) list * float)): unit =  
+    printf "expire_remote_if_time %s\n%!" (string_of_formula keyfmla);
     let (xsb_results, timestamp) = values in   
     match keyfmla with
       | FAtom(modname, relname, args) -> 
@@ -745,18 +758,20 @@ let expire_remote_state_in_xsb (p: flowlog_program) : unit =
               | RefreshTimeout(num, units) when units = "seconds" -> 
                 (* expire every num units. TODO: suppt more than seconds *)
                 if Unix.time() > ((float_of_int num) +. timestamp) then begin
-                  printf "Expiring remote for formula (duration expired): %s\n%!" 
+                  printf "REMOTE STATE --- Expiring remote for formula (duration expired): %s\n%!" 
                         (string_of_formula keyfmla);
                   remote_cache := FmlaMap.remove keyfmla !remote_cache;
                   iter (fun tup -> Communication.retract_formula (reassemble_xsb_atom modname drel tup)) xsb_results
                 end else 
+                  printf "REMOTE STATE --- Allowing relation to remain: %s %s %s\n%!" 
+                    (string_of_formula keyfmla) (string_of_int num) (string_of_float timestamp);
                   ();
               | RefreshPure -> 
                 (* never expire pure tables *) 
                 (); 
               | RefreshEvery -> 
                 (* expire everything under this table, every evaluation cycle *)
-                printf "Expiring remote for formula: %s\n%!" (string_of_formula keyfmla);
+                printf "REMOTE STATE --- Expiring remote for formula: %s\n%!" (string_of_formula keyfmla);
                 remote_cache := FmlaMap.remove keyfmla !remote_cache;
                 iter (fun tup -> Communication.retract_formula (reassemble_xsb_atom modname drel tup)) xsb_results;
               | RefreshTimeout(_,_) -> failwith "expire_remote_state_in_xsb: bad timeout" 

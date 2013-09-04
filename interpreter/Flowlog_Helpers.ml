@@ -84,7 +84,7 @@ let list_intersection (l1: 'a list) (l2: 'a list): 'a list =
 
 let is_forward_clause (cl: clause): bool =    
 	match cl.head with 
-	| FAtom("", "do_forward", _) -> true    
+	| FAtom("", "forward", _) -> true    
 	| _ -> false;;
 
 let rec uses_relation (goal_modname: string) (goal_relname: string) (f: formula): bool =
@@ -204,7 +204,7 @@ let rec disj_to_top (f: formula): formula =
         | _ -> false) 
         prgm.decls;;      
 
-  let get_fields_for_type (prgm: flowlog_program) (etype: string): string list =
+  let get_fields_for_type (prgm: flowlog_program) (etype: string): string list =  
       let decl = find (function       
         | DeclEvent(evname, evtypelst) when evname = etype -> true 
         | _ -> false) prgm.decls in 
@@ -214,16 +214,17 @@ let rec disj_to_top (f: formula): formula =
         | _ -> failwith "get_fields_for_type";;
 
   (* in this IO relation, at index idx, there should be something of type T. What are T's fields, in order? *)
-  let get_io_fields_for_index (prgm: flowlog_program) (relname: string) (idx: int): string list =
+  let get_io_fields_for_index (prgm: flowlog_program) (relname: string) (idx: int): (string list) option =
     let decl = find (function       
         | DeclInc(rname, argtype) when rname = relname -> true 
         | DeclOut(rname, argtypelst) when rname = relname -> true
         | _ -> false) prgm.decls in 
       match decl with 
         | DeclInc(rname, argtype) when rname = relname -> 
-          get_fields_for_type prgm argtype
+          Some (get_fields_for_type prgm argtype)
         | DeclOut(rname, argtypelst) when rname = relname ->
-          get_fields_for_type prgm (nth argtypelst idx)
+        	None
+          (*get_fields_for_type prgm (nth argtypelst idx)*)
         | _ -> failwith "get_io_fields_for_index";;
 
   (* ASSUMED: only one in relation per event *)
@@ -241,20 +242,23 @@ let rec disj_to_top (f: formula): formula =
         			(get_fields_for_type p typename))	
         | _ -> failwith "inc_event_to_formula";;
 
-  let decls_expand_fields (prgm: flowlog_program) (modname: string) (relname: string) (i: int) (t: term): term list =
+   (* in modname.relname, the ith element has which fields? *)
+  let decls_expand_fields (prgm: flowlog_program) (modname: string) (relname: string) (i: int) (t: term): term list =  	
     match t with 
       | TVar(vname) when is_io_rel prgm modname relname -> 
-        map (fun fldname -> TField(vname, fldname)) (get_io_fields_for_index prgm relname i)
+      	(match (get_io_fields_for_index prgm relname i) with
+      		| Some fieldlist -> map (fun fldname -> TField(vname, fldname)) fieldlist
+      		| None -> [t])
       | _ -> [t];;
 
 let construct_map (bindings: (string * string) list): (string StringMap.t) =
   fold_left (fun acc (bx, by) -> StringMap.add bx by acc) StringMap.empty bindings
 
-let get_atoms (f: formula): formula list = 
+let rec get_atoms (f: formula): formula list = 
 	match f with
 		| FTrue -> []
 		| FFalse -> []
-		| FAtom(modname, relname, tlargs) -> f			
+		| FAtom(modname, relname, tlargs) -> [f]
 		| FEquals(t1, t2) -> []			
 		| FAnd(f1, f2) ->
 			(unique (get_atoms f1) @ (get_atoms f2))
@@ -262,8 +266,9 @@ let get_atoms (f: formula): formula list =
 			get_atoms innerf
 		| _ -> failwith "get_atoms";;
 
+(* TODO: so many lists... Ocaml has sets. *)
 
-let get_atoms_used (p: flowlog_program): formula list =
-	let fmlas = in 
-		fold_left (fun acc f -> unique ((get_atoms f) @ acc)) fmlas;;
+let get_atoms_used_in_bodies (p: flowlog_program): formula list =
+	let fmlas = map (fun cl -> cl.body) p.clauses in 
+		fold_left (fun acc f -> unique ((get_atoms f) @ acc)) [] fmlas;;
   	

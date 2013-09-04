@@ -133,29 +133,29 @@ let test_minimize_variables () =
 (**********************************************************************)
 
 let cl1 = {orig_rule = dummy_rule; 
-           head = FAtom("", "do_forward", [newpkt]);
+           head = FAtom("", "forward", [newpkt]);
            body = FEquals(newpktdlsrc, oldpktdldst)};;
 let cl2 = {orig_rule = dummy_rule; 
-           head = FAtom("", "do_forward", [newpkt]);
+           head = FAtom("", "forward", [newpkt]);
            body = FEquals(newpktdlsrc, oldpktdlsrc)};;
 let cl3 = {orig_rule = dummy_rule; 
-           head = FAtom("", "do_forward", [newpkt]);
+           head = FAtom("", "forward", [newpkt]);
            body = FAnd((FAtom("", "R", [newpktdlsrc; xvar])), (FEquals(newpktdlsrc, oldpktdlsrc)))};;
 let cl4 = {orig_rule = dummy_rule; 
-           head = FAtom("", "do_forward", [newpkt]);
+           head = FAtom("", "forward", [newpkt]);
            body = FAnd(FAtom("", "R", [newpktdlsrc; xvar]), FEquals(xvar, oldpktdlsrc))};;
 let body5 = FAnd(FAtom("", "R", [oldpktdlsrc; xvar]), FAtom("", "R", [xvar; oldpktdldst]));;           
 let cl5 = {orig_rule = dummy_rule; 
-           head = FAtom("", "do_forward", [newpkt]);
+           head = FAtom("", "forward", [newpkt]);
            body = body5};;
 let cl6 = {orig_rule = dummy_rule; 
-           head = FAtom("", "do_forward", [newpkt]);
+           head = FAtom("", "forward", [newpkt]);
            body = FAnd(FAtom("", "R", [oldpktdlsrc; xvar]), FEquals(oldpktdldst, oldpktdlsrc))};;
 let cl7 = {orig_rule = dummy_rule; 
-           head = FAtom("", "do_forward", [newpkt]);
+           head = FAtom("", "forward", [newpkt]);
            body = FAnd(FAtom("", "R", [oldpktdlsrc; xvar]), FNot(FEquals(newpktdldst,oldpktdldst)))};;
 let cl8 = {orig_rule = dummy_rule; 
-           head = FAtom("", "do_forward", [newpkt]);
+           head = FAtom("", "forward", [newpkt]);
            body = FAnd(FAtom("", "R", [oldpktdlsrc; xvar]), FNot(FEquals(newpktlocpt,oldpktlocpt)))};;
 
 let test_pe_valid () =

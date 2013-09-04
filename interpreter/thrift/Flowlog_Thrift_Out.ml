@@ -59,7 +59,7 @@ let doBBquery (qryname: string) (bbip: string) (bbport: string) (args: term list
   Each notification opens a separate, new, connection to the black-box.
 *)
 
-let doBBnotify (ev: event) (bbip: string) (bbport: string) =            	    
+let doBBnotify (ev: event) (bbip: string) (bbport: string) : unit=            	    
             let cli = connect ~host:bbip (int_of_string bbport) in 
             try
 
@@ -69,10 +69,13 @@ let doBBnotify (ev: event) (bbip: string) (bbport: string) =
               notif#set_notificationType ev.typeid;
               notif#set_values tbl;
               StringMap.iter (fun k v -> Hashtbl.add tbl k v) ev.values;
+              printf "Making RPC invocation...\n%!"; 
               cli.bb#notifyMe notif;      
-              cli.trans#close
+              cli.trans#close;
+              printf "RPC invocation complete. Socket closed.\n%!"; 
 
-            with Transport.E (_,what) ->
-              Printf.printf "ERROR sending notification: %s\n%!" what;
-              raise (Failure what);;
+            with | Transport.E (_,what) ->
+                     Printf.printf "ERROR sending notification: %s\n%!" what;
+                     raise (Failure what)
+                 | _ -> printf "Unknown problem sending event.\n%!";;
 
