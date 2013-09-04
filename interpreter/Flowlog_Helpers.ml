@@ -249,3 +249,21 @@ let rec disj_to_top (f: formula): formula =
 
 let construct_map (bindings: (string * string) list): (string StringMap.t) =
   fold_left (fun acc (bx, by) -> StringMap.add bx by acc) StringMap.empty bindings
+
+let get_atoms (f: formula): formula list = 
+	match f with
+		| FTrue -> []
+		| FFalse -> []
+		| FAtom(modname, relname, tlargs) -> f			
+		| FEquals(t1, t2) -> []			
+		| FAnd(f1, f2) ->
+			(unique (get_atoms f1) @ (get_atoms f2))
+		| FNot(innerf) ->
+			get_atoms innerf
+		| _ -> failwith "get_atoms";;
+
+
+let get_atoms_used (p: flowlog_program): formula list =
+	let fmlas = in 
+		fold_left (fun acc f -> unique ((get_atoms f) @ acc)) fmlas;;
+  	

@@ -192,6 +192,7 @@ let rec get_state_maybe_remote (p: flowlog_program) (f: formula): (string list) 
         match get_remote_table p relname with
           | (ReactRemote(relname, qryname, ip, port, refresh), DeclRemoteTable(drel, dargs)) ->            
             (* qryname, not relname, when querying *)
+            printf "REFRESHING: %s\n%!" (string_of_formula f);
             let bb_results = Flowlog_Thrift_Out.doBBquery qryname ip port args in
               ignore (FmlaMap.add f (bb_results, Unix.time()) !remote_cache);
               bb_results 
@@ -201,7 +202,15 @@ let rec get_state_maybe_remote (p: flowlog_program) (f: formula): (string list) 
     | FAtom(modname, relname, args) ->          
         Communication.get_state f
     | _ -> failwith "get_state_maybe_remote";;
-  
+
+(* get_state_maybe_remote calls out to BB and updates the cache IF UNCACHED. *)
+let pre_load_all_remote_queries (p: flowlog_program): unit =
+  let remote_fmlas = 
+    filter (function | FAtom(modname, relname, args) when (is_remote_table p relname) -> true
+                     | _-> false)
+           (get_atoms_used p) in
+    iter (fun f -> ignore (get_state_maybe_remote p f)) remote_fmlas;;    
+
 
 (* Replace state references with constant matrices *)
 let rec partial_evaluation (p: flowlog_program) (headterms: term list) (f: formula): formula = 
@@ -724,7 +733,7 @@ let change_table_how (p: flowlog_program) (toadd: bool) (tbldecl: sdecl): formul
 let expire_remote_state_in_xsb (p: flowlog_program) : unit =
 
   (* The cache is keyed by rel/tuple. So R(X, 1) is a DIFFERENT entry from R(1, X). *)
-  let expire_remote (keyfmla: formula) (values: ((string list) list * float)): unit =  
+  let expire_remote_if_time (p:flowlog_program) (keyfmla: formula) (values: ((string list) list * float)): unit =  
     let (xsb_results, timestamp) = values in   
     match keyfmla with
       | FAtom(modname, relname, args) -> 
@@ -756,7 +765,7 @@ let expire_remote_state_in_xsb (p: flowlog_program) : unit =
       end
       | _ -> failwith "expire_remote_state_in_xsb: bad key formula" in 
 
-    FmlaMap.iter expire_remote !remote_cache;;
+    FmlaMap.iter (expire_remote_if_time p) !remote_cache;;
 
 (* separate to own module once works for sw/pt *)
 let respond_to_notification (p: flowlog_program) (notif: event) (context: (switchId * port * Packet.packet) option): unit =
@@ -769,6 +778,11 @@ let respond_to_notification (p: flowlog_program) (notif: event) (context: (switc
 
     (* Expire remote state if needed*)
     expire_remote_state_in_xsb p;    
+
+    (* Since we can't hook XSB's access to these relations,
+       over-generalize and ask for all the fmlas that can possibly be needed.
+       For instance, if foo(X, pkt.dlSrc) is used, ask for foo(X,Y) *)
+    pre_load_all_remote_queries p;
 
     (* for all declared outgoing events ...*)
     let outgoing_defns = get_output_defns p in
