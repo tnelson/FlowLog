@@ -60,7 +60,7 @@ object (self)
          [] fieldlist in
 
         let ev: event = {typeid = ntypestr; values = construct_map vals} in
-          respond_to_notification the_program ev None;      
+          respond_to_notification the_program ev;      
           guarded_refresh_policy();
 
     with 

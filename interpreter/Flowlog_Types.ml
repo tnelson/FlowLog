@@ -128,7 +128,7 @@ open ExtList.List
 
   let string_of_declaration (d: sdecl): string =
     match d with 
-      | DeclTable(tname, argtypes) -> "TABLE "^tname^(String.concat "," argtypes);
+      | DeclTable(tname, argtypes) -> "TABLE "^tname^" "^(String.concat "," argtypes);
       | DeclRemoteTable(tname, argtypes) -> "REMOTE TABLE "^tname^" "^(String.concat "," argtypes);
       | DeclInc(tname, argtype) -> "INCOMING "^tname^" "^argtype;
       | DeclOut(tname, argtypes) -> "OUTGOING "^tname^(String.concat "," argtypes);
@@ -286,5 +286,4 @@ let built_in_reacts = [ ReactInc("packet", packet_in_relname);
                         ReactOut("emit", packet_fields, "packet", map create_id_assign packet_fields, OutEmit);                         
                       ];;
 
-
-
+let built_in_condensed_outrels = ["forward"; "emit"];;

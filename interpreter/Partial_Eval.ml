@@ -4,14 +4,36 @@ open NetCore_Types
 open ExtList.List
 open Printf
 open Xsb_Communication
-open OpenFlow0x01
 open Flowlog_Thrift_Out
+open Packet
+
 
 (* XSB is shared state. We also have the remember_for_forwarding and packet_queue business *)
 let xsbmutex = Mutex.create();;
 
 (* Map query formula to results and time obtained (floating pt in seconds) *)
 let remote_cache = ref FmlaMap.empty;;
+
+(* (unit->unit) option *)
+(* Trigger thunk to refresh policy in stream. *)
+let refresh_policy = ref None;;
+
+(* action_atom list = atom *)
+let fwd_actions = ref [];;
+
+(* Push function for packet stream. Used to emit rather than forward. *)
+(* Not sure why the input can be option. *)
+let emit_push: ((NetCore_Types.switchId * NetCore_Types.portId * Packet.bytes) option -> unit) option ref = ref None;;
+
+let guarded_refresh_policy () : unit = 
+  match !refresh_policy with
+    | None -> printf "Policy has not been created yet. Error!\n%!"
+    | Some f -> f();;
+
+let guarded_emit_push (swid: switchId) (pt: portId) (bytes: Packet.bytes): unit = 
+  match !emit_push with
+    | None -> printf "Packet stream has not been created yet. Error!\n%!"
+    | Some f -> f (Some (swid,pt,bytes));;
 
 
 (* 
@@ -696,19 +718,39 @@ let event_with_assn (p: flowlog_program) (arglist: string list) (tup: string lis
       exit(102)
     end;;
 
-let forward_packet (context: (switchId * port * Packet.packet) option) (ev: event): unit =
+let forward_packet (ev: event): unit =
   printf "forwarding: %s\n%!" (string_of_event ev);
-  ();;
+  (* TODO use allpackets here. compilation uses it, but XSB returns every port individually. *)
+  printf "WARNING: field modifications not yet supported in netcore.\n%!";  
+  fwd_actions := 
+    SwitchAction({id with outPort = Physical(Int32.of_string (get_field ev "locpt"))}) 
+    :: !fwd_actions;;
 
 let emit_packet (ev: event): unit =  
   printf "emitting: %s\n%!" (string_of_event ev);
-  ();;
+  let swid = (Int64.of_string (get_field ev "locsw")) in
+  let pt = (Int32.of_string (get_field ev "locpt")) in
+  let dlSrc = Int64.of_string (get_field ev "dlsrc") in 
+  let dlDst = Int64.of_string (get_field ev "dldst") in 
+  let dlTyp = int_of_string (get_field ev "dltyp") in   
+    
+  (* todo: higher-layer stuff if the dltyp matches. ip or arp *)
+  (*let nwSrc = Int64.of_string (get_field notif "NWSRC") in 
+  let nwDst = Int64.of_string (get_field notif "NWDST") in 
+  let nwProto = Int64.of_string (get_field notif "NWPROTO") in *)
+        
+  let pktbytes = Packet.marshal(
+          {Packet.dlSrc = dlSrc; Packet.dlDst = dlDst;
+           Packet.dlVlan = None; Packet.dlVlanPcp = 0;
+           nw = Packet.Unparsable(dlTyp, Cstruct.create(0))
+          }) in
+    guarded_emit_push swid pt pktbytes;;
 
 let send_event (ev: event) (ip: string) (pt: string): unit =
   printf "sending: %s\n%!" (string_of_event ev);  
   doBBnotify ev ip pt;;
 
-let execute_output (p: flowlog_program) (context: (switchId * port * Packet.packet) option) (defn: sreactive): unit =  
+let execute_output (p: flowlog_program) (defn: sreactive): unit =  
   match defn with 
     | ReactOut(relname, argstrlist, outtype, assigns, spec) ->
      
@@ -721,7 +763,7 @@ let execute_output (p: flowlog_program) (context: (switchId * port * Packet.pack
                   | OutSend(ip, pt) -> {typeid=outtype; values=StringMap.empty}) in                
         let ev = fold_left (event_with_assn p argstrlist tup) initev assigns in          
           match spec with 
-            | OutForward -> forward_packet context ev
+            | OutForward -> forward_packet  ev
             | OutEmit -> emit_packet ev
             | OutLoopback -> failwith "loopback unsupported currently"
             | OutSend(ip, pt) -> send_event ev ip pt in
@@ -783,7 +825,7 @@ let expire_remote_state_in_xsb (p: flowlog_program) : unit =
     FmlaMap.iter (expire_remote_if_time p) !remote_cache;;
 
 (* separate to own module once works for sw/pt *)
-let respond_to_notification (p: flowlog_program) (notif: event) (context: (switchId * port * Packet.packet) option): unit =
+let respond_to_notification (p: flowlog_program) (notif: event): unit =
   try
       Mutex.lock xsbmutex;
   printf "~~~~ RESPONDING TO NOTIFICATION ABOVE ~~~~~~~~~~~~~~~~~~~\n%!";
@@ -801,7 +843,7 @@ let respond_to_notification (p: flowlog_program) (notif: event) (context: (switc
 
     (* for all declared outgoing events ...*)
     let outgoing_defns = get_output_defns p in
-      iter (execute_output p context) outgoing_defns;
+      iter (execute_output p) outgoing_defns;
 
     (* for all declared tables +/- *)
     let table_decls = get_local_tables p in
@@ -831,19 +873,8 @@ let respond_to_notification (p: flowlog_program) (notif: event) (context: (switc
         exit(101);
       end;;
 
-  
-
-
-(* (unit->unit) option *)
-let refresh_policy = ref None;;
-
-let guarded_refresh_policy () : unit = 
-  match !refresh_policy with
-    | None -> printf "Policy has not been created yet. Error!\n%!"
-    | Some f -> f();;
-
-let make_policy_stream (p: flowlog_program) =  
-
+(* If notables is true, send everything to controller *)
+let make_policy_stream (p: flowlog_program) (notables: bool) =  
   (* stream of policies, with function to push new policies on *)
   let (policies, push) = Lwt_stream.create () in
 
@@ -854,7 +885,7 @@ let make_policy_stream (p: flowlog_program) =
         let notifs = map (fun portid -> {typeid="switch_port"; 
                                           values=construct_map [("sw", sw_string); ("pt", (Int32.to_string portid))] }) feats.ports in
         printf "SWITCH %Ld connected. Flowlog events triggered: %s\n%!" sw (String.concat ", " (map string_of_event notifs));
-        List.iter (fun notif -> respond_to_notification p notif None) notifs;
+        List.iter (fun notif -> respond_to_notification p notif) notifs;
         trigger_policy_recreation_thunk()
 
       | SwitchDown(swid) -> 
@@ -867,13 +898,18 @@ let make_policy_stream (p: flowlog_program) =
 
     (* the thunk needs to know the pkt callback, the pkt callback invokes the thunk. so need "and" *)
     trigger_policy_recreation_thunk (): unit = 
-      (* Update the policy *)
-      let (newfwdpol, newnotifpol) = program_to_netcore p updateFromPacket in
-      printf "NEW FWD policy: %s\n%!" (NetCore_Pretty.string_of_pol newfwdpol);
-      printf "NEW NOTIF policy: %s\n%!" (NetCore_Pretty.string_of_pol newnotifpol);
-      let newpol = Union(Union(newfwdpol, newnotifpol), switch_event_handler_policy) in
-      (*let newpol = Action([ControllerAction(updateFromPacket); (SwitchAction({id with outPort = NetCore_Pattern.All}))]) in*)
+      if not notables then
+      begin
+        (* Update the policy *)
+        let (newfwdpol, newnotifpol) = program_to_netcore p updateFromPacket in
+        printf "NEW FWD policy: %s\n%!" (NetCore_Pretty.string_of_pol newfwdpol);
+        printf "NEW NOTIF policy: %s\n%!" (NetCore_Pretty.string_of_pol newnotifpol);
+        let newpol = Union(Union(newfwdpol, newnotifpol), switch_event_handler_policy) in      
         push (Some newpol);              
+      end
+      else
+        if notables then printf "\n*** FLOW TABLE COMPILATION DISABLED! ***\n%!";
+        (*DO NOT CALL THIS: push None*)
     and
       
     (* The callback to be invoked when the policy says to send pkt to controller *)
@@ -881,20 +917,27 @@ let make_policy_stream (p: flowlog_program) =
       (* Update the policy via the push function *)
       printf "Packet in on switch %Ld.\n%s\n%!" sw (Packet.to_string pkt);
 
+      fwd_actions := []; (* populated by things respond_to_notification calls *)
+
       (* Parse the packet and send it to XSB. Deal with the results *)
       let notif = (pkt_to_event sw pt pkt) in           
         printf "... notif: %s\n%!" (string_of_event notif);
-        respond_to_notification p notif (Some (sw, pt, pkt));      
+        respond_to_notification p notif;      
         trigger_policy_recreation_thunk();
-        (* Do nothing more: (the callback returns action set) *) 
-        [] in
-  
-    let (initfwdpol, initnotifpol) = program_to_netcore p updateFromPacket in
-    printf "INITIAL FWD policy is:\n%s\n%!" (NetCore_Pretty.string_of_pol initfwdpol);
-    printf "INITIAL NOTIF policy is:\n%s\n%!" (NetCore_Pretty.string_of_pol initnotifpol);
-    let initpol = Union(Union(initfwdpol, initnotifpol), switch_event_handler_policy) in      
-    (*let initpol = Action([ControllerAction(updateFromPacket); (SwitchAction({id with outPort = NetCore_Pattern.All}))]) in*)
+        (* This callback returns an action set to Frenetic. *) 
+        !fwd_actions in
+
+    if not notables then
+    begin
+      let (initfwdpol, initnotifpol) = program_to_netcore p updateFromPacket in
+      printf "INITIAL FWD policy is:\n%s\n%!" (NetCore_Pretty.string_of_pol initfwdpol);
+      printf "INITIAL NOTIF policy is:\n%s\n%!" (NetCore_Pretty.string_of_pol initnotifpol);
+      let initpol = Union(Union(initfwdpol, initnotifpol), switch_event_handler_policy) in          
       (* cargo-cult hacking invocation. why call this? *)
-      (trigger_policy_recreation_thunk, NetCore_Stream.from_stream initpol policies);;
+      (trigger_policy_recreation_thunk, NetCore_Stream.from_stream initpol policies)
+    end else begin      
+      let initpol = Union(switch_event_handler_policy, Action([ControllerAction(updateFromPacket)])) in
+        (trigger_policy_recreation_thunk, NetCore_Stream.from_stream initpol policies)
+    end;;
 
 

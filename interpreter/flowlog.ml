@@ -67,22 +67,27 @@ let build_finished_program (filename : string) : Types.program =
 
 (**************************************************************************)
 
+let negations_to_end (f: formula): formula =
+  let atoms = conj_to_list f in
+  let (pos, neg) = partition (function | FNot(_) -> false | _ -> true) atoms in
+    build_and (pos @ neg);;
+
 let build_clause (r: srule) (in_atom: formula) (relname: string) (terms: term list) (prefix: string option) (conj: formula): clause =
     let real_relname = (match prefix with | Some p -> (p^"_"^relname) | None -> relname) in
     let head = FAtom("", real_relname, terms) in
     let body = FAnd(in_atom, conj) in
-    {orig_rule = r; head = head; body = body};;
+    {orig_rule = r; head = head; body = negations_to_end body};;
 
 let clauses_of_rule (r: srule): clause list =
     match r with Rule(increlname, incterm, act) ->    
     let atom_for_on = FAtom("", increlname, [TVar(incterm)]) in (* local atom, no module name *)
     match act with 
         | ADelete(relname, terms, condition) -> 
-            map (build_clause r atom_for_on relname terms (Some minus_prefix)) (disj_to_list (disj_to_top condition));
+            map (build_clause r atom_for_on relname terms (Some minus_prefix)) (disj_to_list (disj_to_top (nnf condition)));
         | AInsert(relname, terms, condition) -> 
-            map (build_clause r atom_for_on relname terms (Some plus_prefix)) (disj_to_list (disj_to_top condition));
+            map (build_clause r atom_for_on relname terms (Some plus_prefix)) (disj_to_list (disj_to_top (nnf condition)));
         | ADo(relname, terms, condition) -> 
-            map (build_clause r atom_for_on relname terms None) (disj_to_list (disj_to_top condition));;     
+            map (build_clause r atom_for_on relname terms None) (disj_to_list (disj_to_top (nnf condition)));;     
 
 let desugared_program_of_ast (ast: flowlog_ast): flowlog_program =
     printf "*** REMINDER: IMPORTS NOT YET HANDLED! (Remember to handle in partial eval, too.) ***\n%!"; (* TODO *)
@@ -98,11 +103,15 @@ let desugared_program_of_ast (ast: flowlog_ast): flowlog_program =
                 {decls = the_decls; reacts = the_reacts; clauses = clauses};;
 
 (* usage message *)
-let usage = Printf.sprintf "Usage: %s [-alloy] file.flg" (Filename.basename Sys.argv.(0));;
+let usage = Printf.sprintf "Usage: %s [-alloy] [-notables] file.flg" (Filename.basename Sys.argv.(0));;
 let alloy = ref false;;
+let notables = ref false;;
 let args = ref [];;
+
 let speclist = [
-  ("-alloy", Arg.Unit (fun () -> alloy := true), ": convert to Alloy");];;
+  ("-alloy", Arg.Unit (fun () -> alloy := true), ": convert to Alloy");
+  (* Not calling this "reactive" because reactive still implies sending table entries. *)
+  ("-notables", Arg.Unit (fun () -> notables := true), ": send everything to controller");];;
 
 let simplify_clause (cl: clause): clause =   
     {head = cl.head; orig_rule = cl.orig_rule; body = minimize_variables cl.body};;
@@ -114,36 +123,6 @@ let simplify_clauses (p: flowlog_program) =
 
 let listenPort = ref 6633;;
 
-(*
-let switch_connected (p: flowlog_program) (sw : switchId) (feats : OpenFlow0x01.SwitchFeatures.t) : unit =
-  Printf.printf "Switch %Ld connected.\n%!" sw;
-  let port_nums = map (fun (x : PortDescription.t)-> x.PortDescription.port_no) feats.SwitchFeatures.ports in
-  let sw_string = Int64.to_string sw in  
-  let notifs = map (fun portid -> {typeid="switch_port"; 
-                                   values=construct_map [("sw", sw_string); ("pt", (string_of_int portid))] }) port_nums in
-  printf "SWITCH REGISTERED! %s\n%!" (String.concat ", " (map string_of_event notifs));
-  List.iter (fun notif -> respond_to_notification p notif None) notifs;;
-
-(* infinitely recursive function that listens for switch connection messages 
-   Cribbed nearly verbatim from Ox lib by Tim on Aug 29 2013
-   since we're moving from Ox to Frenetic as a base *)
-let rec handle_switch_reg (p: flowlog_program) (trigger_re_policy_func: unit -> unit): 'a Lwt.t = 
-    let open Message in
-    let open FlowMod in
-    printf "waiting for switch to connect...\n%!";
-    lwt feats = OpenFlow0x01_Platform.accept_switch () in 
-    let sw = feats.SwitchFeatures.switch_id in 
-    (*lwt _ = Log.info_f "switch %Ld connected" sw in*)
-    lwt _ = OpenFlow0x01_Platform.send_to_switch sw 0l (FlowModMsg delete_all_flows) in
-    lwt _ = OpenFlow0x01_Platform.send_to_switch sw 1l BarrierRequest in
-    (* JNF: wait for barrier reply? *)
-    let _ = switch_connected p sw feats in 
-    (*Lwt.async (fun () -> switch_thread sw);*)
-      trigger_re_policy_func(); (* trigger re-production of policy, since state may have changed *)      
-      handle_switch_reg p trigger_re_policy_func;;
-
-*)
-
 let run_flowlog (p: flowlog_program): unit Lwt.t =  
   (* Start up XSB, etc. *)
   Communication.start_program p;
@@ -151,20 +130,20 @@ let run_flowlog (p: flowlog_program): unit Lwt.t =
   (* Listen for incoming notifications via RPC *)
   Flowlog_Thrift_In.start_listening p;
 
-  (* Send the "startup" notification. Enables initialization, etc. in programs *)
-  (*let startup = Types.Constant([], Types.startup_type) in
-    Evaluation.respond_to_notification startup Program.program None;; *)
-
   (* Start the policy stream *)
   (* >> is from Lwt's Pa_lwt. But you MUST have -syntax camlp4o or it won't be recoginized. *)   
   OpenFlow0x01_Platform.init_with_port !listenPort >>
-    let (trigger_re_policy_func, (gen_stream, stream)) = make_policy_stream p in
+    let (trigger_re_policy_func, (gen_stream, stream)) = (make_policy_stream p !notables) in
     refresh_policy := Some trigger_re_policy_func;
 
     (* streams for incoming/exiting packets *)
-    let (pkt_stream, push_pkt) = Lwt_stream.create () in
-      (* pick cancels all threads given if one terminates *)        
-     
+    let (pkt_stream, push_pkt) = Lwt_stream.create () in        
+    emit_push := Some push_pkt;
+
+    (* Send the "startup" notification. Enables initialization, etc. in programs *)         
+    respond_to_notification p {typeid="startup"; values=StringMap.empty};
+
+      (* pick cancels all threads given if one terminates *)             
       (* DO NOT attempt to copy ox/frenetic's switch connection detection code here. It will clash with 
          Frenetic's. Instead, register a HandleSwitchEvent policy, which gives us a nice clean callback. *)
       Lwt.pick [gen_stream;
@@ -184,7 +163,8 @@ let main () =
     else 
       Sys.catch_break true;
       try        
-        Lwt_main.run (run_flowlog program)
+        if !notables then printf "\n*** FLOW TABLE COMPILATION DISABLED! ***\n%!";
+        Lwt_main.run (run_flowlog program);        
       with exn ->
         Xsb.halt_xsb ();
         Format.printf "Unexpected exception: %s\n%s\n%!"

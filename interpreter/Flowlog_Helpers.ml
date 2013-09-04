@@ -204,6 +204,10 @@ let rec disj_to_top (f: formula): formula =
         | _ -> false) 
         prgm.decls;;      
 
+   (* raises not_found on invalid field *)
+  let get_field (ev: event) (fldname: string): string  = 
+  	StringMap.find fldname ev.values;; 
+
   let get_fields_for_type (prgm: flowlog_program) (etype: string): string list =  
       let decl = find (function       
         | DeclEvent(evname, evtypelst) when evname = etype -> true 
@@ -223,7 +227,10 @@ let rec disj_to_top (f: formula): formula =
         | DeclInc(rname, argtype) when rname = relname -> 
           Some (get_fields_for_type prgm argtype)
         | DeclOut(rname, argtypelst) when rname = relname ->
-        	None
+        	if mem relname built_in_condensed_outrels then
+        		Some(get_fields_for_type prgm (nth argtypelst idx))
+        	else
+        		None
           (*get_fields_for_type prgm (nth argtypelst idx)*)
         | _ -> failwith "get_io_fields_for_index";;
 
