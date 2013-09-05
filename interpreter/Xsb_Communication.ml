@@ -6,9 +6,9 @@ open Flowlog_Thrift_Out
 open Str
 open ExtList.List
 
-let debug = true;;
+(*let debug = true;;*)
 
-(*let debug = false;;*)
+let debug = false;;
 
 module Xsb = struct
 	

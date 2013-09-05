@@ -704,7 +704,7 @@ let pkt_to_event (sw : switchId) (pt: port) (pkt : Packet.packet) : event =
 (* augment <ev_so_far> with assignment <assn>, using tuple <tup> for values *)
 let event_with_assn (p: flowlog_program) (arglist: string list) (tup: string list) (ev_so_far : event) (assn: assignment): event =
   (* for this assignment, plug in the appropriate value in tup *)
-  printf "event_with_assn %s %s %s %s\n%!" (String.concat ";" tup) (string_of_event ev_so_far) assn.afield assn.atupvar;
+  (*printf "event_with_assn %s %s %s %s\n%!" (String.concat ";" tup) (string_of_event ev_so_far) assn.afield assn.atupvar;*)
   (*let fieldnames = (get_fields_for_type p ev_so_far.typeid) in  *)  
   (* fieldnames is fields of *event*. don't use that here. 
      e.g. 'time=t' will error, expecting time, not t.*)

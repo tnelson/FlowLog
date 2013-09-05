@@ -92,6 +92,7 @@ let clauses_of_rule (r: srule): clause list =
 exception UndeclaredIncomingRelation of string;;
 exception UndeclaredOutgoingRelation of string;;
 exception UndeclaredTable of string;;
+exception BadArityOfTable of string;;
 exception UndeclaredField of string * string;;
 
 let field_var_or_var (t: term): string =
@@ -116,11 +117,20 @@ let well_formed_rule (decls: sdecl list) (r: srule): unit =
 
     match at with 
       | FAtom(modname, relname, argtl) -> 
-        if not (exists (function | DeclTable(dname, _) when dname = relname -> true 
+        (try 
+          let decl = (find (function | DeclTable(dname, _) when dname = relname -> true 
                                  | DeclRemoteTable(dname, _) when dname = relname -> true 
-                                 | _ -> false) decls) then
-          raise (UndeclaredTable relname);     
+                                 | _ -> false) decls) in
+
+              (match decl with 
+                | DeclTable(_, typeargs) 
+                | DeclRemoteTable(_, typeargs) ->
+                  if length typeargs <> length argtl then
+                    raise (BadArityOfTable relname);
+                | _ -> failwith "validate_rule");         
           iter well_formed_term argtl;
+        with | Not_found -> raise (UndeclaredTable relname))
+
       | FEquals(t1, t2) ->
         well_formed_term t1;
         well_formed_term t2;

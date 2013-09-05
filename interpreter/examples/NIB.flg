@@ -18,7 +18,7 @@ EVENT dummy_down_alert {sw1, pt1, sw2, pt2};
 TABLE switch_has_port(int, int); 
 TABLE ucST(int, int, int, int);
 TABLE switchTopology(int, int, int, int);
-TABLE ucTree(int, int, int, int);
+TABLE ucTree(int, int);
 TABLE spanningTree(int, int);
 TABLE ucTC(int, int);
 TABLE nonSwitchPorts(int, int);
@@ -134,7 +134,8 @@ ON packet_in(pkt):
 
   // recall: smuggling (orig sw, orig pt) in (dlSrc, dlDst)
   INSERT (pkt.dlSrc, pkt.dlDst) INTO ucTree WHERE pkt.dlTyp = 0x1001 AND
-    // "i don't know about where you came from yet"
+    NOT ucTC(pkt.dlSrc, pkt.locSw) AND NOT ucTC(pkt.locSw, pkt.dlSrc); 
+  INSERT (pkt.dlDst, pkt.dlSrc) INTO ucTree WHERE pkt.dlTyp = 0x1001 AND
     NOT ucTC(pkt.dlSrc, pkt.locSw) AND NOT ucTC(pkt.locSw, pkt.dlSrc); 
 
 
