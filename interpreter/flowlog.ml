@@ -158,6 +158,9 @@ let well_formed_rule (decls: sdecl list) (r: srule): unit =
                                  | _ -> false) decls) then
           raise (UndeclaredTable relname);;
 
+let simplify_clause (cl: clause): clause =   
+    {head = cl.head; orig_rule = cl.orig_rule; body = minimize_variables cl.body};;
+
 let desugared_program_of_ast (ast: flowlog_ast): flowlog_program =
     printf "*** REMINDER: IMPORTS NOT YET HANDLED! (Remember to handle in partial eval, too.) ***\n%!"; (* TODO *)
     match ast with AST(imports, stmts) ->
@@ -169,7 +172,12 @@ let desugared_program_of_ast (ast: flowlog_ast): flowlog_program =
         let the_rules  =  filter_map (function SRule(r) -> Some r     | _ -> None) stmts in 
             iter (well_formed_rule the_decls) the_rules;          
             let clauses = (fold_left (fun acc r -> (clauses_of_rule r) @ acc) [] the_rules) in 
-                {decls = the_decls; reacts = the_reacts; clauses = clauses};;
+            let simplified_clauses = map simplify_clause clauses in 
+            let can_fully_compile_simplified = filter can_compile_clause_to_fwd simplified_clauses in
+              printf "Loaded AST. There were %d clauses, %d of which were fully compilable forwarding clauses.\n%!"
+                (length simplified_clauses) (length can_fully_compile_simplified);
+                {decls = the_decls; reacts = the_reacts; clauses = simplified_clauses; 
+                 can_fully_compile_to_fwd_clauses = can_fully_compile_simplified};;
 
                 
 
@@ -184,19 +192,11 @@ let speclist = [
   (* Not calling this "reactive" because reactive still implies sending table entries. *)
   ("-notables", Arg.Unit (fun () -> notables := true), ": send everything to controller");];;
 
-let simplify_clause (cl: clause): clause =   
-    {head = cl.head; orig_rule = cl.orig_rule; body = minimize_variables cl.body};;
-
-let simplify_clauses (p: flowlog_program) =
-  let newclauses = map simplify_clause p.clauses in
-    {decls = p.decls; reacts = p.reacts; clauses = newclauses};;
-
-
 let listenPort = ref 6633;;
 
 let run_flowlog (p: flowlog_program): unit Lwt.t =  
   (* Start up XSB, etc. *)
-  Communication.start_program p;
+  Communication.start_program p !notables;
  
   (* Listen for incoming notifications via RPC *)
   Flowlog_Thrift_In.start_listening p;
@@ -226,7 +226,7 @@ let main () =
   let _ = Arg.parse speclist collect usage in
   let filename = try hd !args with exn -> raise (Failure "Input a .flg file name.") in  
   let ast = read_ast filename in
-  let program = simplify_clauses (desugared_program_of_ast ast) in    
+  let program = (desugared_program_of_ast ast) in    
     printf "-----------\n%!";
     List.iter (fun cl -> printf "%s\n\n%!" (string_of_clause cl)) program.clauses;
 

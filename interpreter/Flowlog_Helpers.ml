@@ -62,13 +62,21 @@ let after_equals (str : string) : string =
 (* XSB returns tuples like ["5", "3", "foo"]. 
    In the context of some variables TVar(x), etc.
    Produce [FEquals(TVar(x), TConst("5")), ...] 
-  Ignore terms that are variables NOT in headterms. These are single-use existentials. *)
-let reassemble_xsb_equality (headterms: term list) (tlargs: term list) (tuple: string list) : formula list =  
+
+   Context: a PACKET-TRIGGERED clause, triggered by incpkt.
+   Thus one of: (1) total compilation to flow fwd rules,
+                (2) weakened compilation to flow controller rules,
+                (3) wasn't a forward clause, so compilation to flow controller rules.
+   Assume: the only TFields are fields of inc and out packet, and should be kept.
+   All variables that are not fields should be ignored: under the above assumptions,
+   either they are head vars of a non-fwd clause, or are existentials. 
+   (This assumes weakening has already taken place if needed by join.) *)
+let reassemble_xsb_equality (incpkt: string) (tlargs: term list) (tuple: string list) : formula list =  
     map2 (fun aterm astr -> 
     	if (String.get astr 0) = '_' then
 		    failwith "reassemble_xsb_equality: unconstrained variable"
       else match aterm with 
-        | TVar(vname) when not (mem aterm headterms) -> FTrue
+        | TVar(vname) -> FTrue        
 		    | _ -> FEquals(aterm, TConst(astr)))
     	 tlargs tuple;;
 

@@ -369,11 +369,14 @@ module Communication = struct
 		
 
 	(* assuming all implicitly defined clauses have been added to list of clauses *)
-	let start_program (prgm : flowlog_program) : unit =
+	let start_program (prgm : flowlog_program) (notables: bool): unit =
 		printf "-------------------\nStarting Flowlog Program...\n%!";		
 		(* prevent XSB from locking up if unknown relation seen. will assume false if unknown now.*)
 		ignore (send_message "set_prolog_flag(unknown, fail)." 0);
-		List.iter (start_clause prgm) prgm.clauses;
+		(* Add a clause if it's not fully compiled, OR we're in no-compilation mode *)
+		List.iter (fun cl -> 
+					if notables || (not (mem cl prgm.can_fully_compile_to_fwd_clauses)) then
+					 (start_clause prgm cl)) prgm.clauses;
 		Xsb.debug_print_listings();;
 
 end

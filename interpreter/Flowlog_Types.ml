@@ -73,7 +73,9 @@ open ExtList.List
 
   type flowlog_program = {  decls: sdecl list; 
                             reacts: sreactive list; 
-                            clauses: clause list; };;
+                            clauses: clause list;
+                            (* subset of <clauses> *)
+                            can_fully_compile_to_fwd_clauses: clause list; };;
 
   (* context for values given by decls *)
   module StringMap = Map.Make(String);;

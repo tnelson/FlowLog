@@ -189,12 +189,13 @@ let rec common_existential_check (newpkt: string) (sofar: string list) (f: formu
    	| FAtom(modname, relname, tlargs) ->  
     		unique (flatten (map ext_helper tlargs));;	
 
-let validate_clause (cl: clause): unit =
+let validate_fwd_clause (cl: clause): unit =
   printf "Validating clause: %s\n%!" (string_of_clause cl);
 	match cl.head with 
 		| FAtom("", "forward", [TVar(newpktname)]) ->
       ignore (common_existential_check newpktname [] cl.body);  
-			forbidden_assignment_check newpktname cl.body false
+			forbidden_assignment_check newpktname cl.body false;    
+      printf "Forward clause was valid.\n%!";
 		| _ -> failwith "validate_clause";;
 
 (***************************************************************************************)
@@ -237,28 +238,28 @@ let pre_load_all_remote_queries (p: flowlog_program): unit =
 
 
 (* Replace state references with constant matrices *)
-let rec partial_evaluation (p: flowlog_program) (headterms: term list) (f: formula): formula = 
+let rec partial_evaluation (p: flowlog_program) (incpkt: string) (f: formula): formula = 
   (* assume valid clause body for PE *)
   match f with 
     | FTrue -> f
     | FFalse -> f
     | FEquals(t1, t2) -> f
-    | FAnd(f1, f2) -> FAnd(partial_evaluation p headterms f1, partial_evaluation p headterms f2)
+    | FAnd(f1, f2) -> FAnd(partial_evaluation p incpkt f1, partial_evaluation p incpkt f2)
     | FNot(innerf) -> 
-        let peresult = partial_evaluation p headterms innerf in
+        let peresult = partial_evaluation p incpkt innerf in
         (match peresult with | FTrue -> FFalse | FFalse -> FTrue | _ -> FNot(peresult))
     | FOr(f1, f2) -> failwith "partial_evaluation: OR"              
     | FAtom(modname, relname, tlargs) ->  
-      printf "partial_evaluation on atomic %s\n%!" (string_of_formula f);
+      printf ">> partial_evaluation on atomic %s\n%!" (string_of_formula f);
       Mutex.lock xsbmutex;
       let xsbresults: (string list) list = get_state_maybe_remote p f in
         Mutex.unlock xsbmutex;
         (*iter (fun sl -> printf "result: %s\n%!" (String.concat "," sl)) results;*)        
         let disjuncts = map 
-          (fun sl -> build_and (reassemble_xsb_equality headterms tlargs sl)) 
+          (fun sl -> build_and (reassemble_xsb_equality incpkt tlargs sl)) 
           xsbresults in
         let fresult = build_or disjuncts in
-        printf "... result (converted from xsb) was: %s\n%!" (string_of_formula fresult);        
+        printf "<< partial evaluation result (converted from xsb) was: %s\n%!" (string_of_formula fresult);        
         fresult;;
 
 (***************************************************************************************)
@@ -523,8 +524,9 @@ let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_h
           | Some(f) -> (strip_to_valid oldpkt {head = cl.head; orig_rule = cl.orig_rule; body = trimmedbody}).body
           | None ->    trimmedbody) in
 
-        (* Do partial evaluation *)
-        let pebody = partial_evaluation p headargs safebody in
+        (* Do partial evaluation. Need to know which terms are of the incoming packet.
+          All others can be factored out. *)
+        let pebody = partial_evaluation p oldpkt safebody in
                 
         (* partial eval may insert disjunctions because of multiple tuples to match 
            so we need to pull those disjunctions up and create multiple policies 
@@ -656,10 +658,15 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: clause list)
 
 let debug = true;;
 
-let can_compile_clause (cl: clause): bool =  
+let can_compile_clause_to_fwd (cl: clause): bool =  
   try 
-    validate_clause cl;
-    true
+    if is_forward_clause cl then 
+    begin
+        validate_fwd_clause cl;
+        true
+    end
+    else
+      false
   with (* catch only "expected" exceptions *)
     | IllegalFieldModification(_) -> if debug then printf "IllegalFieldModification\n%!"; false
     | IllegalAssignmentViaEquals(_) -> if debug then printf "IllegalAssignmentViaEquals\n%!"; false
@@ -671,16 +678,13 @@ let can_compile_clause (cl: clause): bool =
 (* Side effect: reads current state in XSB *)
 (* Set up policies for all packet-triggered clauses *)
 let program_to_netcore (p: flowlog_program) (callback: get_packet_handler): (pol * pol) =
-  printf "\n\n---------------------------------\nCompiling as able...\n%!";
-  let fwd_clauses = (filter is_forward_clause p.clauses) in
-  (*iter (fun cl -> printf "    FWD: %s\n%!" (string_of_clause cl)) fwd_clauses;*)
-  let non_fwd_clauses_by_packets = (filter is_packet_triggered_clause (subtract p.clauses fwd_clauses)) in
-  printf "Non-fwd triggered by packets = %s\n%!" (String.concat " ; " (map string_of_clause non_fwd_clauses_by_packets));
-  let can_fully_compile_fwd_clauses = (filter can_compile_clause fwd_clauses) in
-  
-  let cant_compile_fwd_clauses = subtract fwd_clauses can_fully_compile_fwd_clauses in
-    (pkt_triggered_clauses_to_netcore p can_fully_compile_fwd_clauses None,
-     pkt_triggered_clauses_to_netcore p (cant_compile_fwd_clauses @ non_fwd_clauses_by_packets) (Some callback));;
+  printf "\n\n---------------------------------\nCompiling as able...\n%!";  
+    (pkt_triggered_clauses_to_netcore p 
+      p.can_fully_compile_to_fwd_clauses 
+      None,
+     pkt_triggered_clauses_to_netcore p 
+     (subtract p.clauses p.can_fully_compile_to_fwd_clauses)
+     (Some callback));;
 
 let pkt_to_event (sw : switchId) (pt: port) (pkt : Packet.packet) : event =       
    let isIp = ((Packet.dlTyp pkt) = 0x0800) in
