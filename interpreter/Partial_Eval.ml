@@ -36,6 +36,9 @@ let guarded_emit_push (swid: switchId) (pt: portId) (bytes: Packet.bytes): unit 
     | Some f -> f (Some (swid,pt,bytes));;
 
 
+let counter_inc_pkt = ref 0;;
+let counter_inc_all = ref 0;;
+
 (* 
   ALLOWED atomic fmlas:
 
@@ -253,8 +256,7 @@ let rec partial_evaluation (p: flowlog_program) (incpkt: string) (f: formula): f
       printf ">> partial_evaluation on atomic %s\n%!" (string_of_formula f);
       Mutex.lock xsbmutex;
       let xsbresults: (string list) list = get_state_maybe_remote p f in
-        Mutex.unlock xsbmutex;
-        (*iter (fun sl -> printf "result: %s\n%!" (String.concat "," sl)) results;*)        
+        Mutex.unlock xsbmutex;        
         let disjuncts = map 
           (fun sl -> build_and (reassemble_xsb_equality incpkt tlargs sl)) 
           xsbresults in
@@ -542,8 +544,8 @@ let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_h
                          (Union (acc, policy_of_conjunction oldpkt callback body)))
                       (policy_of_conjunction oldpkt callback (hd bodies))
                       (tl bodies) in 
-          (*printf "--- Result policy: %s\n%!" (NetCore_Pretty.string_of_pol result);          
-          printf "---------------------\n\n%!";          *)
+          printf "--- Result policy: %s\n%!" (NetCore_Pretty.string_of_pol result);          
+          printf "---------------------\n\n%!";          
           result
       | _ -> failwith "pkt_triggered_clause_to_netcore";;
 
@@ -724,6 +726,7 @@ let event_with_assn (p: flowlog_program) (arglist: string list) (tup: string lis
 
 let forward_packet (ev: event): unit =
   printf "forwarding: %s\n%!" (string_of_event ev);
+  write_log (sprintf ">>> forwarding: %s\n%!" (string_of_event ev));
   (* TODO use allpackets here. compilation uses it, but XSB returns every port individually. *)
   printf "WARNING: field modifications not yet supported in netcore.\n%!";  
   fwd_actions := 
@@ -732,6 +735,7 @@ let forward_packet (ev: event): unit =
 
 let emit_packet (ev: event): unit =  
   printf "emitting: %s\n%!" (string_of_event ev);
+  write_log (sprintf ">>> emitting: %s\n%!" (string_of_event ev));
   let swid = (Int64.of_string (get_field ev "locsw")) in
   let pt = (Int32.of_string (get_field ev "locpt")) in
   let dlSrc = Int64.of_string (get_field ev "dlsrc") in 
@@ -751,7 +755,8 @@ let emit_packet (ev: event): unit =
     guarded_emit_push swid pt pktbytes;;
 
 let send_event (ev: event) (ip: string) (pt: string): unit =
-  printf "sending: %s\n%!" (string_of_event ev);  
+  printf ">>> sending: %s\n%!" (string_of_event ev);  
+  write_log (sprintf "sending: %s\n%!" (string_of_event ev));
   doBBnotify ev ip pt;;
 
 let execute_output (p: flowlog_program) (defn: sreactive): unit =  
@@ -832,6 +837,10 @@ let expire_remote_state_in_xsb (p: flowlog_program) : unit =
 let respond_to_notification (p: flowlog_program) (notif: event): unit =
   try
       Mutex.lock xsbmutex;
+      counter_inc_all := !counter_inc_all + 1;
+
+      write_log (sprintf "<<< incoming: %s" (string_of_event notif));
+
   printf "~~~~ RESPONDING TO NOTIFICATION ABOVE ~~~~~~~~~~~~~~~~~~~\n%!";
 
   (* populate the EDB with event *) 
@@ -861,13 +870,14 @@ let respond_to_notification (p: flowlog_program) (notif: event): unit =
     iter Communication.assert_formula to_assert;
     
 
-    Xsb.debug_print_listings();
+    Xsb.debug_print_listings();    
 
     (* depopulate event EDB *)
     Communication.retract_event p notif;  
 
     Mutex.unlock xsbmutex;  
-    printf "~~~~~~~~~~~~~~~~~~~FINISHED EVENT~~~~~~~~~~~~~~~\n%!";
+    printf "~~~~~~~~~~~~~~~~~~~FINISHED EVENT (%d total, %d packets) ~~~~~~~~~~~~~~~\n%!"
+          !counter_inc_all !counter_inc_pkt;
   with
    | Not_found -> Mutex.unlock xsbmutex; printf "Nothing to do for this event.\n%!";
    | exn -> 
@@ -922,7 +932,7 @@ let make_policy_stream (p: flowlog_program) (notables: bool) =
     updateFromPacket (sw: switchId) (pt: port) (pkt: Packet.packet) : NetCore_Types.action =    
       (* Update the policy via the push function *)
       printf "Packet in on switch %Ld.\n%s\n%!" sw (Packet.to_string pkt);
-
+      counter_inc_pkt := !counter_inc_pkt + 1;
       fwd_actions := []; (* populated by things respond_to_notification calls *)
 
       (* Parse the packet and send it to XSB. Deal with the results *)

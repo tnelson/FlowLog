@@ -304,3 +304,16 @@ let get_atoms_used_in_bodies (p: flowlog_program): formula list =
 	let fmlas = map (fun cl -> cl.body) p.clauses in 
 		fold_left (fun acc f -> unique ((get_atoms f) @ acc)) [] fmlas;;
   	
+
+let out_log = ref None;;
+
+let write_log (ln: string): unit = 
+  match !out_log with
+  | None -> printf "Unable to write to log file.\n%!"
+  | Some(out) -> fprintf out "%s\n%!" ln;;
+
+let close_log (): unit =
+  match !out_log with
+  | Some(out) -> close_out out
+  | _ -> ();;
+    

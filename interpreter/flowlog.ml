@@ -221,6 +221,7 @@ let run_flowlog (p: flowlog_program): unit Lwt.t =
                 NetCore_Controller.start_controller pkt_stream stream;
                ];;
 
+
 let main () =
   let collect arg = args := !args @ [arg] in
   let _ = Arg.parse speclist collect usage in
@@ -233,7 +234,8 @@ let main () =
     if !alloy then write_as_alloy program (filename^".als")
     else 
       Sys.catch_break true;
-      try        
+      try      
+        out_log := Some(open_out "log_for_flowlog.log");  
         if !notables then printf "\n*** FLOW TABLE COMPILATION DISABLED! ***\n%!";
         Lwt_main.run (run_flowlog program);        
       with exn ->
@@ -241,6 +243,9 @@ let main () =
         Format.printf "Unexpected exception: %s\n%s\n%!"
           (Printexc.to_string exn)
           (Printexc.get_backtrace ());
+        close_log();
         exit 1;;
     
  main();;
+
+
