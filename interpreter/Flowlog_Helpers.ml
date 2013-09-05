@@ -27,10 +27,10 @@ let rec get_vars (f: formula) : term list =
 	get_terms (function | TVar(_) -> true |  _ -> false) f;;
 (* as get_vars, but includes fields as well *)
 let rec get_vars_and_fieldvars (f: formula) : term list = 
-	printf "get_vars_and_fieldvars: %s\n%!" (string_of_formula f);
+	(*printf "get_vars_and_fieldvars: %s\n%!" (string_of_formula f);*)
 	let varlist = get_terms 
 		(function | TVar(_) -> true | TField(_,_) -> true | _ -> false) f in
-		printf "result of gvf: %s\n%!" (String.concat ";" (map string_of_term varlist));
+		(*printf "result of gvf: %s\n%!" (String.concat ";" (map string_of_term varlist));*)
 		varlist;;
 
 let get_head_vars (cls : clause) : term list =		
@@ -269,9 +269,26 @@ let rec get_atoms (f: formula): formula list =
 		| FEquals(t1, t2) -> []			
 		| FAnd(f1, f2) ->
 			(unique (get_atoms f1) @ (get_atoms f2))
+    | FOr(f1, f2) ->
+      (unique (get_atoms f1) @ (get_atoms f2))
 		| FNot(innerf) ->
-			get_atoms innerf
-		| _ -> failwith "get_atoms";;
+			get_atoms innerf;;
+
+let rec get_equalities ?(sign: bool = true) (f: formula): (bool * formula) list = 
+  match f with
+    | FTrue -> []
+    | FFalse -> []
+    | FAtom(modname, relname, tlargs) -> []
+    | FEquals(t1, t2) -> [(sign, f)]     
+    | FAnd(f1, f2) ->
+      (unique (get_equalities ~sign:sign f1) @ (get_equalities ~sign:sign f2))
+    | FOr(f1, f2) ->
+      (unique (get_equalities ~sign:sign f1) @ (get_equalities ~sign:sign f2))
+    | FNot(innerf) ->
+      get_equalities ~sign:(not sign) innerf;;
+		
+
+
 
 (* TODO: so many lists... Ocaml has sets. *)
 

@@ -851,9 +851,11 @@ let respond_to_notification (p: flowlog_program) (notif: event): unit =
     let to_retract = flatten (map (change_table_how p false) table_decls) in
     printf "  *** WILL ADD: %s\n%!" (String.concat " ; " (map string_of_formula to_assert));
     printf "  *** WILL DELETE: %s\n%!" (String.concat " ; " (map string_of_formula to_retract));
-    (* update state as dictated by +/- *)
-    iter Communication.assert_formula to_assert;
+    (* update state as dictated by +/-
+      Semantics demand that retraction happens before assertion here! *)
     iter Communication.retract_formula to_retract;
+    iter Communication.assert_formula to_assert;
+    
 
     Xsb.debug_print_listings();
 

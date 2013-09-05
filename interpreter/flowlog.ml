@@ -89,6 +89,65 @@ let clauses_of_rule (r: srule): clause list =
         | ADo(relname, terms, condition) -> 
             map (build_clause r atom_for_on relname terms None) (disj_to_list (disj_to_top (nnf condition)));;     
 
+exception UndeclaredIncomingRelation of string;;
+exception UndeclaredOutgoingRelation of string;;
+exception UndeclaredTable of string;;
+exception UndeclaredField of string * string;;
+
+let field_var_or_var (t: term): string =
+  match t with
+    | TVar(vname) -> vname
+    | TConst(_) -> ""
+    | TField(vname, _) -> vname;;
+
+let well_formed_rule (decls: sdecl list) (r: srule): unit =
+  let well_formed_atom (headterms: term list) (inargname: string) (at: formula) :unit =
+    let well_formed_term (t: term): unit = 
+      match t with 
+      | TVar(vname) -> () 
+      | TConst(cval) -> ()
+      (* todo: make certain that the field names are valid *)
+      | TField(vname, fname) when vname = inargname ->         
+        ()
+      | TField(vname, fname) when mem vname (map field_var_or_var headterms) ->         
+        ()
+      | TField(vname, fname) -> 
+        raise (UndeclaredField(vname,fname)) in
+
+    match at with 
+      | FAtom(modname, relname, argtl) -> 
+        if not (exists (function | DeclTable(dname, _) when dname = relname -> true 
+                                 | DeclRemoteTable(dname, _) when dname = relname -> true 
+                                 | _ -> false) decls) then
+          raise (UndeclaredTable relname);     
+          iter well_formed_term argtl;
+      | FEquals(t1, t2) ->
+        well_formed_term t1;
+        well_formed_term t2;
+      | _ -> failwith "validate_rule" in
+
+        (* TODO: ugly code, should be cleaned up *)
+  match r with 
+    (* DO must have outgoing relation in action *)
+    | Rule(inrelname, inrelarg, ADo(outrelname, outrelterms, where)) -> 
+        iter (well_formed_atom outrelterms inrelarg) (get_atoms where);        
+        iter (fun (_, f) -> (well_formed_atom outrelterms inrelarg f)) (get_equalities where);        
+        if not (exists (function | DeclInc(dname, _) when dname = inrelname -> true | _ -> false) decls) then
+          raise (UndeclaredIncomingRelation inrelname);
+        if not (exists (function | DeclOut(dname, _) when dname = outrelname -> true | _ -> false) decls) then
+          raise (UndeclaredOutgoingRelation outrelname); 
+
+    (* insert and delete must have local table in action *)
+    | Rule(inrelname, inrelarg, AInsert(relname, outrelterms, where))  
+    | Rule(inrelname, inrelarg, ADelete(relname, outrelterms, where)) ->
+        iter (well_formed_atom outrelterms inrelarg) (get_atoms where);            
+        iter (fun (_, f) -> (well_formed_atom outrelterms inrelarg f)) (get_equalities where);        
+        if not (exists (function | DeclInc(dname, _) when dname = inrelname -> true | _ -> false) decls) then
+          raise (UndeclaredIncomingRelation inrelname);
+        if not (exists (function | DeclTable(dname, _) when dname = relname -> true                                  
+                                 | _ -> false) decls) then
+          raise (UndeclaredTable relname);;
+
 let desugared_program_of_ast (ast: flowlog_ast): flowlog_program =
     printf "*** REMINDER: IMPORTS NOT YET HANDLED! (Remember to handle in partial eval, too.) ***\n%!"; (* TODO *)
     match ast with AST(imports, stmts) ->
@@ -98,9 +157,11 @@ let desugared_program_of_ast (ast: flowlog_ast): flowlog_program =
         let the_reacts =  built_in_reacts @ 
                           filter_map (function SReactive(r) -> Some r | _ -> None) stmts in 
         let the_rules  =  filter_map (function SRule(r) -> Some r     | _ -> None) stmts in 
-        
+            iter (well_formed_rule the_decls) the_rules;          
             let clauses = (fold_left (fun acc r -> (clauses_of_rule r) @ acc) [] the_rules) in 
                 {decls = the_decls; reacts = the_reacts; clauses = clauses};;
+
+                
 
 (* usage message *)
 let usage = Printf.sprintf "Usage: %s [-alloy] [-notables] file.flg" (Filename.basename Sys.argv.(0));;
