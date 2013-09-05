@@ -123,7 +123,7 @@
             | NAME LPAREN term_list RPAREN {FAtom("", $1, $3)} 
             | NAME PERIOD NAME LPAREN term_list RPAREN ON NAME {FAtom($1, $3, $5)} 
             | NOT formula {FNot($2)} 
-            | formula AND formula {FAnd($1, $3)} 
+            | formula AND formula {FAnd($1, $3)}             
             | formula OR formula {FOr($1, $3)} 
             | LPAREN formula RPAREN {$2} 
             | formula IMPLIES formula {FOr(FNot($1), $3)} 

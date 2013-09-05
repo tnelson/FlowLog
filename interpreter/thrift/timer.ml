@@ -14,6 +14,7 @@ open Arg
 open Thrift
 open Flowlog_rpc_types
 open Thread
+open Printf 
 
 let timer_port = 9091;;
 
@@ -71,11 +72,11 @@ object (self)
       end
       else
       begin
-        (* TODO: need to check for valid fields *)
-        (* note: needs to be upcase or made case-insensitive *)
-        let timer_id = (Hashtbl.find values "ID") in
-        let seconds = int_of_string (Hashtbl.find values "SECONDS") in
-        ignore (Thread.create (fun x ->                                  
+        try 
+        (* case-sensitive. But Flowlog's parser downcases everything. So fields are always lowercase.*)        
+          let timer_id = (Hashtbl.find values "id") in
+          let seconds = int_of_string (Hashtbl.find values "seconds") in
+          ignore (Thread.create (fun x ->                                  
                                   Printf.printf "Starting timer for id=%s. seconds=%d.\n%!" timer_id seconds;
                                   Unix.sleep seconds;
                                   let reply = new notification in
@@ -85,6 +86,8 @@ object (self)
                                   reply#set_values tbl;
                                   send_notif reply;
                                   Printf.printf "Sent timer for id=%s.\n%!" timer_id) 0);
+        with Not_found -> 
+          printf "...but did not contain well-formed fields.\n%!";
       end
   
   

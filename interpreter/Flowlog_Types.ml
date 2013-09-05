@@ -265,6 +265,8 @@ let minus_prefix = "minus";;
 
 let packet_in_relname = "packet_in";;
 let switch_reg_relname = "switch_port_in";;
+let startup_relname = "startup";;
+
 let packet_fields = ["locsw";"locpt";"dlsrc";"dldst";"dltyp";"nwsrc";"nwdst";"nwproto"];;
 let legal_to_modify_packet_fields = ["locpt";"dlsrc";"dldst";"dltyp";"nwsrc";"nwdst"];;
 
@@ -272,16 +274,19 @@ let swpt_fields = ["sw";"pt"];;
 
 let built_in_decls = [DeclInc(packet_in_relname, "packet"); 
                       DeclInc(switch_reg_relname, "switch_port"); 
+                      DeclInc(startup_relname, "startup");
                       DeclOut("forward", ["packet"]);
                       DeclOut("emit", ["packet"]);
 
                       DeclEvent("packet", packet_fields);
+                      DeclEvent("startup", []);
                       DeclEvent("switch_port", swpt_fields)];;
 
 let create_id_assign (k: string): assignment = {afield=k; atupvar=k};;
 
 let built_in_reacts = [ ReactInc("packet", packet_in_relname); 
                         ReactInc("switch_port", switch_reg_relname); 
+                        ReactInc("startup", startup_relname); 
                         ReactOut("forward", packet_fields, "packet", map create_id_assign packet_fields, OutForward); 
                         ReactOut("emit", packet_fields, "packet", map create_id_assign packet_fields, OutEmit);                         
                       ];;

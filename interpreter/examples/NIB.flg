@@ -1,4 +1,4 @@
-blackbox emit;
+/*
 blackbox BBtimer @ 127.0.0.1 9091;
 
 module NIB:
@@ -9,7 +9,197 @@ type timer_expired = {id};
 type startup = {};
 type switch_port = {switch, port};
 type link_down = {sw1, pt1, sw2, pt2};
+*/
 
+EVENT start_timer {seconds, id};
+EVENT timer_expired {id};
+
+TABLE switch_has_port(int, int); 
+TABLE switchTopology(int, int, int, int);
+TABLE ucTree(int, int, int, int);
+TABLE spanningTree(int, int);
+TABLE ucTC(int, int);
+TABLE externalPort(int, int);
+TABLE macConnectedAt(int48, int, int);
+
+OUTGOING start_timer(int, string);
+INCOMING timer_expired(timer_expired); 
+
+/////////////////////
+
+INCOMING timer_expired THEN INSERT INTO timer_expired;
+OUTGOING start_timer(seconds, id) THEN 
+  SEND EVENT start_timer {seconds:=seconds, id:=id} TO 127.0.0.1 9091;
+
+/////////////////////
+
+ON startup(empty_event):
+  DO start_timer(10, "tNIB");
+
+// Built in relation name
+ON switch_port_in(swpt):
+  INSERT (swpt.sw, swpt.pt) INTO switch_has_port;
+  DO emit(newpkt) WHERE 
+    newpkt.locSw = swpt.switch AND
+    newpkt.locPt = swpt.port AND
+    newpkt.dlTyp = 0x1001 AND
+    newpkt.dlSrc = swpt.switch AND
+    newpkt.dlDst = swpt.port;
+
+ON timer_expired(timer):
+  DO emit(newpkt) WHERE
+    timer.id = "tNIB" AND
+    switch_has_port(pkt.locSw, pkt.locPt) AND
+    pkt.dlTyp = 0x1001 AND pkt.dlSrc = pkt.locSw AND pkt.dlDst = pkt.locPt;
+  DO start_timer(10, "tNIB") WHERE
+    timer.id = "tNIB";
+
+/*
+///////////////////////////////////////////////////////////
+
+// PURPOSE: learn the switch topology.
+
+minus ucST(timer: timer_expired, sw1, pt1, sw2, pt2) :- 
+  timer.id = "tNIB", 
+  ucST(sw1, pt1, sw2, pt2); // <-- to constrain
+plus ucST(p: packet, sw1, pt1, sw2, pt2) :-
+  p.dlTyp = 0x1001,
+  sw1 = p.dlSrc, pt1 = p.dlDst,
+  sw2 = p.locSw, pt2 = p.locPt; 
+
+minus switchTopology(timer: timer_expired, sw1, pt1, sw2, pt2) :-
+  timer.id = "tNIB",
+  switchTopology(sw1, pt1, sw2, pt2); // <-- to constrain
+plus switchTopology(timer: timer_expired, sw1, pt1, sw2, pt2) :-  
+  timer.id = "tNIB", ucST(sw1, pt1, sw2, pt2);
+
+///////////////////////////////////////////////////////////
+// TODO: "NIB" gets treated as variable in XSB. Kludged with lowercase prefix for now.
+///////////////////////////////////////////////////////////
+
+// PURPOSE: what's external? 
+
+// an external port is one from which no test packet was received:
+minus externalPort(timer: timer_expired, sw, pt) :- 
+  timer.id = "tNIB", 
+  externalPort(sw, pt);
+
+plus externalPort(timer: timer_expired, sw, pt) :-  
+  timer.id = "tNIB",  
+  switch_has_port(sw, pt), // <--- constrain
+  not ucST(sw, pt, someothersw, someotherpt); // vital to use ucST here
+
+///////////////////////////////////////////////////////////
+// TODO: gee, it's easy to type switchHasPort instead of switch_has_port
+// and get VERY CONFUSED. 
+///////////////////////////////////////////////////////////
+
+// PURPOSE: what host is connected where?
+
+// If we see a packet from an external port...
+plus macConnectedAt(pkt: packet, mac, sw, pt) :- not pkt.dlTyp = 0x1001,
+  externalPort(sw, pt), mac = pkt.dlSrc, sw=pkt.locSw, pt=pkt.locPt;
+
+///////////////////////////////////////////////////////////
+// TODO: easy to say p.dlTyp by mistake and mess everything up.
+// It shouldn't but it does via xsb
+///////////////////////////////////////////////////////////
+
+// If new mac on this port
+minus macConnectedAt(pkt: packet, mac, sw, pt) :- not pkt.dlTyp = 0x1001,
+  mac != pkt.dlSrc, sw=pkt.locSw, pt=pkt.locPt,
+  macConnectedAt(mac, sw, pt);
+
+// OR if mac was known to be elsewhere (new port number or new switch)
+minus macConnectedAt(pkt: packet, mac, sw, pt) :- not pkt.dlTyp = 0x1001,
+  mac = pkt.dlSrc, sw=pkt.locSw, pt != pkt.locPt,
+  macConnectedAt(mac, sw, pt);
+minus macConnectedAt(pkt: packet, mac, sw, pt) :- not pkt.dlTyp = 0x1001,
+  mac = pkt.dlSrc, sw != pkt.locSw, pt = pkt.locPt,
+  macConnectedAt(mac, sw, pt);
+
+// TODO: How to TEST mobility? Will mininet allow?
+
+///////////////////////////////////////////////////////////
+
+
+///////////////////////////////////////////////////////////
+
+// PURPOSE: Notice when links come down and when hosts connect/move
+// Note, timer will do nothing with this. But illustrates reactivity.
+
+action BBtimer(timer: timer_expired, ld: link_down) :-
+timer.id = "tNIB",
+switchTopology(ld.sw1, ld.pt1, ld.sw2, ld.pt2),
+not ucST(ld.sw1, ld.pt1, ld.sw2, ld.pt2);
+
+
+///////////////////////////////////////////////////////////
+// TODO: 3 levels of import per signature:
+// -- "hidden": this signature isn't for export
+// -- "namespace": have to restate in order to trigger action
+// -- "auto": action occurs automatically
+// e.g. if we import nib, we'd like to have these timer events, etc. occur automatically.
+// but if we import a forwarding lib, we might want to filter first.
+///////////////////////////////////////////////////////////
+
+// MOVE THESE TO ANOTHER MODULE
+// PURPOSE: spanning tree
+
+// Transitive-closure between switches so far this cycle.
+// IMPORTANT to add both sides of the link in 1 step, or else tree could have a 1-way cycle.
+// (To see what that means, remove the symmetric rules and test with 3-switch cyclic topo)
+plus ucTC(p: packet, sw1, sw2) :- p.dlTyp = 0x1001,
+  p.locSw = sw2, p.dlSrc = sw1;
+plus ucTC(p: packet, sw1, sw2) :- p.dlTyp = 0x1001,
+  p.locSw = sw1, p.dlSrc = sw2; // for symmetry
+
+plus ucTC(p: packet, sw1, sw2) :- p.dlTyp = 0x1001,
+  p.dlSrc = sw1, ucTC(p.locSw, sw2); // pkt arrived at intermediate step
+plus ucTC(p: packet, sw1, sw2) :- p.dlTyp = 0x1001,
+  p.locSw = sw2, ucTC(sw1, p.dlSrc); // for symmetry: pkt arrived at end step
+
+
+// port is endpoint of a line in the tree if it leads to a new switch:
+plus ucTree(p: packet, sw, pt) :- pkt.dlTyp = 0x1001,
+  p.dlSrc = sw, p.dlDst = pt,
+  not ucTC(sw, p.locSw); // "i don't know about where you came from yet"
+
+// The trustworthy full relation from last cycle, along with housekeeping
+// Yes, housekeeping for all 3 relations. This could get tedious.
+minus spanningTree(timer: timer_expired, sw, pt) :- 
+  timer.id = "tNIB", 
+  spanningTree(sw, pt);
+minus ucTree(timer: timer_expired, sw, pt) :- 
+  timer.id = "tNIB", 
+  ucTree(sw, pt);
+minus ucTC(timer: timer_expired, sw, pt) :- 
+  timer.id = "tNIB", 
+  ucTC(sw, pt);
+
+plus spanningTree(timer: timer_expired, sw, pt) :- 
+  timer.id = "tNIB", 
+  ucTree(sw, pt);
+
+///////////////////////////////////////////////////////////
+
+// PURPOSE: shortest path
+
+// TODO: requires some basic helper BBs like min and <.
+// Focusing on the core functionality for now.
+*/
+
+
+
+
+
+
+
+
+
+
+
+/*
 ///////////////////////////////////////////////////////////
 // Before panicking, make sure that you aren't testing with single,n.
 // There's no topology to learn there.
@@ -22,6 +212,8 @@ type link_down = {sw1, pt1, sw2, pt2};
 // assumption: ports of a switch don't change
 plus switch_has_port(sw_pt : switch_port, sw, pt) :-
   sw_pt.switch = sw, sw_pt.port = pt;
+
+
 
 ///////////////////////////////////////////////////////////
 
@@ -188,3 +380,4 @@ plus spanningTree(timer: timer_expired, sw, pt) :-
 
 // TODO: requires some basic helper BBs like min and <.
 // Focusing on the core functionality for now.
+*/
