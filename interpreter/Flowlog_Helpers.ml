@@ -13,7 +13,7 @@ let rec get_terms (pred: term -> bool) (f: formula) : term list =
 		| FTrue -> []
 		| FFalse -> []
 
-		| FAtom(modname, relname, tlargs) ->
+		| FAtom(_, _, tlargs) ->
 			filter pred tlargs
 		| FEquals(t1, t2) ->
 			filter pred [t1; t2]
@@ -126,17 +126,17 @@ let rec nnf (f: formula): formula =
   match f with 
         | FTrue -> f
         | FFalse -> f
-        | FEquals(t1, t2) -> f
-        | FAtom(modstr, relstr, argterms) -> f
+        | FEquals(_, _) -> f
+        | FAtom(_,_,_) -> f
         | FOr(f1, f2) -> FOr(nnf f1, nnf f2)
         | FAnd(f1, f2) -> FAnd(nnf f1, nnf f2)
         | FNot(f2) -> 
           match f2 with
             | FTrue -> FFalse
             | FFalse -> FTrue
-            | FEquals(t1, t2) -> f
-            | FAtom(modstr, relstr, argterms) -> f            
-            | FNot(f3) -> f3            
+            | FEquals(_, _) -> f
+            | FAtom(_,_,_) -> f
+            | FNot(f3) -> nnf f3  
             | FOr(f1, f2) -> FAnd(nnf (FNot f1), nnf (FNot f2))
             | FAnd(f1, f2) -> FOr(nnf (FNot f1), nnf (FNot f2));;
             
@@ -145,10 +145,16 @@ let rec disj_to_top (f: formula): formula =
     match f with 
         | FTrue -> f;
         | FFalse -> f;
-        | FEquals(t1, t2) -> f;
-        | FAtom(modstr, relstr, argterms) -> f;
-        | FOr(f1, f2) -> f;
-        | FNot(f2) -> f; (* since guaranteed to be in NNF *)            
+        | FEquals(_, _) -> f;
+        | FAtom(_, _, _) -> f;
+        | FOr(f1, f2) -> 
+          FOr(disj_to_top f1, disj_to_top f2);
+        | FNot(f2) ->
+          (match f2 with 
+            | FTrue | FFalse
+            | FAtom(_,_,_) 
+            | FEquals(_,_) -> f
+            | _ -> failwith "disj_to_top: expected nnf fmla") 
         | FAnd(f1, f2) -> 
             (* Distributive law if necessary *)
             let f1ds = disj_to_list (disj_to_top f1) in
@@ -316,4 +322,6 @@ let close_log (): unit =
   match !out_log with
   | Some(out) -> close_out out
   | _ -> ();;
-    
+
+let appendall (lsts: 'a list list): 'a list =
+  fold_left (fun acc l -> acc @ l) [] lsts;;

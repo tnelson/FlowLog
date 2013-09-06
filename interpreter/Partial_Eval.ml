@@ -433,22 +433,6 @@ let rec trim_packet_from_body (body: formula): (string * formula) =
       (varstr, FTrue)
     | _ -> ("", body);;    
 
-
-let policy_of_conjunction (oldpkt: string) (callback: get_packet_handler option) (body: formula): pol = 
-  (* can't just say "if action is fwd, it's a fwd clause" because 
-     this may be an approximation to an un-compilable clause, which needs
-     interpretation at the controller! Instead trust callback to carry that info. *)  
-      
-  let my_action_list = match callback with
-            | Some(f) -> [ControllerAction(f)]            
-            | _ -> build_switch_actions oldpkt body in 
-
-  let mypred = build_switch_pred oldpkt body in 
-
-  Seq(Filter(mypred), Action(my_action_list));;
-(*    ITE(mypred,
-        Action(my_action_list), 
-        Action([]));;*)
   	
 (***************************************************************************************)
 
@@ -511,10 +495,10 @@ let rec strip_to_valid (oldpkt: string) (cl: clause): clause =
 
 (* Side effect: reads current state in XSB *)
 (* Throws exception rather than using option type: more granular error result *)
-let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_handler option) (cl: clause): pol =   
+let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_handler option) (cl: clause): (pred * action) list =   
     (match callback with 
       | None -> printf "\n--- Packet triggered clause to netcore (FULL COMPILE) on: \n%s\n%!" (string_of_clause cl)
-      | Some(c) -> printf "\n--- Packet triggered clause to netcore (~CONTROLLER~) on: \n%s\n%!" (string_of_clause cl));
+      | Some(_) -> printf "\n--- Packet triggered clause to netcore (~CONTROLLER~) on: \n%s\n%!" (string_of_clause cl));
 
     match cl.head with 
       | FAtom(_, _, headargs) ->
@@ -540,13 +524,18 @@ let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_h
            Remember that we know this clause is packet-triggered, but
            we have no constraints on what gets produced. Maybe a bunch of 
            non-packet variables e.g. +R(x, y, z) ... *)
-        let result = fold_left (fun acc body -> 
-                         (Union (acc, policy_of_conjunction oldpkt callback body)))
-                      (policy_of_conjunction oldpkt callback (hd bodies))
-                      (tl bodies) in 
-          printf "--- Result policy: %s\n%!" (NetCore_Pretty.string_of_pol result);          
-          printf "---------------------\n\n%!";          
-          result
+
+        let result = 
+          match callback with
+            | None -> map (fun body ->  
+                (build_switch_pred oldpkt body, 
+                build_switch_actions oldpkt body)) bodies                   
+            | Some(f) -> 
+              (* Action is always sending to controller. So don't extract action *)
+              let bigpred = fold_left (fun acc body -> Or(acc, build_switch_pred oldpkt body)) Nothing bodies in
+                [(bigpred, [ControllerAction(f)])] in      
+
+          result          
       | _ -> failwith "pkt_triggered_clause_to_netcore";;
 
 (* Our compilation generates a lot of duplicates sometimes. Remove them. *)
@@ -616,19 +605,12 @@ let simplify_netcore_policy (p: pol): pol =
           | _ -> And(acc, apred)) Everything subpreds in 
 
   let simplify_netcore_actions (acts: action): action =
-    (* if contains "all", remove every physicalport output. *)
+    (* Concrete, fixed port needs to override general all-ports after expansion.
+       This is because they are in a logical conjunction... *)
     let is_allports_action = (fun act -> act = SwitchAction({id with outPort = NetCore_Pattern.All})) in
-    let newacts = 
-      if exists is_allports_action acts then 
-        begin
-          (* TODO Check: what happens with packet mod in actions? _should_ be split out ok.*)
-          (*printf "all action found. removing single-port actions (if any).\n%!";*)
-          filter is_allports_action acts          
-        end
-      else acts in
-    
-
-    newacts in
+      if exists (fun act -> not (is_allports_action act)) acts then      
+        filter (fun a -> not (is_allports_action a)) acts                   
+      else acts in  
 
   let rec unique_conj_of_union (p: pol): pol list = 
     match p with 
@@ -650,13 +632,21 @@ let simplify_netcore_policy (p: pol): pol =
 (* return the union of policies for each clause *)
 (* Side effect: reads current state in XSB *)
 let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: clause list) (callback: get_packet_handler option): pol =
-  let clause_pols = map (pkt_triggered_clause_to_netcore p callback) clauses in
-    if length clause_pols = 0 then 
-      Filter(Nothing)
+  let clause_pas = appendall (map (pkt_triggered_clause_to_netcore p callback) clauses) in
+    if length clause_pas = 0 then 
+      Action([])
+    else if length clause_pas = 1 then
+      let (pred, acts) = (hd clause_pas) in
+        Seq(Filter(pred), Action(acts))
     else 
-      let thepol = fold_left (fun acc pol -> Union(acc, pol)) 
-                (hd clause_pols) (tl clause_pols) in
-        simplify_netcore_policy thepol;;
+      let thepol = fold_left 
+                (fun acc (pred, acts) ->                   
+                  let newpol = Seq(Filter(pred), Action(acts)) in
+                    printf "unioning... %s\n%!" (NetCore_Pretty.string_of_pol newpol);
+                    Union(acc, newpol))
+                (Action []) 
+                clause_pas in
+        (*simplify_netcore_policy*) thepol;;
 
 let debug = true;;
 
@@ -889,6 +879,9 @@ let respond_to_notification (p: flowlog_program) (notif: event): unit =
         exit(101);
       end;;
 
+(* Frenetic reports every switch has a port 65534. *)
+let lies_port = Int32.of_string "65534";;
+
 (* If notables is true, send everything to controller *)
 let make_policy_stream (p: flowlog_program) (notables: bool) =  
   (* stream of policies, with function to push new policies on *)
@@ -897,9 +890,15 @@ let make_policy_stream (p: flowlog_program) (notables: bool) =
     let rec switch_event_handler (swev: switchEvent): unit =
       match swev with
       | SwitchUp(sw, feats) ->         
-        let sw_string = Int64.to_string sw in  
-        let notifs = map (fun portid -> {typeid="switch_port"; 
-                                          values=construct_map [("sw", sw_string); ("pt", (Int32.to_string portid))] }) feats.ports in
+        let sw_string = Int64.to_string sw in        
+        let notifs = 
+          filter_map (fun portid -> 
+            if portid <> lies_port then 
+              Some {typeid="switch_port"; 
+                    values=construct_map [("sw", sw_string);
+                                          ("pt", (Int32.to_string portid))]}
+            else None)
+            feats.ports in
         printf "SWITCH %Ld connected. Flowlog events triggered: %s\n%!" sw (String.concat ", " (map string_of_event notifs));
         List.iter (fun notif -> respond_to_notification p notif) notifs;
         trigger_policy_recreation_thunk()
