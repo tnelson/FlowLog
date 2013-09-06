@@ -1,5 +1,6 @@
 open Printf
 open ExtList.List
+open NetCore_Types
 
   type term = 
               | TConst of string 
@@ -294,3 +295,6 @@ let built_in_reacts = [ ReactInc("packet", packet_in_relname);
                       ];;
 
 let built_in_condensed_outrels = ["forward"; "emit"];;
+
+(*************************************************************)
+  let allportsatom = SwitchAction({id with outPort = NetCore_Pattern.All});;

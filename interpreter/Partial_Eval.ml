@@ -253,7 +253,7 @@ let rec partial_evaluation (p: flowlog_program) (incpkt: string) (f: formula): f
         (match peresult with | FTrue -> FFalse | FFalse -> FTrue | _ -> FNot(peresult))
     | FOr(f1, f2) -> failwith "partial_evaluation: OR"              
     | FAtom(modname, relname, tlargs) ->  
-      printf ">> partial_evaluation on atomic %s\n%!" (string_of_formula f);
+      (*printf ">> partial_evaluation on atomic %s\n%!" (string_of_formula f);*)
       Mutex.lock xsbmutex;
       let xsbresults: (string list) list = get_state_maybe_remote p f in
         Mutex.unlock xsbmutex;        
@@ -261,21 +261,30 @@ let rec partial_evaluation (p: flowlog_program) (incpkt: string) (f: formula): f
           (fun sl -> build_and (reassemble_xsb_equality incpkt tlargs sl)) 
           xsbresults in
         let fresult = build_or disjuncts in
-        printf "<< partial evaluation result (converted from xsb) was: %s\n%!" (string_of_formula fresult);        
+        (*printf "<< partial evaluation result (converted from xsb) was: %s\n%!" (string_of_formula fresult);        *)
         fresult;;
 
 (***************************************************************************************)
 
-let rec build_switch_actions (oldpkt: string) (body: formula): action =
+let rec build_unsafe_switch_actions (oldpkt: string) (body: formula): action =
   let create_port_actions (actlist: action) (lit: formula): action =
+    let no_contradiction (aval: string): bool = 
+      for_all
+        (function 
+          | SwitchAction(pat) when pat.outPort <>
+              NetCore_Pattern.Physical(Int32.of_string aval) -> false
+          | _ -> true)
+        actlist
+    in
+
     match lit with 
     | FFalse -> raise UnsatisfiableFlag
     | FTrue -> actlist
     | FNot(FEquals(TField(var1, fld1), TField(var2, fld2))) -> 
-      if var1 = oldpkt && fld1 = "locpt" && fld2 = "locpt" then         
-        [SwitchAction({id with outPort = NetCore_Pattern.All})] @ actlist 
-      else if var2 = oldpkt && fld2 = "locpt" && fld1 = "locpt" then 
-        [SwitchAction({id with outPort = NetCore_Pattern.All})] @ actlist 
+      if var1 = oldpkt && fld1 = "locpt" && var2 <> oldpkt && fld2 = "locpt" then         
+        [allportsatom] @ actlist 
+      else if var2 = oldpkt && fld2 = "locpt" && var1 <> oldpkt && fld1 = "locpt" then 
+        [allportsatom] @ actlist 
       else failwith ("create_port_actions: bad negation: "^(string_of_formula body))
 
     | FEquals(TField(var1, fld1), TField(var2, fld2)) ->
@@ -286,8 +295,9 @@ let rec build_switch_actions (oldpkt: string) (body: formula): action =
     
     | FEquals(TField(avar, afld), TConst(aval)) 
     | FEquals(TConst(aval), TField(avar, afld)) -> 
-      if afld = "locpt" then         
-        [SwitchAction({id with outPort = NetCore_Pattern.Physical(Int32.of_string aval)})] @ actlist 
+      (* CHECK FOR CONTRADICTION WITH PRIOR ACTIONS! *)        
+      if avar <> oldpkt && afld = "locpt" && (no_contradiction aval) then          
+        [SwitchAction({id with outPort = NetCore_Pattern.Physical(Int32.of_string aval)})] @ actlist      
       else       
         actlist
 
@@ -358,7 +368,7 @@ open NetCore_Wildcard
 
 (* worst ocaml error ever: used "val" for varname. *)
 
-let build_switch_pred (oldpkt: string) (body: formula): pred =  
+let build_unsafe_switch_pred (oldpkt: string) (body: formula): pred =  
 let field_to_pattern (fld: string) (aval:string): NetCore_Pattern.t =         
   match fld with (* switch handled via different pred type *)
     | "locpt" -> {all with ptrnInPort = WildcardExact (Physical(Int32.of_string aval)) }
@@ -401,6 +411,7 @@ let field_to_pattern (fld: string) (aval:string): NetCore_Pattern.t =
               | Nothing -> Nothing
               | Everything -> acc
               | _ when acc = Everything -> pred 
+              | _ when acc = Nothing -> acc 
               | _ -> And(acc, pred)) Everything predlist;; 
 
 (* todo: lots of code overlap in these functions. should unify *)
@@ -493,17 +504,53 @@ let rec strip_to_valid (oldpkt: string) (cl: clause): clause =
           printf "   --- Final body was:%s\n%!" (string_of_formula final_formula);
           {head = cl.head; orig_rule = cl.orig_rule; body = final_formula};;
 
+let is_all_ports_atom (a: action_atom): bool = 
+  a = allportsatom;;
+
+let get_physical_port_atom (a: action_atom): Int32.t option =
+  match a with 
+    | SwitchAction(swa) -> 
+      (match swa.outPort with 
+        | Physical(aval) -> Some(aval)
+        | _ -> None)
+    | _ -> None;;
+
+let is_physical_port_atom (a: action_atom): bool =
+  match get_physical_port_atom a with
+    | Some(_) -> true
+    | _ -> false;;
+
+let handle_all_and_port_together (oldpkt: string) (apred: pred) (acts: action_atom list): (pred * action) =
+  (* If both allportsatom and physical(x) appear in acts, 
+     (1) remove allportsatom from acts
+     (2) add oldpt != x to pred *)
+  if exists is_all_ports_atom acts && 
+     exists is_physical_port_atom acts then     
+     let avalopt = get_physical_port_atom (find is_physical_port_atom acts) in 
+     match avalopt with 
+      | None -> failwith "handle_all_and_port_together"
+      | Some(aval) -> 
+        let newpred = And(apred, Not(Hdr({all with ptrnInPort = WildcardExact (Physical(aval))}))) in 
+        let newacts = remove acts allportsatom in
+          (*printf "Safe pred/act pair: %s THEN %s \n%!" (NetCore_Pretty.string_of_pred newpred) (NetCore_Pretty.string_of_action newacts);*)
+          (newpred, newacts)
+  else
+  begin
+    (*printf "(Was already) safe pred/act pair: %s THEN %s \n%!" (NetCore_Pretty.string_of_pred apred) (NetCore_Pretty.string_of_action acts);*)
+    (apred, acts)
+  end;;
+
 (* Side effect: reads current state in XSB *)
 (* Throws exception rather than using option type: more granular error result *)
 let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_handler option) (cl: clause): (pred * action) list =   
-    (match callback with 
+   (* (match callback with 
       | None -> printf "\n--- Packet triggered clause to netcore (FULL COMPILE) on: \n%s\n%!" (string_of_clause cl)
       | Some(_) -> printf "\n--- Packet triggered clause to netcore (~CONTROLLER~) on: \n%s\n%!" (string_of_clause cl));
-
+*)
     match cl.head with 
       | FAtom(_, _, headargs) ->
         let (oldpkt, trimmedbody) = trim_packet_from_body cl.body in 
-        printf "Trimmed packet from body: (%s, %s)\n%!" oldpkt (string_of_formula trimmedbody);
+        (*printf "Trimmed packet from body: (%s, %s)\n%!" oldpkt (string_of_formula trimmedbody);*)
 
         (* Get a new fmla that is implied by the original, and can be compiled to a pred *)
         let safebody = (match callback with
@@ -519,7 +566,7 @@ let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_h
            since there may be encircling negation, also need to call nnf *)
         (* todo: this is pretty inefficient for large numbers of tuples. do better? *)
         let bodies = disj_to_list (disj_to_top (nnf pebody)) in 
-        (*printf "bodies after nnf/disj_to_top = %s\n%!" (String.concat " || " (map string_of_formula bodies));*)
+        (*printf "bodies after nnf/disj_to_top = %s\n%!" (String.concat "   \n " (map string_of_formula bodies));*)
         (* anything not the old packet is a RESULT variable.
            Remember that we know this clause is packet-triggered, but
            we have no constraints on what gets produced. Maybe a bunch of 
@@ -528,28 +575,28 @@ let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_h
         let result = 
           match callback with
             | None -> map (fun body ->  
-                (build_switch_pred oldpkt body, 
-                build_switch_actions oldpkt body)) bodies                   
+                let unsafe_pred = build_unsafe_switch_pred oldpkt body in
+                let unsafe_acts = build_unsafe_switch_actions oldpkt body in
+                  (* Because of "all" ... *)
+                  handle_all_and_port_together oldpkt unsafe_pred unsafe_acts)
+                          bodies                   
             | Some(f) -> 
               (* Action is always sending to controller. So don't extract action *)
-              let bigpred = fold_left (fun acc body -> Or(acc, build_switch_pred oldpkt body)) Nothing bodies in
+              let bigpred = fold_left (fun acc body -> Or(acc, build_unsafe_switch_pred oldpkt body)) Nothing bodies in
                 [(bigpred, [ControllerAction(f)])] in      
 
           result          
       | _ -> failwith "pkt_triggered_clause_to_netcore";;
 
+
+(*
 (* Our compilation generates a lot of duplicates sometimes. Remove them. *)
 (* Issue: since callback refs are included in policies, can't compare them with = *)
 let simplify_netcore_policy (p: pol): pol =
   let safe_contains_action (acts: action) (act: action_atom) =
-    exists (fun actb -> match (act, actb) with 
-        | (SwitchAction(_), SwitchAction(_)) -> act = actb
-          (* VITAL ASSUMPTION: only one callback used here *)
-        | (ControllerAction(_), ControllerAction(_)) -> true
-          (* Same assumption --- separate switch event callback *)
-        | _ -> false) acts in
+    exists (fun actb -> safe_compare_action_atoms act actb) acts in
 
-  let safe_compare_pols (p1: pol) (p2: pol): bool =
+  let safe_compare_pols (contradicp1: pol) (p2: pol): bool =
     match (p1, p2) with
     | (Seq(Filter(pred1), Action(acts1)), Seq(Filter(pred2), Action(acts2))) ->
         pred1 = pred2 
@@ -604,19 +651,11 @@ let simplify_netcore_policy (p: pol): pol =
           | _ when acc = Nothing -> Nothing
           | _ -> And(acc, apred)) Everything subpreds in 
 
-  let simplify_netcore_actions (acts: action): action =
-    (* Concrete, fixed port needs to override general all-ports after expansion.
-       This is because they are in a logical conjunction... *)
-    let is_allports_action = (fun act -> act = SwitchAction({id with outPort = NetCore_Pattern.All})) in
-      if exists (fun act -> not (is_allports_action act)) acts then      
-        filter (fun a -> not (is_allports_action a)) acts                   
-      else acts in  
-
   let rec unique_conj_of_union (p: pol): pol list = 
     match p with 
       | Union(p1, p2) -> unique ~cmp:safe_compare_pols (unique_conj_of_union p1 @ unique_conj_of_union p2)
       | Seq(Filter(pr), Action(acts)) ->
-        [Seq(Filter(simplify_netcore_predicate pr), Action(simplify_netcore_actions acts))]
+        [Seq(Filter(simplify_netcore_predicate pr), Action(acts))]
       | _ -> [p] in
 
   let has_something_filter (p: pol): bool = 
@@ -629,24 +668,57 @@ let simplify_netcore_policy (p: pol): pol =
     if length plst < 1 then Seq(Filter(Nothing), Action([])) 
     else fold_left (fun acc p -> Union(acc, p)) (hd plst) (tl plst);;
 
+*)
+
 (* return the union of policies for each clause *)
 (* Side effect: reads current state in XSB *)
-let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: clause list) (callback: get_packet_handler option): pol =
+let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: clause list) (callback: get_packet_handler option): pol =  
   let clause_pas = appendall (map (pkt_triggered_clause_to_netcore p callback) clauses) in
+
+(*  iter (fun (ap, aa) -> printf "!!! %s %s\n%!"
+                        (NetCore_Pretty.string_of_pred ap) 
+                        (NetCore_Pretty.string_of_action aa)) clause_pas;*)
+
+  let or_of_preds_for_action (a: action): pred =
+    fold_left (fun acc (smallpred, act) -> 
+              if not (safe_compare_actions a act) then acc 
+              else if acc = Nothing then smallpred
+              else if smallpred = Nothing then acc
+              else Or(acc, smallpred)) 
+            Nothing
+            clause_pas in
+
     if length clause_pas = 0 then 
       Action([])
     else if length clause_pas = 1 then
       let (pred, acts) = (hd clause_pas) in
         Seq(Filter(pred), Action(acts))
     else 
-      let thepol = fold_left 
-                (fun acc (pred, acts) ->                   
-                  let newpol = Seq(Filter(pred), Action(acts)) in
-                    printf "unioning... %s\n%!" (NetCore_Pretty.string_of_pol newpol);
-                    Union(acc, newpol))
+    begin                      
+      let actionsused = unique ~cmp:safe_compare_actions 
+                          (map (fun (ap, aa) -> aa) clause_pas) in 
+      let actionswithphysicalports = filter (fun alst -> not (mem allportsatom alst)) actionsused in 
+
+      (*printf "actionsued = %s\nactionswithphysicalports = %s\n%!"
+       (String.concat ";" (map NetCore_Pretty.string_of_action actionsused))
+       (String.concat ";" (map NetCore_Pretty.string_of_action actionswithphysicalports));*)
+
+      (* Build a single union over policies for each distinct action *)
+      let singleunion = fold_left 
+                (fun (acc: pol) (aportaction: action) ->  
+                  let newpred = simplify_netcore_predicate (or_of_preds_for_action aportaction) in
+                  if newpred = Nothing then acc
+                  else 
+                    let newpiece = Seq(Filter(newpred), Action(aportaction)) in                    
+                      Union(acc, newpiece))
                 (Action []) 
-                clause_pas in
-        (*simplify_netcore_policy*) thepol;;
+                actionswithphysicalports in
+
+      (* If not all-ports, can safely union without overlap *)
+      ITE(or_of_preds_for_action [allportsatom],
+          Action([allportsatom]),
+          singleunion)    
+    end;;
 
 let debug = true;;
 
@@ -917,8 +989,12 @@ let make_policy_stream (p: flowlog_program) (notables: bool) =
       begin
         (* Update the policy *)
         let (newfwdpol, newnotifpol) = program_to_netcore p updateFromPacket in
-        printf "NEW FWD policy: %s\n%!" (NetCore_Pretty.string_of_pol newfwdpol);
+
+        write_log (sprintf "NEW FWD policy: %s\n%!" (NetCore_Pretty.string_of_pol newfwdpol));
+        write_log (sprintf "NEW NOTIF policy: %s\n%!" (NetCore_Pretty.string_of_pol newnotifpol));
+   (*     printf "NEW FWD policy: %s\n%!" (NetCore_Pretty.string_of_pol newfwdpol);
         printf "NEW NOTIF policy: %s\n%!" (NetCore_Pretty.string_of_pol newnotifpol);
+     *)   
         let newpol = Union(Union(newfwdpol, newnotifpol), switch_event_handler_policy) in      
         push (Some newpol);              
       end

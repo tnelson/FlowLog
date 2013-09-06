@@ -1,6 +1,8 @@
 open Flowlog_Types
 open ExtList.List
 open Printf
+open NetCore_Types
+
 
 (* True if string str1 ends with string str2 *)
 let ends_with (str1 : string) (str2 : string) : bool = 
@@ -325,3 +327,38 @@ let close_log (): unit =
 
 let appendall (lsts: 'a list list): 'a list =
   fold_left (fun acc l -> acc @ l) [] lsts;;
+
+let safe_compare_action_atoms (a1: action_atom) (a2: action_atom): bool =
+    match (a1, a2) with 
+      | (SwitchAction(sa1), SwitchAction(sa2)) -> sa1 = sa2
+          (* VITAL ASSUMPTION: only one callback used here *)
+      | (ControllerAction(_), ControllerAction(_)) -> true
+          (* Same assumption --- separate switch event callback *)
+      | _ -> false;;
+
+let safe_compare_actions (al1: action) (al2: action): bool =
+  (* same ordering? TODO probably not intended *)
+  (length al1 = length al2) && for_all2 safe_compare_action_atoms al1 al2;;
+
+let rec simplify_netcore_predicate (pr: pred): pred =  
+  match pr with         
+    | Nothing -> Nothing 
+    | Everything -> Everything
+    | Not(ip) -> Not(simplify_netcore_predicate ip)
+    | Or(p1, p2) -> 
+        let sp1 = simplify_netcore_predicate p1 in
+        let sp2 = simplify_netcore_predicate p2 in        
+          if sp1 = Everything || sp2 = Everything then Everything
+          else if sp1 = Nothing then sp2 
+          else if p2 = Nothing then sp1 
+          else Or(sp1, sp2)
+    | And(p1, p2) ->
+        let sp1 = simplify_netcore_predicate p1 in
+        let sp2 = simplify_netcore_predicate p2 in        
+          if sp1 = Nothing || sp2 = Nothing then Nothing
+          else if sp1 = Everything then sp2
+          else if sp2 = Everything then sp1
+          else And(sp1, sp2)     
+    | Hdr(pat) -> pr
+    | OnSwitch(sw) -> pr;;
+
