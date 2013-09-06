@@ -72,8 +72,6 @@ exception IllegalExistentialUse of formula;;
 exception IllegalModToNewpkt of (term * term);;
 exception IllegalEquality of (term * term);;
 
-exception UnsatisfiableFlag;;
-
 let legal_field_to_modify (fname: string): bool =
 	mem fname legal_to_modify_packet_fields;;
 

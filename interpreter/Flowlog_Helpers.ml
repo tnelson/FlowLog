@@ -340,6 +340,59 @@ let safe_compare_actions (al1: action) (al2: action): bool =
   (* same ordering? TODO probably not intended *)
   (length al1 = length al2) && for_all2 safe_compare_action_atoms al1 al2;;
 
+let rec gather_predicate_and (pr: pred): pred list = 
+  match pr with
+    | Nothing -> [pr]
+    | Everything -> [pr]
+    | Not(_) -> [pr]
+    | Or(_,_) -> [pr]
+    | And(p1, p2) ->
+        (gather_predicate_and p1) @ (gather_predicate_and p2)
+    | Hdr(pat) -> [pr]
+    | OnSwitch(sw) -> [pr];;
+
+exception UnsatisfiableFlag;;
+
+let remove_contradictions (subpreds: pred list): pred list = 
+    (* Hdr(...), OnSwitch(...) If contradictions, this becomes Nothing*)
+    let process_pred acc p = 
+      let (sws, hdrs) = acc in 
+      match p with 
+      (* Remember that (sw=1 and sw!=2) and (sw!=1 and sw!=2) are both ok! *)
+      | OnSwitch(sw) ->         
+        if exists (fun asw -> (asw = Int64.neg sw) || (asw > Int64.zero && asw <> sw)) sws then raise UnsatisfiableFlag
+        else (sw :: sws, hdrs)  
+      | Not(OnSwitch(sw)) ->        
+        if exists (fun asw -> asw = sw) sws then raise UnsatisfiableFlag
+        else (Int64.neg sw :: sws, hdrs)
+         
+      | Hdr(_) as newhdr -> 
+        if exists (fun ahdr -> ahdr = Not(newhdr)) hdrs then raise UnsatisfiableFlag
+        else (sws, newhdr :: hdrs)    
+      | Not(Hdr(_) as newhdrneg) as newnot -> 
+        if exists (fun ahdr -> ahdr = newhdrneg) hdrs then raise UnsatisfiableFlag
+        else (sws, newnot :: hdrs)          
+
+      | Everything -> acc
+      | Nothing -> raise UnsatisfiableFlag
+      | _ -> failwith ("remove_contradiction: expected only atomic preds") in      
+      try 
+        let _ = fold_left process_pred ([],[]) subpreds in           
+          subpreds
+      with UnsatisfiableFlag -> 
+       (* printf "unsatisfiable: %s\n%!" (String.concat ";" (map NetCore_Pretty.string_of_pred subpreds)); *)
+        [Nothing];;
+  
+
+let build_predicate_and (prs: pred list): pred =
+  fold_left (fun acc pr -> 
+      if acc = Nothing || pr = Nothing then Nothing
+      else if acc = Everything then pr 
+      else if pr = Everything then acc
+      else And(acc, pr))
+    Everything 
+    (remove_contradictions prs);;    
+
 let rec simplify_netcore_predicate (pr: pred): pred =  
   match pr with         
     | Nothing -> Nothing 
@@ -350,15 +403,18 @@ let rec simplify_netcore_predicate (pr: pred): pred =
         let sp2 = simplify_netcore_predicate p2 in        
           if sp1 = Everything || sp2 = Everything then Everything
           else if sp1 = Nothing then sp2 
-          else if p2 = Nothing then sp1 
+          else if sp2 = Nothing then sp1 
           else Or(sp1, sp2)
     | And(p1, p2) ->
-        let sp1 = simplify_netcore_predicate p1 in
+      (* TODO: wasting a ton of time on these calls when sets would be much faster than lists *)
+        let conjuncts = unique( map simplify_netcore_predicate (unique (gather_predicate_and p1) @ (gather_predicate_and p2))) in        
+        build_predicate_and conjuncts
+        (*let sp1 = simplify_netcore_predicate p1 in
         let sp2 = simplify_netcore_predicate p2 in        
           if sp1 = Nothing || sp2 = Nothing then Nothing
           else if sp1 = Everything then sp2
           else if sp2 = Everything then sp1
-          else And(sp1, sp2)     
+          else And(sp1, sp2)     *)
     | Hdr(pat) -> pr
     | OnSwitch(sw) -> pr;;
 
