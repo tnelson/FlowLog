@@ -671,22 +671,40 @@ let simplify_netcore_policy (p: pol): pol =
 (* return the union of policies for each clause *)
 (* Side effect: reads current state in XSB *)
 let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: clause list) (callback: get_packet_handler option): pol =  
+  printf "ENTERING pkt_triggered_clauses_to_netcore!\n%!";
   let clause_pas = appendall (map (pkt_triggered_clause_to_netcore p callback) clauses) in
+  printf "Done creating clause_pas! %d members.\n%!" (length clause_pas);
+  let separate_disjunct_pair (ap, aa) =
+    match ap with 
+      | Or(ap1, ap2) -> map (fun newpred -> (newpred, aa)) (gather_predicate_or ap) 
+      | _ -> [(ap, aa)] in
 
-(*  iter (fun (ap, aa) -> printf "!!! %s %s\n%!"
+      (* so many unique calls ---> expensive. TODO. change to sets. *)
+  let pre_unique_disj_pas = (appendall (map separate_disjunct_pair clause_pas)) in
+  let disj_pas = unique ~cmp:(fun pair1 pair2 -> 
+                              let (pp1, pa1) = pair1 in 
+                              let (pp2, pa2) = pair2 in 
+                                (safe_compare_actions pa1 pa2) && (smart_compare_preds pp1 pp2))  
+                 pre_unique_disj_pas in
+  printf "Done creating disj_pas! %d members. before unique check was %d\n%!" (length disj_pas) (length pre_unique_disj_pas);
+  (*iter (fun (ap, aa) -> write_log (sprintf "!!! %s %s\n%!"
                         (NetCore_Pretty.string_of_pred ap) 
-                        (NetCore_Pretty.string_of_action aa)) clause_pas;*)
+                        (NetCore_Pretty.string_of_action aa)) ) clause_pas;
+  iter (fun (ap, aa) -> write_log (sprintf "--- %s %s\n%!"
+                        (NetCore_Pretty.string_of_pred ap) 
+                        (NetCore_Pretty.string_of_action aa)) ) disj_pas;*)
 
-  let or_of_preds_for_action (a: action): pred =
+
+  (*let or_of_preds_for_action (a: action): pred =
     fold_left (fun acc (smallpred, act) -> 
               if not (safe_compare_actions a act) then acc 
               else if acc = Nothing then smallpred
               else if smallpred = Nothing then acc
               else Or(acc, smallpred)) 
             Nothing
-            clause_pas in
+            clause_pas in*)
 
-  let ite_of_preds_for_action (a: action): pol =
+  let ite_of_preds_for_action (a: action): pol =    
     fold_left (fun acc (smallpred, act) ->               
               if not (safe_compare_actions a act) then acc 
               else 
@@ -696,17 +714,17 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: clause list)
                   else ITE(simppred, Action(act), acc)
               end) 
             (Action([]))
-            clause_pas in    
+            disj_pas in    
 
-    if length clause_pas = 0 then 
+    if length disj_pas = 0 then 
       Action([])
-    else if length clause_pas = 1 then
-      let (pred, acts) = (hd clause_pas) in
+    else if length disj_pas = 1 then
+      let (pred, acts) = (hd disj_pas) in
         Seq(Filter(pred), Action(acts))
     else 
     begin                      
       let actionsused = unique ~cmp:safe_compare_actions 
-                          (map (fun (ap, aa) -> aa) clause_pas) in 
+                          (map (fun (ap, aa) -> aa) disj_pas) in 
       let actionswithphysicalports = filter (fun alst -> not (mem allportsatom alst)) actionsused in 
 
       (*printf "actionsued = %s\nactionswithphysicalports = %s\n%!"
@@ -720,18 +738,24 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: clause list)
                 (fun (acc: pol) (aportaction: action) ->  
                   (*let newpred = simplify_netcore_predicate (or_of_preds_for_action aportaction) in*)
                   let newpol = ite_of_preds_for_action aportaction in
+                 (*  write_log (sprintf "ite_of_preds_for_action: %s = %s" 
+                    (NetCore_Pretty.string_of_action aportaction)
+                    (NetCore_Pretty.string_of_pol newpol));*)
                   (*if newpred = Nothing then acc
                   else *)
                     (*let newpiece = Seq(Filter(newpred), Action(aportaction)) in *)
                     (*let newpiece = ITE(newpred, Action(aportaction), Action([])) in *)
                       Union(acc, newpol))
-                (Action []) 
+                (* the "allports" action must always be checked first*)
+                (ite_of_preds_for_action [allportsatom])
                 actionswithphysicalports in
 
       (* If not all-ports, can safely union without overlap *)
-      ITE(or_of_preds_for_action [allportsatom],
+      (* oh if only that were true *)
+      (*ITE(or_of_preds_for_action [allportsatom],
           Action([allportsatom]),
-          singleunion)    
+          singleunion)    *)
+      singleunion
     end;;
 
 let debug = true;;
@@ -1018,12 +1042,14 @@ let make_policy_stream (p: flowlog_program) (notables: bool) (reportallpackets: 
         printf "NEW NOTIF policy: %s\n%!" (NetCore_Pretty.string_of_pol newnotifpol);
      *)   
         let newpol = Union(Union(newfwdpol, newnotifpol), internal_policy()) in      
-        if !counter_inc_pkt <= 1 then  (* DEBUG *)
+        (*if !counter_inc_pkt <= 1 then *) (* DEBUG *)
         begin
           write_log (sprintf "NEW FWD policy: %s\n%!" (NetCore_Pretty.string_of_pol newfwdpol));
           write_log (sprintf "NEW NOTIF policy: %s\n%!" (NetCore_Pretty.string_of_pol newnotifpol));
 
+          printf "PUSHING NEW POLICY!\n%!";
           push (Some newpol); 
+          printf "PUSHED NEW POLICY!\n%!";
         end
         
       end

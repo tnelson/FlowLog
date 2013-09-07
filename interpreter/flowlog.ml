@@ -221,7 +221,7 @@ let run_flowlog (p: flowlog_program): unit Lwt.t =
          Frenetic's. Instead, register a HandleSwitchEvent policy, which gives us a nice clean callback. *)
       Lwt.pick [gen_stream;
                 NetCore_Controller.start_controller pkt_stream stream;
-               ];;
+               ];;        
 
 
 let main () =
@@ -239,11 +239,12 @@ let main () =
       try      
         out_log := Some(open_out "log_for_flowlog.log");  
         if !notables then printf "\n*** FLOW TABLE COMPILATION DISABLED! ***\n%!";
+        Lwt_main.at_exit (fun () -> return (printf "LWT exiting~\n%!") );
+        at_exit (fun () -> (printf "Ocaml exiting~\n%!"));        
         Lwt_main.run (run_flowlog program);     
-        printf "~~~ FRENETIC ENGINE TERMINATED ~~~\n%!"   
       with exn ->
         Xsb.halt_xsb ();
-        Format.printf "Unexpected exception: %s\n%s\n%!"
+        Format.printf "\nUnexpected exception: %s\n%s\n%!"
           (Printexc.to_string exn)
           (Printexc.get_backtrace ());
         close_log();

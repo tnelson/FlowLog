@@ -340,6 +340,16 @@ let safe_compare_actions (al1: action) (al2: action): bool =
   (* same ordering? TODO probably not intended *)
   (length al1 = length al2) && for_all2 safe_compare_action_atoms al1 al2;;
 
+let rec gather_predicate_or (pr: pred): pred list = 
+  match pr with
+    | Nothing -> [pr]
+    | Everything -> [pr]
+    | Not(_) -> [pr]
+    | Or(p1, p2) -> (gather_predicate_or p1) @ (gather_predicate_or p2)
+    | And(_, _) -> [pr]        
+    | Hdr(pat) -> [pr]
+    | OnSwitch(sw) -> [pr];;
+
 let rec gather_predicate_and (pr: pred): pred list = 
   match pr with
     | Nothing -> [pr]
@@ -418,3 +428,14 @@ let rec simplify_netcore_predicate (pr: pred): pred =
     | Hdr(pat) -> pr
     | OnSwitch(sw) -> pr;;
 
+(* TODO: oh the inefficiency! SETS!! *)
+let smart_compare_preds (p1: pred) (p2: pred): bool =
+  match (p1, p2) with
+    | (And(_,_), And(_,_)) ->
+      let set1 = gather_predicate_and p1 in
+      let set2 = gather_predicate_and p2 in
+        (* PredSet.equal set1 set2*)
+        for_all (fun e -> mem e set2) set1
+        &&
+        for_all (fun e -> mem e set1) set2      
+    | _ -> p1 = p2;;
