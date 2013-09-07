@@ -686,6 +686,18 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: clause list)
             Nothing
             clause_pas in
 
+  let ite_of_preds_for_action (a: action): pol =
+    fold_left (fun acc (smallpred, act) ->               
+              if not (safe_compare_actions a act) then acc 
+              else 
+              begin
+                let simppred = simplify_netcore_predicate smallpred in 
+                  if simppred = Nothing then acc
+                  else ITE(simppred, Action(act), acc)
+              end) 
+            (Action([]))
+            clause_pas in    
+
     if length clause_pas = 0 then 
       Action([])
     else if length clause_pas = 1 then
@@ -702,14 +714,17 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: clause list)
        (String.concat ";" (map NetCore_Pretty.string_of_action actionswithphysicalports));*)
 
       (* Build a single union over policies for each distinct action *)
+      (* Because NetCore's union is BAG union, and || gets compiled to unions, (p1 || p2 || ... || pk); act
+         can produce duplicate packets, even though the actions are disjoint! So construct a nested IF as a workaround. *)
       let singleunion = fold_left 
                 (fun (acc: pol) (aportaction: action) ->  
-                  let newpred = simplify_netcore_predicate (or_of_preds_for_action aportaction) in
-                  if newpred = Nothing then acc
-                  else 
-                    let newpiece = Seq(Filter(newpred), Action(aportaction)) in 
+                  (*let newpred = simplify_netcore_predicate (or_of_preds_for_action aportaction) in*)
+                  let newpol = ite_of_preds_for_action aportaction in
+                  (*if newpred = Nothing then acc
+                  else *)
+                    (*let newpiece = Seq(Filter(newpred), Action(aportaction)) in *)
                     (*let newpiece = ITE(newpred, Action(aportaction), Action([])) in *)
-                      Union(acc, newpiece))
+                      Union(acc, newpol))
                 (Action []) 
                 actionswithphysicalports in
 
