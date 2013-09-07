@@ -185,10 +185,12 @@ let desugared_program_of_ast (ast: flowlog_ast): flowlog_program =
 let usage = Printf.sprintf "Usage: %s [-alloy] [-notables] file.flg" (Filename.basename Sys.argv.(0));;
 let alloy = ref false;;
 let notables = ref false;;
+let reportall = ref false;;
 let args = ref [];;
 
 let speclist = [
   ("-alloy", Arg.Unit (fun () -> alloy := true), ": convert to Alloy");
+  ("-reportall", Arg.Unit (fun () -> reportall := true), ": report all packets. WARNING: VERY SLOW!");
   (* Not calling this "reactive" because reactive still implies sending table entries. *)
   ("-notables", Arg.Unit (fun () -> notables := true), ": send everything to controller");];;
 
@@ -204,7 +206,7 @@ let run_flowlog (p: flowlog_program): unit Lwt.t =
   (* Start the policy stream *)
   (* >> is from Lwt's Pa_lwt. But you MUST have -syntax camlp4o or it won't be recoginized. *)   
   OpenFlow0x01_Platform.init_with_port !listenPort >>
-    let (trigger_re_policy_func, (gen_stream, stream)) = (make_policy_stream p !notables) in
+    let (trigger_re_policy_func, (gen_stream, stream)) = (make_policy_stream p !notables !reportall) in
     refresh_policy := Some trigger_re_policy_func;
 
     (* streams for incoming/exiting packets *)
@@ -237,7 +239,8 @@ let main () =
       try      
         out_log := Some(open_out "log_for_flowlog.log");  
         if !notables then printf "\n*** FLOW TABLE COMPILATION DISABLED! ***\n%!";
-        Lwt_main.run (run_flowlog program);        
+        Lwt_main.run (run_flowlog program);     
+        printf "~~~ FRENETIC ENGINE TERMINATED ~~~\n%!"   
       with exn ->
         Xsb.halt_xsb ();
         Format.printf "Unexpected exception: %s\n%s\n%!"

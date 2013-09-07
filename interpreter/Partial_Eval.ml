@@ -707,7 +707,8 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: clause list)
                   let newpred = simplify_netcore_predicate (or_of_preds_for_action aportaction) in
                   if newpred = Nothing then acc
                   else 
-                    let newpiece = Seq(Filter(newpred), Action(aportaction)) in                    
+                    let newpiece = Seq(Filter(newpred), Action(aportaction)) in 
+                    (*let newpiece = ITE(newpred, Action(aportaction), Action([])) in *)
                       Union(acc, newpiece))
                 (Action []) 
                 actionswithphysicalports in
@@ -953,7 +954,7 @@ let respond_to_notification (p: flowlog_program) (notif: event): unit =
 let lies_port = Int32.of_string "65534";;
 
 (* If notables is true, send everything to controller *)
-let make_policy_stream (p: flowlog_program) (notables: bool) =  
+let make_policy_stream (p: flowlog_program) (notables: bool) (reportallpackets: bool) =  
   (* stream of policies, with function to push new policies on *)
   let (policies, push) = Lwt_stream.create () in
 
@@ -978,9 +979,19 @@ let make_policy_stream (p: flowlog_program) (notables: bool) =
         ()
     and
 
+    reportPacketCallback (sw: switchId) (pt: port) (pkt: Packet.packet) : NetCore_Types.action =   
+      printf "[REPORT ONLY] Packet arrived on switch %Ld, port %s.\n%s\n%!" 
+        sw (NetCore_Pretty.string_of_port pt) (Packet.to_string pkt);
+      [] 
+
+    and 
     switch_event_handler_policy = HandleSwitchEvent(switch_event_handler) 
     and
-
+    report_all_packets_policy = Action[ControllerAction(reportPacketCallback)]
+    and
+    internal_policy () = (if reportallpackets then Union(switch_event_handler_policy, report_all_packets_policy) 
+                          else switch_event_handler_policy)
+    and 
     (* the thunk needs to know the pkt callback, the pkt callback invokes the thunk. so need "and" *)
     trigger_policy_recreation_thunk (): unit = 
       if not notables then
@@ -988,13 +999,18 @@ let make_policy_stream (p: flowlog_program) (notables: bool) =
         (* Update the policy *)
         let (newfwdpol, newnotifpol) = program_to_netcore p updateFromPacket in
 
-        write_log (sprintf "NEW FWD policy: %s\n%!" (NetCore_Pretty.string_of_pol newfwdpol));
-        write_log (sprintf "NEW NOTIF policy: %s\n%!" (NetCore_Pretty.string_of_pol newnotifpol));
    (*     printf "NEW FWD policy: %s\n%!" (NetCore_Pretty.string_of_pol newfwdpol);
         printf "NEW NOTIF policy: %s\n%!" (NetCore_Pretty.string_of_pol newnotifpol);
      *)   
-        let newpol = Union(Union(newfwdpol, newnotifpol), switch_event_handler_policy) in      
-        push (Some newpol);              
+        let newpol = Union(Union(newfwdpol, newnotifpol), internal_policy()) in      
+        if !counter_inc_pkt <= 1 then  (* DEBUG *)
+        begin
+          write_log (sprintf "NEW FWD policy: %s\n%!" (NetCore_Pretty.string_of_pol newfwdpol));
+          write_log (sprintf "NEW NOTIF policy: %s\n%!" (NetCore_Pretty.string_of_pol newnotifpol));
+
+          push (Some newpol); 
+        end
+        
       end
       else
         if notables then printf "\n*** FLOW TABLE COMPILATION DISABLED! ***\n%!";
@@ -1002,7 +1018,8 @@ let make_policy_stream (p: flowlog_program) (notables: bool) =
     and
       
     (* The callback to be invoked when the policy says to send pkt to controller *)
-    updateFromPacket (sw: switchId) (pt: port) (pkt: Packet.packet) : NetCore_Types.action =    
+    updateFromPacket (sw: switchId) (pt: port) (pkt: Packet.packet) : NetCore_Types.action =  
+
       (* Update the policy via the push function *)
       printf "Packet in on switch %Ld.\n%s\n%!" sw (Packet.to_string pkt);
       counter_inc_pkt := !counter_inc_pkt + 1;
@@ -1021,12 +1038,10 @@ let make_policy_stream (p: flowlog_program) (notables: bool) =
       let (initfwdpol, initnotifpol) = program_to_netcore p updateFromPacket in
       printf "INITIAL FWD policy is:\n%s\n%!" (NetCore_Pretty.string_of_pol initfwdpol);
       printf "INITIAL NOTIF policy is:\n%s\n%!" (NetCore_Pretty.string_of_pol initnotifpol);
-      let initpol = Union(Union(initfwdpol, initnotifpol), switch_event_handler_policy) in          
-      (* cargo-cult hacking invocation. why call this? *)
-      (trigger_policy_recreation_thunk, NetCore_Stream.from_stream initpol policies)
+      let initpol = Union(Union(initfwdpol, initnotifpol), internal_policy()) in            
+        (trigger_policy_recreation_thunk, NetCore_Stream.from_stream initpol policies)
     end else begin      
       let initpol = Union(switch_event_handler_policy, Action([ControllerAction(updateFromPacket)])) in
         (trigger_policy_recreation_thunk, NetCore_Stream.from_stream initpol policies)
     end;;
-
 
