@@ -439,3 +439,21 @@ let smart_compare_preds (p1: pred) (p2: pred): bool =
         &&
         for_all (fun e -> mem e set1) set2      
     | _ -> p1 = p2;;
+
+let smart_compare_preds_int (p1: pred) (p2: pred): int =
+  match (p1, p2) with
+    | (And(_,_), And(_,_)) ->
+      let set1 = gather_predicate_and p1 in
+      let set2 = gather_predicate_and p2 in
+        (* PredSet.equal set1 set2*)
+        if      exists (fun e -> not (mem e set2)) set1 then 1
+        else if exists (fun e -> not (mem e set1)) set2 then -1
+      else 0
+    | _ -> Pervasives.compare p1 p2;;
+
+(* this won't intelligently compare within the pred. e.g. (p and q) != (q and p) here. *)
+(* module PredSet  = Set.Make( struct type t = pred let compare = compare end );; *)
+
+module PredSet  = Set.Make( struct type t = pred let compare = smart_compare_preds_int end );;
+
+(* PredSet.add Nothing PredSet.empty ;;*)
