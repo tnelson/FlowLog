@@ -143,28 +143,31 @@ let rec nnf (f: formula): formula =
             | FAnd(f1, f2) -> FOr(nnf (FNot f1), nnf (FNot f2));;
             
 (* Assume: NNF before calling this *)
-let rec disj_to_top (f: formula): formula = 
+let rec disj_to_top ?(ignore_negation: bool = false) (f: formula): formula = 
     match f with 
         | FTrue -> f;
         | FFalse -> f;
         | FEquals(_, _) -> f;
         | FAtom(_, _, _) -> f;
         | FOr(f1, f2) -> 
-          FOr(disj_to_top f1, disj_to_top f2);
-        | FNot(f2) ->
+          FOr(disj_to_top ~ignore_negation:ignore_negation f1, disj_to_top ~ignore_negation:ignore_negation f2);
+        | FNot(f2) when (not ignore_negation) ->
           (match f2 with 
             | FTrue | FFalse
             | FAtom(_,_,_) 
             | FEquals(_,_) -> f
-            | _ -> failwith "disj_to_top: expected nnf fmla") 
+            | _  -> failwith ("disj_to_top: expected nnf fmla"))
+        | FNot(_) -> f
+
         | FAnd(f1, f2) -> 
             (* Distributive law if necessary *)
-            let f1ds = disj_to_list (disj_to_top f1) in
-            let f2ds = disj_to_list (disj_to_top f2) in
+            let f1ds = disj_to_list (disj_to_top ~ignore_negation:ignore_negation f1) in
+            let f2ds = disj_to_list (disj_to_top ~ignore_negation:ignore_negation f2) in
 
             (*printf "f: %s\n%!" (string_of_formula f);
             printf "f1ds: %s\n%!" (String.concat "; " (map string_of_formula f1ds));
             printf "f2ds: %s\n%!" (String.concat "; " (map string_of_formula f2ds));*)
+
 
             let pairs = product_of_lists f1ds f2ds in
                 (* again, start with first pair, not FFalse *)
@@ -366,28 +369,37 @@ exception UnsatisfiableFlag;;
 let remove_contradictions (subpreds: pred list): pred list = 
     (* Hdr(...), OnSwitch(...) If contradictions, this becomes Nothing*)
     let process_pred acc p = 
-      let (sws, hdrs) = acc in 
+      let (sws, hdrs, complex) = acc in 
       match p with 
       (* Remember that (sw=1 and sw!=2) and (sw!=1 and sw!=2) are both ok! *)
       | OnSwitch(sw) ->         
         if exists (fun asw -> (asw = Int64.neg sw) || (asw > Int64.zero && asw <> sw)) sws then raise UnsatisfiableFlag
-        else (sw :: sws, hdrs)  
+        else (sw :: sws, hdrs, complex)  
       | Not(OnSwitch(sw)) ->        
         if exists (fun asw -> asw = sw) sws then raise UnsatisfiableFlag
-        else (Int64.neg sw :: sws, hdrs)
+        else (Int64.neg sw :: sws, hdrs, complex)
          
       | Hdr(_) as newhdr -> 
         if exists (fun ahdr -> ahdr = Not(newhdr)) hdrs then raise UnsatisfiableFlag
-        else (sws, newhdr :: hdrs)    
+        else (sws, newhdr :: hdrs, complex)    
       | Not(Hdr(_) as newhdrneg) as newnot -> 
         if exists (fun ahdr -> ahdr = newhdrneg) hdrs then raise UnsatisfiableFlag
-        else (sws, newnot :: hdrs)          
+        else (sws, newnot :: hdrs, complex)          
 
       | Everything -> acc
       | Nothing -> raise UnsatisfiableFlag
+
+      | Not(p) as np -> 
+        if exists (fun apred -> apred = p) complex then raise UnsatisfiableFlag
+        else (sws, hdrs, np :: complex)
+
+        (* could be smarter TODO *)
+      | Or(p1, p2) -> 
+        (sws, hdrs, p :: complex)
+
       | _ -> failwith ("remove_contradiction: expected only atomic preds") in      
       try 
-        let _ = fold_left process_pred ([],[]) subpreds in           
+        let _ = fold_left process_pred ([],[],[]) subpreds in           
           subpreds
       with UnsatisfiableFlag -> 
        (* printf "unsatisfiable: %s\n%!" (String.concat ";" (map NetCore_Pretty.string_of_pred subpreds)); *)

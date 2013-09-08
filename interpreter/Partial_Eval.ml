@@ -254,7 +254,8 @@ let rec partial_evaluation (p: flowlog_program) (incpkt: string) (f: formula): f
       (*printf ">> partial_evaluation on atomic %s\n%!" (string_of_formula f);*)
       Mutex.lock xsbmutex;
       let xsbresults: (string list) list = get_state_maybe_remote p f in
-        Mutex.unlock xsbmutex;        
+      printf "DISJUNCTS FROM ATOM: %d\n%!" (length xsbresults);       
+        Mutex.unlock xsbmutex;         
         let disjuncts = map 
           (fun sl -> build_and (reassemble_xsb_equality incpkt tlargs sl)) 
           xsbresults in
@@ -298,6 +299,11 @@ let rec build_unsafe_switch_actions (oldpkt: string) (body: formula): action =
         [SwitchAction({id with outPort = NetCore_Pattern.Physical(Int32.of_string aval)})] @ actlist      
       else       
         actlist
+
+    (* If PE has left a disjunction or negated disjunction, it doesn't involve newpkt
+       so ignore this conjunct. *)
+    | FOr(_, _) -> actlist
+    | FNot(FOr(_, _)) -> actlist
 
       (* remember: only called for FORWARD/EMIT rules. so safe to do this: *)
     | FNot(FEquals(TField(avar, afld), TConst(aval)))
@@ -381,8 +387,8 @@ let field_to_pattern (fld: string) (aval:string): NetCore_Pattern.t =
 
   let rec eq_to_pred (eqf: formula): pred option =
     match eqf with
-      | FNot(atom) -> 
-        (match eq_to_pred atom with
+      | FNot(innerf) ->        
+        (match eq_to_pred innerf with
         | None -> None
         | Some(p) -> 
           if p = Everything then Some Nothing
@@ -398,7 +404,30 @@ let field_to_pattern (fld: string) (aval:string): NetCore_Pattern.t =
         else Some(Hdr(field_to_pattern fld aval))
 
       | FTrue -> Some(Everything)
-      | FFalse -> Some(Nothing)      
+      | FFalse -> Some(Nothing)   
+
+      (* PE may leave a disjunction or negated disjunction if it doesn't involve newpkt
+         (meaning it needs processing here) and inside the disj are conjunctions over tuples!
+
+         Thus, this function is now terribly named... :-)  *)
+
+      | FOr(f1, f2) -> 
+          let p1 = eq_to_pred f1 in
+          let p2 = eq_to_pred f2 in
+          (match (p1, p2) with 
+            | (None, None) -> None
+            | (None, Some(apred))
+            | (Some(apred), None) -> Some(apred)
+            | (Some(apred1), Some(apred2)) -> Some(Or(apred1, apred2)))   
+      | FAnd(f1, f2) -> 
+          let p1 = eq_to_pred f1 in
+          let p2 = eq_to_pred f2 in
+         (match (p1, p2) with 
+            | (None, None) -> None
+            | (None, Some(apred))
+            | (Some(apred), None) -> Some(apred)
+            | (Some(apred1), Some(apred2)) -> Some(And(apred1, apred2)))  
+
       | _ -> None (* something for action, not pred *) in
       (*| _  -> failwith ("build_switch_pred: "^(string_of_formula ~verbose:true eqf)) in*)
 
@@ -562,13 +591,20 @@ let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_h
         (* partial eval may insert disjunctions because of multiple tuples to match 
            so we need to pull those disjunctions up and create multiple policies 
            since there may be encircling negation, also need to call nnf *)
+        (* !! Don't need to NNF since no newpkts under negation *)
+
         (* todo: this is pretty inefficient for large numbers of tuples. do better? *)
-        let bodies = disj_to_list (disj_to_top (nnf pebody)) in 
+        
+        (*let bodies = disj_to_list (disj_to_top (nnf pebody)) in *)
+        let bodies = disj_to_list (disj_to_top ~ignore_negation:true pebody) in 
+        
         (*printf "bodies after nnf/disj_to_top = %s\n%!" (String.concat "   \n " (map string_of_formula bodies));*)
         (* anything not the old packet is a RESULT variable.
            Remember that we know this clause is packet-triggered, but
            we have no constraints on what gets produced. Maybe a bunch of 
            non-packet variables e.g. +R(x, y, z) ... *)
+
+         printf "BODIES from PE of single clause: %d\n%!" (length bodies);       
 
         let result = 
           match callback with
@@ -590,9 +626,16 @@ let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_h
 (* Side effect: reads current state in XSB *)
 let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: clause list) (callback: get_packet_handler option): pol =  
   printf "ENTERING pkt_triggered_clauses_to_netcore!\n%!";
-  let clause_pas = appendall (map (pkt_triggered_clause_to_netcore p callback) clauses) in
+  let pre_unique_pas = appendall (map (pkt_triggered_clause_to_netcore p callback) clauses) in
+  
+  let clause_pas = unique ~cmp:(fun pair1 pair2 -> 
+                              let (pp1, pa1) = pair1 in 
+                              let (pp2, pa2) = pair2 in 
+                                (safe_compare_actions pa1 pa2) && (smart_compare_preds pp1 pp2))   
+                  pre_unique_pas in
+
   printf "Done creating clause_pas! %d members.\n%!" (length clause_pas);
-  let separate_disjunct_pair (ap, aa) =
+  (*let separate_disjunct_pair (ap, aa) =
     match ap with 
       | Or(ap1, ap2) -> map (fun newpred -> (newpred, aa)) (gather_predicate_or ap) 
       | _ -> [(ap, aa)] in
@@ -604,25 +647,24 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: clause list)
                               let (pp2, pa2) = pair2 in 
                                 (safe_compare_actions pa1 pa2) && (smart_compare_preds pp1 pp2))  
                  pre_unique_disj_pas in
-  printf "Done creating disj_pas! %d members. before unique check was %d\n%!" (length disj_pas) (length pre_unique_disj_pas);
+  printf "Done creating disj_pas! %d members. before unique check was %d\n%!" (length disj_pas) (length pre_unique_disj_pas);*)
+
   (*iter (fun (ap, aa) -> write_log (sprintf "!!! %s %s\n%!"
                         (NetCore_Pretty.string_of_pred ap) 
                         (NetCore_Pretty.string_of_action aa)) ) clause_pas;
   iter (fun (ap, aa) -> write_log (sprintf "--- %s %s\n%!"
                         (NetCore_Pretty.string_of_pred ap) 
                         (NetCore_Pretty.string_of_action aa)) ) disj_pas;*)
-
-
-  (*let or_of_preds_for_action (a: action): pred =
+  let or_of_preds_for_action (a: action): pred =
     fold_left (fun acc (smallpred, act) -> 
               if not (safe_compare_actions a act) then acc 
               else if acc = Nothing then smallpred
               else if smallpred = Nothing then acc
               else Or(acc, smallpred)) 
             Nothing
-            clause_pas in*)
+            clause_pas in
 
-  let ite_of_preds_for_action (a: action): pol =    
+  (*let ite_of_preds_for_action (a: action): pol =    
     fold_left (fun acc (smallpred, act) ->               
               if not (safe_compare_actions a act) then acc 
               else 
@@ -632,17 +674,17 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: clause list)
                   else ITE(simppred, Action(act), acc)
               end) 
             (Action([]))
-            disj_pas in    
+            disj_pas in   *)
 
-    if length disj_pas = 0 then 
+    if length clause_pas = 0 then 
       Action([])
-    else if length disj_pas = 1 then
-      let (pred, acts) = (hd disj_pas) in
+    else if length clause_pas = 1 then
+      let (pred, acts) = (hd clause_pas) in
         Seq(Filter(pred), Action(acts))
     else 
     begin                      
       let actionsused = unique ~cmp:safe_compare_actions 
-                          (map (fun (ap, aa) -> aa) disj_pas) in 
+                          (map (fun (ap, aa) -> aa) clause_pas) in 
       let actionswithphysicalports = filter (fun alst -> not (mem allportsatom alst)) actionsused in 
 
       (*printf "actionsued = %s\nactionswithphysicalports = %s\n%!"
@@ -650,30 +692,27 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: clause list)
        (String.concat ";" (map NetCore_Pretty.string_of_action actionswithphysicalports));*)
 
       (* Build a single union over policies for each distinct action *)
-      (* Because NetCore's union is BAG union, and || gets compiled to unions, (p1 || p2 || ... || pk); act
-         can produce duplicate packets, even though the actions are disjoint! So construct a nested IF as a workaround. *)
+      (* if we get dup packets, make certain || isn't getting compiled to bag union in netcore *)
       let singleunion = fold_left 
                 (fun (acc: pol) (aportaction: action) ->  
-                  (*let newpred = simplify_netcore_predicate (or_of_preds_for_action aportaction) in*)
-                  let newpol = ite_of_preds_for_action aportaction in
+                  let newpred = simplify_netcore_predicate (or_of_preds_for_action aportaction) in
+                  (*let newpol = ite_of_preds_for_action aportaction in*)
                  (*  write_log (sprintf "ite_of_preds_for_action: %s = %s" 
                     (NetCore_Pretty.string_of_action aportaction)
                     (NetCore_Pretty.string_of_pol newpol));*)
-                  (*if newpred = Nothing then acc
-                  else *)
-                    (*let newpiece = Seq(Filter(newpred), Action(aportaction)) in *)
+                  if newpred = Nothing then acc
+                  else 
+                    let newpol = Seq(Filter(newpred), Action(aportaction)) in 
                     (*let newpiece = ITE(newpred, Action(aportaction), Action([])) in *)
-                      Union(acc, newpol))
-                (* the "allports" action must always be checked first*)
-                (ite_of_preds_for_action [allportsatom])
+                      Union(acc, newpol))                
+                (Action([]))
                 actionswithphysicalports in
 
-      (* If not all-ports, can safely union without overlap *)
-      (* oh if only that were true *)
-      (*ITE(or_of_preds_for_action [allportsatom],
+      (* the "allports" action must always be checked first*)
+      (* If not all-ports, can safely union without overlap *)      
+      ITE(or_of_preds_for_action [allportsatom],
           Action([allportsatom]),
-          singleunion)    *)
-      singleunion
+          singleunion)          
     end;;
 
 let debug = true;;
@@ -932,8 +971,11 @@ let make_policy_stream (p: flowlog_program) (notables: bool) (reportallpackets: 
         trigger_policy_recreation_thunk()
 
       | SwitchDown(swid) -> 
-        printf "WARNING: switch down. Currently unsupported. TODO: create new event type in Flowlog.\n%!";
-        ()
+        let sw_string = Int64.to_string swid in        
+        let notif = {typeid="switch_down"; values=construct_map [("sw", sw_string)]} in          
+          printf "SWITCH %Ld went down. Triggered: %s\n%!" swid (string_of_event notif);
+          respond_to_notification p notif;
+          trigger_policy_recreation_thunk()        
     and
 
     reportPacketCallback (sw: switchId) (pt: port) (pkt: Packet.packet) : NetCore_Types.action =   
