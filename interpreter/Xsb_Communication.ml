@@ -339,8 +339,9 @@ module Communication = struct
 			let subargs = fold_left (fun acc lst -> acc @ lst) [] subsarglists in
 			FAtom(modname, relname, subargs);;
 
+		(* engine will sometimes be told to retract _, need to retract ALL matches, not just first match *)
 	let retract_formula (tup: formula): unit = 
-		ignore (send_message ("retract("^(string_of_formula tup)^").") 0);;
+		ignore (send_message ("retractall("^(string_of_formula tup)^").") 0);;
 
 	let assert_formula (tup: formula): unit = 
 		(* avoid storing multiples of same tuple *)
