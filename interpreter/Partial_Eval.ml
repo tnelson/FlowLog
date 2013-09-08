@@ -300,10 +300,11 @@ let rec build_unsafe_switch_actions (oldpkt: string) (body: formula): action =
       else       
         actlist
 
-    (* If PE has left a disjunction or negated disjunction, it doesn't involve newpkt
-       so ignore this conjunct. *)
+    (* If PE has left a disjunction or negated disjunction (or a standalone negated tuple),
+        then it doesn't involve newpkt so ignore this conjunct. *)
     | FOr(_, _) -> actlist
     | FNot(FOr(_, _)) -> actlist
+    | FNot(FAnd(_,_)) -> actlist
 
       (* remember: only called for FORWARD/EMIT rules. so safe to do this: *)
     | FNot(FEquals(TField(avar, afld), TConst(aval)))
