@@ -221,9 +221,7 @@ let run_flowlog (p: flowlog_program): unit Lwt.t =
       (* pick cancels all threads given if one terminates *)             
       (* DO NOT attempt to copy ox/frenetic's switch connection detection code here. It will clash with 
          Frenetic's. Instead, register a HandleSwitchEvent policy, which gives us a nice clean callback. *)
-      Lwt.pick [gen_stream;
-                NetCore_Controller.start_controller pkt_stream stream;
-               ];;        
+      Lwt.pick [gen_stream; NetCore_Controller.start_controller pkt_stream stream];;
 
 
 let main () =
@@ -237,7 +235,11 @@ let main () =
 
     if !alloy then write_as_alloy program (filename^".als")
     else 
+      (* Intercede when Ctrl-C is pressed to close XSB, etc. *)
       Sys.catch_break true;
+      (* If SIGPIPE ("broken pipe") failure (exit code 141), actually give an error. 
+         Without this set, the program terminates with no message. *)
+      Sys.set_signal Sys.sigpipe Sys.Signal_ignore;
       try      
         out_log := Some(open_out "log_for_flowlog.log");  
         if !notables then printf "\n*** FLOW TABLE COMPILATION DISABLED! ***\n%!";
@@ -245,13 +247,19 @@ let main () =
         at_exit (fun () -> (printf "Ocaml exiting~\n%!"));        
         Lwt_main.run (run_flowlog program);     
         printf "LWT Terminated!\n%!";
-      with exn ->
+      with
+        | Sys.Break ->
+          Xsb.halt_xsb();
+          close_log(); 
+          printf "\nExiting gracefully due to break signal.\n%!";
+          exit 101
+        | exn ->
         Xsb.halt_xsb ();
         Format.printf "\nUnexpected exception: %s\n%s\n%!"
           (Printexc.to_string exn)
           (Printexc.get_backtrace ());
         close_log();
-        exit 1;;
+        exit 100;;
     
  main();;
 
