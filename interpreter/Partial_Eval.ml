@@ -42,32 +42,6 @@ let counter_pols_pushed = ref 0;;
 
 let last_policy_pushed = ref (Action([]));;
 
-(* 
-  ALLOWED atomic fmlas:
-
-  // assume in clause body. assume NNF. assume vars have been substituted out as much as possible
-  // means that such vars that DO occur can never appear as x=y or x=const.
-  
-  
-  (5) atom: 
-*)
-
-(* FORBIDDEN (pass to controller always):
-% (1) joins over existentials [can do better here, no hard constraint]
-% (2) assigns to newpkt fields not supported for modif. in OF, like nwProto [up to openflow to allow]
-% (3) assigns to allowed newpkt field in pkt-dependent way, not state-dep way 
-%    e.g. newpkt.dlSrc = pkt.dlDst
-%    but R(newpkt.dlSrc, pkt.dlDst) is ok
-%    ^^^ this may result in multiple packets being sent. but that's fine.
-%    SPECIAL CASE: newpkt.locPt != pkt.locPt is allowed. Means to use AllPorts.
-% (4) pkt.x = pkt.y --- can't do equality in netcore preds
-*)
-
-(* Any assignment to a newpkt field must either be 
-  (1) the trivial old-field assignment WITHOUT a surrounding not
-  (2) a positive relational binding (no surrounding NOT)      
-  (3) special case NOT newpkt.locPt = oldpkt.locPt *)
-
 exception IllegalFieldModification of formula;;
 exception IllegalAssignmentViaEquals of formula;;
 exception IllegalAtomMustBePositive of formula;;
@@ -282,6 +256,7 @@ let rec build_unsafe_switch_actions (oldpkt: string) (body: formula): action =
     match lit with 
     | FFalse -> raise UnsatisfiableFlag
     | FTrue -> actlist
+    (* old.locpt != new.locpt ---> allports (meaning: all but incoming) *)
     | FNot(FEquals(TField(var1, fld1), TField(var2, fld2))) -> 
       if var1 = oldpkt && fld1 = "locpt" && var2 <> oldpkt && fld2 = "locpt" then         
         [allportsatom] @ actlist 
@@ -615,7 +590,8 @@ let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_h
             | None -> map (fun body ->  
                 let unsafe_pred = build_unsafe_switch_pred oldpkt body in
                 let unsafe_acts = build_unsafe_switch_actions oldpkt body in
-                  (* Because of "all" ... *)
+                  (* Need to deal with cases where all-ports and physical(x)
+                     coexist. Remember that all-ports FORBIDS input port! *)
                   handle_all_and_port_together oldpkt unsafe_pred unsafe_acts)
                           bodies                   
             | Some(f) -> 
@@ -629,7 +605,7 @@ let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_h
 (* return the union of policies for each clause *)
 (* Side effect: reads current state in XSB *)
 let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: clause list) (callback: get_packet_handler option): pol =  
-  printf "ENTERING pkt_triggered_clauses_to_netcore!\n%!";
+  (*printf "ENTERING pkt_triggered_clauses_to_netcore!\n%!";*)
   let pre_unique_pas = appendall (map (pkt_triggered_clause_to_netcore p callback) clauses) in
   
   let clause_pas = unique ~cmp:(fun pair1 pair2 -> 
@@ -638,7 +614,7 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: clause list)
                                 (safe_compare_actions pa1 pa2) && (smart_compare_preds pp1 pp2))   
                   pre_unique_pas in
 
-  printf "Done creating clause_pas! %d members.\n%!" (length clause_pas);
+  (*printf "Done creating clause_pas! %d members.\n%!" (length clause_pas);*)
   (*let separate_disjunct_pair (ap, aa) =
     match ap with 
       | Or(ap1, ap2) -> map (fun newpred -> (newpred, aa)) (gather_predicate_or ap) 
@@ -741,7 +717,7 @@ let can_compile_clause_to_fwd (cl: clause): bool =
 (* Side effect: reads current state in XSB *)
 (* Set up policies for all packet-triggered clauses *)
 let program_to_netcore (p: flowlog_program) (callback: get_packet_handler): (pol * pol) =
-  printf "\n\n---------------------------------\nCompiling as able...\n%!";  
+  (*printf "\n\n---------------------------------\nCompiling as able...\n%!";  *)
     (pkt_triggered_clauses_to_netcore p 
       p.can_fully_compile_to_fwd_clauses 
       None,
@@ -902,7 +878,7 @@ let respond_to_notification (p: flowlog_program) (notif: event): unit =
 
       write_log (sprintf "<<< incoming: %s" (string_of_event notif));
 
-  printf "~~~~ RESPONDING TO NOTIFICATION ABOVE ~~~~~~~~~~~~~~~~~~~\n%!";
+  (*printf "~~~~ RESPONDING TO NOTIFICATION ABOVE ~~~~~~~~~~~~~~~~~~~\n%!";*)
 
   (* populate the EDB with event *) 
     Communication.assert_event p notif;
@@ -923,8 +899,11 @@ let respond_to_notification (p: flowlog_program) (notif: event): unit =
     let table_decls = get_local_tables p in
     let to_assert = flatten (map (change_table_how p true) table_decls) in
     let to_retract = flatten (map (change_table_how p false) table_decls) in
-    printf "  *** WILL ADD: %s\n%!" (String.concat " ; " (map string_of_formula to_assert));
-    printf "  *** WILL DELETE: %s\n%!" (String.concat " ; " (map string_of_formula to_retract));
+    if length to_assert > 0 || length to_retract > 0 then 
+    begin 
+      (*printf "  *** WILL ADD: %s\n%!" (String.concat " ; " (map string_of_formula to_assert));
+      printf "  *** WILL DELETE: %s\n%!" (String.concat " ; " (map string_of_formula to_retract));*)
+    end;
     write_log (sprintf "  *** WILL ADD: %s\n%!" (String.concat " ; " (map string_of_formula to_assert)));
     write_log (sprintf "  *** WILL DELETE: %s\n%!" (String.concat " ; " (map string_of_formula to_retract)));
     (* update state as dictated by +/-
@@ -1037,7 +1016,8 @@ let make_policy_stream (p: flowlog_program) (notables: bool) (reportallpackets: 
     updateFromPacket (sw: switchId) (pt: port) (pkt: Packet.packet) : NetCore_Types.action =  
 
       (* Update the policy via the push function *)
-      printf "Packet in on switch %Ld.\n%s\n%!" sw (Packet.to_string pkt);
+      let startt = Unix.gettimeofday() in 
+      (*printf "Packet in on switch %Ld.\n%s\n%!" sw (Packet.to_string pkt);*)
       counter_inc_pkt := !counter_inc_pkt + 1;
       fwd_actions := []; (* populated by things respond_to_notification calls *)
 
@@ -1047,6 +1027,8 @@ let make_policy_stream (p: flowlog_program) (notables: bool) (reportallpackets: 
         respond_to_notification p notif;      
         trigger_policy_recreation_thunk();
         (* This callback returns an action set to Frenetic. *) 
+        (*printf "Time used: %fs\n%!" (Unix.gettimeofday() -. startt);*)
+        (*printf "actions will be = %s\n%!" (NetCore_Pretty.string_of_action !fwd_actions);*)
         !fwd_actions in
 
     if not notables then

@@ -257,7 +257,7 @@ let rec disj_to_top ?(ignore_negation: bool = false) (f: formula): formula =
   (* raises Not_found if nothing to do for this event *)
   let inc_event_to_formula (p: flowlog_program) (notif: event): formula =
     (* event contains k=v mappings and a type. convert to a formula via defns in program*)
-    printf "Converting event to formula: %s\n%!" (string_of_event notif);
+    (*printf "Converting event to formula: %s\n%!" (string_of_event notif);*)
     let defn = find (function       
         | ReactInc(typename, relname) when notif.typeid = typename -> true
         | _ -> false ) p.reacts in 

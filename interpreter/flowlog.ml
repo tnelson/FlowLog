@@ -186,9 +186,11 @@ let usage = Printf.sprintf "Usage: %s [-alloy] [-notables] file.flg" (Filename.b
 let alloy = ref false;;
 let notables = ref false;;
 let reportall = ref false;;
+let verbose = ref 0;;
 let args = ref [];;
 
 let speclist = [
+  ("-verbose", Arg.Int (fun lvl -> verbose := lvl), ": set level of debug output");
   ("-alloy", Arg.Unit (fun () -> alloy := true), ": convert to Alloy");
   ("-reportall", Arg.Unit (fun () -> reportall := true), ": report all packets. WARNING: VERY SLOW!");
   (* Not calling this "reactive" because reactive still implies sending table entries. *)
@@ -242,6 +244,7 @@ let main () =
         Lwt_main.at_exit (fun () -> return (printf "LWT exiting~\n%!") );
         at_exit (fun () -> (printf "Ocaml exiting~\n%!"));        
         Lwt_main.run (run_flowlog program);     
+        printf "LWT Terminated!\n%!";
       with exn ->
         Xsb.halt_xsb ();
         Format.printf "\nUnexpected exception: %s\n%s\n%!"
