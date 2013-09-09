@@ -38,6 +38,9 @@ let guarded_emit_push (swid: switchId) (pt: portId) (bytes: Packet.bytes): unit 
 
 let counter_inc_pkt = ref 0;;
 let counter_inc_all = ref 0;;
+let counter_pols_pushed = ref 0;;
+
+let last_policy_pushed = ref (Action([]));;
 
 (* 
   ALLOWED atomic fmlas:
@@ -254,7 +257,7 @@ let rec partial_evaluation (p: flowlog_program) (incpkt: string) (f: formula): f
       (*printf ">> partial_evaluation on atomic %s\n%!" (string_of_formula f);*)
       Mutex.lock xsbmutex;
       let xsbresults: (string list) list = get_state_maybe_remote p f in
-      printf "DISJUNCTS FROM ATOM: %d\n%!" (length xsbresults);       
+      (*printf "DISJUNCTS FROM ATOM: %d\n%!" (length xsbresults);       *)
         Mutex.unlock xsbmutex;         
         let disjuncts = map 
           (fun sl -> build_and (reassemble_xsb_equality incpkt tlargs sl)) 
@@ -481,7 +484,7 @@ let rec strip_to_valid (oldpkt: string) (cl: clause): clause =
     of goal: result is a fmla that is implied by the real body. *)
     (* acc contains formula built so far, plus the variables seen *)
     let safeargs = (match cl.head with | FAtom(_, _, args) -> args | _ -> failwith "strip_to_valid") in
-      printf "   --- ENFORCING VALIDITY: Removing literals as needed from clause body: %s\n%!" (string_of_formula cl.body);
+      (*printf "   --- ENFORCING VALIDITY: Removing literals as needed from clause body: %s\n%!" (string_of_formula cl.body);*)
       let may_strip_literal (acc: formula * term list) (lit: formula): (formula * term list) = 
         let (fmlasofar, seen) = acc in         
 
@@ -508,7 +511,7 @@ let rec strip_to_valid (oldpkt: string) (cl: clause): clause =
           if length (list_intersection (subtract (filter not_is_oldpkt_field atomargs) safeargs) seen) > 0 then 
           begin
             (* removing this atom, so a fresh term shouldnt be remembered *)
-            printf "Removing atom: %s\n%!" (string_of_formula lit);
+            (*printf "Removing atom: %s\n%!" (string_of_formula lit);*)
             acc
           end 
           else if fmlasofar = FTrue then
@@ -529,7 +532,7 @@ let rec strip_to_valid (oldpkt: string) (cl: clause): clause =
         | [] -> cl
         | _ ->
           let (final_formula, seen) = fold_left may_strip_literal (FTrue, []) literals in
-          printf "   --- Final body was:%s\n%!" (string_of_formula final_formula);
+          (*printf "   --- Final body was:%s\n%!" (string_of_formula final_formula);*)
           {head = cl.head; orig_rule = cl.orig_rule; body = final_formula};;
 
 let is_all_ports_atom (a: action_atom): bool = 
@@ -605,7 +608,7 @@ let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_h
            we have no constraints on what gets produced. Maybe a bunch of 
            non-packet variables e.g. +R(x, y, z) ... *)
 
-         printf "BODIES from PE of single clause: %d\n%!" (length bodies);       
+         (*printf "BODIES from PE of single clause: %d\n%!" (length bodies);       *)
 
         let result = 
           match callback with
@@ -922,13 +925,15 @@ let respond_to_notification (p: flowlog_program) (notif: event): unit =
     let to_retract = flatten (map (change_table_how p false) table_decls) in
     printf "  *** WILL ADD: %s\n%!" (String.concat " ; " (map string_of_formula to_assert));
     printf "  *** WILL DELETE: %s\n%!" (String.concat " ; " (map string_of_formula to_retract));
+    write_log (sprintf "  *** WILL ADD: %s\n%!" (String.concat " ; " (map string_of_formula to_assert)));
+    write_log (sprintf "  *** WILL DELETE: %s\n%!" (String.concat " ; " (map string_of_formula to_retract)));
     (* update state as dictated by +/-
       Semantics demand that retraction happens before assertion here! *)
     iter Communication.retract_formula to_retract;
     iter Communication.assert_formula to_assert;
     
 
-    Xsb.debug_print_listings();    
+    (*Xsb.debug_print_listings();    *)
 
     (* depopulate event EDB *)
     Communication.retract_event p notif;  
@@ -1002,17 +1007,26 @@ let make_policy_stream (p: flowlog_program) (notables: bool) (reportallpackets: 
    (*     printf "NEW FWD policy: %s\n%!" (NetCore_Pretty.string_of_pol newfwdpol);
         printf "NEW NOTIF policy: %s\n%!" (NetCore_Pretty.string_of_pol newnotifpol);
      *)   
-        let newpol = Union(Union(newfwdpol, newnotifpol), internal_policy()) in      
-        (*if !counter_inc_pkt <= 1 then *) (* DEBUG *)
-        begin
-          write_log (sprintf "NEW FWD policy: %s\n%!" (NetCore_Pretty.string_of_pol newfwdpol));
-          write_log (sprintf "NEW NOTIF policy: %s\n%!" (NetCore_Pretty.string_of_pol newnotifpol));
+        let newpol = Union(Union(newfwdpol, newnotifpol), internal_policy()) in 
+          (* Since can't compare functions, need to use custom comparison *)                    
+          if not (safe_compare_pols newpol !last_policy_pushed) then
+          begin
+            counter_pols_pushed := !counter_pols_pushed + 1;
+          
+            printf "PUSHING NEW POLICY (number %d)!\n%!" !counter_pols_pushed;
+            push (Some newpol); 
+            last_policy_pushed := newpol;
+            printf "PUSHED NEW POLICY!\n%!";
+            write_log (sprintf "Pushed new policy (number %d).\n%!" !counter_pols_pushed);
+            write_log (sprintf "NEW FWD policy: %s\n%!" (NetCore_Pretty.string_of_pol newfwdpol));
+            write_log (sprintf "NEW NOTIF policy: %s\n%!" (NetCore_Pretty.string_of_pol newnotifpol));
 
-          printf "PUSHING NEW POLICY!\n%!";
-          push (Some newpol); 
-          printf "PUSHED NEW POLICY!\n%!";
-        end
-        
+          end
+          else
+          begin
+            write_log (sprintf "NEW POLICY was the same. Did not push (last was number %d).\n" !counter_pols_pushed);
+            printf "NEW POLICY was the same. Did not push (last was number %d).\n%!" !counter_pols_pushed;
+          end
       end
       else
         if notables then printf "\n*** FLOW TABLE COMPILATION DISABLED! ***\n%!";

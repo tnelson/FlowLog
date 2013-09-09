@@ -463,6 +463,29 @@ let smart_compare_preds_int (p1: pred) (p2: pred): int =
       else 0
     | _ -> Pervasives.compare p1 p2;;
 
+(* if want to totally order policies, need to do something better for actions *)
+let rec safe_compare_pols (p1: pol) (p2: pol): bool =
+  match p1, p2 with
+    | Action(acts1), Action(acts2) -> 
+      safe_compare_actions acts1 acts2
+    (* assume: only one switch event handler *)
+    | HandleSwitchEvent(_), HandleSwitchEvent(_) -> true
+    | Filter(apred1), Filter(apred2) -> smart_compare_preds apred1 apred2
+    | Union(subp11, subp12), Union(subp21, subp22) 
+    | Seq(subp11, subp12), Seq(subp21, subp22) ->
+      let comp1 = safe_compare_pols subp11 subp21 in
+      if comp1 then safe_compare_pols subp12 subp22
+      else comp1
+    | ITE(apred1, subp11, subp12), ITE(apred2, subp21, subp22) ->
+      let comppred = smart_compare_preds apred1 apred2 in
+      if not comppred then comppred
+      else let comp1 = safe_compare_pols subp11 subp21 in
+        if comp1 then safe_compare_pols subp12 subp22
+        else comp1
+    (* Not same policy structure, then different policy. *)
+    | _ -> false;;
+
+
 (* this won't intelligently compare within the pred. e.g. (p and q) != (q and p) here. *)
 (* module PredSet  = Set.Make( struct type t = pred let compare = compare end );; *)
 
