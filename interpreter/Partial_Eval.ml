@@ -7,6 +7,12 @@ open Xsb_Communication
 open Flowlog_Thrift_Out
 open Packet
 
+(* output verbosity *)
+(* 0 = default, no debug info at all *)
+(* 2 adds XSB listings between events *)
+(* 3 adds weakening and partial-evaluation info *)
+(* 10 = even XSB messages *)
+let global_verbose = ref 0;;
 
 (* XSB is shared state. We also have the remember_for_forwarding and packet_queue business *)
 let xsbmutex = Mutex.create();;
@@ -48,6 +54,8 @@ exception IllegalAtomMustBePositive of formula;;
 exception IllegalExistentialUse of formula;;
 exception IllegalModToNewpkt of (term * term);;
 exception IllegalEquality of (term * term);;
+
+exception ContradictoryActions of (string * string);;
 
 let legal_field_to_modify (fname: string): bool =
 	mem fname legal_to_modify_packet_fields;;
@@ -244,11 +252,20 @@ let rec partial_evaluation (p: flowlog_program) (incpkt: string) (f: formula): f
 
 let rec build_unsafe_switch_actions (oldpkt: string) (body: formula): action =
   let create_port_actions (actlist: action) (lit: formula): action =
-    let no_contradiction (aval: string): bool = 
+    let no_contradiction_or_repetition (aval: string): bool = 
       for_all
         (function 
-          | SwitchAction(pat) when pat.outPort <>
-              NetCore_Pattern.Physical(Int32.of_string aval) -> false
+          (* Don't just check for <> pts. Prevent adding repetitions of same action.
+             I.e., once you have a physical port, you never get another one. *)
+          (* NetCore_Pattern.Physical(Int32.of_string aval)*)
+          | SwitchAction(pat) ->
+            (match pat.outPort with
+              | NetCore_Pattern.Physical(aval2) ->                 
+                if pat.outPort <> NetCore_Pattern.Physical(Int32.of_string aval) then
+                  raise (ContradictoryActions(aval, Int32.to_string aval2))
+                else 
+                  false (* repetition, don't repeat! *)
+              | _ -> true)
           | _ -> true)
         actlist
     in
@@ -273,8 +290,9 @@ let rec build_unsafe_switch_actions (oldpkt: string) (body: formula): action =
     | FEquals(TField(avar, afld), TConst(aval)) 
     | FEquals(TConst(aval), TField(avar, afld)) -> 
       (* CHECK FOR CONTRADICTION WITH PRIOR ACTIONS! *)        
-      if avar <> oldpkt && afld = "locpt" && (no_contradiction aval) then          
-        [SwitchAction({id with outPort = NetCore_Pattern.Physical(Int32.of_string aval)})] @ actlist      
+      if avar <> oldpkt && afld = "locpt" && (no_contradiction_or_repetition aval) then                  
+        [SwitchAction({id with outPort = NetCore_Pattern.Physical(Int32.of_string aval)})]
+        @ actlist      
       else       
         actlist
 
@@ -338,7 +356,7 @@ let rec build_unsafe_switch_actions (oldpkt: string) (body: formula): action =
   (* - assume: no negated equalities except the special case pkt.locpt != newpkt.locpt *)  
   let atoms = conj_to_list body in
    (* printf "  >> build_switch_actions: %s\n%!" (String.concat " ; " (map (string_of_formula ~verbose:true) atoms));*)
-    (* if any actions are false, folding is invalidated *)
+    (* if any actions are false, folding is invalidated *)    
     try
       let port_actions = fold_left create_port_actions [] atoms in
       let complete_actions = port_actions in (*fold_left create_mod_actions port_actions atoms in*)      
@@ -459,7 +477,8 @@ let rec strip_to_valid (oldpkt: string) (cl: clause): clause =
     of goal: result is a fmla that is implied by the real body. *)
     (* acc contains formula built so far, plus the variables seen *)
     let safeargs = (match cl.head with | FAtom(_, _, args) -> args | _ -> failwith "strip_to_valid") in
-      (*printf "   --- ENFORCING VALIDITY: Removing literals as needed from clause body: %s\n%!" (string_of_formula cl.body);*)
+      if !global_verbose >= 3 then
+        printf "   --- WEAKENING: Removing literals as needed from clause body: %s\n%!" (string_of_formula cl.body);
       let may_strip_literal (acc: formula * term list) (lit: formula): (formula * term list) = 
         let (fmlasofar, seen) = acc in         
 
@@ -476,9 +495,15 @@ let rec strip_to_valid (oldpkt: string) (cl: clause): clause =
 
         (* pkt.x = pkt.y  <--- can't be done in OF 1.0. just remove. *)
         | FEquals(TField(v, f), TField(v2, f2)) when v = v2 && f2 <> f -> 
-          begin printf "Removing atom: %s\n%!" (string_of_formula lit); acc end
+          begin 
+            if !global_verbose >= 3 then
+              printf "Removing atom: %s\n%!" (string_of_formula lit);
+            acc end
         | FNot(FEquals(TField(v, f), TField(v2, f2))) when v = v2 && f2 <> f -> 
-          begin printf "Removing atom: %s\n%!" (string_of_formula lit); acc end            
+          begin
+            if !global_verbose >= 3 then 
+              printf "Removing atom: %s\n%!" (string_of_formula lit);
+            acc end            
 
         (* If this atom involves an already-seen variable not in tlargs, remove it *)
         | FAtom (_, _, atomargs)  
@@ -486,7 +511,8 @@ let rec strip_to_valid (oldpkt: string) (cl: clause): clause =
           if length (list_intersection (subtract (filter not_is_oldpkt_field atomargs) safeargs) seen) > 0 then 
           begin
             (* removing this atom, so a fresh term shouldnt be remembered *)
-            (*printf "Removing atom: %s\n%!" (string_of_formula lit);*)
+            if !global_verbose >= 3 then
+              printf "Removing atom: %s\n%!" (string_of_formula lit);
             acc
           end 
           else if fmlasofar = FTrue then
@@ -899,10 +925,10 @@ let respond_to_notification (p: flowlog_program) (notif: event): unit =
     let table_decls = get_local_tables p in
     let to_assert = flatten (map (change_table_how p true) table_decls) in
     let to_retract = flatten (map (change_table_how p false) table_decls) in
-    if length to_assert > 0 || length to_retract > 0 then 
+    if !global_verbose >= 2 && (length to_assert > 0 || length to_retract > 0) then 
     begin 
-      (*printf "  *** WILL ADD: %s\n%!" (String.concat " ; " (map string_of_formula to_assert));
-      printf "  *** WILL DELETE: %s\n%!" (String.concat " ; " (map string_of_formula to_retract));*)
+      printf "  *** WILL ADD: %s\n%!" (String.concat " ; " (map string_of_formula to_assert));
+      printf "  *** WILL DELETE: %s\n%!" (String.concat " ; " (map string_of_formula to_retract));
     end;
     write_log (sprintf "  *** WILL ADD: %s\n%!" (String.concat " ; " (map string_of_formula to_assert)));
     write_log (sprintf "  *** WILL DELETE: %s\n%!" (String.concat " ; " (map string_of_formula to_retract)));
@@ -911,8 +937,8 @@ let respond_to_notification (p: flowlog_program) (notif: event): unit =
     iter Communication.retract_formula to_retract;
     iter Communication.assert_formula to_assert;
     
-
-    (*Xsb.debug_print_listings();    *)
+    if !global_verbose >= 2 then
+      Xsb.debug_print_listings();   
 
     (* depopulate event EDB *)
     Communication.retract_event p notif;  
@@ -935,7 +961,9 @@ let respond_to_notification (p: flowlog_program) (notif: event): unit =
 let lies_port = Int32.of_string "65534";;
 
 (* If notables is true, send everything to controller *)
-let make_policy_stream (p: flowlog_program) (notables: bool) (reportallpackets: bool) =  
+let make_policy_stream (p: flowlog_program) 
+                       (notables: bool) 
+                       (reportallpackets: bool) =  
   (* stream of policies, with function to push new policies on *)
   let (policies, push) = Lwt_stream.create () in
 
@@ -1026,9 +1054,12 @@ let make_policy_stream (p: flowlog_program) (notables: bool) (reportallpackets: 
         printf "... notif: %s\n%!" (string_of_event notif);
         respond_to_notification p notif;      
         trigger_policy_recreation_thunk();
+
+        if !global_verbose >= 1 then
+          printf "Time used: %fs\n%!" (Unix.gettimeofday() -. startt);
+        if !global_verbose >= 2 then
+          printf "actions will be = %s\n%!" (NetCore_Pretty.string_of_action !fwd_actions);        
         (* This callback returns an action set to Frenetic. *) 
-        (*printf "Time used: %fs\n%!" (Unix.gettimeofday() -. startt);*)
-        (*printf "actions will be = %s\n%!" (NetCore_Pretty.string_of_action !fwd_actions);*)
         !fwd_actions in
 
     if not notables then
