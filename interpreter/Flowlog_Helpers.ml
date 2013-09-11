@@ -440,18 +440,8 @@ let rec simplify_netcore_predicate (pr: pred): pred =
     | Hdr(pat) -> pr
     | OnSwitch(sw) -> pr;;
 
-(* TODO: oh the inefficiency! SETS!! *)
-let smart_compare_preds (p1: pred) (p2: pred): bool =
-  match (p1, p2) with
-    | (And(_,_), And(_,_)) ->
-      let set1 = gather_predicate_and p1 in
-      let set2 = gather_predicate_and p2 in
-        (* PredSet.equal set1 set2*)
-        for_all (fun e -> mem e set2) set1
-        &&
-        for_all (fun e -> mem e set1) set2      
-    | _ -> p1 = p2;;
-
+(* TODO: using mem here prevents from descending >1 layer of alternation 
+   since it compares by structural equality *)
 let smart_compare_preds_int (p1: pred) (p2: pred): int =
   match (p1, p2) with
     | (And(_,_), And(_,_)) ->
@@ -461,7 +451,18 @@ let smart_compare_preds_int (p1: pred) (p2: pred): int =
         if      exists (fun e -> not (mem e set2)) set1 then 1
         else if exists (fun e -> not (mem e set1)) set2 then -1
       else 0
+    | (Or(_,_), Or(_,_)) ->
+      let set1 = gather_predicate_or p1 in
+      let set2 = gather_predicate_or p2 in
+      if      exists (fun e -> not (mem e set2)) set1 then 1
+      else if exists (fun e -> not (mem e set1)) set2 then -1
+      else 0
     | _ -> Pervasives.compare p1 p2;;
+
+(* TODO: oh the inefficiency! SETS!! *)
+let smart_compare_preds (p1: pred) (p2: pred): bool =
+  (smart_compare_preds_int p1 p2) = 0;;
+
 
 (* if want to totally order policies, need to do something better for actions *)
 let rec safe_compare_pols (p1: pol) (p2: pol): bool =

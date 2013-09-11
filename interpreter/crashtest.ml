@@ -31,12 +31,12 @@ let make_policy () =
   let rec updateFromPacket (sw: switchId) (pt: port) (pkt: Packet.packet) : NetCore_Types.action =  
     printf "packet in sw %Ld pt %s: %s\n%!" sw (NetCore_Pretty.string_of_port pt) (Packet.to_string pkt);
 
-    Thread.delay 2.00; (* eventually the number of packets waiting for processing gets too big*)
+    Thread.delay 1.00; (* eventually the number of packets waiting for processing gets too big*)
 
     (*let newpol = Action([allportsatom; ControllerAction(updateFromPacket)]) in 
         push (Some newpol);*)
         printf "pushed. returning now.\n%!";
-        [] 
+        [allportsatom] 
 
       and
 
@@ -54,8 +54,11 @@ let make_policy () =
           printf "SWITCH %Ld went down.\n%!" swid;
     in
 
+  let swpol = HandleSwitchEvent(switch_event_handler) in
+  (*let pktpol = Action([ControllerAction(updateFromPacket); allportsatom]) in*)
+  let pktpol = Action([ControllerAction(updateFromPacket)]) in
 
-  NetCore_Stream.from_stream (Union(HandleSwitchEvent(switch_event_handler), Action([allportsatom;ControllerAction(updateFromPacket)]))) policies;;
+    NetCore_Stream.from_stream (Union(swpol, pktpol)) policies;;
 
 
   

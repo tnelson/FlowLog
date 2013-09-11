@@ -135,7 +135,7 @@ ON packet_in(pkt):
   // recall: smuggling (orig sw, orig pt) in (dlSrc, dlDst)
   INSERT (pkt.dlSrc, pkt.dlDst) INTO ucTree WHERE pkt.dlTyp = 0x1001 AND
     NOT ucTC(pkt.dlSrc, pkt.locSw) AND NOT ucTC(pkt.locSw, pkt.dlSrc); 
-  INSERT (pkt.dlDst, pkt.dlSrc) INTO ucTree WHERE pkt.dlTyp = 0x1001 AND
+  INSERT (pkt.locSw, pkt.locPt) INTO ucTree WHERE pkt.dlTyp = 0x1001 AND
     NOT ucTC(pkt.dlSrc, pkt.locSw) AND NOT ucTC(pkt.locSw, pkt.dlSrc); 
 
 
