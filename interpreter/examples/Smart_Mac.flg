@@ -136,13 +136,21 @@ ON packet_in(pkt):
     // The optimization requirement: ctrlr will learn something new
     AND not learned(pkt.locSw, pkt.locPt, pkt.dlSrc);  
 
-  DO forward(new) WHERE    
+  DO forward(new) WHERE   
+    // know where to go 
     (learned(pkt.locSw, new.locPt, pkt.dlDst) AND          
      not pkt.dlTyp = 0x1001 and 
      pkt.locPt != new.locPt)
     OR
+    // don't know where to go: forward along new edges of spanning tree
     (NOT learned(pkt.locSw, x, pkt.dlDst) AND    
      NOT pkt.locPt = new.locPt AND
-     not pkt.dlTyp = 0x1001 and 
-     switch_has_port(pkt.locSw, new.locPt));
+     spanningTree(pkt.locSw, new.locPt) AND // use pkt.sw here, not new
+     not pkt.dlTyp = 0x1001)
+    OR 
+    // don't know where to go: also send to adjacent non-fabric ports
+    (NOT learned(pkt.locSw, x, pkt.dlDst) AND    
+     NOT pkt.locPt = new.locPt AND
+     nonSwitchPorts(pkt.locSw, new.locPt) AND // use pkt.sw here, not new
+     not pkt.dlTyp = 0x1001);
   
