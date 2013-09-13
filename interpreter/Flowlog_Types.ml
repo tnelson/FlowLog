@@ -108,14 +108,14 @@ open NetCore_Types
       | FEquals(t1, t2) -> (string_of_term ~verbose:verbose t1) ^ " = "^ (string_of_term ~verbose:verbose t2)
       | FNot(f) ->  "(not "^(string_of_formula ~verbose:verbose f)^")"
       | FAtom("", relname, tlargs) -> 
-          relname^"("^(String.concat "," (List.map (string_of_term ~verbose:verbose) tlargs))^")"
+          relname^"("^(String.concat "," (map (string_of_term ~verbose:verbose) tlargs))^")"
       | FAtom(modname, relname, tlargs) -> 
-          modname^"/"^relname^"("^(String.concat "," (List.map (string_of_term ~verbose:verbose) tlargs))^")"
+          modname^"/"^relname^"("^(String.concat "," (map (string_of_term ~verbose:verbose) tlargs))^")"
       | FAnd(f1, f2) -> (string_of_formula ~verbose:verbose f1) ^ ", "^ (string_of_formula ~verbose:verbose f2)
       | FOr(f1, f2) -> (string_of_formula ~verbose:verbose f1) ^ " or "^ (string_of_formula ~verbose:verbose f2)
   
   let action_string outrel argterms fmla: string = 
-    let argstring = (String.concat "," (List.map (string_of_term ~verbose:true) argterms)) in
+    let argstring = (String.concat "," (map (string_of_term ~verbose:true) argterms)) in
       outrel^"("^argstring^") WHERE "^(string_of_formula ~verbose:true fmla);;
 
   let string_of_rule (r: srule): string =
@@ -162,8 +162,8 @@ open NetCore_Types
   let pretty_print_program (ast: flowlog_ast): unit =
     match ast with
       | AST(imports, stmts) ->
-        List.iter (fun imp -> printf "IMPORT %s;\n%!" imp) imports;
-        List.iter (fun stmt -> printf "%s\n%!" (string_of_stmt stmt)) stmts;;
+        iter (fun imp -> printf "IMPORT %s;\n%!" imp) imports;
+        iter (fun stmt -> printf "%s\n%!" (string_of_stmt stmt)) stmts;;
 
   let string_of_clause ?(verbose: bool = false) (cl: clause): string =
     "CLAUSE: "^(string_of_formula ~verbose:verbose cl.head)^" :- "^(string_of_formula ~verbose:verbose cl.body)^"\n"^

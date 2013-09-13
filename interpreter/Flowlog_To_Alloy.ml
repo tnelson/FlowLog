@@ -93,9 +93,47 @@ let alloy_state (out: out_channel) (p: flowlog_program): unit =
             fprintf out "(%s) implies st1 = st2}\n\n%!" statesequal;;
 
 (**********************************************************)
+  let alloy_of_term (t: term): string = 
+    match t with
+      | TConst(s) -> s      
+      | TVar(s) -> s      
+      | TField(varname, fname) -> 
+        (varname^"."^fname);;
+
+  let rec alloy_of_formula (f: formula): string = 
+    match f with
+      | FTrue -> "true"
+      | FFalse -> "false"
+      | FEquals(t1, t2) -> (alloy_of_term t1) ^ " = "^ (alloy_of_term t2)
+      | FNot(f) ->  "not ("^(alloy_of_formula f)^")"
+      | FAtom("", relname, tlargs) -> 
+          (String.concat "->" (map alloy_of_term tlargs))^" in "^relname
+      | FAtom(modname, relname, tlargs) -> 
+          (String.concat "->" (map alloy_of_term tlargs))^" in "^modname^"/"^relname
+      | FAnd(f1, f2) -> "("^(alloy_of_formula f1) ^ " && "^ (alloy_of_formula f2)^")"
+      | FOr(f1, f2) -> (alloy_of_formula f1) ^ " || "^ (alloy_of_formula f2)
+  
+
+(**********************************************************)
 (* Every RULE in the program gets a predicate *)
 let alloy_rules (out: out_channel) (p: flowlog_program): unit =
-	();;
+  let alloy_of_action (act: action): string =
+    match act with
+      | ADelete(outrel, outargs, where)
+      | AInsert(outrel, outargs, where)  
+      | ADo(outrel, outargs, where) ->
+        alloy_of_formula where
+  in
+  let make_rule (i: int) (r: srule): unit = 
+    match r with 
+    | Rule(increl, incvar, act) ->       
+	    fprintf out "pred rule%d(%s: %s) { %s }\n%!" i incvar increl (alloy_of_action act)
+  in
+
+(* Not right: EV vs. relations. Also need both inc and out in pred, yes?
+   alternatively, can abandon per-rule preds and just do per action/statechange*)
+
+  iteri make_rule (unique (map (fun cl -> cl.orig_rule) p.clauses));;
 
 (**********************************************************)
 (* Every +, every -, every DO gets a predicate IFFing disj of appropriate rules *)
