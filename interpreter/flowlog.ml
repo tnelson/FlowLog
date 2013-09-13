@@ -232,8 +232,10 @@ let main () =
     printf "-----------\n%!";
     List.iter (fun cl -> printf "%s\n\n%!" (string_of_clause cl)) program.clauses;
 
-    if !alloy then write_as_alloy program (filename^".als")
+    if !alloy then 
+      write_as_alloy program (filename^".als")
     else 
+    begin
       (* Intercede when Ctrl-C is pressed to close XSB, etc. *)
       Sys.catch_break true;
       (* If SIGPIPE ("broken pipe") failure (exit code 141), actually give an error. 
@@ -258,7 +260,8 @@ let main () =
           (Printexc.to_string exn)
           (Printexc.get_backtrace ());
         close_log();
-        exit 100;;
+        exit 100;
+    end;;
     
  main();;
 
