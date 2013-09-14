@@ -127,7 +127,7 @@ let alloy_state (out: out_channel) (p: flowlog_program): unit =
 (*
 Out args may be actual field names of incoming tuple. Thus, need to let them be any type
 
-pred <outrel>[st: State, <incvar>: <increl>, <outarg0> :univ, <outarg1> :univ, ...] {
+pred <outrel>[st: State, <incvar>: <reactive of increl>, <outarg0> :univ, <outarg1> :univ, ...] {
   (rule1 to alloy) or
   (rule2 to alloy) or...
   ...
@@ -163,6 +163,12 @@ let alloy_actions (out: out_channel) (p: flowlog_program): unit =
       | _ -> failwith "make_existential_decl"
   in
 
+  let event_alloysig_for (increl: string): string =
+    match get_input_defn_for_rel p increl with
+      | ReactInc(typeid, _) -> "EV"^typeid
+      | _ -> failwith "event_typeid_for" 
+  in
+
   let alloy_of_pred_fragment (pf : pred_fragment): string =
   (* substitute var names: don't get stuck on rules with different args or in var name! *)      
     let to_substitute = [(TVar(pf.incvar), TVar("ev"))]
@@ -173,7 +179,7 @@ let alloy_actions (out: out_channel) (p: flowlog_program): unit =
     let freevars = get_terms (function | TVar(x) as t -> not (mem t quantified_vars) | _ -> false) substituted in
     (* explicitly quantify rule-scope existentials *)
     let freevarstr = (String.concat " " (map make_existential_decl freevars)) in
-      "\n  (ev in "^pf.increl^" && ("^freevarstr^" "^(alloy_of_formula substituted)^")\n"^
+      "\n  (ev in "^(event_alloysig_for pf.increl)^" && ("^freevarstr^" "^(alloy_of_formula substituted)^")\n"^
       (* If field of invar in outargs, need to add an equality, otherwise connection is lost by alpha renaming. *)
       "      && "^(String.concat " && " (mapi outarg_to_poss_equality pf.outargs))^")"
   in

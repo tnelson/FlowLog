@@ -218,6 +218,12 @@ let rec disj_to_top ?(ignore_negation: bool = false) (f: formula): formula =
         | _ -> None) 
         prgm.reacts;;      
 
+  let get_input_defn_for_rel (prgm: flowlog_program) (goalrel: string): sreactive =
+    find (function      
+          | ReactInc(intype, relname) when goalrel = relname -> true 
+          | _ -> false) 
+        prgm.reacts;;      
+
   let is_io_rel (prgm: flowlog_program) (modname: string) (relname: string): bool =
     (* exists is ocaml's ormap *)
     exists (function      
