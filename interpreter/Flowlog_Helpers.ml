@@ -21,9 +21,10 @@ let rec get_terms (pred: term -> bool) (f: formula) : term list =
 			filter pred [t1; t2]
 		| FAnd(f1, f2) ->
 			(unique (get_terms pred f1) @ (get_terms pred f2))
+    | FOr(f1, f2) ->
+      (unique (get_terms pred f1) @ (get_terms pred f2))
 		| FNot(innerf) ->
-			get_terms pred innerf
-		| _ -> failwith "get_terms";;	
+			get_terms pred innerf;;	
 
 let rec get_vars (f: formula) : term list = 	
 	get_terms (function | TVar(_) -> true |  _ -> false) f;;
@@ -91,6 +92,8 @@ let subtract (biglst: 'a list) (toremove: 'a list): 'a list =
 let list_intersection (l1: 'a list) (l2: 'a list): 'a list = 
   filter (fun ele1 -> (mem ele1 l2)) l1;;
 
+let is_field (t: term): bool = 
+  match t with | TField(_,_) -> true | _ -> false;;
 
 let is_forward_clause (cl: clause): bool =    
 	match cl.head with 

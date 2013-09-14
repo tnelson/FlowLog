@@ -70,6 +70,13 @@ let get_tablename (tdecl: sdecl): string =
       tblname
     | _ -> failwith "get_tablename";;
 
+let get_table_arity (tdecl: sdecl): int = 
+  match tdecl with
+    | DeclTable(tblname, fieldtypes) 
+    | DeclRemoteTable(tblname, fieldtypes) -> 
+      length fieldtypes
+    | _ -> failwith "get_table_arity";;
+
 let alloy_state (out: out_channel) (p: flowlog_program): unit =
   let declare_state (decl: sdecl) = 
     match decl with 
@@ -105,7 +112,7 @@ let alloy_state (out: out_channel) (p: flowlog_program): unit =
       | FTrue -> "true"
       | FFalse -> "false"
       | FEquals(t1, t2) -> (alloy_of_term t1) ^ " = "^ (alloy_of_term t2)
-      | FNot(f) ->  "not ("^(alloy_of_formula f)^")"
+      | FNot(f2) ->  "not ("^(alloy_of_formula f2)^")"
       | FAtom("", relname, tlargs) -> 
           (String.concat "->" (map alloy_of_term tlargs))^" in "^relname
       | FAtom(modname, relname, tlargs) -> 
@@ -115,36 +122,102 @@ let alloy_state (out: out_channel) (p: flowlog_program): unit =
   
 
 (**********************************************************)
-(* Every RULE in the program gets a predicate *)
-let alloy_rules (out: out_channel) (p: flowlog_program): unit =
-  let alloy_of_action (act: action): string =
-    match act with
-      | ADelete(outrel, outargs, where)
-      | AInsert(outrel, outargs, where)  
-      | ADo(outrel, outargs, where) ->
-        alloy_of_formula where
-  in
-  let make_rule (i: int) (r: srule): unit = 
-    match r with 
-    | Rule(increl, incvar, act) ->       
-	    fprintf out "pred rule%d(%s: %s) { %s }\n%!" i incvar increl (alloy_of_action act)
-  in
-
-(* Not right: EV vs. relations. Also need both inc and out in pred, yes?
-   alternatively, can abandon per-rule preds and just do per action/statechange*)
-
-  iteri make_rule (unique (map (fun cl -> cl.orig_rule) p.clauses));;
-
-(**********************************************************)
 (* Every +, every -, every DO gets a predicate IFFing disj of appropriate rules *)
-let alloy_actions (out: out_channel) (p: flowlog_program): unit =
-	();;
+
+(*
+Out args may be actual field names of incoming tuple. Thus, need to let them be any type
+
+pred <outrel>[st: State, <incvar>: <increl>, <outarg0> :univ, <outarg1> :univ, ...] {
+  (rule1 to alloy) or
+  (rule2 to alloy) or...
+  ...
+}
+*)
+
+type pred_fragment = {outrel: string; increl: string; incvar: string; 
+                      outargs: term list; where: formula};;
+
+let alloy_actions (out: out_channel) (p: flowlog_program): unit =  
+  let make_rule (r: srule): pred_fragment = 
+    match r with 
+    | Rule(increl, incvar, act) ->
+      match act with
+        | ADelete(outrel, outargs, where) ->
+          {outrel = (minus_prefix^"_"^outrel); outargs = outargs; where = where; increl = increl; incvar = incvar}
+
+        | AInsert(outrel, outargs, where) -> 
+          {outrel = (plus_prefix^"_"^outrel);  outargs = outargs; where = where; increl = increl; incvar = incvar}
+        | ADo(outrel, outargs, where) -> 
+          {outrel = outrel;                    outargs = outargs; where = where; increl = increl; incvar = incvar}
+  in
+  
+  let outarg_to_poss_equality (i: int) (outarg: term): string =
+    match outarg with
+      | TField(v, f) -> sprintf "out%d = %s.%s" i v f
+      | _ -> "true"
+  in
+
+  let make_existential_decl (t: term): string =
+    match t with 
+      | TVar(vname) -> sprintf "some %s : univ | " vname
+      | _ -> failwith "make_existential_decl"
+  in
+
+  let alloy_of_pred_fragment (pf : pred_fragment): string =
+  (* substitute var names: don't get stuck on rules with different args or in var name! *)      
+    let to_substitute = [(TVar(pf.incvar), TVar("ev"))]
+                        @ (mapi (fun i outarg -> (outarg, TVar("out"^(string_of_int i)))) pf.outargs) in
+    let substituted = (substitute_terms pf.where to_substitute) in   
+    printf "alloy of formula: %s\n%!" (string_of_formula substituted);
+    let quantified_vars = [TVar("ev")] @ (mapi (fun i _ -> TVar("out"^(string_of_int i))) pf.outargs) in
+    let freevars = get_terms (function | TVar(x) as t -> not (mem t quantified_vars) | _ -> false) substituted in
+    (* explicitly quantify rule-scope existentials *)
+    let freevarstr = (String.concat " " (map make_existential_decl freevars)) in
+      "\n  (ev in "^pf.increl^" && ("^freevarstr^" "^(alloy_of_formula substituted)^")\n"^
+      (* If field of invar in outargs, need to add an equality, otherwise connection is lost by alpha renaming. *)
+      "      && "^(String.concat " && " (mapi outarg_to_poss_equality pf.outargs))^")"
+  in
+
+  (* Accumulate a map from outrel to rules that contribute*)
+  let outrel_to_rules = fold_left (fun acc pf -> 
+              if StringMap.mem pf.outrel acc then
+                StringMap.add pf.outrel (pf :: StringMap.find pf.outrel acc) acc
+              else
+                StringMap.add pf.outrel [pf] acc) 
+            StringMap.empty 
+            (map make_rule (unique (map (fun cl -> cl.orig_rule) p.clauses))) in
+  (* Convert each outrel to a string for Alloy*)
+  let rulestrs = 
+    StringMap.fold (fun outrel pfl acc -> 
+                   let thispred = sprintf "pred %s[st: State, ev: univ, %s] {\n%s\n}\n" 
+                                    outrel 
+                                    (String.concat ", " (mapi (fun i t -> sprintf "out%d : univ" i) (hd pfl).outargs))
+                                    (String.concat " ||\n" (map alloy_of_pred_fragment pfl)) in
+                   StringMap.add outrel thispred acc)
+                   outrel_to_rules 
+                   StringMap.empty in
+  StringMap.iter (fun outrel predstr -> fprintf out "%s\n%!" predstr) rulestrs;;
+
 
 (**********************************************************)
 (* transition: st x ev x st 
    (note this is a slight deviation from the language: packet-in becomes an event) *)
 let alloy_transition (out: out_channel) (p: flowlog_program): unit =
-	();;
+  let build_table_transition (tdecl : sdecl): string = 
+    let tablename = get_tablename tdecl in    
+    let tupvec = (String.concat "," (init (get_table_arity tdecl) (fun i -> sprintf "tup%d" i))) in     
+    (* - { sw: Switch, sw2: Switch | minus_ucTC[st, ev, sw, sw2] } *)
+    let minus_expr = sprintf "{ %s | %s_%s[st1, ev, %s]}" tupvec minus_prefix tablename tupvec in 
+    let plus_expr =  sprintf "{ %s | %s_%s[st1, ev, %s]}" tupvec plus_prefix tablename tupvec in
+      sprintf "  st2.%s = (st1.%s\n            - %s)\n            + %s" 
+              tablename tablename minus_expr plus_expr
+  in
+
+  let local_tables = get_local_tables p in 
+  let remote_tables = (map (fun (react, decl) -> decl) (get_remote_tables p)) in
+    fprintf out "pred transition[st1: State, ev: Event, st2: State] { \n%!";
+    fprintf out "%s\n%!" (String.concat " &&\n\n" (map build_table_transition (local_tables @ remote_tables)));
+    fprintf out "}\n%!";;
 
 (**********************************************************)
 let write_as_alloy (p: flowlog_program) (fn: string): unit =
@@ -152,7 +225,6 @@ let write_as_alloy (p: flowlog_program) (fn: string): unit =
     	alloy_boilerplate out;      
     	alloy_declares out p;
       alloy_state out p;
-    	alloy_rules out p;
     	alloy_actions out p;
     	alloy_transition out p;    	
 		  close_out out;

@@ -31,8 +31,6 @@ ON packet_in(pkt):
      pkt.locPt != new.locPt)
     OR
     (NOT learned(pkt.locSw, x, pkt.dlDst) AND
-    // uncomment duplicate line to prevent full compilation
-     NOT learned(pkt.locSw, x, pkt.dlDst) AND
      NOT pkt.locPt = new.locPt AND
      switch_has_port(pkt.locSw, new.locPt));
     

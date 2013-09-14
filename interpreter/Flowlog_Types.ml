@@ -206,22 +206,27 @@ let equals_if_consistent (t1: term) (t2: term): formula =
     | (TConst(str1), TConst(str2)) when str1 <> str2 -> raise (SubstitutionLedToInconsistency((FEquals(t1, t2))))
     | _ -> FEquals(t1, t2);;
 
-(* f[v -> t] *)
+(* f[v -> t] 
+   Substitutions of variables apply to fields of that variable, too. *)
 let rec substitute_term (f: formula) (v: term) (t: term): formula = 
+  let substitute_term_result (curr: term): term =
+    match curr, v, t with 
+      | x, y, _ when x = y -> t
+      (* curr is a field of v, replace with field of t *)
+      | TField(x, fx), TVar(y), TVar(z) when x = y -> TField(z, fx)
+      | _ -> curr in
+
     match f with
         | FTrue -> f
         | FFalse -> f
         | FEquals(t1, t2) ->
+          let st1 = substitute_term_result t1 in
+          let st2 = substitute_term_result t2 in
           (* Remove fmlas which will be "x=x"; avoids inf. loop. *)
-          if t1 = v && t2 = t then FTrue
-          else if t2 = v && t1 = t then FTrue          
-          else if t1 = v then equals_if_consistent t t2
-          else if t2 = v then equals_if_consistent t1 t
-          else f
+          if st1 = st2 then FTrue
+          else equals_if_consistent st1 st2           
         | FAtom(modstr, relstr, argterms) -> 
-          let newargterms = map (fun arg -> 
-              (*(printf "***** %s\n%!" (string_of_term arg));*)
-              if v = arg then t else arg) argterms in
+          let newargterms = map (fun arg -> substitute_term_result arg) argterms in
             FAtom(modstr, relstr, newargterms)
         | FOr(f1, f2) ->         
             let subs1 = substitute_term f1 v t in
@@ -238,6 +243,9 @@ let rec substitute_term (f: formula) (v: term) (t: term): formula =
             else FAnd(subs1, subs2)       
         | FNot(f2) -> 
             FNot(substitute_term f2 v t);;
+
+let substitute_terms (f: formula) (subs: (term * term) list): formula = 
+  fold_left (fun fm (v, t) -> substitute_term fm v t) f subs;;
 
 (* assume a clause body. exempt gives the terms that are in the head, and thus need to not be removed *)
 let rec minimize_variables ?(exempt: term list = []) (f: formula): formula = 
