@@ -28,13 +28,13 @@ let alloy_boilerplate (out: out_channel): unit =
               localtm.tm_hour localtm.tm_min localtm.tm_sec 
               localtm.tm_mon localtm.tm_mday (localtm.tm_year + 1900); 
   fprintf out "%s\n%!" "
-sig Event {}
-sig Switch {}
-sig MacAddr {}
-sig IPAddr {}
-sig EthTyp {}
-sig PhysicalPort {} 
-sig NwProtocol {}";;
+abstract sig Event {}
+//sig Switch {}
+//sig MacAddr {}
+//sig IPAddr {}
+//sig EthTyp {}
+//sig PhysicalPort {} 
+//sig NwProtocol {}";;
 
 (**********************************************************)
 (* Every program's declared notifications need a sig... *)
@@ -150,9 +150,9 @@ let alloy_actions (out: out_channel) (p: flowlog_program): unit =
           {outrel = outrel;                    outargs = outargs; where = where; increl = increl; incvar = incvar}
   in
   
-  let outarg_to_poss_equality (evname: string) (i: int) (outarg: term): string =
+  let outarg_to_poss_equality (evrestricted: string) (i: int) (outarg: term): string =
     match outarg with
-      | TField(v, f) -> sprintf "out%d = %s.%s" i evname f (* NOT v *)
+      | TField(v, f) -> sprintf "out%d = %s.%s" i evrestricted f (* NOT v and NOT "ev" *)
       | _ -> "(none = none)"
   in
 
@@ -170,7 +170,9 @@ let alloy_actions (out: out_channel) (p: flowlog_program): unit =
 
   let alloy_of_pred_fragment (stateid: string) (pf : pred_fragment): string =
   (* substitute var names: don't get stuck on rules with different args or in var name! *)      
-    let to_substitute = [(TVar(pf.incvar), TVar("ev"))]
+    let evtypename = (event_alloysig_for pf.increl) in
+    let evrestrictedname = (sprintf "(%s <: ev)" evtypename) in
+    let to_substitute = [(TVar(pf.incvar), TVar(evrestrictedname))](* [(TVar(pf.incvar), TVar("ev"))]*)
                         @ (mapi (fun i outarg -> (outarg, TVar("out"^(string_of_int i)))) pf.outargs) in
     let substituted = (substitute_terms pf.where to_substitute) in   
     printf "alloy of formula: %s\n%!" (string_of_formula substituted);
@@ -178,9 +180,11 @@ let alloy_actions (out: out_channel) (p: flowlog_program): unit =
     let freevars = get_terms (function | TVar(x) as t -> not (mem t quantified_vars) | _ -> false) substituted in
     (* explicitly quantify rule-scope existentials *)
     let freevarstr = (String.concat " " (map make_existential_decl freevars)) in
-      "\n  (ev in "^(event_alloysig_for pf.increl)^" && ("^freevarstr^" "^(alloy_of_formula stateid substituted)^")\n"^
+
+      "\n  (ev in "^evtypename^" && ("^freevarstr^" "^(alloy_of_formula stateid substituted)^")\n"^
+
       (* If field of invar in outargs, need to add an equality, otherwise connection is lost by alpha renaming. *)
-      "      && "^(String.concat " && " (mapi (outarg_to_poss_equality "ev") pf.outargs))^")"
+      "      && "^(String.concat " && " (mapi (outarg_to_poss_equality evrestrictedname) pf.outargs))^")"
   in
 
   (* Accumulate a map from outrel to rules that contribute*)
@@ -194,7 +198,7 @@ let alloy_actions (out: out_channel) (p: flowlog_program): unit =
   (* Convert each outrel to a string for Alloy*)
   let rulestrs = 
     StringMap.fold (fun outrel pfl acc -> 
-                   let thispred = sprintf "pred %s[st: State, ev: univ, %s] {\n%s\n}\n" 
+                   let thispred = sprintf "pred %s[st: State, ev: Event, %s] {\n%s\n}\n" 
                                     outrel 
                                     (String.concat ", " (mapi (fun i t -> sprintf "out%d : univ" i) (hd pfl).outargs))
                                     (String.concat " ||\n" (map (alloy_of_pred_fragment "st") pfl)) in
@@ -227,6 +231,16 @@ let alloy_transition (out: out_channel) (p: flowlog_program): unit =
     fprintf out "}\n%!";;
 
 (**********************************************************)
+let alloy_boilerplate_pred (out: out_channel): unit = 
+  fprintf out "
+pred testPred[] {
+  some st1, st2: State, ev: Event |
+     transition[st1, ev, st2] &&
+     st1 != st2 and no st1.learned &&
+     no st1.switch_has_port
+}
+run testPred for 1 Event, 2 State, 2 Int\n%!";;
+
 let write_as_alloy (p: flowlog_program) (fn: string): unit =
     let out = open_out fn in 
     	alloy_boilerplate out;      
@@ -234,6 +248,7 @@ let write_as_alloy (p: flowlog_program) (fn: string): unit =
       alloy_state out p;
     	alloy_actions out p;
     	alloy_transition out p;    	
+      alloy_boilerplate_pred out;
 		  close_out out;
       printf "~~~ Finished compiling %s to Alloy. ~~~\n%!" fn;;
 
