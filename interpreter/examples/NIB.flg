@@ -15,17 +15,17 @@ EVENT start_timer {seconds, id};
 EVENT timer_expired {id};
 EVENT dummy_down_alert {sw1, pt1, sw2, pt2};
 
-TABLE switch_has_port(int, int); 
-TABLE ucST(int, int, int, int);
-TABLE switchTopology(int, int, int, int);
-TABLE ucTree(int, int);
-TABLE spanningTree(int, int);
-TABLE ucTC(int, int);
-TABLE nonSwitchPorts(int, int);
-TABLE macConnectedAt(int48, int, int);
+TABLE switch_has_port(switchid, portid); 
+TABLE ucST(switchid, portid, switchid, portid);
+TABLE switchTopology(switchid, portid, switchid, portid);
+TABLE ucTree(switchid, portid);
+TABLE spanningTree(switchid, portid);
+TABLE ucTC(switchid, switchid);
+TABLE nonSwitchPorts(switchid, portid);
+TABLE macConnectedAt(macaddr, switchid, portid);
 
 OUTGOING start_timer(int, string);
-OUTGOING dummy_down_alert(int, int, int, int);
+OUTGOING dummy_down_alert(switchid, portid, switchid, portid);
 INCOMING timer_expired(timer_expired); 
 
 /////////////////////

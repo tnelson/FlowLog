@@ -28,24 +28,42 @@ let alloy_boilerplate (out: out_channel): unit =
               localtm.tm_hour localtm.tm_min localtm.tm_sec 
               localtm.tm_mon localtm.tm_mday (localtm.tm_year + 1900); 
   fprintf out "%s\n%!" "
+pred true[] {}
+pred false[] { some none }
+
 abstract sig Event {}
-//sig Switch {}
-//sig MacAddr {}
-//sig IPAddr {}
-//sig EthTyp {}
-//sig PhysicalPort {} 
-//sig NwProtocol {}";;
+abstract sig Value {}
+sig Switchid extends Value {}
+sig Macaddr extends Value {}
+sig Ipaddr extends Value {}
+sig Ethtyp extends Value {}
+sig Portid extends Value {} 
+sig Nwprotocol extends Value {}
+";;
+
+(**********************************************************)
+(* Identify the constants (like "0x1001") used and declare them. *)
+let alloy_constants (out: out_channel) (p: flowlog_program): unit =
+  let constants = fold_left (fun acc cl -> unique ( acc @ (get_terms (function | TConst(_) -> true | _ -> false) cl.body)))
+                  []
+                  p.clauses in
+  iter (function | TConst(c) -> fprintf out "lone sig C_%s extends Value {}\n" c | _ -> failwith "alloy_constants") constants;
+  fprintf out "\n%!";;
 
 (**********************************************************)
 (* Every program's declared notifications need a sig... *)
 (* ...and an extensional constraint *)
+
+let type_of_event_field (evname: string) (fldname: string): string =
+  "Value";; (* TODO: inference or annotation in program *)
+
 let alloy_declares (out: out_channel) (p: flowlog_program): unit =
   let declare_event (decl: sdecl) =
     match decl with 
       | DeclEvent(evname, evfields) ->  
         let ifislone = if length evfields > 0 then "" else "lone " in
           fprintf out "%ssig EV%s extends Event {\n%!" ifislone evname;
-          let flddecls = map (sprintf "    %s: one Int") evfields in 
+          let flddecls = map (fun fldname -> (sprintf "    %s: one %s") fldname (type_of_event_field evname fldname)) evfields in 
             fprintf out "%s%!" (String.concat ",\n" flddecls);
             fprintf out "}\n\n%!";
 
@@ -101,15 +119,15 @@ let alloy_state (out: out_channel) (p: flowlog_program): unit =
 (**********************************************************)
   let alloy_of_term (t: term): string = 
     match t with
-      | TConst(s) -> s      
+      | TConst(s) -> "C_"^s      
       | TVar(s) -> s      
       | TField(varname, fname) -> 
         (varname^"."^fname);;
 
   let rec alloy_of_formula (stateid: string) (f: formula): string = 
     match f with
-      | FTrue -> "(none = none)"
-      | FFalse -> "(none != none)"
+      | FTrue -> "true[]"
+      | FFalse -> "false[]"
       | FEquals(t1, t2) -> (alloy_of_term t1) ^ " = "^ (alloy_of_term t2)
       | FNot(f2) ->  "not ("^(alloy_of_formula stateid f2)^")"
       | FAtom("", relname, tlargs) -> 
@@ -153,7 +171,7 @@ let alloy_actions (out: out_channel) (p: flowlog_program): unit =
   let outarg_to_poss_equality (evrestricted: string) (i: int) (outarg: term): string =
     match outarg with
       | TField(v, f) -> sprintf "out%d = %s.%s" i evrestricted f (* NOT v and NOT "ev" *)
-      | _ -> "(none = none)"
+      | _ -> "true[]"
   in
 
   let make_existential_decl (t: term): string =
@@ -195,6 +213,7 @@ let alloy_actions (out: out_channel) (p: flowlog_program): unit =
                 StringMap.add pf.outrel [pf] acc) 
             StringMap.empty 
             (map make_rule (unique (map (fun cl -> cl.orig_rule) p.clauses))) in
+  
   (* Convert each outrel to a string for Alloy*)
   let rulestrs = 
     StringMap.fold (fun outrel pfl acc -> 
@@ -203,10 +222,19 @@ let alloy_actions (out: out_channel) (p: flowlog_program): unit =
                                     (String.concat ", " (mapi (fun i t -> sprintf "out%d : univ" i) (hd pfl).outargs))
                                     (String.concat " ||\n" (map (alloy_of_pred_fragment "st") pfl)) in
                    StringMap.add outrel thispred acc)
-                   outrel_to_rules 
+                   outrel_to_rules
                    StringMap.empty in
   StringMap.iter (fun outrel predstr -> fprintf out "%s\n%!" predstr) rulestrs;;
 
+
+let plus_rule_exists (p: flowlog_program) (tblname: string): bool =
+  exists (fun cl -> match cl.orig_rule with 
+    | Rule(_, _, AInsert(rtbl, _, _)) when tblname = rtbl -> true
+    | _ -> false) p.clauses;;
+let minus_rule_exists (p: flowlog_program) (tblname: string): bool =
+  exists (fun cl -> match cl.orig_rule with 
+    | Rule(_, _, ADelete(rtbl, _, _)) when tblname = rtbl -> true
+    | _ -> false) p.clauses;;
 
 (**********************************************************)
 (* transition: st x ev x st 
@@ -218,9 +246,11 @@ let alloy_transition (out: out_channel) (p: flowlog_program): unit =
     let tupavec = (String.concat "," (init (length (get_table_fieldtypes tdecl)) (fun i -> sprintf "tup%d" i))) in   
 
     (* - { sw: Switch, sw2: Switch | minus_ucTC[st, ev, sw, sw2] } *)
-    let minus_expr = sprintf "{ %s | %s_%s[st1, ev, %s]}" tupdvec minus_prefix tablename tupavec in 
-    let plus_expr =  sprintf "{ %s | %s_%s[st1, ev, %s]}" tupdvec plus_prefix tablename tupavec in
-      sprintf "  st2.%s = (st1.%s\n            - %s)\n            + %s" 
+    let minus_expr = if minus_rule_exists p tablename then sprintf "- { %s | %s_%s[st1, ev, %s]}" tupdvec minus_prefix tablename tupavec 
+                     else "" in 
+    let plus_expr =  if plus_rule_exists p tablename then sprintf "+ { %s | %s_%s[st1, ev, %s]}" tupdvec plus_prefix tablename tupavec 
+                     else "" in
+      sprintf "  st2.%s = (st1.%s\n            %s)\n            %s" 
               tablename tablename minus_expr plus_expr
   in
 
@@ -239,11 +269,12 @@ pred testPred[] {
      st1 != st2 and no st1.learned &&
      no st1.switch_has_port
 }
-run testPred for 1 Event, 2 State, 2 Int\n%!";;
+run testPred for 3 but 1 Event, 2 State, 8 Value\n%!";;
 
 let write_as_alloy (p: flowlog_program) (fn: string): unit =
     let out = open_out fn in 
-    	alloy_boilerplate out;      
+    	alloy_boilerplate out;    
+      alloy_constants out p;  
     	alloy_declares out p;
       alloy_state out p;
     	alloy_actions out p;
