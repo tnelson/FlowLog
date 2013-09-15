@@ -45,7 +45,7 @@ let alloy_declares (out: out_channel) (p: flowlog_program): unit =
       | DeclEvent(evname, evfields) ->  
         let ifislone = if length evfields > 0 then "" else "lone " in
           fprintf out "%ssig EV%s extends Event {\n%!" ifislone evname;
-          let flddecls = map (sprintf "    %s: one X") evfields in 
+          let flddecls = map (sprintf "    %s: one Int") evfields in 
             fprintf out "%s%!" (String.concat ",\n" flddecls);
             fprintf out "}\n\n%!";
 
@@ -70,28 +70,27 @@ let get_tablename (tdecl: sdecl): string =
       tblname
     | _ -> failwith "get_tablename";;
 
-let get_table_arity (tdecl: sdecl): int = 
+let get_table_fieldtypes (tdecl: sdecl): string list = 
   match tdecl with
     | DeclTable(tblname, fieldtypes) 
     | DeclRemoteTable(tblname, fieldtypes) -> 
-      length fieldtypes
-    | _ -> failwith "get_table_arity";;
+      fieldtypes
+    | _ -> failwith "get_table_fieldtypes";;
 
 let alloy_state (out: out_channel) (p: flowlog_program): unit =
-  let declare_state (decl: sdecl) = 
+  let declare_state (decl: sdecl): string = 
     match decl with 
       | DeclTable(tblname, fieldtypes) 
       | DeclRemoteTable(tblname, fieldtypes) -> 
-        let typesproduct = String.concat " -> " fieldtypes in 
-          fprintf out "    %s: %s\n%!" tblname typesproduct
+        let typesproduct = String.concat " -> " (map String.capitalize fieldtypes) in 
+          sprintf "    %s: %s\n%!" tblname typesproduct
       | _ -> failwith "declare_state"
   in
 
   let local_tables = get_local_tables p in 
   let remote_tables = (map (fun (react, decl) -> decl) (get_remote_tables p)) in
     fprintf out "sig State {\n%!";
-    iter declare_state local_tables;
-    iter declare_state remote_tables;
+    fprintf out "%s\n%!" (String.concat ",\n" (map declare_state (local_tables @ remote_tables)));
     fprintf out "}\n%!";
     fprintf out "fact StateExtensional { all st1, st2: State |\n%!";
     let stateequals = (map (fun tblname -> sprintf "st1.%s = st2.%s" tblname tblname)
@@ -107,18 +106,18 @@ let alloy_state (out: out_channel) (p: flowlog_program): unit =
       | TField(varname, fname) -> 
         (varname^"."^fname);;
 
-  let rec alloy_of_formula (f: formula): string = 
+  let rec alloy_of_formula (stateid: string) (f: formula): string = 
     match f with
-      | FTrue -> "true"
-      | FFalse -> "false"
+      | FTrue -> "(none = none)"
+      | FFalse -> "(none != none)"
       | FEquals(t1, t2) -> (alloy_of_term t1) ^ " = "^ (alloy_of_term t2)
-      | FNot(f2) ->  "not ("^(alloy_of_formula f2)^")"
+      | FNot(f2) ->  "not ("^(alloy_of_formula stateid f2)^")"
       | FAtom("", relname, tlargs) -> 
-          (String.concat "->" (map alloy_of_term tlargs))^" in "^relname
+          (String.concat "->" (map alloy_of_term tlargs))^" in "^stateid^"."^relname
       | FAtom(modname, relname, tlargs) -> 
-          (String.concat "->" (map alloy_of_term tlargs))^" in "^modname^"/"^relname
-      | FAnd(f1, f2) -> "("^(alloy_of_formula f1) ^ " && "^ (alloy_of_formula f2)^")"
-      | FOr(f1, f2) -> (alloy_of_formula f1) ^ " || "^ (alloy_of_formula f2)
+          (String.concat "->" (map alloy_of_term tlargs))^" in "^stateid^"."^modname^"_"^relname
+      | FAnd(f1, f2) -> "("^(alloy_of_formula stateid f1) ^ " && "^ (alloy_of_formula stateid f2)^")"
+      | FOr(f1, f2) -> (alloy_of_formula stateid f1) ^ " || "^ (alloy_of_formula stateid f2)
   
 
 (**********************************************************)
@@ -151,10 +150,10 @@ let alloy_actions (out: out_channel) (p: flowlog_program): unit =
           {outrel = outrel;                    outargs = outargs; where = where; increl = increl; incvar = incvar}
   in
   
-  let outarg_to_poss_equality (i: int) (outarg: term): string =
+  let outarg_to_poss_equality (evname: string) (i: int) (outarg: term): string =
     match outarg with
-      | TField(v, f) -> sprintf "out%d = %s.%s" i v f
-      | _ -> "true"
+      | TField(v, f) -> sprintf "out%d = %s.%s" i evname f (* NOT v *)
+      | _ -> "(none = none)"
   in
 
   let make_existential_decl (t: term): string =
@@ -169,7 +168,7 @@ let alloy_actions (out: out_channel) (p: flowlog_program): unit =
       | _ -> failwith "event_typeid_for" 
   in
 
-  let alloy_of_pred_fragment (pf : pred_fragment): string =
+  let alloy_of_pred_fragment (stateid: string) (pf : pred_fragment): string =
   (* substitute var names: don't get stuck on rules with different args or in var name! *)      
     let to_substitute = [(TVar(pf.incvar), TVar("ev"))]
                         @ (mapi (fun i outarg -> (outarg, TVar("out"^(string_of_int i)))) pf.outargs) in
@@ -179,9 +178,9 @@ let alloy_actions (out: out_channel) (p: flowlog_program): unit =
     let freevars = get_terms (function | TVar(x) as t -> not (mem t quantified_vars) | _ -> false) substituted in
     (* explicitly quantify rule-scope existentials *)
     let freevarstr = (String.concat " " (map make_existential_decl freevars)) in
-      "\n  (ev in "^(event_alloysig_for pf.increl)^" && ("^freevarstr^" "^(alloy_of_formula substituted)^")\n"^
+      "\n  (ev in "^(event_alloysig_for pf.increl)^" && ("^freevarstr^" "^(alloy_of_formula stateid substituted)^")\n"^
       (* If field of invar in outargs, need to add an equality, otherwise connection is lost by alpha renaming. *)
-      "      && "^(String.concat " && " (mapi outarg_to_poss_equality pf.outargs))^")"
+      "      && "^(String.concat " && " (mapi (outarg_to_poss_equality "ev") pf.outargs))^")"
   in
 
   (* Accumulate a map from outrel to rules that contribute*)
@@ -198,7 +197,7 @@ let alloy_actions (out: out_channel) (p: flowlog_program): unit =
                    let thispred = sprintf "pred %s[st: State, ev: univ, %s] {\n%s\n}\n" 
                                     outrel 
                                     (String.concat ", " (mapi (fun i t -> sprintf "out%d : univ" i) (hd pfl).outargs))
-                                    (String.concat " ||\n" (map alloy_of_pred_fragment pfl)) in
+                                    (String.concat " ||\n" (map (alloy_of_pred_fragment "st") pfl)) in
                    StringMap.add outrel thispred acc)
                    outrel_to_rules 
                    StringMap.empty in
@@ -211,10 +210,12 @@ let alloy_actions (out: out_channel) (p: flowlog_program): unit =
 let alloy_transition (out: out_channel) (p: flowlog_program): unit =
   let build_table_transition (tdecl : sdecl): string = 
     let tablename = get_tablename tdecl in    
-    let tupvec = (String.concat "," (init (get_table_arity tdecl) (fun i -> sprintf "tup%d" i))) in     
+    let tupdvec = (String.concat "," (mapi  (fun i typ -> sprintf "tup%d: %s" i (String.capitalize typ)) (get_table_fieldtypes tdecl))) in   
+    let tupavec = (String.concat "," (init (length (get_table_fieldtypes tdecl)) (fun i -> sprintf "tup%d" i))) in   
+
     (* - { sw: Switch, sw2: Switch | minus_ucTC[st, ev, sw, sw2] } *)
-    let minus_expr = sprintf "{ %s | %s_%s[st1, ev, %s]}" tupvec minus_prefix tablename tupvec in 
-    let plus_expr =  sprintf "{ %s | %s_%s[st1, ev, %s]}" tupvec plus_prefix tablename tupvec in
+    let minus_expr = sprintf "{ %s | %s_%s[st1, ev, %s]}" tupdvec minus_prefix tablename tupavec in 
+    let plus_expr =  sprintf "{ %s | %s_%s[st1, ev, %s]}" tupdvec plus_prefix tablename tupavec in
       sprintf "  st2.%s = (st1.%s\n            - %s)\n            + %s" 
               tablename tablename minus_expr plus_expr
   in
@@ -234,4 +235,32 @@ let write_as_alloy (p: flowlog_program) (fn: string): unit =
     	alloy_actions out p;
     	alloy_transition out p;    	
 		  close_out out;
-      printf "~~~ Finished compiling to Alloy. ~~~\n%!";;
+      printf "~~~ Finished compiling %s to Alloy. ~~~\n%!" fn;;
+
+(**********************************************************)
+let write_as_alloy_change_impact (p1: flowlog_program) (fn1: string) (p2: flowlog_program) (fn2: string): unit = 
+
+  let alloy_out_difference (rel: sreactive): string =     
+    "some outev: Event | 
+          (prog1.outpolicy[st, ev, outev] and not prog2.outpolicy[st, ev, outev]) ||
+          (prog2.outpolicy[st, ev, outev] and not prog1.outpolicy[st, ev, outev])"
+  in
+
+  write_as_alloy p1 fn1;
+  write_as_alloy p2 fn2;
+  let out = open_out "change-impact.als" in 
+      fprintf out "
+      open %s as prog1
+      open %s as prog2
+
+      pred changeImpact[] { 
+        some ev: Event, st: State |
+        some newst1, newst2: State |
+          (prog1.transition[] and prog2.transition[] and newst1 != newst2)
+          || 
+          %s
+      }\n%!" fn1 fn2 (String.concat "\n||\n  " (map alloy_out_difference (get_output_defns p1)));
+      fprintf out "run changeImpact[] for 3 State, 1 Event";
+      close_out out;
+      printf "WARNING: Make sure the two files have the same ontology, or the generated file may not run.\n%!";
+      printf "~~~ Finished change-impact query file. ~~~\n%!";;

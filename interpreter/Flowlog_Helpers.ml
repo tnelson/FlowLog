@@ -218,6 +218,12 @@ let rec disj_to_top ?(ignore_negation: bool = false) (f: formula): formula =
         | _ -> None) 
         prgm.reacts;;      
 
+  let relation_name_of_defn (r: sreactive): string =
+    match r with
+      | ReactOut(relname, arglist, outtype, assigns, spec) -> relname
+      | ReactRemote(relname, qryname, ip, port, refresh) ->  relname
+      | ReactInc(evname, relname) -> relname;;
+
   let get_input_defn_for_rel (prgm: flowlog_program) (goalrel: string): sreactive =
     find (function      
           | ReactInc(intype, relname) when goalrel = relname -> true 
