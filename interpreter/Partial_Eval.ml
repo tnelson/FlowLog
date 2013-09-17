@@ -245,7 +245,8 @@ let rec partial_evaluation (p: flowlog_program) (incpkt: string) (f: formula): f
           (fun sl -> build_and (reassemble_xsb_equality incpkt tlargs sl)) 
           xsbresults in
         let fresult = build_or disjuncts in
-        (*printf "<< partial evaluation result (converted from xsb) was: %s\n%!" (string_of_formula fresult);        *)
+        if !global_verbose >= 3 then 
+          printf "<< partial evaluation result (converted from xsb) for %s\n    was: %s\n%!" (string_of_formula f) (string_of_formula fresult);        
         fresult;;
 
 (***************************************************************************************)
@@ -478,7 +479,7 @@ let rec strip_to_valid (oldpkt: string) (cl: clause): clause =
     (* acc contains formula built so far, plus the variables seen *)
     let safeargs = (match cl.head with | FAtom(_, _, args) -> args | _ -> failwith "strip_to_valid") in
       if !global_verbose >= 3 then
-        printf "   --- WEAKENING: Removing literals as needed from clause body: %s\n%!" (string_of_formula cl.body);
+        printf "   --- WEAKENING: Checking clause body in case need to weaken: %s\n%!" (string_of_formula cl.body);
       let may_strip_literal (acc: formula * term list) (lit: formula): (formula * term list) = 
         let (fmlasofar, seen) = acc in         
 
