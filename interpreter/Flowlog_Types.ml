@@ -1,5 +1,6 @@
 open Printf
 open ExtList.List
+open NetCore_Types
 
   type term = 
               | TConst of string 
@@ -73,11 +74,15 @@ open ExtList.List
 
   type flowlog_program = {  decls: sdecl list; 
                             reacts: sreactive list; 
-                            clauses: clause list; };;
+                            clauses: clause list;
+                            (* subset of <clauses> *)
+                            can_fully_compile_to_fwd_clauses: clause list; };;
 
   (* context for values given by decls *)
   module StringMap = Map.Make(String);;
   type event = { typeid: string; values: string StringMap.t};;
+
+  module FmlaMap = Map.Make(struct type t = formula let compare = compare end);;
 
 (*************************************************************)
   let string_of_event (notif: event): string =
@@ -103,14 +108,14 @@ open ExtList.List
       | FEquals(t1, t2) -> (string_of_term ~verbose:verbose t1) ^ " = "^ (string_of_term ~verbose:verbose t2)
       | FNot(f) ->  "(not "^(string_of_formula ~verbose:verbose f)^")"
       | FAtom("", relname, tlargs) -> 
-          relname^"("^(String.concat "," (List.map (string_of_term ~verbose:verbose) tlargs))^")"
+          relname^"("^(String.concat "," (map (string_of_term ~verbose:verbose) tlargs))^")"
       | FAtom(modname, relname, tlargs) -> 
-          modname^"/"^relname^"("^(String.concat "," (List.map (string_of_term ~verbose:verbose) tlargs))^")"
+          modname^"/"^relname^"("^(String.concat "," (map (string_of_term ~verbose:verbose) tlargs))^")"
       | FAnd(f1, f2) -> (string_of_formula ~verbose:verbose f1) ^ ", "^ (string_of_formula ~verbose:verbose f2)
       | FOr(f1, f2) -> (string_of_formula ~verbose:verbose f1) ^ " or "^ (string_of_formula ~verbose:verbose f2)
   
   let action_string outrel argterms fmla: string = 
-    let argstring = (String.concat "," (List.map (string_of_term ~verbose:true) argterms)) in
+    let argstring = (String.concat "," (map (string_of_term ~verbose:true) argterms)) in
       outrel^"("^argstring^") WHERE "^(string_of_formula ~verbose:true fmla);;
 
   let string_of_rule (r: srule): string =
@@ -126,7 +131,7 @@ open ExtList.List
 
   let string_of_declaration (d: sdecl): string =
     match d with 
-      | DeclTable(tname, argtypes) -> "TABLE "^tname^(String.concat "," argtypes);
+      | DeclTable(tname, argtypes) -> "TABLE "^tname^" "^(String.concat "," argtypes);
       | DeclRemoteTable(tname, argtypes) -> "REMOTE TABLE "^tname^" "^(String.concat "," argtypes);
       | DeclInc(tname, argtype) -> "INCOMING "^tname^" "^argtype;
       | DeclOut(tname, argtypes) -> "OUTGOING "^tname^(String.concat "," argtypes);
@@ -157,8 +162,8 @@ open ExtList.List
   let pretty_print_program (ast: flowlog_ast): unit =
     match ast with
       | AST(imports, stmts) ->
-        List.iter (fun imp -> printf "IMPORT %s;\n%!" imp) imports;
-        List.iter (fun stmt -> printf "%s\n%!" (string_of_stmt stmt)) stmts;;
+        iter (fun imp -> printf "IMPORT %s;\n%!" imp) imports;
+        iter (fun stmt -> printf "%s\n%!" (string_of_stmt stmt)) stmts;;
 
   let string_of_clause ?(verbose: bool = false) (cl: clause): string =
     "CLAUSE: "^(string_of_formula ~verbose:verbose cl.head)^" :- "^(string_of_formula ~verbose:verbose cl.body)^"\n"^
@@ -201,22 +206,27 @@ let equals_if_consistent (t1: term) (t2: term): formula =
     | (TConst(str1), TConst(str2)) when str1 <> str2 -> raise (SubstitutionLedToInconsistency((FEquals(t1, t2))))
     | _ -> FEquals(t1, t2);;
 
-(* f[v -> t] *)
+(* f[v -> t] 
+   Substitutions of variables apply to fields of that variable, too. *)
 let rec substitute_term (f: formula) (v: term) (t: term): formula = 
+  let substitute_term_result (curr: term): term =
+    match curr, v, t with 
+      | x, y, _ when x = y -> t
+      (* curr is a field of v, replace with field of t *)
+      | TField(x, fx), TVar(y), TVar(z) when x = y -> TField(z, fx)
+      | _ -> curr in
+
     match f with
         | FTrue -> f
         | FFalse -> f
         | FEquals(t1, t2) ->
+          let st1 = substitute_term_result t1 in
+          let st2 = substitute_term_result t2 in
           (* Remove fmlas which will be "x=x"; avoids inf. loop. *)
-          if t1 = v && t2 = t then FTrue
-          else if t2 = v && t1 = t then FTrue          
-          else if t1 = v then equals_if_consistent t t2
-          else if t2 = v then equals_if_consistent t1 t
-          else f
+          if st1 = st2 then FTrue
+          else equals_if_consistent st1 st2           
         | FAtom(modstr, relstr, argterms) -> 
-          let newargterms = map (fun arg -> 
-              (*(printf "***** %s\n%!" (string_of_term arg));*)
-              if v = arg then t else arg) argterms in
+          let newargterms = map (fun arg -> substitute_term_result arg) argterms in
             FAtom(modstr, relstr, newargterms)
         | FOr(f1, f2) ->         
             let subs1 = substitute_term f1 v t in
@@ -233,6 +243,9 @@ let rec substitute_term (f: formula) (v: term) (t: term): formula =
             else FAnd(subs1, subs2)       
         | FNot(f2) -> 
             FNot(substitute_term f2 v t);;
+
+let substitute_terms (f: formula) (subs: (term * term) list): formula = 
+  fold_left (fun fm (v, t) -> substitute_term fm v t) f subs;;
 
 (* assume a clause body. exempt gives the terms that are in the head, and thus need to not be removed *)
 let rec minimize_variables ?(exempt: term list = []) (f: formula): formula = 
@@ -260,30 +273,41 @@ let rec minimize_variables ?(exempt: term list = []) (f: formula): formula =
 (* all lowercased by parser *)
 let plus_prefix = "plus";;
 let minus_prefix = "minus";;
-let do_prefix = "do";;
 
 let packet_in_relname = "packet_in";;
 let switch_reg_relname = "switch_port_in";;
+let switch_down_relname = "switch_down";;
+let startup_relname = "startup";;
+
 let packet_fields = ["locsw";"locpt";"dlsrc";"dldst";"dltyp";"nwsrc";"nwdst";"nwproto"];;
 let legal_to_modify_packet_fields = ["locpt";"dlsrc";"dldst";"dltyp";"nwsrc";"nwdst"];;
 
 let swpt_fields = ["sw";"pt"];;
+let swdown_fields = ["sw"];;
 
 let built_in_decls = [DeclInc(packet_in_relname, "packet"); 
                       DeclInc(switch_reg_relname, "switch_port"); 
-                      DeclOut(do_prefix^"_forward", ["packet"]);
-                      DeclOut(do_prefix^"_emit", ["packet"]);
+                      DeclInc(switch_down_relname, "switch_down");
+                      DeclInc(startup_relname, "startup");
+                      DeclOut("forward", ["packet"]);
+                      DeclOut("emit", ["packet"]);
 
                       DeclEvent("packet", packet_fields);
-                      DeclEvent("switch_port", swpt_fields)];;
+                      DeclEvent("startup", []);
+                      DeclEvent("switch_port", swpt_fields);
+                      DeclEvent("switch_down", swdown_fields)];;
 
 let create_id_assign (k: string): assignment = {afield=k; atupvar=k};;
 
 let built_in_reacts = [ ReactInc("packet", packet_in_relname); 
                         ReactInc("switch_port", switch_reg_relname); 
-                        ReactOut(do_prefix^"_forward", packet_fields, "packet", map create_id_assign packet_fields, OutForward); 
-                        ReactOut(do_prefix^"_emit", packet_fields, "packet", map create_id_assign packet_fields, OutEmit);                         
+                        ReactInc("switch_down", switch_down_relname); 
+                        ReactInc("startup", startup_relname); 
+                        ReactOut("forward", packet_fields, "packet", map create_id_assign packet_fields, OutForward); 
+                        ReactOut("emit", packet_fields, "packet", map create_id_assign packet_fields, OutEmit);                         
                       ];;
 
+let built_in_condensed_outrels = ["forward"; "emit"];;
 
-
+(*************************************************************)
+  let allportsatom = SwitchAction({id with outPort = NetCore_Pattern.All});;

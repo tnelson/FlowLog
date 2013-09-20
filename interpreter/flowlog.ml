@@ -67,21 +67,99 @@ let build_finished_program (filename : string) : Types.program =
 
 (**************************************************************************)
 
-let build_clause (r: srule) (in_atom: formula) (relname: string) (terms: term list) (prefix: string) (conj: formula): clause =
-    let head = FAtom("", prefix^"_"^relname, terms) in
+let negations_to_end (f: formula): formula =
+  let atoms = conj_to_list f in
+  let (pos, neg) = partition (function | FNot(_) -> false | _ -> true) atoms in
+    build_and (pos @ neg);;
+
+let build_clause (r: srule) (in_atom: formula) (relname: string) (terms: term list) (prefix: string option) (conj: formula): clause =
+    let real_relname = (match prefix with | Some p -> (p^"_"^relname) | None -> relname) in
+    let head = FAtom("", real_relname, terms) in
     let body = FAnd(in_atom, conj) in
-    {orig_rule = r; head = head; body = body};;
+    {orig_rule = r; head = head; body = negations_to_end body};;
 
 let clauses_of_rule (r: srule): clause list =
     match r with Rule(increlname, incterm, act) ->    
     let atom_for_on = FAtom("", increlname, [TVar(incterm)]) in (* local atom, no module name *)
     match act with 
         | ADelete(relname, terms, condition) -> 
-            map (build_clause r atom_for_on relname terms minus_prefix) (disj_to_list (disj_to_top condition));
+            map (build_clause r atom_for_on relname terms (Some minus_prefix)) (disj_to_list (disj_to_top (nnf condition)));
         | AInsert(relname, terms, condition) -> 
-            map (build_clause r atom_for_on relname terms plus_prefix) (disj_to_list (disj_to_top condition));
+            map (build_clause r atom_for_on relname terms (Some plus_prefix)) (disj_to_list (disj_to_top (nnf condition)));
         | ADo(relname, terms, condition) -> 
-            map (build_clause r atom_for_on relname terms do_prefix) (disj_to_list (disj_to_top condition));;     
+            map (build_clause r atom_for_on relname terms None) (disj_to_list (disj_to_top (nnf condition)));;     
+
+exception UndeclaredIncomingRelation of string;;
+exception UndeclaredOutgoingRelation of string;;
+exception UndeclaredTable of string;;
+exception BadArityOfTable of string;;
+exception UndeclaredField of string * string;;
+
+let field_var_or_var (t: term): string =
+  match t with
+    | TVar(vname) -> vname
+    | TConst(_) -> ""
+    | TField(vname, _) -> vname;;
+
+let well_formed_rule (decls: sdecl list) (r: srule): unit =
+  let well_formed_atom (headterms: term list) (inargname: string) (at: formula) :unit =
+    let well_formed_term (t: term): unit = 
+      match t with 
+      | TVar(vname) -> () 
+      | TConst(cval) -> ()
+      (* todo: make certain that the field names are valid *)
+      | TField(vname, fname) when vname = inargname ->         
+        ()
+      | TField(vname, fname) when mem vname (map field_var_or_var headterms) ->         
+        ()
+      | TField(vname, fname) -> 
+        raise (UndeclaredField(vname,fname)) in
+
+    match at with 
+      | FAtom(modname, relname, argtl) -> 
+        (try 
+          let decl = (find (function | DeclTable(dname, _) when dname = relname -> true 
+                                 | DeclRemoteTable(dname, _) when dname = relname -> true 
+                                 | _ -> false) decls) in
+
+              (match decl with 
+                | DeclTable(_, typeargs) 
+                | DeclRemoteTable(_, typeargs) ->
+                  if length typeargs <> length argtl then
+                    raise (BadArityOfTable relname);
+                | _ -> failwith "validate_rule");         
+          iter well_formed_term argtl;
+        with | Not_found -> raise (UndeclaredTable relname))
+
+      | FEquals(t1, t2) ->
+        well_formed_term t1;
+        well_formed_term t2;
+      | _ -> failwith "validate_rule" in
+
+        (* TODO: ugly code, should be cleaned up *)
+  match r with 
+    (* DO must have outgoing relation in action *)
+    | Rule(inrelname, inrelarg, ADo(outrelname, outrelterms, where)) -> 
+        iter (well_formed_atom outrelterms inrelarg) (get_atoms where);        
+        iter (fun (_, f) -> (well_formed_atom outrelterms inrelarg f)) (get_equalities where);        
+        if not (exists (function | DeclInc(dname, _) when dname = inrelname -> true | _ -> false) decls) then
+          raise (UndeclaredIncomingRelation inrelname);
+        if not (exists (function | DeclOut(dname, _) when dname = outrelname -> true | _ -> false) decls) then
+          raise (UndeclaredOutgoingRelation outrelname); 
+
+    (* insert and delete must have local table in action *)
+    | Rule(inrelname, inrelarg, AInsert(relname, outrelterms, where))  
+    | Rule(inrelname, inrelarg, ADelete(relname, outrelterms, where)) ->
+        iter (well_formed_atom outrelterms inrelarg) (get_atoms where);            
+        iter (fun (_, f) -> (well_formed_atom outrelterms inrelarg f)) (get_equalities where);        
+        if not (exists (function | DeclInc(dname, _) when dname = inrelname -> true | _ -> false) decls) then
+          raise (UndeclaredIncomingRelation inrelname);
+        if not (exists (function | DeclTable(dname, _) when dname = relname -> true                                  
+                                 | _ -> false) decls) then
+          raise (UndeclaredTable relname);;
+
+let simplify_clause (cl: clause): clause =   
+    {head = cl.head; orig_rule = cl.orig_rule; body = minimize_variables cl.body};;
 
 let desugared_program_of_ast (ast: flowlog_ast): flowlog_program =
     printf "*** REMINDER: IMPORTS NOT YET HANDLED! (Remember to handle in partial eval, too.) ***\n%!"; (* TODO *)
@@ -92,101 +170,99 @@ let desugared_program_of_ast (ast: flowlog_ast): flowlog_program =
         let the_reacts =  built_in_reacts @ 
                           filter_map (function SReactive(r) -> Some r | _ -> None) stmts in 
         let the_rules  =  filter_map (function SRule(r) -> Some r     | _ -> None) stmts in 
-        
+            iter (well_formed_rule the_decls) the_rules;          
             let clauses = (fold_left (fun acc r -> (clauses_of_rule r) @ acc) [] the_rules) in 
-                {decls = the_decls; reacts = the_reacts; clauses = clauses};;
+            let simplified_clauses = map simplify_clause clauses in 
+            let can_fully_compile_simplified = filter can_compile_clause_to_fwd simplified_clauses in
+              printf "Loaded AST. There were %d clauses, %d of which were fully compilable forwarding clauses.\n%!"
+                (length simplified_clauses) (length can_fully_compile_simplified);
+                {decls = the_decls; reacts = the_reacts; clauses = simplified_clauses; 
+                 can_fully_compile_to_fwd_clauses = can_fully_compile_simplified};;
+
+                
 
 (* usage message *)
-let usage = Printf.sprintf "Usage: %s [-alloy] file.flg" (Filename.basename Sys.argv.(0));;
+let usage = Printf.sprintf "Usage: %s [-alloy] [-notables] file.flg" (Filename.basename Sys.argv.(0));;
 let alloy = ref false;;
+let notables = ref false;;
+let reportall = ref false;;
 let args = ref [];;
+
 let speclist = [
-  ("-alloy", Arg.Unit (fun () -> alloy := true), ": convert to Alloy");];;
-
-let simplify_clause (cl: clause): clause =   
-    {head = cl.head; orig_rule = cl.orig_rule; body = minimize_variables cl.body};;
-
-let simplify_clauses (p: flowlog_program) =
-  let newclauses = map simplify_clause p.clauses in
-    {decls = p.decls; reacts = p.reacts; clauses = newclauses};;
-
+  ("-verbose", Arg.Int (fun lvl -> global_verbose := lvl), ": set level of debug output");
+  ("-alloy", Arg.Unit (fun () -> alloy := true), ": convert to Alloy");
+  ("-reportall", Arg.Unit (fun () -> reportall := true), ": report all packets. WARNING: VERY SLOW!");
+  (* Not calling this "reactive" because reactive still implies sending table entries. *)
+  ("-notables", Arg.Unit (fun () -> notables := true), ": send everything to controller");];;
 
 let listenPort = ref 6633;;
 
-(*
-let switch_connected (p: flowlog_program) (sw : switchId) (feats : OpenFlow0x01.SwitchFeatures.t) : unit =
-  Printf.printf "Switch %Ld connected.\n%!" sw;
-  let port_nums = map (fun (x : PortDescription.t)-> x.PortDescription.port_no) feats.SwitchFeatures.ports in
-  let sw_string = Int64.to_string sw in  
-  let notifs = map (fun portid -> {typeid="switch_port"; 
-                                   values=construct_map [("sw", sw_string); ("pt", (string_of_int portid))] }) port_nums in
-  printf "SWITCH REGISTERED! %s\n%!" (String.concat ", " (map string_of_event notifs));
-  List.iter (fun notif -> respond_to_notification p notif None) notifs;;
-
-(* infinitely recursive function that listens for switch connection messages 
-   Cribbed nearly verbatim from Ox lib by Tim on Aug 29 2013
-   since we're moving from Ox to Frenetic as a base *)
-let rec handle_switch_reg (p: flowlog_program) (trigger_re_policy_func: unit -> unit): 'a Lwt.t = 
-    let open Message in
-    let open FlowMod in
-    printf "waiting for switch to connect...\n%!";
-    lwt feats = OpenFlow0x01_Platform.accept_switch () in 
-    let sw = feats.SwitchFeatures.switch_id in 
-    (*lwt _ = Log.info_f "switch %Ld connected" sw in*)
-    lwt _ = OpenFlow0x01_Platform.send_to_switch sw 0l (FlowModMsg delete_all_flows) in
-    lwt _ = OpenFlow0x01_Platform.send_to_switch sw 1l BarrierRequest in
-    (* JNF: wait for barrier reply? *)
-    let _ = switch_connected p sw feats in 
-    (*Lwt.async (fun () -> switch_thread sw);*)
-      trigger_re_policy_func(); (* trigger re-production of policy, since state may have changed *)      
-      handle_switch_reg p trigger_re_policy_func;;
-
-*)
-
 let run_flowlog (p: flowlog_program): unit Lwt.t =  
   (* Start up XSB, etc. *)
-  Communication.start_program p;
+  Communication.start_program p !notables;
  
   (* Listen for incoming notifications via RPC *)
-  (*Flowlog_Thrift_In.start_listening p;; *)
-
-  (* Send the "startup" notification. Enables initialization, etc. in programs *)
-  (*let startup = Types.Constant([], Types.startup_type) in
-    Evaluation.respond_to_notification startup Program.program None;; *)
+  Flowlog_Thrift_In.start_listening p;
 
   (* Start the policy stream *)
   (* >> is from Lwt's Pa_lwt. But you MUST have -syntax camlp4o or it won't be recoginized. *)   
   OpenFlow0x01_Platform.init_with_port !listenPort >>
-    let (trigger_re_policy_func, (gen_stream, stream)) = make_policy_stream p in
+    let (trigger_re_policy_func, (gen_stream, stream)) = (make_policy_stream p !notables !reportall) in
+    refresh_policy := Some trigger_re_policy_func;
+
     (* streams for incoming/exiting packets *)
-    let (pkt_stream, push_pkt) = Lwt_stream.create () in
-      (* pick cancels all threads given if one terminates *)        
-     
+    let (pkt_stream, push_pkt) = Lwt_stream.create () in        
+    emit_push := Some push_pkt;
+
+    (* Send the "startup" notification. Enables initialization, etc. in programs *)         
+    respond_to_notification p {typeid="startup"; values=StringMap.empty};
+
+      (* pick cancels all threads given if one terminates *)             
       (* DO NOT attempt to copy ox/frenetic's switch connection detection code here. It will clash with 
          Frenetic's. Instead, register a HandleSwitchEvent policy, which gives us a nice clean callback. *)
-      Lwt.pick [gen_stream;
-                NetCore_Controller.start_controller pkt_stream stream;
-               ];;
+      Lwt.pick [gen_stream; NetCore_Controller.start_controller pkt_stream stream];;
+
 
 let main () =
   let collect arg = args := !args @ [arg] in
   let _ = Arg.parse speclist collect usage in
   let filename = try hd !args with exn -> raise (Failure "Input a .flg file name.") in  
   let ast = read_ast filename in
-  let program = simplify_clauses (desugared_program_of_ast ast) in    
+  let program = (desugared_program_of_ast ast) in    
     printf "-----------\n%!";
     List.iter (fun cl -> printf "%s\n\n%!" (string_of_clause cl)) program.clauses;
 
-    if !alloy then write_as_alloy program (filename^".als")
+    if !alloy then 
+      write_as_alloy program (filename^".als")
     else 
+    begin
+      (* Intercede when Ctrl-C is pressed to close XSB, etc. *)
       Sys.catch_break true;
-      try        
-        Lwt_main.run (run_flowlog program)
-      with exn ->
+      (* If SIGPIPE ("broken pipe") failure (exit code 141), actually give an error. 
+         Without this set, the program terminates with no message. *)
+      Sys.set_signal Sys.sigpipe Sys.Signal_ignore;
+      try      
+        out_log := Some(open_out "log_for_flowlog.log");  
+        if !notables then printf "\n*** FLOW TABLE COMPILATION DISABLED! ***\n%!";
+        Lwt_main.at_exit (fun () -> return (printf "LWT exiting~\n%!") );
+        at_exit (fun () -> (printf "Ocaml exiting~\n%!"));        
+        Lwt_main.run (run_flowlog program);     
+        printf "LWT Terminated!\n%!";
+      with
+        | Sys.Break ->
+          Xsb.halt_xsb();
+          close_log(); 
+          printf "\nExiting gracefully due to break signal.\n%!";
+          exit 101
+        | exn ->
         Xsb.halt_xsb ();
-        Format.printf "Unexpected exception: %s\n%s\n%!"
+        Format.printf "\nUnexpected exception: %s\n%s\n%!"
           (Printexc.to_string exn)
           (Printexc.get_backtrace ());
-        exit 1;;
+        close_log();
+        exit 100;
+    end;;
     
  main();;
+
+

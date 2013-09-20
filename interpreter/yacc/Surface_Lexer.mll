@@ -6,11 +6,15 @@ open Surface_Parser;;       (* The tokens are defined in this mli *)
 (* TODO: We've likely hit the point where the table is blowing up because we have a lot of keywords. 
          Could be faster to use the hash-table lookup method for keywords? *)
 
+(* COMMENTS --- the pattern below for multiline /* */ assumes no strings containing
+  /* etc. Standard "dumb" comment assumptions due to limited language syntax. *)
+
 }
 rule token = parse
     [' ' '\t' '\r'] { token lexbuf }    
   | "\n" { Lexing.new_line lexbuf; token lexbuf }
   | "//" [^ '\n']* { token lexbuf }
+  | "/*" {commenting lexbuf}
   | eof { EOF }
 
   | "import" { IMPORT }  
@@ -56,5 +60,13 @@ rule token = parse
   | '"' { DOUBLEQUOTE }
   | ['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9'] as dotted_ip { DOTTED_IP(dotted_ip)}
   | ['0'-'9']+ | '0''x'(['0'-'9']+) as number { NUMBER(number) }
-  | ['a'-'z''A'-'Z''_''0'-'9''-']+ as name { NAME(name) }
+  | ['a'-'z''A'-'Z''_''0'-'9']+ as name { NAME(name) }
+  | ['a'-'z''A'-'Z''_''0'-'9''-']+ as name 
+    { Printf.printf "Bad identifier: %s. Cannot use dashes. Use underscore instead.\n%!" name; 
+      token lexbuf; }
   | _ as c { Printf.printf "Unknown character: %c\n" c; token lexbuf;}
+and commenting = parse 
+  | "*/" { token lexbuf }
+  | "\n" { Lexing.new_line lexbuf; commenting lexbuf }
+  | eof { EOF }
+  | _   { commenting lexbuf }

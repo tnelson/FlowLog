@@ -10,6 +10,7 @@ open Arg
 open Thrift
 open Flowlog_rpc_types
 open Thread
+open Printf 
 
 let police_port = 5050;; (* the five oh *)
 
@@ -40,7 +41,7 @@ let send_notif notif =
       cli.fl#notifyMe notif;
       cli.trans#close;
     with Transport.E (_,what) ->
-      Printf.printf "ERROR: %s\n" what ; flush stdout
+      printf "ERROR: %s\n" what ; flush stdout
 
 
 class bb_handler =
@@ -50,7 +51,7 @@ object (self)
   method notifyMe notif = 
     let ntype = sod ((sod notif)#get_notificationType) in
     let values = sod ((sod notif)#get_values) in
-      Printf.printf "received notification. type=%s\n%!" ntype;
+      printf "received notification. type=%s\n%!" ntype;
       (* <>, not != *)
       if ntype <> "stolen_laptop_found" then
       begin
@@ -65,13 +66,17 @@ object (self)
           Printf.printf "Sent exception.\n%!";
       end
       else
-      begin
-        (* TODO: need to check for valid fields *)
-        (* note: needs to be upcase or made case-insensitive *)
-        let mac = (Hashtbl.find values "MAC") in
-        let swid = (Hashtbl.find values "SWID") in
-        let time = (Hashtbl.find values "TIME") in
-          Printf.printf "Our anonymous tipster, who sounds like a Flowlog Controller, saw %s on switch %s at time=%s.\n%!" mac swid time
+      begin        
+        (* case-sensitive. But Flowlog's parser downcases everything. So fields are always lowercase.*)        
+        try 
+          let mac = (Hashtbl.find values "mac") in
+          let swid = (Hashtbl.find values "swid") in
+          let time = (Hashtbl.find values "time") in
+            printf "Our anonymous tipster, who sounds like a Flowlog Controller, saw %s on switch %s at time=%s.\n%!" mac swid time
+            (* Don't leave this check out: without it, this app could freeze. *)
+        with Not_found -> 
+          printf "...but did not contain well-formed fields.\n%!";
+
       end
   
 
@@ -80,7 +85,7 @@ method doQuery qry =
     (*let args = (sod (sod qry)#get_arguments) in*)
     let rep = new queryReply in
     let tbl = (Hashtbl.create 1) in
-    Printf.printf "The _man_ answers to no one's queries! Was: %s\n%!" relname;
+    printf "The _man_ answers to no one's queries! Was: %s\n%!" relname;
     rep#set_exception_code "2";
     rep#set_exception_message "The _man_ answers to no one's queries!";
     rep#set_result tbl;
@@ -102,9 +107,9 @@ let dobb () =
   in
     (* Listen in a separate thread. *)
     (* returns handle to new thread. ignore to avoid warning *)
-    Printf.printf "Starting listener for STOLEN LAPTOP TIPS! (in main thread; this should block)...\n%!";
+    printf "Starting listener for STOLEN LAPTOP TIPS! (in main thread; this should block)...\n%!";
     server#serve;
-;;
+  ;;
 
 dobb();;
 

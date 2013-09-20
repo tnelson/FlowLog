@@ -5,28 +5,28 @@
 
 // EVENT, OUTGOING, etc. for packet handling is all built in.
 
-IMPORT Mac_Learning;
+//IMPORT Mac_Learning;
 
-EVENT stolen-laptop-report {mac};
-EVENT stolen-laptop-cancel {mac};
-EVENT stolen-laptop-found {mac, swid, time};
+EVENT stolen_laptop_report {mac};
+EVENT stolen_laptop_cancel {mac};
+EVENT stolen_laptop_found {mac, swid, time};
 
 TABLE stolen(int48); 
 REMOTE TABLE get_time(int); 
 
-OUTGOING notify-police(int48, int, int);
-INCOMING laptop-stolen(stolen-laptop-report); 
-INCOMING laptop-recovered(stolen-laptop-cancel);
+OUTGOING notify_police(int48, int, int);
+INCOMING laptop_stolen(stolen_laptop_report); 
+INCOMING laptop_recovered(stolen_laptop_cancel);
 
 //////////
 // Reactive
 //////////
 
-INCOMING stolen-laptop-report THEN INSERT INTO laptop-stolen;
-INCOMING stolen-laptop-cancel THEN INSERT INTO laptop-recovered;
+INCOMING stolen_laptop_report THEN INSERT INTO laptop_stolen;
+INCOMING stolen_laptop_cancel THEN INSERT INTO laptop_recovered;
 
-OUTGOING notify-police(mac, swid, t) THEN 
-  SEND EVENT stolen-laptop-found {mac:=mac, swid:=swid, time:=t} TO 127.0.0.1 5050;
+OUTGOING notify_police(mac, swid, t) THEN 
+  SEND EVENT stolen_laptop_found {mac:=mac, swid:=swid, time:=t} TO 127.0.0.1 5050;
 
 REMOTE TABLE get_time 
   FROM time AT 127.0.0.1 9091
@@ -41,24 +41,24 @@ REMOTE TABLE get_time
 // Rules
 //////////
 
-ON laptop-recovered(rec):
+ON laptop_recovered(rec):
   DELETE (rec.mac) FROM stolen;
 
-ON laptop-stolen(stolen):
+ON laptop_stolen(stolen):
   INSERT (stolen.mac) INTO stolen;
 
-on foo(bar):
-  insert (x) into zot;
+//on foo(bar):
+//  insert (x) into zot;
 
-ON packet-in(pkt): 
-  DO forward(new) WHERE 
-    Mac-learning.forward(new) ON pkt;
+ON packet_in(pkt): 
+  //DO forward(new) WHERE 
+  //  Mac_learning.forward(new) ON pkt;
 
-  DO notify-police(pkt.dlSrc, pkt.locSw, time) WHERE 
+  DO notify_police(pkt.dlSrc, pkt.locSw, time) WHERE 
     stolen(pkt.dlSrc) AND 
     get_time(time);  
 
-ON fozzie-in(pkt): 
-  DO kermit-out(new) WHERE 
-    muppets.foo(new) ON pkt AND
-    (R(pkt.x) OR P(pkt.x, pkt.y));
+//ON fozzie_in(pkt): 
+//  DO kermit_out(new) WHERE 
+    //muppets.foo(new) ON pkt AND
+    //(R(pkt.x) OR P(pkt.x, pkt.y));

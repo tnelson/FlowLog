@@ -38,6 +38,7 @@ module Xsb = struct
 		let out_ch, _ = get_ch () in
 		output_string out_ch "halt.\n";
 		flush out_ch;;
+
 	
 	let print_or_flush_errors (print_too: bool) : unit =
 	  let errstr = ref "" in
@@ -58,17 +59,28 @@ module Xsb = struct
         while not (ends_with !next_str "\n") do
   		    next_str := (!next_str) ^ (String.make 1 (input_char in_ch));		 
   		  		 
-  		  	(*Printf.printf "glg: %s\n%!" !next_str;*)
-		    if (ends_with !next_str "| ?- | ?-") then 
-		    begin
+  		    (*Printf.printf "glg: %s\n%!" !next_str;*)
+		    while (ends_with !next_str "| ?- | ?-") do		    
+		    	print_or_flush_errors (if debug then true else false);
 		    	(* we may have asked an extra semicolon and caused a syntax error. *)
 		    	if debug then Printf.printf "XSB Error. Asking again.\n%!";
 		  		output_string out_ch (orig ^ "\n");
 		    	flush out_ch;
 		    	next_str := "";
-		  	end
+		  	done
 		done;
 		!next_str;;
+
+	let flush_xsb_with_dummy out_ch in_ch: unit = 
+		output_string out_ch "false.\n";
+		flush out_ch;
+		if debug then printf "Flushing with dummy false... expect a no response\n%!";
+		let l = ref "" in
+			while not (!l = "no") do
+				l := get_line_gingerly in_ch out_ch "false.\n" ;
+				l := String.trim (Str.global_replace (Str.regexp "| \\?-") "" !l);
+			done;;
+
 
 	(* Prints the XSB listings currently asserted to stdout.
 	   This function is useful for confirming that XSB knows what we think it knows. *)
@@ -96,6 +108,10 @@ module Xsb = struct
 	let send_assert (str : string) : string =
 	    if debug then Printf.printf "send_assert: %s\n%!" str;
 		let out_ch, in_ch = get_ch () in
+
+		(* Begin by clearing out any error state due to semicolons *)	
+		flush_xsb_with_dummy out_ch in_ch;
+
 		output_string out_ch (str ^ "\n");
 		flush out_ch;		
 		let answer = ref "" in
@@ -144,31 +160,49 @@ module Xsb = struct
 	let send_query (str : string) (num_vars : int) : (string list) list =
 	    if debug then Printf.printf "send_query: %s (#vars: %d)\n%!" str num_vars;
 		let out_ch, in_ch = get_ch () in
+
+		(* Begin by clearing out any error state due to semicolons *)
+		flush_xsb_with_dummy out_ch in_ch;
+
+		(* Send the query *)
 		output_string out_ch (str ^ "\n");
 		flush out_ch;
+
+
+
+		if num_vars = 1 then
+		begin
+			if debug then Printf.printf "forcing initial semicolon.\n%!";
+			output_string out_ch ";\n"; flush out_ch
+		end;
 		
 		let answer = ref [] in
 		let next_str = ref "" in        		
 		let counter = ref 0 in
-		while not (ends_with !next_str "no") do
+		while not (ends_with !next_str "no") do			
 
-			(*next_str := (input_line in_ch);			*)
             next_str := get_line_gingerly in_ch out_ch str;		  		
 			next_str := String.trim (Str.global_replace (Str.regexp "| \\?-") "" !next_str);
 
-			(*if debug then Printf.printf "%d > '%s'\n%!" !counter !next_str;*)
-			(* the last line won't be followed by a newline until we give it a ;. 
-				TODO: Worry that since we don't know how many blocks total, we may send an extra ;. *)
+			if debug then Printf.printf "%d > '%s'\n%!" !counter !next_str;
+			(* This function is tricky:
+			    The last line won't be followed by a newline until we give it a ';'. 
+				Since we don't know how many blocks total, we may send an extra ';'.
+				This is dealt with by the get_line_gingerly function.
+				
+				We need to send a semicolon before asking for a line if num_vars = 1.
+	  	    *)
 			
 			(* need to account for "X=3no" as well as "no" *)
 
-			if (String.length !next_str > 0) then (*  && not (ends_with !next_str "no") then*)
-			begin
-				if (!counter mod num_vars = (num_vars - 2)) then
+			if (String.length !next_str > 0) then 
+			begin					(* Time to be a coder, not a mathematician: =, not \cong *)
+				if (!counter mod num_vars = ((num_vars - 2)) mod num_vars) 
+				   && not (ends_with !next_str "no") 
+				   && not (ends_with !next_str "yes") then
 				begin
-			  	if debug then Printf.printf "time for semicolon. at %d, of %d\n%!" !counter num_vars;
-			  	output_string out_ch ";\n";
-			  	flush out_ch;
+			  		if debug then Printf.printf "time for semicolon. at %d, of %d\n%!" !counter num_vars;
+			  		output_string out_ch ";\n"; flush out_ch;
 				end;			
 				counter := !counter + 1;			
 
@@ -305,8 +339,9 @@ module Communication = struct
 			let subargs = fold_left (fun acc lst -> acc @ lst) [] subsarglists in
 			FAtom(modname, relname, subargs);;
 
+		(* engine will sometimes be told to retract _, need to retract ALL matches, not just first match *)
 	let retract_formula (tup: formula): unit = 
-		ignore (send_message ("retract("^(string_of_formula tup)^").") 0);;
+		ignore (send_message ("retractall("^(string_of_formula tup)^").") 0);;
 
 	let assert_formula (tup: formula): unit = 
 		(* avoid storing multiples of same tuple *)
@@ -335,11 +370,14 @@ module Communication = struct
 		
 
 	(* assuming all implicitly defined clauses have been added to list of clauses *)
-	let start_program (prgm : flowlog_program) : unit =
+	let start_program (prgm : flowlog_program) (notables: bool): unit =
 		printf "-------------------\nStarting Flowlog Program...\n%!";		
 		(* prevent XSB from locking up if unknown relation seen. will assume false if unknown now.*)
 		ignore (send_message "set_prolog_flag(unknown, fail)." 0);
-		List.iter (start_clause prgm) prgm.clauses;
+		(* Add a clause if it's not fully compiled, OR we're in no-compilation mode *)
+		List.iter (fun cl -> 
+					if notables || (not (mem cl prgm.can_fully_compile_to_fwd_clauses)) then
+					 (start_clause prgm cl)) prgm.clauses;
 		Xsb.debug_print_listings();;
 
 end
