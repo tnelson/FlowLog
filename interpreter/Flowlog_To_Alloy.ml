@@ -32,13 +32,24 @@ pred true[] {}
 pred false[] { some none }
 
 abstract sig Event {}
-abstract sig Value {}
-sig Switchid extends Value {}
-sig Macaddr extends Value {}
-sig Ipaddr extends Value {}
-sig Ethtyp extends Value {}
-sig Portid extends Value {} 
-sig Nwprotocol extends Value {}
+
+sig Switchid {}
+sig Macaddr {}
+sig Ipaddr {}
+sig Ethtyp {}
+sig Portid {} 
+sig Nwprotocol {}
+
+sig FLString {} 
+sig FLInt{} 
+
+sig EVpacket extends Event
+           {locsw: Switchid, locpt: Portid,
+            dlsrc: Macaddr, dldst: Macaddr, dltyp: Ethtyp,
+            nwsrc: Ipaddr, nwdst: Ipaddr, nwproto: Nwprotocol }
+sig EVstartup extends Event {}
+sig EVswitch_port extends Event { sw: Switchid, pt: Portid}
+sig EVswitch_down extends Event { sw: Switchid }
 ";;
 
 (**********************************************************)
@@ -47,7 +58,7 @@ let alloy_constants (out: out_channel) (p: flowlog_program): unit =
   let constants = fold_left (fun acc cl -> unique ( acc @ (get_terms (function | TConst(_) -> true | _ -> false) cl.body)))
                   []
                   p.clauses in
-  iter (function | TConst(c) -> fprintf out "lone sig C_%s extends Value {}\n" c | _ -> failwith "alloy_constants") constants;
+  iter (function | TConst(c) -> fprintf out "lone sig C_%s extends [FILL] {}\n" c | _ -> failwith "alloy_constants") constants;
   fprintf out "\n%!";;
 
 (**********************************************************)
@@ -55,23 +66,27 @@ let alloy_constants (out: out_channel) (p: flowlog_program): unit =
 (* ...and an extensional constraint *)
 
 let type_of_event_field (evname: string) (fldname: string): string =
-  "Value";; (* TODO: inference or annotation in program *)
+  "[FILL]";; (* TODO: inference or annotation in program *)
 
 let alloy_declares (out: out_channel) (p: flowlog_program): unit =
   let declare_event (decl: sdecl) =
     match decl with 
-      | DeclEvent(evname, evfields) ->  
-        let ifislone = if length evfields > 0 then "" else "lone " in
-          fprintf out "%ssig EV%s extends Event {\n%!" ifislone evname;
-          let flddecls = map (fun fldname -> (sprintf "    %s: one %s") fldname (type_of_event_field evname fldname)) evfields in 
-            fprintf out "%s%!" (String.concat ",\n" flddecls);
-            fprintf out "}\n\n%!";
+      | DeclEvent(evname, evfields) as ev ->  
+        (* don't declare events we've already declared stock. *)
+        if not (mem ev built_in_decls) then
+        begin
+          let ifislone = if length evfields > 0 then "" else "lone " in
+            fprintf out "%ssig EV%s extends Event {\n%!" ifislone evname;
+            let flddecls = map (fun fldname -> (sprintf "    %s: one %s") fldname (type_of_event_field evname fldname)) evfields in 
+              fprintf out "%s%!" (String.concat ",\n" flddecls);
+              fprintf out "}\n\n%!";
+        end;
 
         if length evfields > 0 then 
         begin
           fprintf out "fact EV%sExtensional { all ev1, ev2: EV%s | \n%!" evname evname;        
           let fieldequals = (map (fun fld -> sprintf "ev1.%s = ev2.%s" fld fld) evfields) in
-          let fieldsequal = String.concat "&&" fieldequals in 
+          let fieldsequal = String.concat " && " fieldequals in 
             fprintf out "(%s) implies ev1 = ev2}\n\n%!" fieldsequal;
         end;
       | _ -> failwith "declare_event"
@@ -101,7 +116,7 @@ let alloy_state (out: out_channel) (p: flowlog_program): unit =
       | DeclTable(tblname, fieldtypes) 
       | DeclRemoteTable(tblname, fieldtypes) -> 
         let typesproduct = String.concat " -> " (map String.capitalize fieldtypes) in 
-          sprintf "    %s: %s\n%!" tblname typesproduct
+          sprintf "    %s: %s%!" tblname typesproduct
       | _ -> failwith "declare_state"
   in
 
@@ -266,10 +281,10 @@ let alloy_boilerplate_pred (out: out_channel): unit =
 pred testPred[] {
   some st1, st2: State, ev: Event |
      transition[st1, ev, st2] &&
-     st1 != st2 and no st1.learned &&
+     st1 != st2 and //no st1.learned &&
      no st1.switch_has_port
 }
-run testPred for 3 but 1 Event, 2 State, 8 Value\n%!";;
+run testPred for 3 but 1 Event, 2 State\n%!";;
 
 let write_as_alloy (p: flowlog_program) (fn: string): unit =
     let out = open_out fn in 
