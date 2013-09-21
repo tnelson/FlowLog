@@ -135,7 +135,10 @@ pred minus_uctree[st: State, ev: Event, out0 : univ, out1 : univ] {
 
 pred plus_macconnectedat[st: State, ev: Event, out0 : univ, out1 : univ, out2 : univ] {
 
-  (ev in EVpacket && ( ((not ((EVpacket <: ev).dltyp = C_0x1001) && (EVpacket <: ev).locsw->(EVpacket <: ev).locpt in st.nonswitchports) && not ((EVpacket <: ev).dlsrc->(EVpacket <: ev).locsw->(EVpacket <: ev).locpt in st.macconnectedat)))
+  (ev in EVpacket && ( ((not ((EVpacket <: ev).dltyp = C_0x1001) && 
+       (EVpacket <: ev).locsw->(EVpacket <: ev).locpt in st.nonswitchports) 
+&&  not ((EVpacket <: ev).dlsrc->(EVpacket <: ev).locsw->(EVpacket <: ev).locpt in st.macconnectedat)
+))
       && out0 = (EVpacket <: ev).dlsrc && out1 = (EVpacket <: ev).locsw && out2 = (EVpacket <: ev).locpt)
 }
 
@@ -249,10 +252,13 @@ pred transition[st1: State, ev: Event, st2: State] {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 /* FACT ADDED: account for lack of subtyping. goes away with subtyping */
-fact probesWellFormed {
+fact probesAndNonProbesWellFormed {
 	all ev : EVpacket | 
-		ev.dltyp = C_0x1001 implies
-			ev.dlsrc in Switchid and ev.dldst in Portid
+		(ev.dltyp = C_0x1001 implies
+			ev.dlsrc in Switchid and ev.dldst in Portid)
+		and
+		(ev.dltyp != C_0x1001 implies
+			ev.dlsrc in Macaddr and ev.dldst in Macaddr)
 }
 
 /* ucTC faithfully computes reachability */
@@ -280,7 +286,56 @@ check timerWipesNonUC for 0 but 1 Event, 2 State, 2 Switchid, 2 Portid,
                                                           2 Ipaddr, 1 Ethtyp, 1 Nwprotocol, 2 Macaddr,
                                                           1 FLString, 1 FLInt
 
+
+/* macConnectedAt relation is supposed to hold Macaddr -> Switchid -> Portid 
+    of non-switch ports macs are seen at */
+assert macConnectedAtOK {
+	all st: State, st2: State, ev: EVpacket |	
+		not ev.dltyp = C_0x1001 and transition[st, ev, st2] implies
+		// NOT an inductive property as we defined it
+		(ev.locsw -> ev.locpt) in st.nonswitchports implies 
+			(ev.dlsrc -> ev.locsw -> ev.locpt) in st2.macconnectedat
+		and
+		some xpt : Portid | xpt != ev.locpt and (ev.dlsrc -> ev.locsw -> xpt in st.macconnectedat) implies
+			not (ev.dlsrc -> ev.locsw -> xpt in st2.macconnectedat)
+		and
+		some xsw : Switchid | xsw != ev.locsw and (ev.dlsrc -> xsw -> ev.locpt in st.macconnectedat) implies
+			not (ev.dlsrc -> xsw -> ev.locpt in st2.macconnectedat)
+		and
+		some xmac : Macaddr | xmac != ev.dlsrc and (xmac -> ev.locsw -> ev.locpt in st.macconnectedat) implies
+			not (xmac -> ev.locsw -> ev.locpt in st2.macconnectedat)				
+}
+
+check macConnectedAtOK for 4 but 1 Event, 2 State
+
+pred probesNotSelf[] {
+	all ev : EVpacket | 
+		(ev.dltyp = C_0x1001 implies
+			ev.dlsrc != ev.locsw)
+}
+
+assert spanningTreeOK {
+	all st: State, st2: State, ev: EVpacket |	
+		probesNotSelf[] and ev.dltyp = C_0x1001 and transition[st, ev, st2] implies
+             // no change to overall ST
+			st2.spanningtree = st.spanningtree 
+			// any change is just this probe's edge (and the reverse): this limits growth to at most 1 edge per probe              
+			and (st2.uctree = st.uctree || (st2.uctree - st.uctree) in (ev.locsw -> ev.locpt) + (ev.dlsrc -> ev.dldst))
+			// only add if one of the switches is not in the spanning tree yet
+			and st2.uctree != st.uctree implies (ev.dlsrc not in (st.uctc.Portid) || ev.locsw not in (st.uctc.Portid))
+			// [so far, we've proven "tree", since 1 edge per 1 node of growth]
+			
+			// TODO: haven't we also proven "spanning"? look again in morning
+}
+
+check spanningTreeOK for 4 but 1 Event, 2 State
+
+
+// TODO: policy pred so we can verify output events!
+
 /////////////////////////////////////////////////////////
 // QUESTION: How can we argue that OSEPL applies to the base types here?
 // Obviously it applies to event, state. But not so obvious Switchid etc.
-
+// A: Because unless some relation is required to contain something (via existentials; unis in checks)
+// the base types are coming from the event and the followup state
+// ... still not an automatic check though.  
