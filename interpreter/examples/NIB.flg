@@ -115,10 +115,10 @@ ON packet_in(pkt):
     AND ucTC(sw1, pkt.dlSrc) AND ucTC(pkt.locSw, sw2);
 
 
-
   INSERT (pkt.dlSrc, pkt.locSw, pkt.locPt) INTO macConnectedAt WHERE 
     NOT pkt.dlTyp = 0x1001 AND
     nonSwitchPorts(pkt.locSw, pkt.locPt) AND
+       // This line is safe since the INSERT rule and the DELETE rules never overlap on same pkt
     NOT macConnectedAt(pkt.dlSrc, pkt.locSw, pkt.locPt); // pol opt
   // new mac on this port
   DELETE (mac, pkt.locSw, pkt.locPt) FROM macConnectedAt WHERE 

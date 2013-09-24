@@ -83,10 +83,48 @@ pred transition[st1: State, ev: Event, st2: State] {
             + { tup0: Switchid,tup1: Portid | plus_switch_has_port[st1, ev, tup0,tup1]}
 }
 
-pred testPred[] {
-  some st1, st2: State, ev: Event |
-     transition[st1, ev, st2] &&
-     st1 != st2 and //no st1.learned &&
-     no st1.switch_has_port
+/////////////////////////////////////////////////
+// consistency (never >1 in a state. requires prestate condition--->inductive)
+assert consistentState {
+  all st1, st2: State, ev: Event |
+  all sw: Switchid, host:Macaddr |
+    (lone (st1.learned.host)[sw] and transition[st1, ev, st2])
+     implies
+    (lone (st2.learned.host)[sw])
 }
-run testPred for 3 but 1 Event, 2 State
+// exists 2x State, 1x Event, 1x mac | (0)[lone s] and (2x Sw, 2x Port)[!lone s]
+check consistentState for 3 but 1 Event, 2 State
+/////////////////////////////////////////////////
+// never restart flooding: if you're in a state where an address isnt flooded, it isn't going to start 
+// being flooded ever again---unless a switch has come down
+assert neverReFlood {
+  all st1, st2: State, ev: Event |
+  all sw: Switchid, host:Macaddr |
+// IN PROGRESS
+    (some (st1.learned.host)[sw] and transition[st1, ev, st2] and not ev in EVswitch_down)
+     implies
+    (some (st2.learned.host)[sw])
+	
+}
+check neverReFlood for 3 but 1 Event, 2 State
+
+/////////////////////////////////////////////////
+
+/////////////////////////////////////////////////
+// lone s: FORALL x:s FORALL y:s (x=y)
+// one s: EXISTS x:s FORALL y:s  (x=y)
+// some s: EXISTS s
+// no s: FORALL s
+
+// two exactly: EXISTS x1:s, EXISTS x2:s FORALL y:s (x1 != x2 && (y=x1 || y=x2))
+// two or more: EXISTS x1:s, EXISTS x2:s (x1 != x2)
+// so the negation of "lone" is just none or two or more (exists x2)
+
+
+
+
+
+// assuming no movement, eventual silence to controller?
+
+// if not sent on tree or endpoint, ??? [known: that's easy. what else?]
+// ^^ this one is not the smart version
