@@ -36,6 +36,11 @@ let oldpktdldst = TField("pkt", "dldst");;
 let newpktlocpt = TField("newpkt", "locpt");;
 let oldpktlocpt = TField("pkt", "locpt");;
 
+
+let split_disj1 = (FOr (FAnd(FAtom("", "p1", []), FAtom("", "p2", [])),
+                       (FAnd(FAtom("", "p3", []), FAtom("", "p4", [])))));;
+
+
              (*	 printf "%s\n%!" (string_of_formula (nnf (FOr((FNot (FOr(rx, ry))), pxy))));;
              	 printf "%s\n%!" (string_of_formula (disj_to_top (nnf (FOr((FNot (FOr(rx, ry))), pxy)))));;*)
 
@@ -64,8 +69,11 @@ let test_disj_to_top () =
                  (disj_to_top (nnf (FAnd(FOr(FFalse, FTrue), FFalse))))
                  (FOr(FAnd(FFalse, FFalse), FAnd(FTrue, FFalse)));
     assert_equal ~printer:string_of_formula                                   
-             	 (disj_to_top (nnf (FOr(FNot(FOr(rx, ry)), pxy))))
-             	 (FOr((FAnd(nrx, nry)), pxy));;
+             	   (disj_to_top (nnf (FOr(FNot(FOr(rx, ry)), pxy))))
+             	   (FOr((FAnd(nrx, nry)), pxy));
+    assert_equal ~printer:string_of_formula     
+                 (disj_to_top split_disj1)
+                split_disj1;;
 
 let gather_printer (lst: (term * term) list): string = 
   String.concat ";" (map (fun apair -> let (t1, t2) = apair in 
@@ -159,16 +167,16 @@ let cl8 = {orig_rule = dummy_rule;
            body = FAnd(FAtom("", "R", [oldpktdlsrc; xvar]), FNot(FEquals(newpktlocpt,oldpktlocpt)))};;
 
 let test_pe_valid () =
-    assert_raises  ~msg:"cl1" (IllegalAssignmentViaEquals (FEquals(newpktdlsrc, oldpktdldst))) (fun _ -> validate_clause cl1);
-    assert_equal   ~msg:"cl2" (validate_clause cl2) ();
+    assert_raises  ~msg:"cl1" (IllegalAssignmentViaEquals (FEquals(newpktdlsrc, oldpktdldst))) (fun _ -> validate_fwd_clause cl1);
+    assert_equal   ~msg:"cl2" (validate_fwd_clause cl2) ();
     (*assert_equal  ~msg:"cl3" (validate_clause cl3) ();*)  
-    assert_raises  ~msg:"cl3" (IllegalModToNewpkt(newpktdlsrc, newpktdlsrc)) (fun _ -> (validate_clause cl3));
+    assert_raises  ~msg:"cl3" (IllegalModToNewpkt(newpktdlsrc, newpktdlsrc)) (fun _ -> (validate_fwd_clause cl3));
     (*assert_equal   ~msg:"cl4" (validate_clause cl4) ();*)
-    assert_raises  ~msg:"cl4" (IllegalModToNewpkt(newpktdlsrc, newpktdlsrc)) (fun _ -> (validate_clause cl4));
-    assert_raises  ~msg:"cl5" (IllegalExistentialUse (FAtom("", "R", [xvar; oldpktdldst]))) (fun _ -> validate_clause cl5);
-    assert_raises  ~msg:"cl6" (IllegalEquality(oldpktdldst,oldpktdlsrc)) (fun _ -> validate_clause cl6);
-    assert_raises  ~msg:"cl7" (IllegalEquality(newpktdldst,oldpktdldst)) (fun _ -> validate_clause cl7);
-    assert_equal   ~msg:"cl8" (validate_clause cl8) ();;
+    assert_raises  ~msg:"cl4" (IllegalModToNewpkt(newpktdlsrc, newpktdlsrc)) (fun _ -> (validate_fwd_clause cl4));
+    assert_raises  ~msg:"cl5" (IllegalExistentialUse (FAtom("", "R", [xvar; oldpktdldst]))) (fun _ -> validate_fwd_clause cl5);
+    assert_raises  ~msg:"cl6" (IllegalEquality(oldpktdldst,oldpktdlsrc)) (fun _ -> validate_fwd_clause cl6);
+    assert_raises  ~msg:"cl7" (IllegalEquality(newpktdldst,oldpktdldst)) (fun _ -> validate_fwd_clause cl7);
+    assert_equal   ~msg:"cl8" (validate_fwd_clause cl8) ();;
 
 let cl9 = {orig_rule = dummy_rule; 
            head = FAtom("", "plus_foo", [xvar]);

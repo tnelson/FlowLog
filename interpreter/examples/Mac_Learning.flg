@@ -1,6 +1,6 @@
 
-TABLE learned(int, int, int); 
-TABLE switch_has_port(int, int); 
+TABLE learned(switchid, portid, macaddr); 
+TABLE switch_has_port(switchid, portid); 
 
 // all the events used here are built-in
 

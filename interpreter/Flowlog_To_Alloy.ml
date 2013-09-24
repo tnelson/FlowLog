@@ -116,7 +116,7 @@ let alloy_state (out: out_channel) (p: flowlog_program): unit =
       | DeclTable(tblname, fieldtypes) 
       | DeclRemoteTable(tblname, fieldtypes) -> 
         let typesproduct = String.concat " -> " (map String.capitalize fieldtypes) in 
-          sprintf "    %s: %s%!" tblname typesproduct
+          sprintf "    %s: set (%s)%!" tblname typesproduct
       | _ -> failwith "declare_state"
   in
 
