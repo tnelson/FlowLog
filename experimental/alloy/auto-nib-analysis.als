@@ -269,7 +269,7 @@ assert isTCReallyTC {
 				st2.uctc =
 				^(st.uctc + (ev.dlsrc -> ev.locsw))
 }
-check isTCReallyTC for 0 but 1 Event, 2 State, 4 Switchid, 2 Portid, 2 Ipaddr, 1 Ethtyp, 1 Nwprotocol
+check isTCReallyTC for 0 but 1 Event, 2 State, 6 Switchid, 2 Portid, 2 Ipaddr, 1 Ethtyp, 1 Nwprotocol
 
 /* Timer truly updates ucX -> X */
 /* Don't forget to constrain the timer ID or you'll be very confused. */
@@ -306,7 +306,7 @@ assert macConnectedAtOK {
 			not (xmac -> ev.locsw -> ev.locpt in st2.macconnectedat)				
 }
 
-check macConnectedAtOK for 4 but 1 Event, 2 State
+check macConnectedAtOK for 3 but 1 Event, 2 State
 
 pred probesNotSelf[] {
 	all ev : EVpacket | 
@@ -323,9 +323,7 @@ assert spanningTreeOK {
 			and (st2.uctree = st.uctree || (st2.uctree - st.uctree) in (ev.locsw -> ev.locpt) + (ev.dlsrc -> ev.dldst))
 			// only add if one of the switches is not in the spanning tree yet
 			and st2.uctree != st.uctree implies (ev.dlsrc not in (st.uctc.Portid) || ev.locsw not in (st.uctc.Portid))
-			// [so far, we've proven "tree", since 1 edge per 1 node of growth]
-			
-			// TODO: haven't we also proven "spanning"? look again in morning
+			// [so far, we've proven "tree", since 1 edge per 1 node of growth]		
 }
 
 check spanningTreeOK for 4 but 1 Event, 2 State

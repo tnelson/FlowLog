@@ -100,7 +100,6 @@ check consistentState for 3 but 1 Event, 2 State
 assert neverReFlood {
   all st1, st2: State, ev: Event |
   all sw: Switchid, host:Macaddr |
-// IN PROGRESS
     (some (st1.learned.host)[sw] and transition[st1, ev, st2] and not ev in EVswitch_down)
      implies
     (some (st2.learned.host)[sw])
