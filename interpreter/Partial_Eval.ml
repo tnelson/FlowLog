@@ -711,15 +711,20 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: clause list)
                   else 
                     let newpol = Seq(Filter(newpred), Action(aportaction)) in 
                     (*let newpiece = ITE(newpred, Action(aportaction), Action([])) in *)
-                      Union(acc, newpol))                
+                      if acc = Action([]) then 
+                        newpol
+                      else
+                        Union(acc, newpol))       
                 (Action([]))
                 actionswithphysicalports in
 
       (* the "allports" action must always be checked first*)
-      (* If not all-ports, can safely union without overlap *)      
-      ITE(or_of_preds_for_action [allportsatom],
-          Action([allportsatom]),
-          singleunion)          
+      (* If not all-ports, can safely union without overlap *)  
+      let allportspred = or_of_preds_for_action [allportsatom] in
+      if allportspred <> Nothing then 
+        ITE(allportspred, Action([allportsatom]), singleunion)          
+      else
+        singleunion
     end;;
 
 let debug = true;;
