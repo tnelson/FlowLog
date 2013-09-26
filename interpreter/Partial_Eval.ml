@@ -720,7 +720,7 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: clause list)
 
       (* the "allports" action must always be checked first*)
       (* If not all-ports, can safely union without overlap *)  
-      let allportspred = or_of_preds_for_action [allportsatom] in
+      let allportspred = simplify_netcore_predicate (or_of_preds_for_action [allportsatom]) in
       if allportspred <> Nothing then 
         ITE(allportspred, Action([allportsatom]), singleunion)          
       else

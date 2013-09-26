@@ -28,13 +28,18 @@ ON packet_in(pkt):
       // NOTE: this line wasn't required in fully reactive version.
       // But now, we may have learned (sw=x,pt=y,mac=z) and see a packet for z
       // on port y (because the switch on that end hasn't yet learned where z is.)
-     pkt.locPt != new.locPt)
+      // This is missing from the stock Mac Learning Frenetic functionality, and 
+      // lacking it can result in dupe packets when pinging  at topo=tree,3,3       
+      pkt.locPt != new.locPt 
+     )
     OR
     (NOT learned(pkt.locSw, x, pkt.dlDst) AND
-     NOT pkt.locPt = new.locPt AND
-     switch_has_port(pkt.locSw, new.locPt));
+     NOT pkt.locPt = new.locPt 
+     // Commented out as **optimization**, only sound if compiled.
+     // (If interpreted in XSB, will get a problem because new.locPt isn't bound)
+     // AND switch_has_port(pkt.locSw, new.locPt)
+    );
     
-// ^^ expect above (with crisis) to have no fwding pol, since learned is empty
 
 ON switch_port_in(swpt):
 	INSERT (swpt.sw, swpt.pt) INTO switch_has_port;
