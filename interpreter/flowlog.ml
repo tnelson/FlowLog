@@ -182,8 +182,14 @@ let desugared_program_of_ast (ast: flowlog_ast): flowlog_program =
                 
 
 (* usage message *)
-let usage = Printf.sprintf "Usage: %s [-alloy] [-notables] file.flg" (Filename.basename Sys.argv.(0));;
+let usage = Printf.sprintf "Usage: %s 
+                             [-alloy] 
+                             [-verbose <n>] 
+                             [-reportall] 
+                             [-notables] 
+                             file.flg" (Filename.basename Sys.argv.(0));;
 let alloy = ref false;;
+let cimp = ref false;;
 let notables = ref false;;
 let reportall = ref false;;
 let args = ref [];;
@@ -191,6 +197,7 @@ let args = ref [];;
 let speclist = [
   ("-verbose", Arg.Int (fun lvl -> global_verbose := lvl), ": set level of debug output");
   ("-alloy", Arg.Unit (fun () -> alloy := true), ": convert to Alloy");
+  ("-cimp", Arg.Unit (fun () -> cimp := true), ": convert two files to Alloy and compare their semantics");
   ("-reportall", Arg.Unit (fun () -> reportall := true), ": report all packets. WARNING: VERY SLOW!");
   (* Not calling this "reactive" because reactive still implies sending table entries. *)
   ("-notables", Arg.Unit (fun () -> notables := true), ": send everything to controller");];;
@@ -230,11 +237,19 @@ let main () =
   let ast = read_ast filename in
   let program = (desugared_program_of_ast ast) in    
     printf "-----------\n%!";
-    List.iter (fun cl -> printf "%s\n\n%!" (string_of_clause cl)) program.clauses;
+    (*List.iter (fun cl -> printf "%s\n\n%!" (string_of_clause cl)) program.clauses;*)
 
     if !alloy then 
-      write_as_alloy program (filename^".als")
-    else 
+      write_as_alloy program (alloy_filename filename)
+    else if !cimp then
+    begin
+      let filename2 = try hd (tl !args) with exn -> raise (Failure "Input a second .flg file name for use with change-impact.") in 
+      let ast2 = read_ast filename2 in
+      let program2 = (desugared_program_of_ast ast2) in   
+        write_as_alloy_change_impact program (alloy_filename filename) 
+                                     program2 (alloy_filename filename)
+    end
+    else
     begin
       (* Intercede when Ctrl-C is pressed to close XSB, etc. *)
       Sys.catch_break true;

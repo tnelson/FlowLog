@@ -47,9 +47,6 @@ ON laptop_recovered(rec):
 ON laptop_stolen(stolen):
   INSERT (stolen.mac) INTO stolen;
 
-//on foo(bar):
-//  insert (x) into zot;
-
 ON packet_in(pkt): 
   //DO forward(new) WHERE 
   //  Mac_learning.forward(new) ON pkt;
@@ -58,7 +55,3 @@ ON packet_in(pkt):
     stolen(pkt.dlSrc) AND 
     get_time(time);  
 
-//ON fozzie_in(pkt): 
-//  DO kermit_out(new) WHERE 
-    //muppets.foo(new) ON pkt AND
-    //(R(pkt.x) OR P(pkt.x, pkt.y));

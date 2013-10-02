@@ -19,6 +19,9 @@ open Unix
 
 *)
 
+let alloy_filename (flfn: string): string =
+  (Filename.chop_extension flfn)^".als";;
+
 (**********************************************************)
 (* Some boilerplate (packets, etc.) *)    
 
@@ -170,6 +173,11 @@ type pred_fragment = {outrel: string; increl: string; incvar: string;
                       outargs: term list; where: formula};;
 
 let alloy_actions (out: out_channel) (p: flowlog_program): unit =  
+  let do_assignment_subs (evid: string) (assns: assignment list) (tupvar: string): string = 
+    let foundassign = find (fun assn -> assn.atupvar = tupvar) assns in
+      sprintf "%s.%s" evid foundassign.afield
+  in 
+
   let make_rule (r: srule): pred_fragment = 
     match r with 
     | Rule(increl, incvar, act) ->
@@ -250,6 +258,10 @@ let minus_rule_exists (p: flowlog_program) (tblname: string): bool =
   exists (fun cl -> match cl.orig_rule with 
     | Rule(_, _, ADelete(rtbl, _, _)) when tblname = rtbl -> true
     | _ -> false) p.clauses;;
+let do_rule_exists (p: flowlog_program) (tblname: string): bool =
+  exists (fun cl -> match cl.orig_rule with 
+    | Rule(_, _, ADo(rtbl, _, _)) when tblname = rtbl -> true
+    | _ -> false) p.clauses;;
 
 (**********************************************************)
 (* transition: st x ev x st 
@@ -273,6 +285,19 @@ let alloy_transition (out: out_channel) (p: flowlog_program): unit =
   let remote_tables = (map (fun (react, decl) -> decl) (get_remote_tables p)) in
     fprintf out "pred transition[st1: State, ev: Event, st2: State] { \n%!";
     fprintf out "%s\n%!" (String.concat " &&\n\n" (map build_table_transition (local_tables @ remote_tables)));
+    fprintf out "}\n\n%!";;
+
+let alloy_outpolicy (out: out_channel) (p: flowlog_program): unit =
+  let alloy_out_difference (d: sreactive): string =
+    match d with 
+    | ReactOut(relname, arglist, outtype, assigns, spec) -> 
+      if do_rule_exists p relname then
+        sprintf "  %s[st1, ev, ev2]" relname              
+      else "false[]"
+    | _ -> failwith "alloy_out_difference" 
+  in
+    fprintf out "pred outpolicy[st1: State, ev: Event, ev2: Event] { \n%!";
+    fprintf out "%s" (String.concat " ||\n" (map alloy_out_difference (get_output_defns p))); 
     fprintf out "}\n%!";;
 
 (**********************************************************)
@@ -287,13 +312,17 @@ pred testPred[] {
 run testPred for 3 but 1 Event, 2 State\n%!";;
 
 let write_as_alloy (p: flowlog_program) (fn: string): unit =
+  if not (ends_with fn ".als") then 
+    failwith "Alloy filename must end with .als, so as not to accidently overwrite .flg files.";
+
     let out = open_out fn in 
     	alloy_boilerplate out;    
       alloy_constants out p;  
     	alloy_declares out p;
       alloy_state out p;
     	alloy_actions out p;
-    	alloy_transition out p;    	
+    	alloy_transition out p;    
+      alloy_outpolicy out p;	
       alloy_boilerplate_pred out;
 		  close_out out;
       printf "~~~ Finished compiling %s to Alloy. ~~~\n%!" fn;;
@@ -301,27 +330,29 @@ let write_as_alloy (p: flowlog_program) (fn: string): unit =
 (**********************************************************)
 let write_as_alloy_change_impact (p1: flowlog_program) (fn1: string) (p2: flowlog_program) (fn2: string): unit = 
 
-  let alloy_out_difference (rel: sreactive): string =     
-    "some outev: Event | 
-          (prog1.outpolicy[st, ev, outev] and not prog2.outpolicy[st, ev, outev]) ||
-          (prog2.outpolicy[st, ev, outev] and not prog1.outpolicy[st, ev, outev])"
-  in
-
   write_as_alloy p1 fn1;
   write_as_alloy p2 fn2;
   let out = open_out "change-impact.als" in 
       fprintf out "
-      open %s as prog1
-      open %s as prog2
+module cimp
 
-      pred changeImpact[] { 
-        some ev: Event, st: State |
-        some newst1, newst2: State |
-          (prog1.transition[] and prog2.transition[] and newst1 != newst2)
-          || 
-          %s
-      }\n%!" fn1 fn2 (String.concat "\n||\n  " (map alloy_out_difference (get_output_defns p1)));
-      fprintf out "run changeImpact[] for 3 State, 1 Event";
+open %s as prog1
+open %s as prog2
+
+pred changeImpact[] { 
+  some ev: Event, st: State |
+  some newst1, newst2: State |
+    (prog1/transition[st, ev, newst1] and 
+     prog2/transition[st, ev, newst2] and 
+     newst1 != newst2)
+    || 
+    some outev: Event | 
+      (prog1/outpolicy[st, ev, outev] and not prog2/outpolicy[st, ev, outev]) ||
+      (prog2/outpolicy[st, ev, outev] and not prog1/outpolicy[st, ev, outev])
+}\n%!" (Filename.chop_extension fn1) (Filename.chop_extension fn2);
+  (* 3 states since prestate, newstate1, newstate 2. *)
+  (* 2 events since ev, outev *)
+      fprintf out "run changeImpact for 3 State, 2 Event";
       close_out out;
       printf "WARNING: Make sure the two files have the same ontology, or the generated file may not run.\n%!";
       printf "~~~ Finished change-impact query file. ~~~\n%!";;
