@@ -1,5 +1,3 @@
-
-
 EVENT host_report {mac, sw, pt};
 OUTGOING notify_police(macaddr, switchid, portid);
 
@@ -8,7 +6,9 @@ OUTGOING notify_police(mac, sw, pt) THEN
 
 ON packet_in(pkt):
   DO notify_police(pkt.dlSrc, pkt.locSw, pkt.locPt) WHERE
-    not learned(ANY1, ANY2, pkt.dlSrc); // use diff. ids until gensym added in runtime
+    not learned(ANY, ANY, pkt.dlSrc); 
+
+// ^ There is a problem with the last line! :-)
 
 ///////////////////////////////
 // Unchanged:
@@ -27,7 +27,5 @@ ON packet_in(pkt):
     learned(pkt.locSw, new.locPt, pkt.dlDst);
     
   DO forward(new) WHERE 
-    NOT learned(pkt.locSw, x, pkt.dlDst) AND
+    NOT learned(pkt.locSw, ANY, pkt.dlDst) AND
     NOT pkt.locPt = new.locPt;
-
-///////////////////////////////

@@ -9,6 +9,8 @@ open Surface_Parser;;       (* The tokens are defined in this mli *)
 (* COMMENTS --- the pattern below for multiline /* */ assumes no strings containing
   /* etc. Standard "dumb" comment assumptions due to limited language syntax. *)
 
+let any_counter = ref 0;;
+
 }
 rule token = parse
     [' ' '\t' '\r'] { token lexbuf }    
@@ -58,6 +60,9 @@ rule token = parse
   | '(' { LPAREN }
   | ')' { RPAREN }
   | '"' { DOUBLEQUOTE }
+
+  | "any" { any_counter := !any_counter+1; NAME("any"^(string_of_int !any_counter)) }
+
   | ['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9'] as dotted_ip { DOTTED_IP(dotted_ip)}
   | ['0'-'9']+ | '0''x'(['0'-'9']+) as number { NUMBER(number) }
   | ['a'-'z''A'-'Z''_''0'-'9']+ as name { NAME(name) }
