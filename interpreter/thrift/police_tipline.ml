@@ -53,19 +53,7 @@ object (self)
     let values = sod ((sod notif)#get_values) in
       printf "received notification. type=%s\n%!" ntype;
       (* <>, not != *)
-      if ntype <> "stolen_laptop_found" then
-      begin
-        let reply = new notification in
-        let tbl = (Hashtbl.create 2) in
-        (* TODO: abstract this out *) 
-          reply#set_notificationType "exception";          
-          Hashtbl.add tbl "sender" "Police_Tipline";
-          Hashtbl.add tbl "message" "The tipline can't accept anything but stolen_laptop_found.";
-          reply#set_values tbl;
-          send_notif reply;
-          Printf.printf "Sent exception.\n%!";
-      end
-      else
+      if ntype = "stolen_laptop_found" then
       begin        
         (* case-sensitive. But Flowlog's parser downcases everything. So fields are always lowercase.*)        
         try 
@@ -76,8 +64,29 @@ object (self)
             (* Don't leave this check out: without it, this app could freeze. *)
         with Not_found -> 
           printf "...but did not contain well-formed fields.\n%!";
-
       end
+      else if ntype = "host_report" then
+      begin        
+        try 
+          let mac = (Hashtbl.find values "mac") in
+          let swid = (Hashtbl.find values "sw") in
+          let ptid = (Hashtbl.find values "pt") in
+            printf "[host_report] saw %s on switch %s port %s.\n%!" mac swid ptid  
+        with Not_found -> 
+          printf "...but did not contain well-formed fields.\n%!";
+      end      
+      else      
+      begin
+        let reply = new notification in
+        let tbl = (Hashtbl.create 2) in
+        (* TODO: abstract this out *) 
+          reply#set_notificationType "exception";          
+          Hashtbl.add tbl "sender" "Police_Tipline";
+          Hashtbl.add tbl "message" "The tipline can't accept anything but stolen_laptop_found.";
+          reply#set_values tbl;
+          send_notif reply;
+          Printf.printf "Sent exception.\n%!";
+      end      
   
 
 method doQuery qry =

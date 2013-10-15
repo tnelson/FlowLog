@@ -5,8 +5,6 @@
 
 // EVENT, OUTGOING, etc. for packet handling is all built in.
 
-//IMPORT Mac_Learning;
-
 EVENT stolen_laptop_report {mac};
 EVENT stolen_laptop_cancel {mac};
 EVENT stolen_laptop_found {mac, swid, time};
@@ -32,14 +30,9 @@ REMOTE TABLE get_time
   FROM time AT 127.0.0.1 9091
   TIMEOUT 1 seconds;
 
-// To do proactive compilation well, we need to optimize. Hence
-// timeout above. Default: must refresh every evaluation (bad).
-// TIMEOUT: refresh every k seconds (so can last across evaluations)
-// PURE: never have to refresh (used for addition, etc)
-
-//////////
-// Rules
-//////////
+/*
+  Rules
+*/
 
 ON laptop_recovered(rec):
   DELETE (rec.mac) FROM stolen;
@@ -48,8 +41,9 @@ ON laptop_stolen(stolen):
   INSERT (stolen.mac) INTO stolen;
 
 ON packet_in(pkt): 
-  //DO forward(new) WHERE 
-  //  Mac_learning.forward(new) ON pkt;
+  // For demonstration only: flood.
+  DO forward(new) WHERE 
+    new.locPt != pkt.locPt;    
 
   DO notify_police(pkt.dlSrc, pkt.locSw, time) WHERE 
     stolen(pkt.dlSrc) AND 
