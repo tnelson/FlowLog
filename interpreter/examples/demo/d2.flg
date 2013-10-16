@@ -2,7 +2,7 @@ EVENT host_report {mac, sw, pt};
 OUTGOING notify_police(macaddr, switchid, portid);
 
 OUTGOING notify_police(mac, sw, pt) THEN 
-  SEND EVENT host_report {mac:=mac, sw:=sw, pt:=pt} TO 127.0.0.1 5050;
+  SEND EVENT host_report {mac:=mac, sw:=sw, pt:=pt} TO 127.0.0.1:5050;
 
 ON packet_in(pkt):
   DO notify_police(pkt.dlSrc, pkt.locSw, pkt.locPt) WHERE

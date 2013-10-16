@@ -85,12 +85,17 @@
 // OUTGOING notify-police(mac, swid, t) THEN 
 // SEND EVENT stolen-laptop-found {mac:=mac, swid:=swid, time:=t} TO 127.0.0.1 5050;
 
+  optional_colon: 
+            | COLON {()} | {()};
+
   reactive_stmt:              
-            | REMOTE TABLE NAME FROM NAME AT DOTTED_IP NUMBER refresh_clause SEMICOLON 
-              {ReactRemote($3, $5, $7, $8, $9)}             
+            | REMOTE TABLE NAME FROM NAME AT 
+              DOTTED_IP optional_colon NUMBER refresh_clause SEMICOLON 
+              {ReactRemote($3, $5, $7, $9, $10)}             
             | OUTGOING NAME LPAREN name_list RPAREN THEN 
-              SEND EVENT NAME LCURLY possempty_assign_list RCURLY TO DOTTED_IP NUMBER SEMICOLON 
-              {ReactOut($2, $4, $9, $11, OutSend($14, $15))}              
+              SEND EVENT NAME LCURLY possempty_assign_list RCURLY 
+              TO DOTTED_IP optional_colon NUMBER SEMICOLON 
+              {ReactOut($2, $4, $9, $11, OutSend($14, $16))}              
             | INCOMING NAME THEN INSERT INTO NAME SEMICOLON 
               {ReactInc($2, $6)};
   

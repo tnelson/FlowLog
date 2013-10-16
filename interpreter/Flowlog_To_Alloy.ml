@@ -173,10 +173,10 @@ type pred_fragment = {outrel: string; increl: string; incvar: string;
                       outargs: term list; where: formula};;
 
 let alloy_actions (out: out_channel) (p: flowlog_program): unit =  
-  let do_assignment_subs (evid: string) (assns: assignment list) (tupvar: string): string = 
+  (*let do_assignment_subs (evid: string) (assns: assignment list) (tupvar: string): string = 
     let foundassign = find (fun assn -> assn.atupvar = tupvar) assns in
       sprintf "%s.%s" evid foundassign.afield
-  in 
+  in*) 
 
   let make_rule (r: srule): pred_fragment = 
     match r with 

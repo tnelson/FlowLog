@@ -48,7 +48,7 @@ rule token = parse
   | "false" { FALSE }
   
   | '.' { PERIOD }
-  | ":=" { COLON_EQUALS }
+  | ":=" { COLON_EQUALS }  
   | ':' { COLON }
   | ';' { SEMICOLON }
   | '=' { EQUALS }
