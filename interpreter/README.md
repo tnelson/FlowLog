@@ -7,6 +7,7 @@ You'll need to install: packet, openflow, and frenetic packages, along with
 their dependencies. The best way to do this is via their repos, rather than
 using opam. 
 
+Via opam, you should also install extlib and thrift.
 
 make clean
 make reinstall
