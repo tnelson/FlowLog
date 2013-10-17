@@ -39,7 +39,7 @@ open NetCore_Types
   type sreactive = 
         (* table name, query name, ip, port, refresh settings *)
       | ReactRemote of string * string * string * string * refresh
-        (* out relation name, args, event type name, assignments, ip, port*)
+        (* out relation name, args, event type name, assignments, spec*)
       | ReactOut of string * string list * string * assignment list * spec_out
         (* incoming event type, trigger relation name*)
       | ReactInc of string * string;;

@@ -6,6 +6,7 @@ open Printf
 open ExtList.List
 open NetCore_Types
 open NetCore_Pattern
+open Flowlog_Parse_Helpers
 
 (**********************************************************************)
 (* Formula Wrangling: NNF, disjunction lifting, substitution ...*)
@@ -205,11 +206,32 @@ let allhdrs = Hdr(all);;
         (build_switch_pred old_cl1 trimmed_cl1) 
         allhdrs;;
 *)
+
+let try_to_open filename = 
+  (fun _ -> desugared_program_of_ast (read_ast filename));;
+
+let test_parse_errors () =
+  assert_raises ~msg:"bad input field in head" (UndeclaredField("swpt","notafieldomg")) 
+                (try_to_open "./tests/bad_input_field_in_head.flg");
+  assert_raises ~msg:"bad input field in body" (UndeclaredField("swpt","omgwtfbbq")) 
+                (try_to_open "./tests/bad_input_field_in_body.flg");    
+  assert_raises ~msg:"bad DO output field in WHERE" (UndeclaredField("new","omgwtfbbq")) 
+                (try_to_open "./tests/bad_do_field.flg");    
+  assert_raises ~msg:"INSERT/DELETE tried to use field" (InsertDeleteNoField("swpt")) 
+                (try_to_open "./tests/bad_insert_not_field.flg");    
+  assert_raises ~msg:"multiple io-reacts for one relation" (RelationHadMultipleReacts("forward")) 
+                (try_to_open "./tests/multiple_reacts_on_forward.flg");    
+  assert_raises ~msg:"multiple io-decls for one relation" (RelationHadMultipleDecls("forward")) 
+                (try_to_open "./tests/multiple_decls_of_forward.flg");                    
+  ();;
+
 (**********************************************************************)
 (* SUITE DEFINITION *)
 (**********************************************************************)
 
- let suite = "Flowlog tests" >::: ["test_disj_to_top" >:: test_disj_to_top;
+ let suite = "Flowlog tests" >::: [
+                                   "test_parse_errors" >:: test_parse_errors;
+                                   "test_disj_to_top" >:: test_disj_to_top;
                                    "test_nnf" >:: test_nnf;
                                    "test_minimize_variables" >:: test_minimize_variables;
                                    "test_pe_valid" >:: test_pe_valid;

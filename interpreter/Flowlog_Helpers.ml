@@ -224,11 +224,20 @@ let rec disj_to_top ?(ignore_negation: bool = false) (f: formula): formula =
       | ReactRemote(relname, qryname, ip, port, refresh) ->  relname
       | ReactInc(evname, relname) -> relname;;
 
-  let get_input_defn_for_rel (prgm: flowlog_program) (goalrel: string): sreactive =
+  let get_input_defn_for_rel_preproc (reacts: sreactive list) (goalrel: string): sreactive =
     find (function      
           | ReactInc(intype, relname) when goalrel = relname -> true 
           | _ -> false) 
-        prgm.reacts;;      
+        reacts;;      
+
+  let get_output_defn_for_rel_preproc (reacts: sreactive list) (goalrel: string): sreactive =    
+    find (function      
+          | ReactOut(outrel, _, eventid, _, _) when goalrel = outrel -> true 
+          | _ -> false) 
+        reacts;;     
+
+  let get_input_defn_for_rel (prgm: flowlog_program) (goalrel: string): sreactive =
+    get_input_defn_for_rel_preproc prgm.reacts goalrel;;      
 
   let is_io_rel (prgm: flowlog_program) (modname: string) (relname: string): bool =
     (* exists is ocaml's ormap *)
@@ -238,18 +247,37 @@ let rec disj_to_top ?(ignore_negation: bool = false) (f: formula): formula =
         | _ -> false) 
         prgm.decls;;      
 
+  (* TODO: when this all gets refactored again, should use record types for more types *)
+
    (* raises not_found on invalid field *)
   let get_field (ev: event) (fldname: string): string  = 
   	StringMap.find fldname ev.values;; 
 
-  let get_fields_for_type (prgm: flowlog_program) (etype: string): string list =  
+let get_fields_for_type_preproc (decls: sdecl list) (etype: string): string list =  
       let decl = find (function       
         | DeclEvent(evname, evtypelst) when evname = etype -> true 
-        | _ -> false) prgm.decls in 
+        | _ -> false) decls in 
       match decl with 
         | DeclEvent(evname, evfieldlst) -> 
           evfieldlst
         | _ -> failwith "get_fields_for_type";;
+
+  let get_fields_for_type (prgm: flowlog_program) (etype: string): string list =  
+      get_fields_for_type_preproc prgm.decls etype;;
+
+  let get_valid_fields_for_input_rel (decls: sdecl list) (reacts: sreactive list) (rname: string): (string list) =
+    let defn = get_input_defn_for_rel_preproc reacts rname in 
+    match defn with 
+      | ReactInc(intype, _) ->
+        get_fields_for_type_preproc decls intype
+      | _ -> failwith "get_valid_fields_for_input_rel";;
+
+  let get_valid_fields_for_output_rel (decls: sdecl list) (reacts: sreactive list) (rname: string): (string list) =
+    let defn = get_output_defn_for_rel_preproc reacts rname in 
+    match defn with 
+      | ReactOut(outrel, _, eventid, _, _) ->
+        get_fields_for_type_preproc decls eventid
+      | _ -> failwith "get_valid_fields_for_output_rel";;
 
   (* in this IO relation, at index idx, there should be something of type T. What are T's fields, in order? *)
   let get_io_fields_for_index (prgm: flowlog_program) (relname: string) (idx: int): (string list) option =

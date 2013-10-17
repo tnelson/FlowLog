@@ -176,7 +176,7 @@ let rec common_existential_check (newpkt: string) (sofar: string list) (f: formu
     		unique (flatten (map ext_helper tlargs));;	
 
 let validate_fwd_clause (cl: clause): unit =
-  printf "Validating clause: %s\n%!" (string_of_clause cl);
+  (*printf "Validating clause: %s\n%!" (string_of_clause cl);*)
 	match cl.head with 
 		| FAtom("", "forward", [TVar(newpktname)]) ->
       ignore (common_existential_check newpktname [] cl.body);  

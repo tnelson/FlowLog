@@ -1,0 +1,6 @@
+
+// This program should produce a compiler error:
+
+ON packet_in(pkt):
+  DO forward(new) WHERE new.omgwtfbbq = 5;
+
