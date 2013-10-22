@@ -1,0 +1,5 @@
+TABLE switch_has_port(switchid, portid); 
+
+ON switch_port_in(swpt):
+  INSERT (swpt.sw) INTO switch_has_port;  
+

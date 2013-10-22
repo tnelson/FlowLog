@@ -63,7 +63,7 @@ exception UndeclaredOutgoingRelation of string;;
 exception UndeclaredTable of string;;
 exception BadArityOfTable of string;;
 exception UndeclaredField of string * string;;
-exception InsertDeleteNoField of string;;
+exception NonCondensedNoField of string;;
 exception RelationHadMultipleReacts of string;;
 exception RelationHadMultipleDecls of string;;
 
@@ -73,23 +73,28 @@ let field_var_or_var (t: term): string =
     | TConst(_) -> ""
     | TField(vname, _) -> vname;;
 
-let field_vars_in (tl: term list): string list =   
+let field_vars_in (condensed: bool) (tl: term list): string list =   
   filter_map (function 
-    | TVar(_) -> None
+    | TVar(vname) when condensed -> Some vname
+    | TVar(vname) -> None
     | TConst(_) -> None
     | TField(vname, _) -> Some vname) tl
 
 let well_formed_rule (decls: sdecl list) (reacts: sreactive list) (r: srule): unit =    
-  let is_do = (match r with 
-          | Rule(_, _, ADo(_,_,_)) -> true          
-          | _ -> false) in
 
-    let well_formed_term (headterms: term list) (inrelname: string) (inargname: string) (t: term): unit = 
+    (* This may be called for a term in the head OR in the body.*)
+    let well_formed_term (headrelname: string) (headterms: term list) (inrelname: string) (inargname: string) (t: term): unit = 
+      (* Predefined in Flowlog_Types -- "forward" and "emit" have condensed args.
+         All other output relations or tables have base types for args. *)
+      let condensed = (mem headrelname built_in_condensed_outrels) in
+
       match t with 
+      | TConst(cval) -> () (* constant is always OK *)
+
       | TVar(vname) -> 
-        if not is_do && (vname = inargname || mem vname (field_vars_in headterms)) then
-          raise (InsertDeleteNoField(vname))      
-      | TConst(cval) -> ()
+        if not condensed && (vname = inargname || mem vname (field_vars_in condensed headterms)) then
+          raise (NonCondensedNoField(vname))      
+
         (* variable name in input relation *)
       | TField(vname, fname) when vname = inargname ->         
         let valid_fields = get_valid_fields_for_input_rel decls reacts inrelname in        
@@ -98,21 +103,23 @@ let well_formed_rule (decls: sdecl list) (reacts: sreactive list) (r: srule): un
         
         (* the variable here is in the clause head. e.g. "newpkt"
            if this is a DO rule and the term is a field var... deal with similar to above. 
-           if this is an insert/delete rule... ?  *)        
-      | TField(vname, fname) when mem vname (field_vars_in headterms) ->              
+           if this is an insert/delete rule, disallow non = inargname fields.  *)        
+      | TField(vname, fname) when mem vname (field_vars_in condensed headterms) ->              
         (match r with 
-          | Rule(inrelname, inrelarg, ADo(outrelname, outrelterms, where)) -> 
-            let valid_fields = get_valid_fields_for_output_rel decls reacts outrelname in                    
+          | Rule(inrelname, inrelarg, ADo(_, outrelterms, where)) -> 
+            let valid_fields = get_valid_fields_for_output_rel decls reacts headrelname in                    
             if not (mem fname valid_fields) then 
               raise (UndeclaredField(vname, fname))
-          | Rule(inrelname, inrelarg, AInsert(relname, outrelterms, where))  
-          | Rule(inrelname, inrelarg, ADelete(relname, outrelterms, where)) -> 
-            ()) (* TODO? *)
-      | TField(vname, fname) ->  
-      printf "valid fields: %s\n%!" (String.concat "," (map string_of_term headterms));       
-        raise (UndeclaredField(vname,fname)) in
+          | Rule(inrelname, inrelarg, AInsert(_, outrelterms, where))  
+          | Rule(inrelname, inrelarg, ADelete(_, outrelterms, where)) -> 
+            raise (UndeclaredField(vname, fname)))
 
-  let well_formed_atom (headterms: term list) (inrelname: string) (inargname: string) (atom: formula) :unit =
+      (* any other field... must be undeclared *)
+      | TField(vname, fname) ->                
+          raise (UndeclaredField(vname,fname)) 
+      in
+
+  let well_formed_atom (headrelname: string) (headterms: term list) (inrelname: string) (inargname: string) (atom: formula) :unit =
     match atom with 
       | FAtom(modname, relname, argtl) -> 
         (try 
@@ -127,35 +134,42 @@ let well_formed_rule (decls: sdecl list) (reacts: sreactive list) (r: srule): un
                   if length typeargs <> length argtl then
                     raise (BadArityOfTable relname);
                 | _ -> failwith "validate_rule");         
-          iter (well_formed_term headterms inrelname inargname) argtl;
+          iter (well_formed_term headrelname headterms inrelname inargname) argtl;
         with | Not_found -> raise (UndeclaredTable relname))
 
       | FEquals(t1, t2) ->
-        well_formed_term headterms inrelname inargname t1;
-        well_formed_term headterms inrelname inargname t2;
+        well_formed_term headrelname headterms inrelname inargname t1;
+        well_formed_term headrelname headterms inrelname inargname t2;
       | _ -> failwith "validate_rule" in
 
+  (* regardless whether this rule is DO or INSERT etc. check these: *)
   let validate_common_elements inrelname inrelarg outrelname outrelterms where = 
-    iter (well_formed_atom outrelterms inrelname inrelarg) (get_atoms where);        
-    iter (fun (_, f) -> (well_formed_atom outrelterms inrelname inrelarg f)) (get_equalities where);        
-    iter (well_formed_term outrelterms inrelname inrelarg) outrelterms;
-    if not (exists (function | DeclInc(dname, _) when dname = inrelname -> true | _ -> false) decls) then
+    iter (well_formed_atom outrelname outrelterms inrelname inrelarg) (get_atoms where);        
+    iter (fun (_, f) -> (well_formed_atom outrelname outrelterms inrelname inrelarg f)) (get_equalities where);        
+    iter (well_formed_term outrelname outrelterms inrelname inrelarg) outrelterms;
+    if not (exists (function | DeclInc(dname, _) when dname = inrelname -> true | _ -> false) decls) then    
       raise (UndeclaredIncomingRelation inrelname)
   in 
 
   match r with     
-    (* DO must have outgoing relation in action *)
+    (* DO must have outgoing relation in action, and must be correct arity *)
     | Rule(inrelname, inrelarg, ADo(outrelname, outrelterms, where)) -> 
         validate_common_elements inrelname inrelarg outrelname outrelterms where;
-        if not (exists (function | DeclOut(dname, _) when dname = outrelname -> true | _ -> false) decls) then
-          raise (UndeclaredOutgoingRelation outrelname); 
+        (try
+          let dargs = first (filter_map (function | DeclOut(dname, dargs) when dname = outrelname -> Some dargs | _ -> None) decls) in
+          if (length outrelterms) <> (length dargs) then
+            raise (BadArityOfTable outrelname)          
+        with Not_found -> raise (UndeclaredOutgoingRelation outrelname))
 
-    (* insert and delete must have local table in action *)
+    (* insert and delete must have local table in action, of correct arity *)
     | Rule(inrelname, inrelarg, AInsert(relname, outrelterms, where))  
     | Rule(inrelname, inrelarg, ADelete(relname, outrelterms, where)) ->
         validate_common_elements inrelname inrelarg relname outrelterms where;        
-        if not (exists (function | DeclTable(dname, _) when dname = relname -> true | _ -> false) decls) then
-          raise (UndeclaredTable relname);;
+        (try
+          let dargs = first (filter_map (function | DeclTable(dname, dargs) when dname = relname -> Some dargs | _ -> None) decls) in
+          if (length outrelterms) <> (length dargs) then
+            raise (BadArityOfTable relname)          
+        with Not_found -> raise (UndeclaredTable relname));;
 
 let simplify_clause (cl: clause): clause =   
     {head = cl.head; orig_rule = cl.orig_rule; body = minimize_variables cl.body};;

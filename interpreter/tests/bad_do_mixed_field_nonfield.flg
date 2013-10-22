@@ -1,0 +1,3 @@
+ON packet_in(pkt):
+  DO frozzle(pkt, pkt.locSw);
+

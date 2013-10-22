@@ -217,12 +217,21 @@ let test_parse_errors () =
                 (try_to_open "./tests/bad_input_field_in_body.flg");    
   assert_raises ~msg:"bad DO output field in WHERE" (UndeclaredField("new","omgwtfbbq")) 
                 (try_to_open "./tests/bad_do_field.flg");    
-  assert_raises ~msg:"INSERT/DELETE tried to use field" (InsertDeleteNoField("swpt")) 
+  assert_raises ~msg:"bad DO output field in WHERE" (UndeclaredField("swpt","swx")) 
+                (try_to_open "./tests/bad_insert_field.flg");                    
+  assert_raises ~msg:"INSERT/DELETE bad field" (NonCondensedNoField("swpt")) 
                 (try_to_open "./tests/bad_insert_not_field.flg");    
   assert_raises ~msg:"multiple io-reacts for one relation" (RelationHadMultipleReacts("forward")) 
                 (try_to_open "./tests/multiple_reacts_on_forward.flg");    
   assert_raises ~msg:"multiple io-decls for one relation" (RelationHadMultipleDecls("forward")) 
                 (try_to_open "./tests/multiple_decls_of_forward.flg");                    
+  assert_raises ~msg:"DO args mixed field and nonfield of inc var" (NonCondensedNoField("pkt")) 
+                (try_to_open "./tests/bad_do_mixed_field_nonfield.flg");                    
+  assert_raises ~msg:"Bad arity of output relation (DO)" (BadArityOfTable("forward")) 
+                (try_to_open "./tests/bad_forward_arity.flg");                    
+  assert_raises ~msg:"Bad arity of output relation (INSERT)" (BadArityOfTable("switch_has_port")) 
+                (try_to_open "./tests/bad_insert_arity.flg");                    
+
   ();;
 
 (**********************************************************************)
