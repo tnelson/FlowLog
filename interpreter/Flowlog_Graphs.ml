@@ -77,9 +77,9 @@ let string_of_data_node (n: data_node): string =
     | NIncomingTable(str) -> "IN("^str^")"
     | NOutgoingTable(str) -> "OUT("^str^")";;
 
-let get_nodes_affecting (es: data_edge list) (n: data_node): data_node list =
+let get_nodes_affecting (datamode: string) (es: data_edge list) (n: data_node): data_node list =
   filter_map (fun e -> 
-      if e.dsink <> n then None
+      if e.dsink <> n || e.mode <> datamode then None
       else Some e.dsrc)
     es;;
 let get_nodes_affected_by (es: data_edge list) (n: data_node): data_node list =
@@ -88,12 +88,30 @@ let get_nodes_affected_by (es: data_edge list) (n: data_node): data_node list =
       else Some e.dsink)
     es;;    
 
-let string_of_dependencies (g: depend_graph): string =
+let depends_or_nothing (datamode: string) (nodes: data_node list): string =
+  if (length nodes) > 0 then 
+    sprintf "%s: %s" datamode (String.concat ", " (map string_of_data_node nodes))^"\n"
+  else "";;  
+
+let string_of_edges (g: depend_graph): string =
+ String.concat "\n" (map (fun e -> (string_of_data_node e.dsink)
+                                   ^", "^(e.mode)^", "^
+                                   string_of_data_node e.dsrc)
+                         g.dependencies);;
+
+(* This includes a line for nodes that have no edges at all *)
+let pretty_string_of_dependencies (g: depend_graph): string =
   let nodestrs = map (fun (n: data_node) -> 
+      let plus_affecting = (get_nodes_affecting "+" g.dependencies n) in 
+      let minus_affecting = (get_nodes_affecting "-" g.dependencies n) in 
+      let do_affecting = (get_nodes_affecting "" g.dependencies n) in    
         (string_of_data_node n) 
-        ^" <-- "^
-        (String.concat ", " 
-          (map string_of_data_node (get_nodes_affecting g.dependencies n)))) g.datanodes in 
+        ^" <-- \n"^
+        (depends_or_nothing "  +" plus_affecting)^
+        (depends_or_nothing "  -" minus_affecting)^        
+        (depends_or_nothing " do" do_affecting))
+      g.datanodes in 
+
     String.concat "\n" nodestrs;;
 
   let files_to_graph (fnames: string list): depend_graph =  
@@ -106,6 +124,8 @@ E.g. TABLE(ucst) <- TABLE(ucst) means that a modification (+ or -) of ucst
 depends on its current value.*)
 
   (* For debugging+development before creating real tests *)
-  printf "%s\n%!" (string_of_dependencies (files_to_graph ["examples/NIB.flg"; "examples/Mac_Learning.flg"]));;
+  printf "%s\n%!" (pretty_string_of_dependencies (files_to_graph ["examples/NIB.flg"; "examples/Mac_Learning.flg"]));;
+
+  printf "%s\n%!" (string_of_edges (files_to_graph ["examples/Mac_Learning.flg"]));;
 
   (* TODO: use program name to disambiguate relation names *)
