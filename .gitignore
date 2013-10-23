@@ -3,3 +3,5 @@
 *.log
 interpreter/_build
 interpreter/thrift/_build
+*.d.byte
+*.native
