@@ -206,11 +206,29 @@ let rec disj_to_top ?(ignore_negation: bool = false) (f: formula): formula =
     	| _ -> false) prgm.decls in
 	(the_react, the_decl);;
 
+  let is_local_table (prgm: flowlog_program) (relname: string) = 
+    exists (function      
+        | DeclTable(rname, _) when rname = relname -> true         
+        | _ -> false) 
+        prgm.decls;;
+
   let is_remote_table (prgm: flowlog_program) (relname: string): bool =   
     exists (function      
         | DeclRemoteTable(rname, _) when rname = relname -> true         
         | _ -> false) 
-        prgm.decls;;      
+        prgm.decls;;
+
+  let is_incoming_table (prgm: flowlog_program) (relname: string): bool =
+    exists (function      
+        | DeclInc(rname, argtype) when rname = relname -> true 
+        | _ -> false) 
+        prgm.decls;;  
+
+  let is_outgoing_table (prgm: flowlog_program) (relname: string): bool =
+    exists (function      
+        | DeclOut(rname, argtype) when rname = relname -> true 
+        | _ -> false) 
+        prgm.decls;;  
 
   let get_output_defns (prgm: flowlog_program): sreactive list =
     filter_map (function      
