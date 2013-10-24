@@ -3,6 +3,7 @@ open Flowlog_Parse_Helpers
 open Flowlog_Helpers
 open Printf
 open ExtList.List
+open Yojson.Safe
 
 (**********************************************************************)
 (* Produce dependency graphs (and associated relations) for Flowlog programs *)
@@ -129,3 +130,16 @@ depends on its current value.*)
   printf "%s\n%!" (string_of_edges (files_to_graph ["examples/Mac_Learning.flg"]));;
 
   (* TODO: use program name to disambiguate relation names *)
+
+  let node_to_json (d: data_node): json =
+    `String(string_of_data_node d);;
+
+  let edge_to_json (e: data_edge): json =
+    `Tuple([node_to_json e.dsrc; node_to_json e.dsink; `String e.mode]);;
+
+  let json_graph (g: depend_graph) : json = 
+    `Assoc([("datanodes",   `List (map node_to_json g.datanodes));
+            ("dependencies",`List (map edge_to_json g.dependencies))]);;
+    
+    Yojson.Safe.to_file "test.json" (json_graph (files_to_graph ["examples/Mac_Learning.flg"]));;
+
