@@ -22,7 +22,7 @@ let read_ast (filename : string) : flowlog_ast =
     try 
       let result = Surface_Parser.main Surface_Lexer.token lexbuf in 
         printf "Done parsing.\n%!";
-        pretty_print_program result;
+        (*pretty_print_program result;*)
         result
     with exn -> 
       let curr = lexbuf.Lexing.lex_curr_p in

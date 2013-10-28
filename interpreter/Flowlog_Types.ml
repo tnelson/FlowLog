@@ -282,6 +282,10 @@ let startup_relname = "startup";;
 let packet_fields = ["locsw";"locpt";"dlsrc";"dldst";"dltyp";"nwsrc";"nwdst";"nwproto"];;
 let legal_to_modify_packet_fields = ["locpt";"dlsrc";"dldst";"dltyp";"nwsrc";"nwdst"];;
 
+(* custom packet type: ARP packet (source/target; protocol/hardware) *)
+let arp_packet_fields = packet_fields @ ["arp_op";"arp_spa";"arp_sha";"arp_tpa";"arp_tha"];;
+
+
 let swpt_fields = ["sw";"pt"];;
 let swdown_fields = ["sw"];;
 
@@ -311,3 +315,9 @@ let built_in_condensed_outrels = ["forward"; "emit"];;
 
 (*************************************************************)
   let allportsatom = SwitchAction({id with outPort = NetCore_Pattern.All});;
+(*************************************************************)
+
+(* E.g. arp_packet always fires packet also. *)
+let built_in_subtypes = [("arp_packet", "packet"); 
+                         ("icmp_packet", "packet")];;
+

@@ -3,16 +3,20 @@ open Flowlog_Parse_Helpers
 open Flowlog_Helpers
 open Printf
 open ExtList.List
-open Yojson.Safe
+open Yojson
 
 (**********************************************************************)
 (* Produce dependency graphs (and associated relations) for Flowlog programs *)
 (**********************************************************************)
 
-(* ~~ More types than needed at first,
-      expect will eventually add new fields
-      e.g., conditions on events/packets.
-   ~~ Distinction between incoming/outgoing event tables: is it important? *)
+(* ~~ Expect we'll eventually add new fields
+      e.g., conditions on events/packets. For now,
+      just table-level dependencies.
+
+   ~~ +/-/empty denotes result of the dependency. e.g.
+      ("learned", "packet_in", "+") means that packet_in affects
+      learned positively.
+*)
 
 type data_node = | NLocalTable of string 
                  | NRemoteTable of string
@@ -124,22 +128,23 @@ let pretty_string_of_dependencies (g: depend_graph): string =
 E.g. TABLE(ucst) <- TABLE(ucst) means that a modification (+ or -) of ucst
 depends on its current value.*)
 
-  (* For debugging+development before creating real tests *)
-  printf "%s\n%!" (pretty_string_of_dependencies (files_to_graph ["examples/NIB.flg"; "examples/Mac_Learning.flg"]));;
-
-  printf "%s\n%!" (string_of_edges (files_to_graph ["examples/Mac_Learning.flg"]));;
-
   (* TODO: use program name to disambiguate relation names *)
 
   let node_to_json (d: data_node): json =
     `String(string_of_data_node d);;
 
   let edge_to_json (e: data_edge): json =
-    `Tuple([node_to_json e.dsrc; node_to_json e.dsink; `String e.mode]);;
+    `List([node_to_json e.dsrc; node_to_json e.dsink; `String e.mode]);;
 
   let json_graph (g: depend_graph) : json = 
     `Assoc([("datanodes",   `List (map node_to_json g.datanodes));
             ("dependencies",`List (map edge_to_json g.dependencies))]);;
-    
-    Yojson.Safe.to_file "test.json" (json_graph (files_to_graph ["examples/Mac_Learning.flg"]));;
+  
+  let output_single_dependency_graph (fn: string): unit =  
+    let out = open_out ((Filename.chop_extension fn)^".json")  in 
+      Yojson.pretty_to_channel out (json_graph (files_to_graph [fn]));
+      close_out out;;
 
+  let example_print: unit = 
+    printf "%s\n%!" (pretty_string_of_dependencies (files_to_graph ["examples/NIB.flg"; "examples/Mac_Learning.flg"]));
+    printf "%s\n%!" (string_of_edges (files_to_graph ["examples/Mac_Learning.flg"]));;

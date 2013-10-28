@@ -20,11 +20,8 @@ open Flowlog_Parse_Helpers
 open Xsb_Communication
 
 (* Use ExtList.List instead -- provides filter_map, but also tail-recursive combine *)
-(*open List;;*)
 open ExtList.List
-
-                
-
+              
 (* usage message *)
 let usage = Printf.sprintf "Usage: %s 
                              [-alloy] 
@@ -36,12 +33,14 @@ let alloy = ref false;;
 let cimp = ref false;;
 let notables = ref false;;
 let reportall = ref false;;
+let depend = ref false;;
 let args = ref [];;
 
 let speclist = [
   ("-verbose", Arg.Int (fun lvl -> global_verbose := lvl), ": set level of debug output");
   ("-alloy", Arg.Unit (fun () -> alloy := true), ": convert to Alloy");
   ("-cimp", Arg.Unit (fun () -> cimp := true), ": convert two files to Alloy and compare their semantics");
+  ("-depend", Arg.Unit (fun () -> depend := true), ": output a JSON dependency graph");  
   ("-reportall", Arg.Unit (fun () -> reportall := true), ": report all packets. WARNING: VERY SLOW!");
   (* Not calling this "reactive" because reactive still implies sending table entries. *)
   ("-notables", Arg.Unit (fun () -> notables := true), ": send everything to controller");];;
@@ -78,10 +77,17 @@ let main () =
   let collect arg = args := !args @ [arg] in
   let _ = Arg.parse speclist collect usage in
   let filename = try hd !args with exn -> raise (Failure "Input a .flg file name.") in  
+
+  if !depend then
+  begin
+    Flowlog_Graphs.output_single_dependency_graph filename;
+    printf "Output dependency graph with .json extension.\n%!";
+    exit(0);
+  end;
+
   let ast = read_ast filename in
   let program = (desugared_program_of_ast ast) in    
-    printf "-----------\n%!";
-    (*List.iter (fun cl -> printf "%s\n\n%!" (string_of_clause cl)) program.clauses;*)
+    printf "-----------\n%!";    
 
     if !alloy then 
       write_as_alloy program (alloy_filename filename)
@@ -92,8 +98,9 @@ let main () =
       let program2 = (desugared_program_of_ast ast2) in   
         write_as_alloy_change_impact program (alloy_filename filename) 
                                      program2 (alloy_filename filename)
-    end
-    else
+    end;    
+
+    if (not !alloy) && (not !cimp) then (* ACTUALLY RUN THE PROGRAM HERE *)
     begin
       (* Intercede when Ctrl-C is pressed to close XSB, etc. *)
       Sys.catch_break true;

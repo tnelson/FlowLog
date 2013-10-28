@@ -17,9 +17,10 @@ To use the interpreter, you need:
   or the Aluminum "Minimal Alloy" analyzer:
   	http://cs.brown.edu/research/plt/dl/aluminum/
 
-To output dependency graphs in JSON, you need:
-
 * The "yojson" package (opam install yojson)
+  (We use this to output dependency graphs in JSON format.)
+
+* The "thrift" package.
 
 -----------------------------
 Legacy notes: 
