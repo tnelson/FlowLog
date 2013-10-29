@@ -22,7 +22,7 @@ let read_ast (filename : string) : flowlog_ast =
     try 
       let result = Surface_Parser.main Surface_Lexer.token lexbuf in 
         printf "Done parsing.\n%!";
-        (*pretty_print_program result;*)
+        (*pretty_print_ast result;*)
         result
     with exn -> 
       let curr = lexbuf.Lexing.lex_curr_p in
@@ -86,7 +86,7 @@ let well_formed_rule (decls: sdecl list) (reacts: sreactive list) (r: srule): un
     let well_formed_term (headrelname: string) (headterms: term list) (inrelname: string) (inargname: string) (t: term): unit = 
       (* Predefined in Flowlog_Types -- "forward" and "emit" have condensed args.
          All other output relations or tables have base types for args. *)
-      let condensed = (mem headrelname built_in_condensed_outrels) in
+      let condensed = (mem headrelname built_in_condensed_outrels) in    
 
       match t with 
       | TConst(cval) -> () (* constant is always OK *)
@@ -96,10 +96,12 @@ let well_formed_rule (decls: sdecl list) (reacts: sreactive list) (r: srule): un
           raise (NonCondensedNoField(vname))      
 
         (* variable name in input relation *)
-      | TField(vname, fname) when vname = inargname ->         
-        let valid_fields = get_valid_fields_for_input_rel decls reacts inrelname in        
-        if not (mem fname valid_fields) then 
-          raise (UndeclaredField(vname, fname))
+      | TField(vname, fname) when vname = inargname ->    
+        (try         
+          let valid_fields = get_valid_fields_for_input_rel decls reacts inrelname in        
+          if not (mem fname valid_fields) then 
+            raise (UndeclaredField(vname, fname))
+        with | Not_found -> raise (UndeclaredIncomingRelation inrelname))
         
         (* the variable here is in the clause head. e.g. "newpkt"
            if this is a DO rule and the term is a field var... deal with similar to above. 
@@ -107,9 +109,11 @@ let well_formed_rule (decls: sdecl list) (reacts: sreactive list) (r: srule): un
       | TField(vname, fname) when mem vname (field_vars_in condensed headterms) ->              
         (match r with 
           | Rule(inrelname, inrelarg, ADo(_, outrelterms, where)) -> 
-            let valid_fields = get_valid_fields_for_output_rel decls reacts headrelname in                    
-            if not (mem fname valid_fields) then 
-              raise (UndeclaredField(vname, fname))
+            (try
+              let valid_fields = get_valid_fields_for_output_rel decls reacts headrelname in                    
+              if not (mem fname valid_fields) then 
+                raise (UndeclaredField(vname, fname))
+            with | Not_found -> raise (UndeclaredOutgoingRelation headrelname))
           | Rule(inrelname, inrelarg, AInsert(_, outrelterms, where))  
           | Rule(inrelname, inrelarg, ADelete(_, outrelterms, where)) -> 
             raise (UndeclaredField(vname, fname)))
@@ -122,18 +126,17 @@ let well_formed_rule (decls: sdecl list) (reacts: sreactive list) (r: srule): un
   let well_formed_atom (headrelname: string) (headterms: term list) (inrelname: string) (inargname: string) (atom: formula) :unit =
     match atom with 
       | FAtom(modname, relname, argtl) -> 
-        (try 
+        (try           
           let decl = (find (function
                                  | DeclTable(dname, _) when dname = relname -> true 
                                  | DeclRemoteTable(dname, _) when dname = relname -> true 
-                                 | _ -> false) decls) in
-
+                                 | _ -> false) decls) in              
               (match decl with 
                 | DeclTable(_, typeargs) 
                 | DeclRemoteTable(_, typeargs) ->
                   if length typeargs <> length argtl then
                     raise (BadArityOfTable relname);
-                | _ -> failwith "validate_rule");         
+                | _ -> failwith "validate_rule");                   
           iter (well_formed_term headrelname headterms inrelname inargname) argtl;
         with | Not_found -> raise (UndeclaredTable relname))
 
@@ -188,7 +191,9 @@ let well_formed_decls (decls: sdecl list): unit =
   ignore (fold_left (fun acc decl -> 
     match decl with 
       | DeclOut(relname, _) 
-      | DeclInc(relname, _) -> 
+      | DeclInc(relname, _) 
+      | DeclTable(relname, _) 
+      | DeclRemoteTable(relname, _) -> 
         if mem relname acc then
           raise (RelationHadMultipleDecls(relname))
         else relname::acc

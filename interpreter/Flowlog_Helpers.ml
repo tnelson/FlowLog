@@ -288,10 +288,10 @@ let get_fields_for_type_preproc (decls: sdecl list) (etype: string): string list
   let get_fields_for_type (prgm: flowlog_program) (etype: string): string list =  
       get_fields_for_type_preproc prgm.decls etype;;
 
-  let get_valid_fields_for_input_rel (decls: sdecl list) (reacts: sreactive list) (rname: string): (string list) =
-    let defn = get_input_defn_for_rel_preproc reacts rname in 
+  let get_valid_fields_for_input_rel (decls: sdecl list) (reacts: sreactive list) (rname: string): (string list) =  
+    let defn = get_input_defn_for_rel_preproc reacts rname in     
     match defn with 
-      | ReactInc(intype, _) ->
+      | ReactInc(intype, _) ->        
         get_fields_for_type_preproc decls intype
       | _ -> failwith "get_valid_fields_for_input_rel";;
 

@@ -51,7 +51,7 @@ let build_chase_containment (prgm1: flowlog_program) (prgm2: flowlog_program): p
 let string_of_pmodel (mdl: pmodel): string = 
   String.concat ", " (map string_of_formula mdl);;
 
-let example_run: unit = 
+let example_run(): unit = 
   let test1 = build_chase_containment
       (desugared_program_of_ast (read_ast "examples/NIB.flg"))
       (desugared_program_of_ast (read_ast "examples/NIB.flg")) in

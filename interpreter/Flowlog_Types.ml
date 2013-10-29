@@ -159,7 +159,7 @@ open NetCore_Types
       | SDecl(dstmt) -> (string_of_declaration dstmt);
       | SRule(rstmt) -> (string_of_rule rstmt);;
 
-  let pretty_print_program (ast: flowlog_ast): unit =
+  let pretty_print_ast (ast: flowlog_ast): unit =
     match ast with
       | AST(imports, stmts) ->
         iter (fun imp -> printf "IMPORT %s;\n%!" imp) imports;
@@ -290,6 +290,7 @@ let swpt_fields = ["sw";"pt"];;
 let swdown_fields = ["sw"];;
 
 let built_in_decls = [DeclInc(packet_in_relname, "packet"); 
+                      DeclInc(arp_packet_in_relname, "arp_packet"); 
                       DeclInc(switch_reg_relname, "switch_port"); 
                       DeclInc(switch_down_relname, "switch_down");
                       DeclInc(startup_relname, "startup");
