@@ -145,6 +145,6 @@ depends on its current value.*)
       Yojson.pretty_to_channel out (json_graph (files_to_graph [fn]));
       close_out out;;
 
-  let example_print: unit = 
+  let example_print(): unit = 
     printf "%s\n%!" (pretty_string_of_dependencies (files_to_graph ["examples/NIB.flg"; "examples/Mac_Learning.flg"]));
     printf "%s\n%!" (string_of_edges (files_to_graph ["examples/Mac_Learning.flg"]));;

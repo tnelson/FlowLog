@@ -48,11 +48,12 @@ let build_chase_containment (prgm1: flowlog_program) (prgm2: flowlog_program): p
         | None -> acc)
     [] prgm1.clauses;;
 
-let test1 = build_chase_containment
-    (desugared_program_of_ast (read_ast "examples/NIB.flg"))
-    (desugared_program_of_ast (read_ast "examples/NIB.flg"));;
-
 let string_of_pmodel (mdl: pmodel): string = 
   String.concat ", " (map string_of_formula mdl);;
 
-printf "%s\n%!" (String.concat ";\n " (map string_of_pmodel test1));;
+let example_run: unit = 
+  let test1 = build_chase_containment
+      (desugared_program_of_ast (read_ast "examples/NIB.flg"))
+      (desugared_program_of_ast (read_ast "examples/NIB.flg")) in
+
+    printf "%s\n%!" (String.concat ";\n " (map string_of_pmodel test1));;

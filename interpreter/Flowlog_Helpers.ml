@@ -9,6 +9,11 @@ let ends_with (str1 : string) (str2 : string) : bool =
 	if String.length str2 > String.length str1 then false
     else (String.sub str1 ((String.length str1) - (String.length str2)) (String.length str2)) = str2;;
 
+(* ends_with plus mirror-universe beard*)
+let starts_with (str1 : string) (str2 : string) : bool = 
+  if String.length str2 > String.length str1 then false
+    else (String.sub str1 0 (String.length str2)) = str2;;
+
 (* return list of terms that match pred *)
 let rec get_terms (pred: term -> bool) (f: formula) : term list = 
 	match f with

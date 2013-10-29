@@ -1,0 +1,58 @@
+// (To check, use xterm <host> in mininet and the 
+// arp -d command to remove local arp entries between pings.)
+
+TABLE cache(ipaddr, macaddr); 
+
+ON arp_packet_in(pkt):
+  
+  // LEARN FROM REPLIES  
+  // (No mobility support here: once learned, always learned)
+  INSERT (pkt.arp_tpa, pkt.arp_tha) INTO cache WHERE
+    pkt.arp_op = 2 and 
+    not cache(pkt.arp_tpa, ANY);
+  // TODO: ^^^ is "t" right, or should it be "s"?
+
+
+  // Propagate all arp replies via flooding, 
+  // and never interfere with a reply.
+  DO forward(new) WHERE
+    pkt.arp_op = 2 and 
+    not pkt.locPt = new.locPt;
+  //Mac_Learning.switch_has_port(pkt.locSw, newpkt.locPt), // REQUIRED: manual invocation for now
+
+
+  // Propagate (flood) all arp requests for unlearned addresses
+  DO forward(new) WHERE
+    pkt.arp_op = 1 and 
+    not cache(pkt.nwDst, ANY) and  
+    //Mac_Learning.switch_has_port(pkt.locSw, newpkt.locPt),
+    not newpkt.locPt = pkt.locPt;
+
+  // modify request into reply if we know the mac address.
+  DO emit(new) WHERE    
+    pkt.arp_op = 1 and // triggers for request
+    newpkt.arp_op = 2 and // produces reply
+
+    // if we have a value cached 
+    cache(pkt.nwDst, newpkt.dlSrc) and
+ 
+    // Flip/set ARP-protocol fields.
+    // Required in well-formed reply!
+    newpkt.arp_sha = newpkt.dlSrc and
+    newpkt.arp_spa = newpkt.nwSrc and
+    newpkt.arp_tha = pkt.dlSrc and
+    newpkt.arp_tpa = pkt.nwSrc and
+
+    // flip the packet (same exit port as entrance)
+    newpkt.locSw = pkt.locSw and
+    newpkt.locPt = pkt.locPt and
+    // + appropriate ethernet-level address flipping
+    newpkt.nwDst = pkt.nwSrc and
+    newpkt.dlDst = pkt.dlSrc and
+    newpkt.nwSrc = pkt.nwDst;
+
+// Defer to MAC learning for other packet types
+//action forward(pkt : packet, newpkt : packet) :- 
+//  not pkt.dlTyp = 0x0806, Mac_Learning.forward(pkt, newpkt);
+//action forward(pkt : packet, newpkt : packet) :- 
+//  not pkt.nwProto = 1, not pkt.nwProto = 2, Mac_Learning.forward(pkt, newpkt);

@@ -73,7 +73,7 @@ let run_flowlog (p: flowlog_program): unit Lwt.t =
       Lwt.pick [gen_stream; NetCore_Controller.start_controller pkt_stream stream];;
 
 
-let main () =
+let main () =  
   let collect arg = args := !args @ [arg] in
   let _ = Arg.parse speclist collect usage in
   let filename = try hd !args with exn -> raise (Failure "Input a .flg file name.") in  
@@ -85,6 +85,7 @@ let main () =
     exit(0);
   end;
 
+  printf "Loading %s\n%!" filename;
   let ast = read_ast filename in
   let program = (desugared_program_of_ast ast) in    
     printf "-----------\n%!";    
