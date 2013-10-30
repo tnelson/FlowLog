@@ -275,6 +275,7 @@ let plus_prefix = "plus";;
 let minus_prefix = "minus";;
 
 let packet_in_relname = "packet_in";;
+let arp_packet_in_relname = "arp_packet_in";;
 let switch_reg_relname = "switch_port_in";;
 let switch_down_relname = "switch_down";;
 let startup_relname = "startup";;
