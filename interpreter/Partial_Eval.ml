@@ -794,7 +794,7 @@ let get_arp (pkt: Packet.packet): (string*string) list =
        ("arp_tha", "0")]
     | Arp(Reply(arp_sha, arp_spa, arp_tha, arp_tpa)) -> 
       [("arp_sha", Int64.to_string arp_sha); ("arp_spa", Int32.to_string arp_spa); 
-       ("arp_tpa", Int32.to_string arp_tpa); ("arp_op", "1");
+       ("arp_tpa", Int32.to_string arp_tpa); ("arp_op", "2");
        ("arp_tha", Int64.to_string arp_tha)]
     | Ip (_) -> []
     | _ -> [];;

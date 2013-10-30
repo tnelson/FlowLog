@@ -2,6 +2,7 @@
 // arp -d command to remove local arp entries between pings.)
 
 TABLE cache(ipaddr, macaddr); 
+TABLE switch_has_port(switchid, portid); 
 
 ON arp_packet_in(pkt):
   
@@ -13,22 +14,20 @@ ON arp_packet_in(pkt):
     not cache(pkt.arp_tpa, ANY);
   // TODO: ^^^ is "t" right, or should it be "s"?
 
-
   // Propagate all arp replies via flooding, 
   // and never interfere with a reply.
   DO forward(new) WHERE
     pkt.dlTyp = 0x0806  and // <--- MUST BE EXPLICIT FOR COMPILATION
     pkt.arp_op = 2 and 
-    not pkt.locPt = new.locPt;
-  //Mac_Learning.switch_has_port(pkt.locSw, pkt.locPt), // REQUIRED: manual invocation for now
-
+    not pkt.locPt = new.locPt and
+    switch_has_port(pkt.locSw, pkt.locPt); // REQUIRED: this rule is not compiled!
 
   // Propagate (flood) all arp requests for unlearned addresses
   DO forward(new) WHERE
     pkt.dlTyp = 0x0806  and // <--- MUST BE EXPLICIT FOR COMPILATION
     pkt.arp_op = 1 and 
     not cache(pkt.nwDst, ANY) and  
-    //Mac_Learning.switch_has_port(pkt.locSw, new.locPt),
+    switch_has_port(pkt.locSw, new.locPt) and
     not new.locPt = pkt.locPt;
 
   // modify request into reply if we know the mac address.
@@ -60,3 +59,9 @@ ON arp_packet_in(pkt):
 //  not pkt.dlTyp = 0x0806, Mac_Learning.forward(pkt, new);
 //action forward(pkt : packet, new : packet) :- 
 //  not pkt.nwProto = 1, not pkt.nwProto = 2, Mac_Learning.forward(pkt, new);
+
+ON switch_port_in(swpt):
+  INSERT (swpt.sw, swpt.pt) INTO switch_has_port;
+
+ON switch_down(swd):
+  DELETE (swd.sw, ANY) FROM switch_has_port;

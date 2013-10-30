@@ -44,7 +44,6 @@ ON packet_in(pkt):
 ON switch_port_in(swpt):
   INSERT (swpt.sw, swpt.pt) INTO switch_has_port;
 
-// TODO: still need to use sep var names. we don't have a gensym "_" wildcard
 ON switch_down(swd):
-  DELETE (swd.sw, any) FROM switch_has_port;
-  DELETE (swd.sw, any1, any2) FROM learned;
+  DELETE (swd.sw, ANY) FROM switch_has_port;
+  DELETE (swd.sw, ANY, ANY) FROM learned;
