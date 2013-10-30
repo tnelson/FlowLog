@@ -785,6 +785,20 @@ let program_to_netcore (p: flowlog_program) (callback: get_packet_handler): (pol
      (subtract p.clauses p.can_fully_compile_to_fwd_clauses)
      (Some callback));;
 
+let get_arp (pkt: Packet.packet): (string*string) list =
+  match pkt.nw with
+    | Arp(Query(arp_sha, arp_spa, arp_tpa)) ->        
+      [("arp_sha", Int64.to_string arp_sha); ("arp_spa", Int32.to_string arp_spa); 
+       ("arp_tpa", Int32.to_string arp_tpa); ("arp_op", "1");
+       (* arp_packets all must have the same fields *)
+       ("arp_tha", "0")]
+    | Arp(Reply(arp_sha, arp_spa, arp_tha, arp_tpa)) -> 
+      [("arp_sha", Int64.to_string arp_sha); ("arp_spa", Int32.to_string arp_spa); 
+       ("arp_tpa", Int32.to_string arp_tpa); ("arp_op", "1");
+       ("arp_tha", Int64.to_string arp_tha)]
+    | Ip (_) -> []
+    | _ -> [];;
+  
 let pkt_to_event (sw : switchId) (pt: port) (pkt : Packet.packet) : event =       
    let isIp = ((Packet.dlTyp pkt) = 0x0800) in
    let isArp = ((Packet.dlTyp pkt) = 0x0806) in
@@ -797,11 +811,14 @@ let pkt_to_event (sw : switchId) (pt: port) (pkt : Packet.packet) : event =
     (* nwSrc/nwDst will throw an exception if you call them on an unsuitable packet *)
     ("nwsrc", if (isIp || isArp) then Int32.to_string (Packet.nwSrc pkt) else "0");
     ("nwdst", if (isIp || isArp) then Int32.to_string (Packet.nwDst pkt) else "0");
-    ("nwproto", if isIp then (string_of_int (Packet.nwProto pkt)) else "arp")
-    ] in
+    ("nwproto", if isIp then (string_of_int (Packet.nwProto pkt)) else "0")    
+    ] 
+    @ (get_arp pkt) in
     (*let _ = if debug then print_endline ("pkt to term list: " ^ (Type_Helpers.list_to_string Type_Helpers.term_to_string ans)) in
     let _ = if debug then print_endline ("dlTyp: " ^ (string_of_int (dlTyp pkt_payload))) in*)    
-    {typeid="packet"; values=construct_map values};;
+    if isArp then {typeid="arp_packet"; values=construct_map values}
+    else {typeid="packet"; values=construct_map values};;
+    
 
 (* TODO: ugly func, should be cleaned up.*)
 (* augment <ev_so_far> with assignment <assn>, using tuple <tup> for values *)
@@ -1140,9 +1157,7 @@ let make_policy_stream (p: flowlog_program)
       
     (* The callback to be invoked when the policy says to send pkt to controller *)
     (* callback here. *)
-    updateFromPacket (sw: switchId) (pt: port) (pkt: Packet.packet) : NetCore_Types.action =  
-      printf "updateFromPacket.\n%!";
-
+    updateFromPacket (sw: switchId) (pt: port) (pkt: Packet.packet) : NetCore_Types.action =        
       (* Update the policy via the push function *)
       let startt = Unix.gettimeofday() in 
       (*printf "Packet in on switch %Ld.\n%s\n%!" sw (Packet.to_string pkt);*)

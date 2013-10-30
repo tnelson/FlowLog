@@ -312,7 +312,8 @@ let built_in_reacts = [ ReactInc("packet", packet_in_relname);
                         ReactInc("arp_packet", arp_packet_in_relname); 
                         ReactInc("switch_port", switch_reg_relname); 
                         ReactInc("switch_down", switch_down_relname); 
-                        ReactInc("startup", startup_relname);                         
+                        ReactInc("startup", startup_relname);   
+                                              
                         ReactOut("forward", packet_fields, "packet", map create_id_assign packet_fields, OutForward);
                         ReactOut("emit", packet_fields, "packet", map create_id_assign packet_fields, OutEmit);
                         ReactOut("emit_arp", arp_packet_fields, "arp_packet", map create_id_assign arp_packet_fields, OutEmit);

@@ -348,11 +348,11 @@ module Communication = struct
 		retract_formula tup; 
 		ignore (send_message ("assert("^(string_of_formula tup)^").") 0);;
 
-	let assert_event (p: flowlog_program) (notif: event): unit =		 
-			assert_formula (inc_event_to_formula p notif);;
+	let assert_event (p: flowlog_program) (notif: event): unit =	
+			iter assert_formula (inc_event_to_formulas p notif);;
 
 	let retract_event (p: flowlog_program) (notif: event): unit = 
-			retract_formula (inc_event_to_formula p notif);;
+			iter retract_formula (inc_event_to_formulas p notif);;
 
 	let start_clause (prgm: flowlog_program) (cls : clause) : unit =
 		(*if debug then print_endline ("start_clause: assert((" ^ (Type_Helpers.clause_to_string cls) ^ ")).");

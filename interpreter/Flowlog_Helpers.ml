@@ -277,9 +277,10 @@ let rec disj_to_top ?(ignore_negation: bool = false) (f: formula): formula =
   	StringMap.find fldname ev.values;; 
 
 let get_fields_for_type_preproc (decls: sdecl list) (etype: string): string list =  
+    (*printf "get_fields_for_type_preproc: %s\n%!" etype;    *)
       let decl = find (function       
         | DeclEvent(evname, evtypelst) when evname = etype -> true 
-        | _ -> false) decls in 
+        | _ -> false) decls in       
       match decl with 
         | DeclEvent(evname, evfieldlst) -> 
           evfieldlst
@@ -291,7 +292,7 @@ let get_fields_for_type_preproc (decls: sdecl list) (etype: string): string list
   let get_valid_fields_for_input_rel (decls: sdecl list) (reacts: sreactive list) (rname: string): (string list) =  
     let defn = get_input_defn_for_rel_preproc reacts rname in     
     match defn with 
-      | ReactInc(intype, _) ->        
+      | ReactInc(intype, _) ->                
         get_fields_for_type_preproc decls intype
       | _ -> failwith "get_valid_fields_for_input_rel";;
 
@@ -321,18 +322,15 @@ let get_fields_for_type_preproc (decls: sdecl list) (etype: string): string list
 
   (* ASSUMED: only one in relation per event *)
   (* raises Not_found if nothing to do for this event *)
-  let inc_event_to_formula (p: flowlog_program) (notif: event): formula =
+  let inc_event_to_formulas (p: flowlog_program) (notif: event): formula list =
     (* event contains k=v mappings and a type. convert to a formula via defns in program*)
     (*printf "Converting event to formula: %s\n%!" (string_of_event notif);*)
-    let defn = find (function       
-        | ReactInc(typename, relname) when notif.typeid = typename -> true
-        | _ -> false ) p.reacts in 
-      match defn with 
-        | ReactInc(typename, relname) -> 
-          FAtom("", relname, map (fun fld -> 
-          			TConst(StringMap.find fld notif.values)) 
-        			(get_fields_for_type p typename))	
-        | _ -> failwith "inc_event_to_formula";;
+    filter_map (function       
+        | ReactInc(typename, relname) when notif.typeid = typename -> 
+          Some(FAtom("", relname,                      
+                     map (fun fld -> try TConst(StringMap.find fld notif.values) with | Not_found -> failwith "inc_event_to_formulas") 
+                     (get_fields_for_type p typename)))
+        | _ -> None ) p.reacts;;
 
    (* in modname.relname, the ith element has which fields? *)
   let decls_expand_fields (prgm: flowlog_program) (modname: string) (relname: string) (i: int) (t: term): term list =  	
