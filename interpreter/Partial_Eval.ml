@@ -867,13 +867,14 @@ let get_field_default (ev: event) (fname: string): string =
   (* Assuming that the field is THERE... it may be set to a "dunno" by xsb *)
   try
     let evval = (get_field ev fname) in
+      (*printf "get_field/default: %s %s\n%!" fname evval;*)
       if not (starts_with evval "_") then evval
       else (match ev.typeid, fname with        
         | _,"nwsrc" -> "0"
         | _,"nwdst" -> "0"
         | _,"nwproto" -> "0"
-        | _,"nwfrag" -> "0"        
-        | _,"nwttl" -> "0"     
+        | _,"nwfrag" -> "0"
+        | _,"nwttl" -> "0"
         | _,"nwtos" -> "0"      
         | _,"nwchksum" -> "0"
         | _,"nwident" -> "0"     
@@ -899,11 +900,11 @@ let make_ip (ev: event): nw =
 let emit_packet (ev: event): unit =  
   printf "emitting: %s\n%!" (string_of_event ev);
   write_log (sprintf ">>> emitting: %s\n%!" (string_of_event ev));
-  let swid = (Int64.of_string (get_field ev "locsw")) in
-  let pt = (Int32.of_string (get_field ev "locpt")) in
-  let dlSrc = Int64.of_string (get_field ev "dlsrc") in 
-  let dlDst = Int64.of_string (get_field ev "dldst") in 
-  let dlTyp = int_of_string (get_field ev "dltyp") in   
+  let swid = (Int64.of_string (get_field_default ev "locsw")) in
+  let pt = (Int32.of_string (get_field_default ev "locpt")) in
+  let dlSrc = Int64.of_string (get_field_default ev "dlsrc") in 
+  let dlDst = Int64.of_string (get_field_default ev "dldst") in 
+  let dlTyp = int_of_string (get_field_default ev "dltyp") in   
 
   (* kludgey version to start: hardcode type names to test methods of creation *)
   (* TODO: confirm dltyp isn't wrong *)
@@ -943,14 +944,15 @@ let execute_output (p: flowlog_program) (defn: sreactive): unit =
         printf "EXECUTING OUTPUT... tuple: %s\n%!" (String.concat ";" tup);
         (* arglist orders the xsb results. assigns says how to use them, spec how to send them. *)
         let initev = (match spec with 
-                  | OutForward | OutEmit -> {typeid = "packet"; values=StringMap.empty}      
+                  | OutForward -> {typeid = "packet"; values=StringMap.empty}      
+                  | OutEmit(typ) -> {typeid = typ; values=StringMap.empty}      
                   | OutLoopback -> failwith "loopback unsupported currently"
                   | OutPrint 
                   | OutSend(_, _) -> {typeid=outtype; values=StringMap.empty}) in                
         let ev = fold_left (event_with_assn p argstrlist tup) initev assigns in          
           match spec with 
-            | OutForward -> forward_packet  ev
-            | OutEmit -> emit_packet ev
+            | OutForward -> forward_packet ev
+            | OutEmit(_) -> emit_packet ev
             | OutPrint -> printf "PRINT RULE FIRED: %s\n%!" (string_of_event ev)
             | OutLoopback -> failwith "loopback unsupported currently"
             | OutSend(ip, pt) -> send_event ev ip pt in

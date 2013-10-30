@@ -32,7 +32,7 @@ open NetCore_Types
 
   type spec_out = 
       | OutForward
-      | OutEmit
+      | OutEmit of string
       | OutLoopback
       | OutPrint 
       | OutSend of string * string;;
@@ -141,7 +141,7 @@ open NetCore_Types
   let string_of_outspec (spec: spec_out) =
     match spec with 
       | OutForward -> "forward"      
-      | OutEmit -> "emit"
+      | OutEmit(typ) -> "emit["^typ^"]"
       | OutPrint -> "print"
       | OutLoopback -> "loopback"
       | OutSend(ip, pt) -> ip^":"^pt;;  
@@ -315,8 +315,8 @@ let built_in_reacts = [ ReactInc("packet", packet_in_relname);
                         ReactInc("startup", startup_relname);   
                                               
                         ReactOut("forward", packet_fields, "packet", map create_id_assign packet_fields, OutForward);
-                        ReactOut("emit", packet_fields, "packet", map create_id_assign packet_fields, OutEmit);
-                        ReactOut("emit_arp", arp_packet_fields, "arp_packet", map create_id_assign arp_packet_fields, OutEmit);
+                        ReactOut("emit", packet_fields, "packet", map create_id_assign packet_fields, OutEmit("packet"));
+                        ReactOut("emit_arp", arp_packet_fields, "arp_packet", map create_id_assign arp_packet_fields, OutEmit("arp_packet"));
                       ];;
 
 let built_in_condensed_outrels = ["forward"; "emit"; "emit_arp"];;

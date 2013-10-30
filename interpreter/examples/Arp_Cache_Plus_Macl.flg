@@ -8,37 +8,44 @@ ON arp_packet_in(pkt):
   
   // LEARN FROM REPLIES  
   // (No mobility support here: once learned, always learned)
-  INSERT (pkt.arp_tpa, pkt.arp_tha) INTO cache WHERE
+  INSERT (pkt.arp_spa, pkt.arp_sha) INTO cache WHERE
     pkt.dlTyp = 0x0806 and // <--- MUST BE EXPLICIT FOR COMPILATION
+    // ^^^ [TODO: not being done properly yet]
     pkt.arp_op = 2 and 
     not cache(pkt.arp_tpa, ANY);
   // TODO: ^^^ is "t" right, or should it be "s"?
 
   // Propagate all arp replies via flooding, 
   // and never interfere with a reply.
-  DO forward(new) WHERE
-    pkt.dlTyp = 0x0806  and // <--- MUST BE EXPLICIT FOR COMPILATION
+  DO forward(new) WHERE    
     pkt.arp_op = 2 and 
     not pkt.locPt = new.locPt and
-    switch_has_port(pkt.locSw, pkt.locPt); // REQUIRED: this rule is not compiled!
+    switch_has_port(pkt.locSw, new.locPt); // REQUIRED: this rule is not compiled!
+
+  // TODO: pkt.locPt in last line above causes failure of clause
+  // because new.locPt wasn't positively constrained. XSB won't 
+  // complain; it'l just be unsound. So need to detect and throw
+  // an error if this occurs in a non-compiled clause! TODO
 
   // Propagate (flood) all arp requests for unlearned addresses
-  DO forward(new) WHERE
-    pkt.dlTyp = 0x0806  and // <--- MUST BE EXPLICIT FOR COMPILATION
+  DO forward(new) WHERE    
     pkt.arp_op = 1 and 
     not cache(pkt.nwDst, ANY) and  
-    switch_has_port(pkt.locSw, new.locPt) and
+    switch_has_port(pkt.locSw, new.locPt) and // REQUIRED: this rule is not compiled!
     not new.locPt = pkt.locPt;
 
   // modify request into reply if we know the mac address.
-  DO emit_arp(new) WHERE  
-    pkt.dlTyp = 0x0806 and // <--- MUST BE EXPLICIT FOR COMPILATION
+  DO emit_arp(new) WHERE      
     pkt.arp_op = 1 and // triggers for request
     new.arp_op = 2 and // produces reply
 
     // if we have a value cached 
     cache(pkt.nwDst, new.dlSrc) and
  
+    new.dlTyp = 0x806 and 
+
+    // ^^^ TODO: this is necessary for the moment...
+
     // Flip/set ARP-protocol fields.
     // Required in well-formed reply!
     new.arp_sha = new.dlSrc and
