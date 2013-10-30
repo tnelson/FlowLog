@@ -56,11 +56,15 @@ exception IllegalAtomMustBePositive of formula;;
 exception IllegalExistentialUse of formula;;
 exception IllegalModToNewpkt of (term * term);;
 exception IllegalEquality of (term * term);;
+exception NonTableField of formula;;
 
 exception ContradictoryActions of (string * string);;
 
 let legal_field_to_modify (fname: string): bool =
 	mem fname legal_to_modify_packet_fields;;
+
+let compilable_field_to_test (fname: string): bool =
+  mem fname packet_fields;;
 
 (* 2 & 3 *) 
 let rec forbidden_assignment_check (newpkt: string) (f: formula) (innot: bool): unit = 
@@ -73,12 +77,17 @@ let rec forbidden_assignment_check (newpkt: string) (f: formula) (innot: bool): 
       | _ -> ()
     in
 
- 	  let check_legal_newpkt_fields = function  
+ 	  let check_legal_pkt_fields = function  
 							| TField(varname, fld)
+                (* newpkt: must be legal to modify *)
                 when varname = newpkt -> 
       				   			if not (legal_field_to_modify fld) then
       	 					   		raise (IllegalFieldModification f)
-      	 					| _ -> () 
+              | TField(varname, fld) ->
+                 (* any term: cannot compile if involves non-base fieldnames *)
+                 if not (compilable_field_to_test fld) then
+                    raise (NonTableField f)
+      	 			| _ -> () 
       	 				in
     (* use of negation on equality: ok if [pkt.x = 5], [new.pt = old.pt] *)
     let check_legal_negation (t1: term) (t2: term): unit =
@@ -130,15 +139,15 @@ let rec forbidden_assignment_check (newpkt: string) (f: formula) (innot: bool): 
         (3) equality: new = const
         (4) equality: old = const *)
         check_legal_negation t1 t2; (* if negated, must be special case *)
-    		check_legal_newpkt_fields t1; (* not trying to set an unsettable field *)
-    		check_legal_newpkt_fields t2;
+    		check_legal_pkt_fields t1; (* not trying to set an unsettable field *)
+    		check_legal_pkt_fields t2;
     		check_same_field_if_newpkt t1 t2; (* can't swap fields, etc. w/o controller *)
         check_not_same_pkt t1 t2;
         check_netcore_temp_limit_eq t1 t2;
 
       	| FAtom(modname, relname, tlargs) ->       		
       		(* new field must be legal for modification by openflow *)
-      		iter check_legal_newpkt_fields tlargs;
+      		iter check_legal_pkt_fields tlargs;
       		(* if involves a newpkt, must be positive *)    
       		if (innot && (ExtList.List.exists (function | TField(fvar, _) when fvar = newpkt -> true | _ -> false) tlargs)) then  	
       			raise (IllegalAtomMustBePositive f);;      		
@@ -444,14 +453,14 @@ let field_to_pattern (fld: string) (aval:string): NetCore_Pattern.t =
 (* todo: lots of code overlap in these functions. should unify *)
 (* removes the packet_in atom (since that's meaningless here). 
    returns the var the old packet was bound to, and the trimmed fmla *)
-let rec trim_packet_from_body (body: formula): (string * formula) =
+let rec trim_packet_from_body (p: flowlog_program) (body: formula): (string * formula) =
   match body with
     | FTrue -> ("", body)
     | FFalse -> ("", body)
     | FEquals(t1, t2) -> ("", body)
     | FAnd(f1, f2) -> 
-      let (var1, trimmed1) = trim_packet_from_body f1 in
-      let (var2, trimmed2) = trim_packet_from_body f2 in
+      let (var1, trimmed1) = trim_packet_from_body p f1 in
+      let (var2, trimmed2) = trim_packet_from_body p f2 in
       let trimmed = if trimmed1 = FTrue then 
                       trimmed2 
                     else if trimmed2 = FTrue then
@@ -464,10 +473,10 @@ let rec trim_packet_from_body (body: formula): (string * formula) =
         (var1, trimmed)
       else failwith ("trim_packet_from_clause: multiple variables used in packet_in: "^var1^" and "^var2)
     | FNot(f) ->
-      let (v, t) = trim_packet_from_body f in
+      let (v, t) = trim_packet_from_body p f in
         (v, FNot(t))
     | FOr(f1, f2) -> failwith "trim_packet_from_clause"              
-    | FAtom("", relname, [TVar(varstr)]) when relname = packet_in_relname ->  
+    | FAtom("", relname, [TVar(varstr)]) when is_incoming_table p relname ->  
       (varstr, FTrue)
     | _ -> ("", body);;    
 
@@ -482,6 +491,8 @@ let rec strip_to_valid (oldpkt: string) (cl: clause): clause =
     let safeargs = (match cl.head with | FAtom(_, _, args) -> args | _ -> failwith "strip_to_valid") in
       if !global_verbose >= 3 then
         printf "   --- WEAKENING: Checking clause body in case need to weaken: %s\n%!" (string_of_formula cl.body);
+      
+      (* 'seen' keeps track of the terms used in relational lits so far *)
       let may_strip_literal (acc: formula * term list) (lit: formula): (formula * term list) = 
         let (fmlasofar, seen) = acc in         
 
@@ -497,16 +508,30 @@ let rec strip_to_valid (oldpkt: string) (cl: clause): clause =
         | FNot(FFalse) -> acc
 
         (* pkt.x = pkt.y  <--- can't be done in OF 1.0. just remove. *)
-        | FEquals(TField(v, f), TField(v2, f2)) when v = v2 && f2 <> f -> 
-          begin 
-            if !global_verbose >= 3 then
-              printf "Removing atom: %s\n%!" (string_of_formula lit);
-            acc end
+        | FEquals(TField(v, f), TField(v2, f2)) 
         | FNot(FEquals(TField(v, f), TField(v2, f2))) when v = v2 && f2 <> f -> 
           begin
             if !global_verbose >= 3 then 
               printf "Removing atom: %s\n%!" (string_of_formula lit);
             acc end            
+
+          (* weaken if referring to a non-table packet field (like ARP fields) *)
+        | FEquals(TField(_, fld), _) 
+        | FNot(FEquals(TField(_, fld), _)) 
+        | FEquals(_, TField(_, fld)) 
+        | FNot(FEquals(_,TField(_, fld)))
+          when not (compilable_field_to_test fld) -> 
+          begin
+            if !global_verbose >= 3 then 
+              printf "Removing atom: %s\n%!" (string_of_formula lit);
+            acc end            
+        | FAtom(_,_,args) 
+        | FNot(FAtom(_,_,args)) 
+          when exists (function | TField(_, fld) -> not (compilable_field_to_test fld) | _ -> false) args -> 
+          begin 
+            if !global_verbose >= 3 then 
+              printf "Removing atom: %s\n%!" (string_of_formula lit);
+            acc end                      
 
         (* If this atom involves an already-seen variable not in tlargs, remove it *)
         | FAtom (_, _, atomargs)  
@@ -584,7 +609,7 @@ let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_h
 *)
     match cl.head with 
       | FAtom(_, _, headargs) ->
-        let (oldpkt, trimmedbody) = trim_packet_from_body cl.body in 
+        let (oldpkt, trimmedbody) = trim_packet_from_body p cl.body in 
         (*printf "Trimmed packet from body: (%s, %s)\n%!" oldpkt (string_of_formula trimmedbody);*)
 
         (* Get a new fmla that is implied by the original, and can be compiled to a pred *)
@@ -745,6 +770,7 @@ let can_compile_clause_to_fwd (cl: clause): bool =
     | IllegalAssignmentViaEquals(_) -> if debug then printf "IllegalAssignmentViaEquals\n%!"; false
     | IllegalAtomMustBePositive(_) -> if debug then printf "IllegalAtomMustBePositive\n%!"; false
     | IllegalExistentialUse(_) -> if debug then printf "IllegalExistentialUse\n%!"; false
+    | NonTableField(_) -> if debug then printf "NonTableField\n%!"; false
     | IllegalModToNewpkt(_, _) -> if debug then printf "IllegalModToNewpkt\n%!"; false
     | IllegalEquality(_,_) -> if debug then printf "IllegalEquality\n%!"; false;;
 
@@ -902,11 +928,13 @@ let execute_output (p: flowlog_program) (defn: sreactive): unit =
         let initev = (match spec with 
                   | OutForward | OutEmit -> {typeid = "packet"; values=StringMap.empty}      
                   | OutLoopback -> failwith "loopback unsupported currently"
-                  | OutSend(ip, pt) -> {typeid=outtype; values=StringMap.empty}) in                
+                  | OutPrint 
+                  | OutSend(_, _) -> {typeid=outtype; values=StringMap.empty}) in                
         let ev = fold_left (event_with_assn p argstrlist tup) initev assigns in          
           match spec with 
             | OutForward -> forward_packet  ev
             | OutEmit -> emit_packet ev
+            | OutPrint -> printf "PRINT RULE FIRED: %s\n%!" (string_of_event ev)
             | OutLoopback -> failwith "loopback unsupported currently"
             | OutSend(ip, pt) -> send_event ev ip pt in
 
@@ -1111,7 +1139,9 @@ let make_policy_stream (p: flowlog_program)
     and
       
     (* The callback to be invoked when the policy says to send pkt to controller *)
+    (* callback here. *)
     updateFromPacket (sw: switchId) (pt: port) (pkt: Packet.packet) : NetCore_Types.action =  
+      printf "updateFromPacket.\n%!";
 
       (* Update the policy via the push function *)
       let startt = Unix.gettimeofday() in 

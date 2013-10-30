@@ -8,6 +8,7 @@ ON arp_packet_in(pkt):
   // LEARN FROM REPLIES  
   // (No mobility support here: once learned, always learned)
   INSERT (pkt.arp_tpa, pkt.arp_tha) INTO cache WHERE
+    pkt.dlTyp = 0x0806 and // <--- MUST BE EXPLICIT FOR COMPILATION
     pkt.arp_op = 2 and 
     not cache(pkt.arp_tpa, ANY);
   // TODO: ^^^ is "t" right, or should it be "s"?
@@ -16,43 +17,46 @@ ON arp_packet_in(pkt):
   // Propagate all arp replies via flooding, 
   // and never interfere with a reply.
   DO forward(new) WHERE
+    pkt.dlTyp = 0x0806  and // <--- MUST BE EXPLICIT FOR COMPILATION
     pkt.arp_op = 2 and 
     not pkt.locPt = new.locPt;
-  //Mac_Learning.switch_has_port(pkt.locSw, newpkt.locPt), // REQUIRED: manual invocation for now
+  //Mac_Learning.switch_has_port(pkt.locSw, pkt.locPt), // REQUIRED: manual invocation for now
 
 
   // Propagate (flood) all arp requests for unlearned addresses
   DO forward(new) WHERE
+    pkt.dlTyp = 0x0806  and // <--- MUST BE EXPLICIT FOR COMPILATION
     pkt.arp_op = 1 and 
     not cache(pkt.nwDst, ANY) and  
-    //Mac_Learning.switch_has_port(pkt.locSw, newpkt.locPt),
-    not newpkt.locPt = pkt.locPt;
+    //Mac_Learning.switch_has_port(pkt.locSw, new.locPt),
+    not new.locPt = pkt.locPt;
 
   // modify request into reply if we know the mac address.
-  DO emit(new) WHERE    
+  DO emit_arp(new) WHERE  
+    pkt.dlTyp = 0x0806 and // <--- MUST BE EXPLICIT FOR COMPILATION
     pkt.arp_op = 1 and // triggers for request
-    newpkt.arp_op = 2 and // produces reply
+    new.arp_op = 2 and // produces reply
 
     // if we have a value cached 
-    cache(pkt.nwDst, newpkt.dlSrc) and
+    cache(pkt.nwDst, new.dlSrc) and
  
     // Flip/set ARP-protocol fields.
     // Required in well-formed reply!
-    newpkt.arp_sha = newpkt.dlSrc and
-    newpkt.arp_spa = newpkt.nwSrc and
-    newpkt.arp_tha = pkt.dlSrc and
-    newpkt.arp_tpa = pkt.nwSrc and
+    new.arp_sha = new.dlSrc and
+    new.arp_spa = new.nwSrc and
+    new.arp_tha = pkt.dlSrc and
+    new.arp_tpa = pkt.nwSrc and
 
     // flip the packet (same exit port as entrance)
-    newpkt.locSw = pkt.locSw and
-    newpkt.locPt = pkt.locPt and
+    new.locSw = pkt.locSw and
+    new.locPt = pkt.locPt and
     // + appropriate ethernet-level address flipping
-    newpkt.nwDst = pkt.nwSrc and
-    newpkt.dlDst = pkt.dlSrc and
-    newpkt.nwSrc = pkt.nwDst;
+    new.nwDst = pkt.nwSrc and
+    new.dlDst = pkt.dlSrc and
+    new.nwSrc = pkt.nwDst;
 
 // Defer to MAC learning for other packet types
-//action forward(pkt : packet, newpkt : packet) :- 
-//  not pkt.dlTyp = 0x0806, Mac_Learning.forward(pkt, newpkt);
-//action forward(pkt : packet, newpkt : packet) :- 
-//  not pkt.nwProto = 1, not pkt.nwProto = 2, Mac_Learning.forward(pkt, newpkt);
+//action forward(pkt : packet, new : packet) :- 
+//  not pkt.dlTyp = 0x0806, Mac_Learning.forward(pkt, new);
+//action forward(pkt : packet, new : packet) :- 
+//  not pkt.nwProto = 1, not pkt.nwProto = 2, Mac_Learning.forward(pkt, new);

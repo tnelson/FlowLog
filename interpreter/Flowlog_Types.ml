@@ -34,6 +34,7 @@ open NetCore_Types
       | OutForward
       | OutEmit
       | OutLoopback
+      | OutPrint 
       | OutSend of string * string;;
 
   type sreactive = 
@@ -141,6 +142,7 @@ open NetCore_Types
     match spec with 
       | OutForward -> "forward"      
       | OutEmit -> "emit"
+      | OutPrint -> "print"
       | OutLoopback -> "loopback"
       | OutSend(ip, pt) -> ip^":"^pt;;  
 
@@ -286,7 +288,6 @@ let legal_to_modify_packet_fields = ["locpt";"dlsrc";"dldst";"dltyp";"nwsrc";"nw
 (* custom packet type: ARP packet (source/target; protocol/hardware) *)
 let arp_packet_fields = packet_fields @ ["arp_op";"arp_spa";"arp_sha";"arp_tpa";"arp_tha"];;
 
-
 let swpt_fields = ["sw";"pt"];;
 let swdown_fields = ["sw"];;
 
@@ -297,23 +298,27 @@ let built_in_decls = [DeclInc(packet_in_relname, "packet");
                       DeclInc(startup_relname, "startup");
                       DeclOut("forward", ["packet"]);
                       DeclOut("emit", ["packet"]);
+                      DeclOut("emit_arp", ["arp_packet"]);
 
                       DeclEvent("packet", packet_fields);
                       DeclEvent("startup", []);
                       DeclEvent("switch_port", swpt_fields);
+                      DeclEvent("arp_packet", arp_packet_fields);
                       DeclEvent("switch_down", swdown_fields)];;
 
 let create_id_assign (k: string): assignment = {afield=k; atupvar=k};;
 
 let built_in_reacts = [ ReactInc("packet", packet_in_relname); 
+                        ReactInc("arp_packet", arp_packet_in_relname); 
                         ReactInc("switch_port", switch_reg_relname); 
                         ReactInc("switch_down", switch_down_relname); 
-                        ReactInc("startup", startup_relname); 
-                        ReactOut("forward", packet_fields, "packet", map create_id_assign packet_fields, OutForward); 
-                        ReactOut("emit", packet_fields, "packet", map create_id_assign packet_fields, OutEmit);                         
+                        ReactInc("startup", startup_relname);                         
+                        ReactOut("forward", packet_fields, "packet", map create_id_assign packet_fields, OutForward);
+                        ReactOut("emit", packet_fields, "packet", map create_id_assign packet_fields, OutEmit);
+                        ReactOut("emit_arp", arp_packet_fields, "arp_packet", map create_id_assign arp_packet_fields, OutEmit);
                       ];;
 
-let built_in_condensed_outrels = ["forward"; "emit"];;
+let built_in_condensed_outrels = ["forward"; "emit"; "emit_arp"];;
 
 (*************************************************************)
   let allportsatom = SwitchAction({id with outPort = NetCore_Pattern.All});;
