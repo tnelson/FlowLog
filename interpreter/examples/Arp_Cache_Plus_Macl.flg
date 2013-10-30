@@ -1,5 +1,9 @@
 // (To check, use xterm <host> in mininet and the 
 // arp -d command to remove local arp entries between pings.)
+// BETTER: use arping. Will see stream of replies, and check log that
+// replies are due to emits, not forwards.
+///////////////////////////////////////////////////
+
 
 TABLE cache(ipaddr, macaddr); 
 TABLE switch_has_port(switchid, portid); 
@@ -9,15 +13,14 @@ ON arp_packet_in(pkt):
   // LEARN FROM REPLIES  
   // (No mobility support here: once learned, always learned)
   INSERT (pkt.arp_spa, pkt.arp_sha) INTO cache WHERE
-    pkt.dlTyp = 0x0806 and // <--- MUST BE EXPLICIT FOR COMPILATION
-    // ^^^ [TODO: not being done properly yet]
+    pkt.dlTyp = 0x0806 and // <--- MUST BE EXPLICIT FOR WEAKENING/compilation
     pkt.arp_op = 2 and 
     not cache(pkt.arp_tpa, ANY);
-  // TODO: ^^^ is "t" right, or should it be "s"?
 
   // Propagate all arp replies via flooding, 
   // and never interfere with a reply.
   DO forward(new) WHERE    
+    pkt.dlTyp = 0x0806 and // <--- MUST BE EXPLICIT FOR WEAKENING/compilation
     pkt.arp_op = 2 and 
     not pkt.locPt = new.locPt and
     switch_has_port(pkt.locSw, new.locPt); // REQUIRED: this rule is not compiled!
@@ -28,14 +31,16 @@ ON arp_packet_in(pkt):
   // an error if this occurs in a non-compiled clause! TODO
 
   // Propagate (flood) all arp requests for unlearned addresses
-  DO forward(new) WHERE    
+  DO forward(new) WHERE   
+    pkt.dlTyp = 0x0806 and // <--- MUST BE EXPLICIT FOR WEAKENING/compilation 
     pkt.arp_op = 1 and 
     not cache(pkt.nwDst, ANY) and  
     switch_has_port(pkt.locSw, new.locPt) and // REQUIRED: this rule is not compiled!
     not new.locPt = pkt.locPt;
 
   // modify request into reply if we know the mac address.
-  DO emit_arp(new) WHERE      
+  DO emit_arp(new) WHERE  
+    pkt.dlTyp = 0x0806 and // <--- MUST BE EXPLICIT FOR WEAKENING/compilation    
     pkt.arp_op = 1 and // triggers for request
     new.arp_op = 2 and // produces reply
 

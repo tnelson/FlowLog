@@ -320,6 +320,8 @@ let built_in_reacts = [ ReactInc("packet", packet_in_relname);
                       ];;
 
 let built_in_condensed_outrels = ["forward"; "emit"; "emit_arp"];;
+let built_in_packet_input_tables = [packet_in_relname; arp_packet_in_relname];;
+
 
 (*************************************************************)
   let allportsatom = SwitchAction({id with outPort = NetCore_Pattern.All});;

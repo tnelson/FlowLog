@@ -381,7 +381,7 @@ open NetCore_Wildcard
 
 (* worst ocaml error ever: used "val" for varname. *)
 
-let build_unsafe_switch_pred (oldpkt: string) (body: formula): pred =  
+let build_unsafe_switch_pred (oldpkt: string) (body: formula): pred =    
 let field_to_pattern (fld: string) (aval:string): NetCore_Pattern.t =         
   match fld with (* switch handled via different pred type *)
     | "locpt" -> {all with ptrnInPort = WildcardExact (Physical(Int32.of_string aval)) }
@@ -475,8 +475,9 @@ let rec trim_packet_from_body (p: flowlog_program) (body: formula): (string * fo
     | FNot(f) ->
       let (v, t) = trim_packet_from_body p f in
         (v, FNot(t))
-    | FOr(f1, f2) -> failwith "trim_packet_from_clause"              
-    | FAtom("", relname, [TVar(varstr)]) when is_incoming_table p relname ->  
+    | FOr(f1, f2) -> failwith "trim_packet_from_clause"           
+    (* Don't remove non-packet input tables. Those flag caller that the clause is not packet-triggered *)   
+    | FAtom("", relname, [TVar(varstr)]) when (is_packet_in_table relname) ->  
       (varstr, FTrue)
     | _ -> ("", body);;    
 
@@ -603,10 +604,10 @@ let handle_all_and_port_together (oldpkt: string) (apred: pred) (acts: action_at
 (* Side effect: reads current state in XSB *)
 (* Throws exception rather than using option type: more granular error result *)
 let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_handler option) (cl: clause): (pred * action) list =   
-   (* (match callback with 
+    if !global_verbose > 4 then (match callback with 
       | None -> printf "\n--- Packet triggered clause to netcore (FULL COMPILE) on: \n%s\n%!" (string_of_clause cl)
       | Some(_) -> printf "\n--- Packet triggered clause to netcore (~CONTROLLER~) on: \n%s\n%!" (string_of_clause cl));
-*)
+
     match cl.head with 
       | FAtom(_, _, headargs) ->
         let (oldpkt, trimmedbody) = trim_packet_from_body p cl.body in 
@@ -650,7 +651,7 @@ let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_h
                           bodies                   
             | Some(f) -> 
               (* Action is always sending to controller. So don't extract action *)
-              let bigpred = fold_left (fun acc body -> Or(acc, build_unsafe_switch_pred oldpkt body)) Nothing bodies in
+              let bigpred = fold_left (fun acc body -> (printf "adding = %s\n%!" (NetCore_Pretty.string_of_pred (build_unsafe_switch_pred oldpkt body))); Or(acc, build_unsafe_switch_pred oldpkt body)) Nothing bodies in
                 [(bigpred, [ControllerAction(f)])] in      
 
           result          

@@ -229,6 +229,9 @@ let rec disj_to_top ?(ignore_negation: bool = false) (f: formula): formula =
         | _ -> false) 
         prgm.decls;;  
 
+  let is_packet_in_table (relname: string): bool =
+    mem relname built_in_packet_input_tables;;  
+
   let is_outgoing_table (prgm: flowlog_program) (relname: string): bool =
     exists (function      
         | DeclOut(rname, argtype) when rname = relname -> true 
