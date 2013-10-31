@@ -1,0 +1,97 @@
+/*
+ON packet_in(pkt) WHERE pkt.dlTyp = 0x0806 AND pkt.arp_op = 2:
+
+EVENT ALIAS arp_request AS packet_in WHERE pkt.dlTyp = 0x0806 AND pkt.arp_op = 2
+
+ON arp_request(pkt):
+  .a...
+*/
+
+TABLE cache(ipaddr, macaddr);
+// request ip, src mac, src ip, src switch, src port [last 3 should live in NIB; join with NIB]
+TABLE queued(ipaddr, macaddr, ipaddr, switchid, portid);
+TABLE switch_has_port(switchid, portid);
+
+ON arp_packet_in(pkt) WHERE pkt.arp_op = 1:
+
+  // -- STEP 1 --
+  // -- If  request cached, then emit reply --
+
+  // modify request into reply if we know the mac address.
+  DO emit_arp(new) WHERE  
+    pkt.dlTyp = 0x0806 and // <--- MUST BE EXPLICIT FOR WEAKENING/compilation    
+    pkt.arp_op = 1 and // triggers for request
+    new.arp_op = 2 and // produces reply
+
+    // if we have a value cached 
+    cache(pkt.arp_tpa, new.dlSrc) and
+ 
+    new.dlTyp = 0x806 and 
+
+    // ^^^ TODO: this is necessary for the moment...
+
+    // Flip/set ARP-protocol fields.
+    // Required in well-formed reply!
+    new.arp_sha = new.dlSrc and
+    new.arp_spa = new.nwSrc and
+    new.arp_tha = pkt.dlSrc and
+    new.arp_tpa = pkt.nwSrc and
+
+    // flip the packet (same exit port as entrance)
+    new.locSw = pkt.locSw and
+    new.locPt = pkt.locPt and
+    // + appropriate ethernet-level address flipping
+    new.nwDst = pkt.nwSrc and
+    new.dlDst = pkt.dlSrc and
+    new.nwSrc = pkt.nwDst;
+
+  // If request is NOT cached, then add it to the table of requests queued their reply
+
+  INSERT (pkt.arp_tpa, pkt.dlSrc, pkt.locSw, pkt.locPt) INTO queued WHERE
+    pkt.dlTyp = 0x0806 and // <--- MUST BE EXPLICIT FOR WEAKENING/compilation    
+    pkt.dlSrc != 0xCAFECAFE and
+    not cache(pkt.arp_tpa, ANY);
+
+  //
+  // -- STEP 2 --
+  //
+
+  // Propagate (flood) all arp requests for unlearned addresses
+  DO emit(new) WHERE   
+    pkt.dlTyp = 0x0806 and // <--- MUST BE EXPLICIT FOR WEAKENING/compilation 
+    pkt.arp_op = 1 and 
+    not cache(pkt.arp_tpa, ANY) and  
+    not queued(pkt.arp_tpa, ANY, ANY, ANY) and
+    new.dlSrc = 3405695742 and // CONTROLER MAC ADDRESS (0xCAFECAFE)
+    switch_has_port(new.locSw, new.locPt); // REQUIRED: this rule is not compiled;
+
+//
+// HANDLE ALL REPLIES
+//
+
+ON arp_packet_in(reply) WHERE reply.arp_op = 2:
+  // Learn from replies 
+  // (No support for changing IP address here: once learned, always learned)
+  INSERT (reply.arp_spa, reply.arp_sha) INTO cache WHERE
+    reply.dlTyp = 0x0806 and // <--- MUST BE EXPLICIT FOR WEAKENING/compilation
+    not cache(reply.arp_spa, ANY);
+
+  // Clear requests queued for this reply
+  DELETE (reply.arp_spa, ANY, ANY, ANY, ANY) FROM queued;
+
+  // Send replies for any queued requests
+  DO emit(new) WHERE
+    reply.dlTyp = 0x0806 and // <--- MUST BE EXPLICIT FOR WEAKENING/compilation    
+    new.arp_op = 2 and // produces reply
+
+    // Constrain ARP-protocol fields based on queued request
+    queued(reply.arp_spa, new.arp_tha, new.arp_tpa, new.locSw, new.locPt) and
+ 
+    new.dlTyp = 0x806 and 
+    // ^^^ TODO: this is necessary for the moment...
+
+    // Constrain remaining fields
+    new.dlDst = new.arp_tha and
+    new.dlSrc = reply.dlSrc and
+    new.arp_spa = reply.arp_spa;
+    new.arp_sha = reply.arp_sha;
