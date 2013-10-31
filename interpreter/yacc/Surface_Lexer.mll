@@ -64,7 +64,7 @@ rule token = parse
   | "any" { any_counter := !any_counter+1; NAME("any"^(string_of_int !any_counter)) }
 
   | ['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9'] as dotted_ip { DOTTED_IP(dotted_ip)}
-  | ['0'-'9']+ | '0''x'(['0'-'9']+) as number { NUMBER(number) }
+  | ['0'-'9']+ | '0''x'(['0'-'9''a'-'f']+) as number { NUMBER(number) }
   | ['a'-'z''A'-'Z''_''0'-'9']+ as name { NAME(name) }
   | ['a'-'z''A'-'Z''_''0'-'9''-']+ as name 
     { Printf.printf "Bad identifier: %s. Cannot use dashes. Use underscore instead.\n%!" name; 

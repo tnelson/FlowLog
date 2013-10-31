@@ -45,7 +45,7 @@ EVENT ALIAS arp_request AS packet_in WHERE pkt.dlTyp = 0x0806 AND pkt.arp_op = 2
 /* TODO: dlTyp must be explicit here for compilation; but should be implied.
  * also, replace controller MAC address with constant */
 ON arp_packet_in(request) WHERE request.dlTyp = 0x0806 AND
-                                request.dlSrc = 3405695742:     // 0xCAFECAFE
+                                request.dlSrc = 0xCAFECAFE:      
    DO forward(new) WHERE
      new.locPt != request.locPt;
 
@@ -58,7 +58,7 @@ ON arp_packet_in(request) WHERE request.dlTyp = 0x0806 AND
 /* TODO: dlTyp must be explicit here for compilation; but should be implied.
  * also, replace controller MAC address with constant */
 ON arp_packet_in(request) WHERE request.arp_op = 1 AND request.dlTyp = 0x0806 AND
-                                request.dlSrc != 3405695742: // 0xCAFECAFE
+                                request.dlSrc != 0xCAFECAFE: 
 
   //
   // If we have a hardware addr cached for the target protocol addr,
@@ -105,14 +105,14 @@ ON arp_packet_in(request) WHERE request.arp_op = 1 AND request.dlTyp = 0x0806 AN
     not queued(request.arp_tpa, ANY, ANY, ANY, ANY) and
     new.locSw = request.locSw and
     new.dlDst = request.dlDst and
-    new.dlSrc = 3405695742 and // TODO: CONTROLER MAC ADDRESS (0xCAFECAFE)
+    new.dlSrc = 0xCAFECAFE and 
 
     // Make it an ARP request
     new.arp_op = 1 and
 
     // Constrain other ARP fields based on original request
     new.arp_tpa = request.arp_tpa and
-    new.arp_sha = 3405695742 and // TODO: CONTROLER MAC ADDRESS (0xCAFECAFE)
+    new.arp_sha = 0xCAFECAFE and 
     new.arp_spa = 167772161 and // TODO: CONTROLLER IP ADDR (10.0.0.1)
 
     // TODO: see if we can eliminate these...
@@ -139,7 +139,7 @@ ON arp_packet_in(request) WHERE request.arp_op = 1 AND request.dlTyp = 0x0806 AN
 
 /* TODO: dlTyp must be explicit here for compilation; but should be implied */
 ON arp_packet_in(reply) WHERE reply.arp_op = 2 AND reply.dlTyp = 0x0806 AND
-                              reply.dlSrc != 3405695742: // 0xCAFECAFE
+                              reply.dlSrc != 0xCAFECAFE:
 
   //
   // Learn from replies
