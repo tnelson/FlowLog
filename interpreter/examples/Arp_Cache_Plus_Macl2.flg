@@ -1,19 +1,42 @@
 /*
-ON packet_in(pkt) WHERE pkt.dlTyp = 0x0806 AND pkt.arp_op = 2:
+ * A simple ARP proxy with cache.
+ *
+ * All ARP requests are sent to the controller (except those issued by the
+ * controller, of course). The controller attempts to reply to them from its
+ * cache. If the mapping is not found in the cache, then the controller issues
+ * its own ARP request to answer the original. We don't want to issue more
+ * than one ARP request to any given host, thus we keep a queue of outstanding
+ * requests which we are actively proxying.
+ *
+ * TODO:
+ *  - Don't emit a packet on every port. Emit a packet at a single switch and
+ *    have the switches broadcast it (along a tree) to the rest of the network.
+ *  - Implement with soft state. Requires timeouts and enables updates.
+ */
 
-EVENT ALIAS arp_request AS packet_in WHERE pkt.dlTyp = 0x0806 AND pkt.arp_op = 2
+/*******************************************************************************
+ *
+ * Data Structures
+ *
+ ******************************************************************************/
 
-ON arp_request(pkt):
-  .a...
-*/
-
-/* TODO: Implement with soft state. Requires timeouts and enables updates. */
-
+// Cache for issuing ARP replies. Maps IP to MAC address.
 TABLE cached(ipaddr, macaddr);
+
+// Table of queued ARP requests for which we are awaiting a reply from the target
+//
+// Column values:
 // request ip, src mac, src ip, src switch, src port
 //                      [last 3 should live in NIB; join with NIB]
 TABLE queued(ipaddr, macaddr, ipaddr, switchid, portid);
+
+// Table from swithc to ports. Eventually this should move to another file / NIB
 TABLE switch_has_port(switchid, portid);
+
+/*
+EVENT ALIAS arp_request AS packet_in WHERE pkt.dlTyp = 0x0806 AND pkt.arp_op = 2
+(plus some code to parse the packet into fields...)
+*/
 
 /*******************************************************************************
  *
