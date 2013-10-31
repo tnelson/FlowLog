@@ -23,6 +23,7 @@ module Xsb = struct
 		let xin_channel, xout_channel, error_channel = Unix.open_process_full "xsb" (Unix.environment ()) in
 		(* to prevent errors from accumulating *)
 		Unix.set_nonblock (Unix.descr_of_in_channel error_channel);
+		printf "XSB started.\n%!";
 		(xout_channel, xin_channel, error_channel);;
 
 	let ref_out_ch = ref None;;

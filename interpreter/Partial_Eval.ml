@@ -703,14 +703,17 @@ let make_arp (ev: event): nw =
       let arp_tha = Int64.of_string (get_field ev "arp_tha") in   
         Arp(Reply(arp_sha, arp_spa, arp_tha, arp_tpa))
     | _ -> failwith "bad arp op";;
-  
+
+(* This is likely to change if we change engines.*)
+let field_is_defined (ev: event) (fname: string): bool = 
+  not (starts_with (get_field ev fname) "_");;
 
 let get_field_default (ev: event) (fname: string): string =
   (* Assuming that the field is THERE... it may be set to a "dunno" by xsb *)
   try
     let evval = (get_field ev fname) in
       (*printf "get_field/default: %s %s\n%!" fname evval;*)
-      if not (starts_with evval "_") then evval
+      if field_is_defined ev fname then evval
       else (match ev.typeid, fname with        
         | _,"nwsrc" -> "0"
         | _,"nwdst" -> "0"

@@ -278,6 +278,12 @@ let rec minimize_variables ?(exempt: term list = []) (f: formula): formula =
           minimize_variables ~exempt:exempt newf
         with SubstitutionLedToInconsistency(_) -> FFalse;;
 
+let add_conjunct_to_action (act: action) (f: formula) =  
+  match act with 
+    | _ when f = FTrue -> act
+    | ADelete(a, b, fmla) -> ADelete(a, b, FAnd(f, fmla)) 
+    | AInsert(a, b, fmla) -> AInsert(a, b, FAnd(f, fmla))
+    | ADo(a, b, fmla) -> ADo(a, b, FAnd(f, fmla));;
 
 (************************************************************************************)
 (* BUILT-IN CONSTANTS, MAGIC-NUMBERS, EVENTS, REACTIVE DEFINITIONS, ETC.            *)

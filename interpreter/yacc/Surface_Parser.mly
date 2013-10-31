@@ -1,5 +1,6 @@
 %{
-  open Flowlog_Types;;
+  open Flowlog_Types
+  open ExtList.List
 %}
 
 
@@ -107,9 +108,10 @@
             | {RefreshEvery};
 
   rule_stmt: on_clause COLON action_clause_list 
-    {List.map (fun act -> Rule(List.hd $1, List.hd (List.tl $1), act)) $3};
+    {map (fun act -> let triggerrel, triggervar, optwhere = $1 in 
+           Rule(triggerrel, triggervar, (add_conjunct_to_action act optwhere))) $3};
 
-  on_clause: ON NAME LPAREN NAME RPAREN {[$2;$4]};
+  on_clause: ON NAME LPAREN NAME RPAREN optional_fmla {($2,$4,$6)};
 
   action_clause: 
             | DELETE LPAREN term_list RPAREN FROM NAME optional_fmla SEMICOLON {ADelete($6, $3, $7)} 

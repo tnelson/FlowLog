@@ -97,5 +97,5 @@ ON arp_packet_in(reply) WHERE reply.arp_op = 2:
     // Constrain remaining fields
     new.dlDst = new.arp_tha and
     new.dlSrc = reply.dlSrc and
-    new.arp_spa = reply.arp_spa;
+    new.arp_spa = reply.arp_spa and
     new.arp_sha = reply.arp_sha;

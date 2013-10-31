@@ -553,7 +553,6 @@ let rec safe_compare_pols (p1: pol) (p2: pol): bool =
     (* Not same policy structure, then different policy. *)
     | _ -> false;;
 
-
 (* this won't intelligently compare within the pred. e.g. (p and q) != (q and p) here. *)
 (* module PredSet  = Set.Make( struct type t = pred let compare = compare end );; *)
 
