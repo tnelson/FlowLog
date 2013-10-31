@@ -9,8 +9,6 @@
  * requests which we are actively proxying.
  *
  * TODO:
- *  - Don't emit a packet on every port. Emit a packet at a single switch and
- *    have the switches broadcast it (along a tree) to the rest of the network.
  *  - Implement with soft state. Requires timeouts and enables updates.
  */
 
@@ -40,12 +38,27 @@ EVENT ALIAS arp_request AS packet_in WHERE pkt.dlTyp = 0x0806 AND pkt.arp_op = 2
 
 /*******************************************************************************
  *
- * HANDLE ALL REQUESTS
+ * Only flood ARP requests from the controller
  *
  ******************************************************************************/
 
-/* TODO: dlTyp must be explicit here for compilation; but should be implied */
-ON arp_packet_in(request) WHERE request.arp_op = 1 AND request.dlTyp = 0x0806:
+/* TODO: doesn't compile nicely if we try with arp_packet_in! */
+
+ON packet_in(request) WHERE request.dlTyp = 0x0806 AND
+                            request.dlSrc = 3405695742:     // 0xCAFECAFE
+   DO forward(new) WHERE
+     new.locPt != request.locPt;
+
+/*******************************************************************************
+ *
+ * Handle all requests not from the controller
+ *
+ ******************************************************************************/
+
+/* TODO: dlTyp must be explicit here for compilation; but should be implied.
+ * also, replace controller MAC address with constant */
+ON arp_packet_in(request) WHERE request.arp_op = 1 AND request.dlTyp = 0x0806 AND
+                                request.dlSrc != 3405695742: // 0xCAFECAFE
 
   //
   // If we have a hardware addr cached for the target protocol addr,
@@ -79,25 +92,25 @@ ON arp_packet_in(request) WHERE request.arp_op = 1 AND request.dlTyp = 0x0806:
 
   INSERT (request.arp_tpa, request.arp_sha, request.arp_spa,
           request.locSw, request.locPt) INTO queued WHERE
-    not cached(request.arp_tpa, ANY) and
-    request.dlSrc != 3405695742; // TODO: can't be from controller 0xCAFECAFE
-
+    not cached(request.arp_tpa, ANY);
 
   //
-  // Finally, propagate (flood) an arp request from the controller for unlearned
-  // addresses without an existing queued request.
+  // Finally, issue an arp request from the controller for unlearned
+  // addresses without an existing queued request. The new request is
+  // issued from the same switch that started the process.
   //
 
   DO emit_arp(new) WHERE
     not cached(request.arp_tpa, ANY) and
     not queued(request.arp_tpa, ANY, ANY, ANY, ANY) and
+    new.locSw = request.locSw and
     new.dlDst = request.dlDst and
     new.dlSrc = 3405695742 and // TODO: CONTROLER MAC ADDRESS (0xCAFECAFE)
 
     // Make it an ARP request
     new.arp_op = 1 and
 
-    // Constrain other ARP fields based on request
+    // Constrain other ARP fields based on original request
     new.arp_tpa = request.arp_tpa and
     new.arp_sha = 3405695742 and // TODO: CONTROLER MAC ADDRESS (0xCAFECAFE)
     new.arp_spa = 167772161 and // TODO: CONTROLLER IP ADDR (10.0.0.1)
@@ -116,12 +129,17 @@ ON arp_packet_in(request) WHERE request.arp_op = 1 AND request.dlTyp = 0x0806:
 
 /*******************************************************************************
  *
- * HANDLE ALL REPLIES
+ * Handle all replies
+ *
+ * - Must explicitly specify that no replies will be from the controller;
+ *   otherwise, NetCore will try to send copy all controller-issued ARP
+ *   traffic back to the controller.
  *
  ******************************************************************************/
 
 /* TODO: dlTyp must be explicit here for compilation; but should be implied */
-ON arp_packet_in(reply) WHERE reply.arp_op = 2 AND reply.dlTyp = 0x0806:
+ON arp_packet_in(reply) WHERE reply.arp_op = 2 AND reply.dlTyp = 0x0806 AND
+                              reply.dlSrc != 3405695742: // 0xCAFECAFE
 
   //
   // Learn from replies
