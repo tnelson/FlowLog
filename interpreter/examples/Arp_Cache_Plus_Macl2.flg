@@ -64,6 +64,8 @@ ON arp_packet_in(request) WHERE request.arp_op = 1:
     not cached(request.arp_tpa, ANY) and  
     not queued(request.arp_tpa, ANY, ANY, ANY, ANY) and
     new.dlSrc = 3405695742 and // CONTROLER MAC ADDRESS (0xCAFECAFE)
+    new.dlDst = request.dlDst and
+    new.dlTyp = 0x0806 and 
     switch_has_port(new.locSw, new.locPt); // REQUIRED: this rule is not compiled;
 
 /*******************************************************************************
