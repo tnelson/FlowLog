@@ -79,7 +79,7 @@ ON arp_packet_in(request) WHERE request.arp_op = 1 AND request.dlTyp = 0x0806 AN
 
     // Constrain ethernet header appropriately
     new.dlDst = request.dlSrc and
-    new.dlSrc = request.arp_tha and
+    new.dlSrc = new.arp_sha and
 
     // Finally, turn packet around (set exit port as entrance)
     new.locSw = request.locSw and
