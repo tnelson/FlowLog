@@ -7,8 +7,11 @@ ON arp_request(pkt):
   .a...
 */
 
+/* TODO: Implement with soft state. Requires timeouts and enables updates. */
+
 TABLE cached(ipaddr, macaddr);
-// request ip, src mac, src ip, src switch, src port [last 3 should live in NIB; join with NIB]
+// request ip, src mac, src ip, src switch, src port
+//                      [last 3 should live in NIB; join with NIB]
 TABLE queued(ipaddr, macaddr, ipaddr, switchid, portid);
 TABLE switch_has_port(switchid, portid);
 
@@ -20,8 +23,10 @@ TABLE switch_has_port(switchid, portid);
 
 ON arp_packet_in(request) WHERE request.arp_op = 1:
 
+  //
   // If we have a hardware addr cached for the target protocol addr,
   // then emit reply:
+  //
 
   DO emit_arp(new) WHERE  
     cached(request.arp_tpa, new.arp_sha) and
@@ -43,30 +48,47 @@ ON arp_packet_in(request) WHERE request.arp_op = 1:
     new.locPt = request.locPt and
 
     // TODO: see if we can eliminate these...
-    request.dlTyp = 0x0806 and // <--- MUST BE EXPLICIT FOR WEAKENING/compilation    
+    request.dlTyp = 0x0806 and // <--- MUST BE EXPLICIT FOR WEAKENING/compilation
     new.dlTyp = 0x806;
 
 
-  // If request is NOT cached, then add it to the table of requests queued their reply
-
-  INSERT (request.arp_tpa, request.arp_sha, request.arp_spa, request.locSw, request.locPt) INTO queued WHERE
-    request.dlTyp = 0x0806 and // <--- MUST BE EXPLICIT FOR WEAKENING/compilation    
-    request.dlSrc != 3405695742 and // TODO: 0xCAFECAFE can't be used safely in dlsrc
-    not cached(request.arp_tpa, ANY);
-
   //
-  // -- STEP 2 --
+  // If request is NOT cached and is NOT from us (the controller),
+  // then add it to the table of requests queued their reply
   //
 
-  // Propagate (flood) all arp requests for unlearned addresses
-  DO emit_arp(new) WHERE   
-    request.dlTyp = 0x0806 and // <--- MUST BE EXPLICIT FOR WEAKENING/compilation     
+  INSERT (request.arp_tpa, request.arp_sha, request.arp_spa,
+          request.locSw, request.locPt) INTO queued WHERE
+    not cached(request.arp_tpa, ANY) and
+    request.dlSrc != 3405695742 and // TODO: 0xCAFECAFE can't be used in dlsrc
+
+    // TODO: see if we can eliminate this...
+    request.dlTyp = 0x0806; // <--- MUST BE EXPLICIT FOR WEAKENING/compilation    
+
+
+  //
+  // Finally, propagate (flood) an arp request from the controller for unlearned
+  // addresses without an existing queued request.
+  //
+
+  DO emit_arp(new) WHERE
     not cached(request.arp_tpa, ANY) and  
     not queued(request.arp_tpa, ANY, ANY, ANY, ANY) and
-    new.dlSrc = 3405695742 and // CONTROLER MAC ADDRESS (0xCAFECAFE)
     new.dlDst = request.dlDst and
-    new.dlTyp = 0x0806 and 
+    new.dlSrc = 3405695742 and // TODO: CONTROLER MAC ADDRESS (0xCAFECAFE)
+
+    // TODO: see if we can eliminate these...
+    request.dlTyp = 0x0806 and // <--- MUST BE EXPLICIT FOR WEAKENING/compilation     
     switch_has_port(new.locSw, new.locPt); // REQUIRED: this rule is not compiled;
+
+  //
+  // Bonus: We can cache the source of this ARP request
+  //
+
+  INSERT (request.arp_spa, request.arp_sha) INTO cached WHERE
+    request.dlTyp = 0x0806 and // <--- MUST BE EXPLICIT FOR WEAKENING/compilation
+    not cached(request.arp_spa, ANY);
+
 
 /*******************************************************************************
  *
@@ -75,16 +97,26 @@ ON arp_packet_in(request) WHERE request.arp_op = 1:
  ******************************************************************************/
 
 ON arp_packet_in(reply) WHERE reply.arp_op = 2:
+
+  //
   // Learn from replies 
   // (No support for changing IP address here: once learned, always learned)
+  //
+
   INSERT (reply.arp_spa, reply.arp_sha) INTO cached WHERE
     reply.dlTyp = 0x0806 and // <--- MUST BE EXPLICIT FOR WEAKENING/compilation
     not cached(reply.arp_spa, ANY);
 
+  //
   // Clear requests queued for this reply
+  //
+
   DELETE (reply.arp_spa, ANY, ANY, ANY, ANY) FROM queued;
 
+  //
   // Send replies for any queued requests
+  //
+
   DO emit_arp(new) WHERE
     reply.dlTyp = 0x0806 and // <--- MUST BE EXPLICIT FOR WEAKENING/compilation    
     new.arp_op = 2 and // produces reply
