@@ -1,3 +1,7 @@
+(****************************************************************)
+(* Most type definitions and a few helpers                      *)
+(****************************************************************)
+
 open Printf
 open ExtList.List
 open NetCore_Types
@@ -84,6 +88,9 @@ open NetCore_Types
   type event = { typeid: string; values: string StringMap.t};;
 
   module FmlaMap = Map.Make(struct type t = formula let compare = compare end);;
+
+(*************************************************************)
+  let allportsatom = SwitchAction({id with outPort = NetCore_Pattern.All});;
 
 (*************************************************************)
   let string_of_event (notif: event): string =
@@ -272,17 +279,30 @@ let rec minimize_variables ?(exempt: term list = []) (f: formula): formula =
         with SubstitutionLedToInconsistency(_) -> FFalse;;
 
 
-(* all lowercased by parser *)
+(************************************************************************************)
+(* BUILT-IN CONSTANTS, MAGIC-NUMBERS, EVENTS, REACTIVE DEFINITIONS, ETC.            *)
+(*   If adding a new packet type, new built-in definition, etc. do so here.         *)
+(************************************************************************************)
+
+(* Note: all program text is lowercased by parser *)
+
+(* These are prepended to relation names when we pass insert/delete rules to Prolog *)
 let plus_prefix = "plus";;
 let minus_prefix = "minus";;
 
+(* Avoid using strings for hard-coded type names and relation names. 
+   Use these definitions instead. *)
 let packet_in_relname = "packet_in";;
 let arp_packet_in_relname = "arp_packet_in";;
 let switch_reg_relname = "switch_port_in";;
 let switch_down_relname = "switch_down";;
 let startup_relname = "startup";;
 
+(**********************************************)
+
+(* Fields in a base packet *)
 let packet_fields = ["locsw";"locpt";"dlsrc";"dldst";"dltyp";"nwsrc";"nwdst";"nwproto"];;
+(* Fields that OpenFlow permits modification of *)
 let legal_to_modify_packet_fields = ["locpt";"dlsrc";"dldst";"dltyp";"nwsrc";"nwdst"];;
 
 (* custom packet type: ARP packet (source/target; protocol/hardware) *)
@@ -291,11 +311,16 @@ let arp_packet_fields = packet_fields @ ["arp_op";"arp_spa";"arp_sha";"arp_tpa";
 let swpt_fields = ["sw";"pt"];;
 let swdown_fields = ["sw"];;
 
+(**********************************************)
+
+(* Some declarations and reactive definitions are built in. E.g., packet_in. *)
+
 let built_in_decls = [DeclInc(packet_in_relname, "packet"); 
                       DeclInc(arp_packet_in_relname, "arp_packet"); 
                       DeclInc(switch_reg_relname, "switch_port"); 
                       DeclInc(switch_down_relname, "switch_down");
                       DeclInc(startup_relname, "startup");
+                      
                       DeclOut("forward", ["packet"]);
                       DeclOut("emit", ["packet"]);
                       DeclOut("emit_arp", ["arp_packet"]);
@@ -319,15 +344,22 @@ let built_in_reacts = [ ReactInc("packet", packet_in_relname);
                         ReactOut("emit_arp", arp_packet_fields, "arp_packet", map create_id_assign arp_packet_fields, OutEmit("arp_packet"));
                       ];;
 
+(* These output relations have a "condensed" argument. That is, they are unary, 
+   with a packet as the argument. Should only be done for certain built-ins. *)
 let built_in_condensed_outrels = ["forward"; "emit"; "emit_arp"];;
+
+(* All packet types must go here; 
+   these are the tables that flag a rule as being "packet-triggered".*)
 let built_in_packet_input_tables = [packet_in_relname; arp_packet_in_relname];;
 
-
-(*************************************************************)
-  let allportsatom = SwitchAction({id with outPort = NetCore_Pattern.All});;
 (*************************************************************)
 
+(* If adding a new packet type, make sure to include self and all supertypes here. *)
 (* E.g. arp_packet always fires packet also. *)
-let built_in_subtypes = [("arp_packet", "packet"); 
-                         ("icmp_packet", "packet")];;
-
+let built_in_subtypes (typename: string): string list = 
+  match typename with
+    | "arp_packet" -> ["arp_packet"; "packet"]
+    | "icmp_packet" -> ["icmp_packet"; "packet"]
+    | _ -> [typename];;
+  
+(*************************************************************)

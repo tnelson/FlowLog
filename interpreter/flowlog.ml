@@ -1,22 +1,16 @@
+(****************************************************************)
+(* Main flowlog executable                                      *)
+(****************************************************************)
+
+
 open Flowlog_Types
 open Flowlog_Helpers
 open Partial_Eval
 open Printf
 open Arg
 open Flowlog_To_Alloy
-
-open NetCore_Types
-open Packet
-open OpenFlow0x01
-open OpenFlow0x01_Platform
-open OpenFlow0x01_Core
 open Lwt
-open NetCore_Pattern
-open NetCore_Wildcard
-open NetCore_Controller
-
 open Flowlog_Parse_Helpers
-
 open Xsb_Communication
 
 (* Use ExtList.List instead -- provides filter_map, but also tail-recursive combine *)

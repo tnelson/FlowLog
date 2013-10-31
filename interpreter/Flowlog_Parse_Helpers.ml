@@ -1,10 +1,14 @@
+(****************************************************************)
+(* Helpers for loading ASTs, desugaring, validating input, etc. *)
+(****************************************************************)
+
 open Flowlog_Types
 open Flowlog_Helpers
 open Surface_Parser
 open Surface_Lexer
 open Printf
 open ExtList.List
-open Partial_Eval
+open Partial_Eval_Validation
 
 (* Thanks to Jon Harrop on caml-list *)
 let from_case_insensitive_channel ic =
@@ -199,8 +203,10 @@ let well_formed_decls (decls: sdecl list): unit =
         else relname::acc
       | _ -> acc) [] decls);;
 
-let desugared_program_of_ast (ast: flowlog_ast): flowlog_program =
-    printf "*** REMINDER: IMPORTS NOT YET HANDLED! (Remember to handle in partial eval, too.) ***\n%!"; (* TODO *)
+(* + There is some information overlap between declarations and reactive definitions.
+   + "Imports" currently have a slot in the language, but they are un-used. *)
+
+let desugared_program_of_ast (ast: flowlog_ast): flowlog_program =    
     match ast with AST(imports, stmts) ->
         (* requires extlib *)
         let the_decls  =  built_in_decls @ 

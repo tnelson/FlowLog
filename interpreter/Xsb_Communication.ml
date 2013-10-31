@@ -1,3 +1,9 @@
+(*****************************************************************)
+(* Interface with XSB. Invoked by Partial_Eval etc.              *)
+(* We access XSB textually via pipes. Note the special functions *)
+(* to properly handle XSB's output.                              *)
+(*****************************************************************)
+
 open Unix
 open Printf
 open Flowlog_Types
@@ -117,6 +123,7 @@ module Xsb = struct
 		let answer = ref "" in
 		let next_str = ref "" in		
 
+		(* For debugging *)
         (*let next_str = ref "" in
 		while not (ends_with !next_str "\n") do
 		  next_str := (!next_str) ^ (String.make 1 (input_char in_ch));
@@ -167,8 +174,6 @@ module Xsb = struct
 		(* Send the query *)
 		output_string out_ch (str ^ "\n");
 		flush out_ch;
-
-
 
 		if num_vars = 1 then
 		begin
@@ -236,94 +241,9 @@ module Communication = struct
 	(* Perfectly valid to ask "r(X, 2)" here. *)
 	let get_state (f: formula): (string list) list =
 		send_message ((string_of_formula f)^".") (length (get_vars_and_fieldvars f));;
-(*
-	(* ignoring blackbox queries for the moment *)
-	let retract_signature (s : Types.signature) : unit =
-		match s with Types.Signature(_, _, _, args) ->
-		let num_vars = List.length (List.fold_right (fun t acc -> add_unique_var t acc) args []) in
-		let _ = send_message ("retract((" ^ (Type_Helpers.signature_to_string s) ^ ")).") num_vars in ();;
-
-	let assert_signature (s : Types.signature) : unit =
-		retract_signature s;
-		match s with Types.Signature(_, _, _, args) ->
-		let num_vars = List.length (List.fold_right (fun t acc -> add_unique_var t acc) args []) in
-		let _ = send_message ("assert((" ^ (Type_Helpers.signature_to_string s) ^ ")).") num_vars in ();;	
-
-	let rec split_list (num : int) (l : 'a list) : 'a list * 'a list =
-		if num < 0 then raise (Failure "split_list: num should be nonnegative") else
-		if num = 0 then ([], l) else
-		match l with
-		| [] -> raise (Failure "split_list: num is bigger than the length of the list");
-		| h :: t -> let first_recur, rest_recur = split_list (num - 1) t in (h :: first_recur, rest_recur);;
-
-	(* Take the raw results from XSB and produce notification constants*)
-	let rec group_into_constants (types : Types.term_type list) (sl : string list) : Types.term list =
-	    (*if debug then Printf.printf "group_into_constants: types=[%s] sl=[%s]\n%!"
-	            (Type_Helpers.list_to_string Type_Helpers.term_type_name types)
-	            (Type_Helpers.list_to_string (fun x -> x) sl);*)
-		match types with
-		| [] -> if sl = [] then [] else raise (Failure "More strings than fit into the types");
-		| Types.Type(_, fields) as t :: tail ->
-			let (first_bunch, rest) = split_list (List.length fields) sl in
-			Types.Constant(first_bunch, t) :: group_into_constants tail rest;
-		| _ -> raise (Failure "group_into_constants: deferred type");;
-
-	let get_queries (prgm : Types.program) (cls : Types.clause) : (Types.atom * Types.blackbox) list =
-		match prgm with Types.Program(_, _, blackboxes, _, _) ->
-		match cls with Types.Clause(_, body) -> List.fold_right (fun a acc -> match a with
-			| Types.Apply(b, bb_name, rel_name, tl) -> (match List.filter (fun bb -> match bb with Types.BlackBox(name, _) -> bb_name = name) blackboxes with
-				| [] -> acc;
-				| h :: _ -> (a, h) :: acc;);
-			| _ -> acc;) body [];;
-
-	let retract_query (qs : Types.atom * Types.blackbox) =
-		match qs with | (Types.Apply(_, module_name, name, tl) as q, bb) ->
-		let query_answers = List.map (group_into_constants (List.map Type_Helpers.type_of_term tl)) (Flowlog_Thrift_Out.doBBquery bb q) in
-		List.iter (fun ans -> retract_signature (Types.Signature(Types.Helper, module_name, name, ans))) query_answers;
-		              | _ -> failwith "retract_query: wrong type of atom";;
-
-	let assert_query (qs : Types.atom * Types.blackbox) =
-		match qs with | (Types.Apply(_, module_name, name, tl) as q, bb) ->
-		let query_answers = List.map (group_into_constants (List.map Type_Helpers.type_of_term tl)) (Flowlog_Thrift_Out.doBBquery bb q) in
-		List.iter (fun ans -> assert_signature (Types.Signature(Types.Helper, module_name, name, ans))) query_answers;
-		              | _ -> failwith "assert_query: wrong type of atom";;
-
-  (* TODO: tons of code-duplication here *)
-
-	let query_signature (prgm : Types.program) (s : Types.signature) : (Types.term list) list =
-	    if debug then Printf.printf "Query signature: %s\n%!" (Type_Helpers.signature_to_string s);
-		match s with Types.Signature(_, _, _, args) ->
-		let num_vars = List.length (List.fold_right (fun t acc -> add_unique_var t acc) args []) in
-		match prgm with Types.Program(_, _, _, _, prgm_clauses) ->
-		let clauses = List.filter (fun cls -> Type_Helpers.clause_signature cls = Type_Helpers.signature_name s) prgm_clauses in
-		let queries = List.fold_right (fun cls acc -> (get_queries prgm cls) @ acc) clauses [] in
-		List.iter assert_query queries;
-		let strings = send_message ((Type_Helpers.signature_to_string s) ^ ".") num_vars in
-		List.iter retract_query queries;
-		let types = List.map Type_Helpers.type_of_term (List.filter (function Types.Constant(_,_) -> false; | _ -> true;) args) in
-		List.map (fun sl -> group_into_constants types sl) strings;;
-
-*)
 
 	let clause_to_xsb (cls: clause): string =
 		(string_of_formula cls.head)^" :- "^(string_of_formula cls.body);;
-
-(*
-	(* Returns x :: l if x not already in l *)
-	let add_unique (x : 'a) (l : 'a list) : 'a list =
-	  if List.mem x l then l else x :: l;;
-	
-	(* Same as add_unique but only if x is a Variable *)
-	let add_unique_var (t : term) (acc : term list) : term list = 
-		match t with
-		| TConst(_) -> acc;
-		| TVar(name) -> 
-			List.fold_right (fun field acc1 -> add_unique (Types.Field_ref(name, field)) acc1) fields acc;
-		| Types.Field_ref(_, _) -> add_unique t acc;
-		| _ -> acc;;
-	
-*)
-
 
 	(* Substitute notif vars for their fields and produce a string for XSB to consume *)	
 	let rec subs_xsb_formula (prgm: flowlog_program) (f: formula): formula = 

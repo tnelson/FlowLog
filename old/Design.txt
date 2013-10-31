@@ -1,3 +1,5 @@
+****OUTDATED****
+
 Redesign ideas.
 
 File organization:

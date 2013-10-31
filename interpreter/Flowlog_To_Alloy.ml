@@ -1,23 +1,12 @@
+(****************************************************************)
+(* Automatic translation from Flowlog to Alloy                  *)
+(****************************************************************)
+
 open Printf
 open Flowlog_Types
 open Flowlog_Helpers
 open ExtList.List
 open Unix 
-
-(* Which is the right target language: Alloy or Margrave? 
-
-+Margrave: automatic OSEPL.
-+Margrave: easier rule-blaming (Alloy can do w/ added preds or with evaluator. 
-           We can probably build blaming into the compiled target?)
-
-+Alloy: easier to express properties (e.g. correctness of TC)
-+Alloy: support for TC (could add to Margrave, but would be added engineering)
-+Alloy: smoother user experience, visualization, treeview, etc.
-
-+Alloy: better known tool
-+Margrave: needs use
-
-*)
 
 let alloy_filename (flfn: string): string =
   (Filename.chop_extension flfn)^".als";;
