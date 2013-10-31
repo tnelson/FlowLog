@@ -5,3 +5,7 @@ interpreter/_build
 interpreter/thrift/_build
 *.d.byte
 *.native
+interpreter/examples/*.json
+Surface_Lexer.ml
+Surface_Parser.ml
+Surface_Parser.mli

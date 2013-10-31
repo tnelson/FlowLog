@@ -1,12 +1,11 @@
-.PHONY: dummy all clean .force
+.PHONY: dummy all clean yacc .force
+
+YACC_DIR = yacc
 
 OCAMLBUILD = ocamlbuild -use-ocamlfind -I thrift -I thrift/gen-ocaml
 
-dummy:
-	@echo "To compile foo.ml, type:"
-	@echo "$ make foo.d.byte"
-	@echo
-	@echo "If you really want to build everything, use make all."
+default: yacc flowlog.d.byte
+	@echo "Compiled FlowLog. If you would rather build everyting, use 'make all'"
 
 all: $(patsubst %.ml,%.d.byte,$(wildcard *.ml))
 
@@ -15,3 +14,6 @@ all: $(patsubst %.ml,%.d.byte,$(wildcard *.ml))
 
 clean:
 	$(OCAMLBUILD) -clean
+
+yacc:
+	$(MAKE) -C $(YACC_DIR)
