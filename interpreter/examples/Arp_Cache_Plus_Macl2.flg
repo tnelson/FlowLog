@@ -51,7 +51,7 @@ ON arp_packet_in(request) WHERE request.arp_op = 1:
 
   INSERT (request.arp_tpa, request.arp_sha, request.arp_spa, request.locSw, request.locPt) INTO queued WHERE
     request.dlTyp = 0x0806 and // <--- MUST BE EXPLICIT FOR WEAKENING/compilation    
-    request.dlSrc != 0xCAFECAFE and
+    request.dlSrc != 3405695742 and // TODO: 0xCAFECAFE can't be used safely in dlsrc
     not cached(request.arp_tpa, ANY);
 
   //
@@ -60,8 +60,7 @@ ON arp_packet_in(request) WHERE request.arp_op = 1:
 
   // Propagate (flood) all arp requests for unlearned addresses
   DO emit_arp(new) WHERE   
-    request.dlTyp = 0x0806 and // <--- MUST BE EXPLICIT FOR WEAKENING/compilation 
-    request.arp_op = 1 and 
+    request.dlTyp = 0x0806 and // <--- MUST BE EXPLICIT FOR WEAKENING/compilation     
     not cached(request.arp_tpa, ANY) and  
     not queued(request.arp_tpa, ANY, ANY, ANY, ANY) and
     new.dlSrc = 3405695742 and // CONTROLER MAC ADDRESS (0xCAFECAFE)
@@ -99,3 +98,16 @@ ON arp_packet_in(reply) WHERE reply.arp_op = 2:
     new.dlSrc = reply.dlSrc and
     new.arp_spa = reply.arp_spa and
     new.arp_sha = reply.arp_sha;
+
+
+/*******************************************************************************
+ *
+ * Populate switch_has_port
+ *
+ ******************************************************************************/
+
+ON switch_port_in(swpt):
+  INSERT (swpt.sw, swpt.pt) INTO switch_has_port;
+
+ON switch_down(swd):
+  DELETE (swd.sw, ANY) FROM switch_has_port;

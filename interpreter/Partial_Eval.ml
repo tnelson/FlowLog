@@ -723,7 +723,7 @@ let get_field_default (ev: event) (fname: string): string =
         | _,"nwtos" -> "0"      
         | _,"nwchksum" -> "0"
         | _,"nwident" -> "0"     
-        | _ -> failwith "get_field_default")
+        | _ -> failwith ("get_field_default. no default specified for: "^fname))
   with 
     | Not_found -> failwith ("get_field_default: not found field "^fname);;
 

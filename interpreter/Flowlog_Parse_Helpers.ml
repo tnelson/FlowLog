@@ -25,8 +25,8 @@ let read_ast (filename : string) : flowlog_ast =
     let lexbuf = from_case_insensitive_channel (open_in filename) in
     try 
       let result = Surface_Parser.main Surface_Lexer.token lexbuf in 
-        printf "Done parsing.\n%!";
-        (*pretty_print_ast result;*)
+        printf "Done parsing. Resulting AST: \n%!";
+        pretty_print_ast result;
         result
     with exn -> 
       let curr = lexbuf.Lexing.lex_curr_p in
