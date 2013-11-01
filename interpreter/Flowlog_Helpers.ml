@@ -323,13 +323,14 @@ let get_fields_for_type_preproc (decls: sdecl list) (etype: string): string list
           (*get_fields_for_type prgm (nth argtypelst idx)*)
         | _ -> failwith "get_io_fields_for_index";;
 
-  (* ASSUMED: only one in relation per event *)
+
+  (* ASSUMED: We're dealing with one event at a time, and so each relation we populate gets only one tuple. *)
   (* raises Not_found if nothing to do for this event *)
   let inc_event_to_formulas (p: flowlog_program) (notif: event): formula list =
     (* event contains k=v mappings and a type. convert to a formula via defns in program*)
     (*printf "Converting event to formula: %s\n%!" (string_of_event notif);*)
     filter_map (function       
-        | ReactInc(typename, relname) when notif.typeid = typename -> 
+        | ReactInc(typename, relname) when mem typename (built_in_subtypes notif.typeid) ->
           Some(FAtom("", relname,                      
                      map (fun fld -> try TConst(StringMap.find fld notif.values) with | Not_found -> failwith "inc_event_to_formulas") 
                      (get_fields_for_type p typename)))

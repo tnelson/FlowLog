@@ -867,7 +867,7 @@ let respond_to_notification (p: flowlog_program) (notif: event): unit =
   (*printf "~~~~ RESPONDING TO NOTIFICATION ABOVE ~~~~~~~~~~~~~~~~~~~\n%!";*)
 
   (* populate the EDB with event *) 
-    Communication.assert_event p notif;
+    Communication.assert_event_and_subevents p notif;
 
     (* Expire remote state if needed*)
     expire_remote_state_in_xsb p;    
@@ -901,7 +901,7 @@ let respond_to_notification (p: flowlog_program) (notif: event): unit =
       Xsb.debug_print_listings();   
 
     (* depopulate event EDB *)
-    Communication.retract_event p notif;  
+    Communication.retract_event_and_subevents p notif;  
 
     Mutex.unlock xsbmutex;  
     printf "~~~~~~~~~~~~~~~~~~~FINISHED EVENT (%d total, %d packets) ~~~~~~~~~~~~~~~\n%!"
