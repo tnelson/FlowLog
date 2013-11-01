@@ -10,6 +10,8 @@
  *
  * TODO:
  *  - Implement with soft state. Requires timeouts and enables updates.
+ *  - Replace controller MAC and IP addresses & arp_op with constants
+ *    (requires FlowLog improvements).
  */
 
 /*******************************************************************************
@@ -31,10 +33,6 @@ TABLE queued(ipaddr, macaddr, ipaddr, switchid, portid);
 // Table from swithc to ports. Eventually this should move to another file / NIB
 TABLE switch_has_port(switchid, portid);
 
-/*
-EVENT ALIAS arp_request AS packet_in WHERE pkt.dlTyp = 0x0806 AND pkt.arp_op = 2
-(plus some code to parse the packet into fields...)
-*/
 
 /*******************************************************************************
  *
@@ -42,22 +40,18 @@ EVENT ALIAS arp_request AS packet_in WHERE pkt.dlTyp = 0x0806 AND pkt.arp_op = 2
  *
  ******************************************************************************/
 
-/* TODO: dlTyp must be explicit here for compilation; but should be implied.
- * also, replace controller MAC address with constant */
-ON arp_packet_in(request) WHERE request.dlSrc = 0xCAFECAFE:
+ON arp_packet_in(request) WHERE request.dlSrc = 0xCAFECAFE: // Controller MAC
    DO forward(new) WHERE
      new.locPt != request.locPt;
 
 /*******************************************************************************
  *
- * Handle all requests not from the controller
+ * Intercept and process all ARP requests not from the controller
  *
  ******************************************************************************/
 
-/* TODO: dlTyp must be explicit here for compilation; but should be implied.
- * also, replace controller MAC address with constant */
 ON arp_packet_in(request) WHERE request.arp_op = 1 AND
-                                request.dlSrc != 0xCAFECAFE:
+                                request.dlSrc != 0xCAFECAFE: // Controller MAC
 
   //
   // If we have a hardware addr cached for the target protocol addr,
@@ -110,10 +104,10 @@ ON arp_packet_in(request) WHERE request.arp_op = 1 AND
 
     // Constrain other ARP fields based on original request
     new.arp_tpa = request.arp_tpa and
-    new.arp_sha = 0xCAFECAFE and
-    new.arp_spa = 167772161 and // TODO: CONTROLLER IP ADDR (10.0.0.1)
+    new.arp_sha = 0xCAFECAFE and // Controller MAC
+    new.arp_spa = 167772161 and // Controller IP addr (10.0.0.1)
 
-    switch_has_port(new.locSw, new.locPt); // REQUIRED: this rule is not compiled;
+    switch_has_port(new.locSw, new.locPt); // REQUIRED: this rule is not compiled
 
   //
   // Bonus: We can cache the source of this ARP request
@@ -122,10 +116,9 @@ ON arp_packet_in(request) WHERE request.arp_op = 1 AND
   INSERT (request.arp_spa, request.arp_sha) INTO cached WHERE
     not cached(request.arp_spa, ANY);
 
-
 /*******************************************************************************
  *
- * Handle all replies
+ * Handle all ARP replies
  *
  * - Must explicitly specify that no replies will be from the controller;
  *   otherwise, NetCore will try to send copy all controller-issued ARP
@@ -133,7 +126,6 @@ ON arp_packet_in(request) WHERE request.arp_op = 1 AND
  *
  ******************************************************************************/
 
-/* TODO: dlTyp must be explicit here for compilation; but should be implied */
 ON arp_packet_in(reply) WHERE reply.arp_op = 2 AND
                               reply.dlSrc != 0xCAFECAFE:
 
@@ -171,7 +163,7 @@ ON arp_packet_in(reply) WHERE reply.arp_op = 2 AND
 
 /*******************************************************************************
  *
- * Populate switch_has_port
+ * Populate switch_has_port (ideally, this should be in its own NIB module)
  *
  ******************************************************************************/
 
