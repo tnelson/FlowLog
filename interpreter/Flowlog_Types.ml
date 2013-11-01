@@ -57,6 +57,7 @@ open NetCore_Types
       | DeclEvent of string * string list;;
 
   type srule = 
+       (* onrel, onvar, action*)
       | Rule of string * string * action;;
 
   type stmt = 
@@ -368,4 +369,19 @@ let built_in_subtypes (typename: string): string list =
     | "icmp_packet" -> ["icmp_packet"; "packet"]
     | _ -> [typename];;
   
+(*************************************************************)
+
+(* We don't yet have access to vname until we have a concrete rule *)
+(* Remember: field names must be lowercase *)
+(* both INCOMING and OUTGOING relations can call this. *)
+let built_in_where_for_variable (vart: term) (relname: string): formula = 
+  let vname = (match vart with | TVar(x) -> x | _ -> failwith "built_in_where_for_vname") in
+  match relname with 
+    | "arp_packet_in"
+    | "emit_arp" -> FEquals(TField(vname, "dltyp"), TConst("0x0806"))
+    | "lldp_packet_in" -> FEquals(TField(vname, "dltyp"), TConst("0x88CC"))
+    | "icmp_packet_in" -> FAnd(FEquals(TField(vname, "dltyp"), TConst("0x0800")), 
+                               FEquals(TField(vname, "nwproto"), TConst("0x1")))    
+    | _ -> FTrue ;;
+
 (*************************************************************)

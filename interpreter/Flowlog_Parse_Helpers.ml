@@ -224,16 +224,35 @@ let decls_added_by_sugar (stmts: stmt list): sdecl list =
                           DeclInc(ename, ename)::acc
                       | _ -> failwith "decls_added_by_sugar") [] event_decls;;
 
+(* built_in_where_for_vname (vname: string) (relname: string): *)
+let add_built_ins (r: srule): srule =  
+  match r with | Rule(onrel, onvar, act) ->  
+  let to_add_for_incoming = (built_in_where_for_variable (TVar(onvar)) onrel) in
+  (* built-in outgoing additions will only work on condensed rels as written (note the length = 1 check) *)
+  let to_add_for_outgoing = (match act with | ADo(outrel, outterms, where) when (length outterms) = 1 ->
+                                                (built_in_where_for_variable (first outterms) outrel ) 
+                                            | _ -> FTrue) in      
+  let act' = if to_add_for_incoming <> FTrue  
+             then add_conjunct_to_action act to_add_for_incoming 
+             else act in
+  let act'' = if to_add_for_outgoing <> FTrue 
+              then add_conjunct_to_action act' to_add_for_outgoing
+              else act' in
+    Rule(onrel, onvar, act'');;
+
 let desugared_program_of_ast (ast: flowlog_ast): flowlog_program =    
     match ast with AST(imports, stmts) ->
         (* requires extlib *)
         let the_decls  =  built_in_decls @ 
-                          filter_map (function SDecl(d) -> Some d     | _ -> None) stmts @
+                          filter_map (function | SDecl(d) -> Some d   
+                                               | _ -> None) stmts @
                           (decls_added_by_sugar stmts) in 
         let the_reacts =  built_in_reacts @ 
-                          filter_map (function SReactive(r) -> Some r | _ -> None) stmts @
+                          filter_map (function | SReactive(r) -> Some r 
+                                               | _ -> None) stmts @
                           (reacts_added_by_sugar stmts) in 
-        let the_rules  =  filter_map (function SRule(r) -> Some r     | _ -> None) stmts in 
+        let the_rules  =  filter_map (function |SRule(r) -> Some (add_built_ins r) 
+                                              | _ -> None) stmts in 
             
 
             (* Validation done here and below! *)
