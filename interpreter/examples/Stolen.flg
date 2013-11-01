@@ -10,34 +10,31 @@ EVENT stolen_laptop_cancel {mac};
 EVENT stolen_laptop_found {mac, swid, time};
 
 TABLE stolen(int48); 
-REMOTE TABLE get_time(int); 
 
+// TODO: Make these un-necessary in surface syntax? Only complication is types for Alloy/bugdetection
+REMOTE TABLE get_time(int); 
 OUTGOING notify_police(int48, int, int);
-INCOMING laptop_stolen(stolen_laptop_report); 
-INCOMING laptop_recovered(stolen_laptop_cancel);
 
 //////////
 // Reactive
 //////////
 
-INCOMING stolen_laptop_report THEN INSERT INTO laptop_stolen;
-INCOMING stolen_laptop_cancel THEN INSERT INTO laptop_recovered;
-
 OUTGOING notify_police(mac, swid, t) THEN 
   SEND EVENT stolen_laptop_found {mac:=mac, swid:=swid, time:=t} TO 127.0.0.1 5050;
 
-REMOTE TABLE get_time 
-  FROM time AT 127.0.0.1 9091
+REMOTE TABLE get_time
+  FROM time AT 127.0.0.1 9091 
   TIMEOUT 1 seconds;
+
 
 /*
   Rules
 */
 
-ON laptop_recovered(rec):
+ON stolen_laptop_cancel(rec):
   DELETE (rec.mac) FROM stolen;
 
-ON laptop_stolen(stolen):
+ON stolen_laptop_report(stolen):
   INSERT (stolen.mac) INTO stolen;
 
 ON packet_in(pkt): 

@@ -206,15 +206,37 @@ let well_formed_decls (decls: sdecl list): unit =
 (* + There is some information overlap between declarations and reactive definitions.
    + "Imports" currently have a slot in the language, but they are un-used. *)
 
+let reacts_added_by_sugar (stmts: stmt list): sreactive list =
+  (* If we have an event decl X, return an incoming reactive defn X if X is undeclared. *)
+  let inc_events_with_react = filter_map (function SReactive(ReactInc(evname,_)) -> Some evname | _ -> None) stmts in  
+  let event_decls = filter_map (function SDecl(DeclEvent(_,_) as d) -> Some d     | _ -> None) stmts in 
+  fold_left (fun acc decl -> match decl with
+                      | DeclEvent(ename, _) when not (mem ename inc_events_with_react) -> 
+                          ReactInc(ename, ename)::acc
+                      | _ -> failwith "reacts_added_by_sugar") [] event_decls;;
+
+let decls_added_by_sugar (stmts: stmt list): sdecl list =
+  (* If we have an event decl X, return an incoming decl X if X is undeclared. *)  
+  let inc_events_with_decl = filter_map (function SDecl(DeclInc(_,evname)) -> Some evname | _ -> None) stmts in  
+  let event_decls = filter_map (function SDecl(DeclEvent(_,_) as d) -> Some d     | _ -> None) stmts in 
+  fold_left (fun acc decl -> match decl with
+                      | DeclEvent(ename, _) when not (mem ename inc_events_with_decl) -> 
+                          DeclInc(ename, ename)::acc
+                      | _ -> failwith "decls_added_by_sugar") [] event_decls;;
+
 let desugared_program_of_ast (ast: flowlog_ast): flowlog_program =    
     match ast with AST(imports, stmts) ->
         (* requires extlib *)
         let the_decls  =  built_in_decls @ 
-                          filter_map (function SDecl(d) -> Some d     | _ -> None) stmts in 
+                          filter_map (function SDecl(d) -> Some d     | _ -> None) stmts @
+                          (decls_added_by_sugar stmts) in 
         let the_reacts =  built_in_reacts @ 
-                          filter_map (function SReactive(r) -> Some r | _ -> None) stmts in 
+                          filter_map (function SReactive(r) -> Some r | _ -> None) stmts @
+                          (reacts_added_by_sugar stmts) in 
         let the_rules  =  filter_map (function SRule(r) -> Some r     | _ -> None) stmts in 
             
+
+            (* Validation done here and below! *)
             iter (well_formed_rule the_decls the_reacts) the_rules;   
             well_formed_reacts the_reacts;
             well_formed_decls the_decls;       
