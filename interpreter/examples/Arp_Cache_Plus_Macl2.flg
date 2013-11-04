@@ -86,6 +86,33 @@ ON arp_packet_in(request) WHERE request.arp_op = 1 AND
           request.locSw, request.locPt) INTO queued WHERE
     not cached(request.arp_tpa, ANY);
 
+    // Infoz on any:
+    /// cached(request.arp_tpa, x) ---> exists x | cached ...
+    ///not cached(request.arp_tpa, x) ---> exists x | not cached ...
+    ///not cached(request.arp_tpa, ANY) ---> not exists x | cached ...     forall x not cached ...
+
+/*
+
+sig EVarp_packet extends EVpacket 
+  { arp_op: FLInt, arp_tha: Macaddr, arp_sha: Macaddr,
+     arp_tpa: Ipaddr, arp_spa: Ipaddr}
+
+assert cachedImmediateReply {
+  all st1, st2: State, ev: EVarp_packet |
+     (transition[st1, ev, st2] &&
+//      some ev2: EVarp_packet | outpolicy[st1, ev, ev2] &&
+      ev.arp_op = C_1 &&
+      // exists ip | st1.cached[ev.arp_tpa, ip]
+      some (st1.cached)[ev.arp_tpa]) implies
+
+      // The only change to state is the requestor's data
+      st1 = st2 || st2.cached - st1.cached = (ev.arp_spa -> ev.arp_sha)
+     // TODO: add condition about what gets output
+}
+check cachedImmediateReply for 2 but 1 Event, 2 State
+*/
+
+
   //
   // Finally, issue an arp request from the controller for unlearned
   // addresses without an existing queued request. The new request is

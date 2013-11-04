@@ -186,10 +186,19 @@ let alloy_actions (out: out_channel) (p: flowlog_program): unit =
       | _ -> "true[]"
   in
 
-  let make_existential_decl (t: term): string =
-    match t with 
-      | TVar(vname) -> sprintf "some %s : univ | " vname
-      | _ -> failwith "make_existential_decl"
+  let make_quantified_decl (tqs: (term * bool) list): string list =
+    (* negative occur of an "any" term becomes universal. TODO: risk of string muddling *)
+    let quantify_helper (tq: term*bool) =
+      match tq with     
+        | TVar(vname), false when starts_with vname "any" -> sprintf "all %s : univ | " vname
+        | TVar(vname), _ -> sprintf "some %s : univ | " vname      
+        | _ -> failwith "make_quantified_decl" in
+    
+    let trimmed_list = fold_left (fun acc tq -> 
+                                    let t, sn = tq in 
+                                      if (exists (fun (ot,_) -> ot = t) acc) then acc else tq::acc)
+                         [] tqs in
+    map quantify_helper trimmed_list
   in
 
   let event_alloysig_for (increl: string): string =
@@ -207,9 +216,10 @@ let alloy_actions (out: out_channel) (p: flowlog_program): unit =
     let substituted = (substitute_terms pf.where to_substitute) in   
     printf "alloy of formula: %s\n%!" (string_of_formula substituted);
     let quantified_vars = [TVar("ev")] @ (mapi (fun i _ -> TVar("out"^(string_of_int i))) pf.outargs) in
-    let freevars = get_terms (function | TVar(x) as t -> not (mem t quantified_vars) | _ -> false) substituted in
+    let freevars_signed = get_terms_with_sign (function | TVar(x) as t -> not (mem t quantified_vars) | _ -> false) true substituted in  
+    (* If the free var is an ANY, be careful how to bind it. If it is an ANY that appears within a negation, must be ALL not EXISTS *)
     (* explicitly quantify rule-scope existentials *)
-    let freevarstr = (String.concat " " (map make_existential_decl freevars)) in
+    let freevarstr = (String.concat " " (make_quantified_decl freevars_signed)) in
 
       "\n  (ev in "^evtypename^" && ("^freevarstr^" "^(alloy_of_formula stateid substituted)^")\n"^
 

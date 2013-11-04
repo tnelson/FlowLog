@@ -15,7 +15,7 @@ let starts_with (str1 : string) (str2 : string) : bool =
     else (String.sub str1 0 (String.length str2)) = str2;;
 
 (* return list of terms that match pred *)
-let rec get_terms (pred: term -> bool) (f: formula) : term list = 
+let rec get_terms (pred: term -> bool) (f: formula) : term list =   
 	match f with
 		| FTrue -> []
 		| FFalse -> []
@@ -30,6 +30,22 @@ let rec get_terms (pred: term -> bool) (f: formula) : term list =
       (unique (get_terms pred f1) @ (get_terms pred f2))
 		| FNot(innerf) ->
 			get_terms pred innerf;;	
+
+let rec get_terms_with_sign (pred: term -> bool) (startsign : bool) (f: formula) : (term*bool) list = 
+  match f with
+    | FTrue -> []
+    | FFalse -> []
+    | FAtom(_, _, tlargs) ->
+      filter_map (fun t -> if pred t then Some (t, startsign) else None) tlargs
+    | FEquals(t1, t2) ->
+      filter_map (fun t -> if pred t then Some (t, startsign) else None) [t1; t2]
+    | FAnd(f1, f2) ->
+      (unique (get_terms_with_sign pred startsign f1) @ (get_terms_with_sign pred startsign f2))
+    | FOr(f1, f2) ->
+      (unique (get_terms_with_sign pred startsign f1) @ (get_terms_with_sign pred startsign f2))
+    | FNot(innerf) ->
+      get_terms_with_sign pred (not startsign) innerf;; 
+
 
 let rec get_vars (f: formula) : term list = 	
 	get_terms (function | TVar(_) -> true |  _ -> false) f;;
