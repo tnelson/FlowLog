@@ -55,14 +55,14 @@ ON arp_packet_in(request) WHERE request.arp_op = 1 AND
 
   //
   // If we have a hardware addr cached for the target protocol addr,
-  // then emit reply:
+  // or it is a self-request, then emit reply:
   //
 
   DO emit_arp(new) WHERE
     (cached(request.arp_tpa, new.arp_sha) OR
      (request.arp_tpa = request.arp_spa and
       new.arp_sha = request.arp_sha and
-      not cached(request.arp_tpa, ANY))
+      not cached(request.arp_tpa, ANY)) // don't dup packets when also cached
     ) and
 
     // Make it an ARP reply
@@ -126,7 +126,7 @@ check cachedImmediateReply for 2 but 1 Event, 2 State
   DO emit_arp(new) WHERE
     not cached(request.arp_tpa, ANY) and
     not queued(request.arp_tpa, ANY, ANY, ANY, ANY) and
-    not request.arp_tpa = request.arp_spa and
+    not request.arp_tpa = request.arp_spa and // skip self-requests
     new.locSw = request.locSw and
     new.dlDst = request.dlDst and
     new.dlSrc = 0xCAFECAFE and
