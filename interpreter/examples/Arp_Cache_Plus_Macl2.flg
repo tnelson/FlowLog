@@ -132,7 +132,7 @@ check cachedImmediateReply for 2 but 1 Event, 2 State
     // Constrain other ARP fields based on original request
     new.arp_tpa = request.arp_tpa and
     new.arp_sha = 0xCAFECAFE and // Controller MAC
-    new.arp_spa = 167772161 and // Controller IP addr (10.0.0.1)
+    new.arp_spa = 0x0A0A0A01 and // Controller IP addr (10.10.10.1)
 
     switch_has_port(new.locSw, new.locPt); // REQUIRED: this rule is not compiled
 
