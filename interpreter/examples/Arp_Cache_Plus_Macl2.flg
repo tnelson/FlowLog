@@ -59,7 +59,10 @@ ON arp_packet_in(request) WHERE request.arp_op = 1 AND
   //
 
   DO emit_arp(new) WHERE
-    cached(request.arp_tpa, new.arp_sha) and
+    (cached(request.arp_tpa, new.arp_sha) OR
+     (request.arp_tpa = request.arp_spa and
+      new.arp_sha = request.arp_sha)
+    ) and
 
     // Make it an ARP reply
     new.arp_op = 2 and
@@ -122,6 +125,7 @@ check cachedImmediateReply for 2 but 1 Event, 2 State
   DO emit_arp(new) WHERE
     not cached(request.arp_tpa, ANY) and
     not queued(request.arp_tpa, ANY, ANY, ANY, ANY) and
+    not request.arp_tpa = request.arp_spa and
     new.locSw = request.locSw and
     new.dlDst = request.dlDst and
     new.dlSrc = 0xCAFECAFE and
