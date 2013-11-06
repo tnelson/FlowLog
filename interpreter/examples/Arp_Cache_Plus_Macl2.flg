@@ -61,7 +61,8 @@ ON arp_packet_in(request) WHERE request.arp_op = 1 AND
   DO emit_arp(new) WHERE
     (cached(request.arp_tpa, new.arp_sha) OR
      (request.arp_tpa = request.arp_spa and
-      new.arp_sha = request.arp_sha)
+      new.arp_sha = request.arp_sha and
+      not cached(request.arp_tpa, ANY))
     ) and
 
     // Make it an ARP reply
