@@ -30,10 +30,6 @@ TABLE cached(ipaddr, macaddr);
 //                      [last 3 should live in NIB; join with NIB]
 TABLE queued(ipaddr, macaddr, ipaddr, switchid, portid);
 
-// Table from swithc to ports. Eventually this should move to another file / NIB
-TABLE switch_has_port(switchid, portid);
-
-
 /*******************************************************************************
  *
  * Only flood ARP requests from the controller
@@ -97,7 +93,7 @@ ON arp_packet_in(request) WHERE request.arp_op = 1 AND
 
 /*
 
-sig EVarp_packet extends EVpacket 
+sig EVarp_packet extends EVpacket
   { arp_op: FLInt, arp_tha: Macaddr, arp_sha: Macaddr,
      arp_tpa: Ipaddr, arp_spa: Ipaddr}
 
@@ -195,9 +191,83 @@ ON arp_packet_in(reply) WHERE reply.arp_op = 2 AND
 
 /*******************************************************************************
  *
- * Populate switch_has_port (ideally, this should be in its own NIB module)
+ * Primitive contents of "Mac_Learning.inc.flg"
+ *
+ * Copy-and-pasted from examples/Mac_Learning.flg
  *
  ******************************************************************************/
+
+TABLE learned(switchid, portid, macaddr);
+
+/*
+ * TODO: how should we create the syntax to indicate that MAC learning should
+ * not be handle packets handled elsewhere? at the same time, it is the
+ * forwarding module, so we may want it to handle traffic which doesn't enter
+ * via packet_in anyway. Note that we *do* want to learn from the ARP traffic...
+ *
+ * TODO: Positioning of "pkt.dlTyp != 0x0806" is an open question -- Can we
+ * achieve both of these goals?
+ *   1) learn from packets which come through the system
+ *   2) not affect forwarding of ARP traffic in any way? (including via the
+ *      INSERT rule)
+ * When positioned on the initial `ON packet_in(pkt)`, we get smaller flow
+ * tables from NetCore (helping compensate for NetCore issue #142), but we don't
+ * learn anything from ARP traffic. A wholly different approach would be for the
+ * ARP handlers above to explicitly add to the learned relation, but I don't
+ * like that mixing as it violates modularity...
+ *
+ */
+
+ON packet_in(pkt) WHERE pkt.dlTyp != 0x0806:
+  // ***TODO*** Add these restrictions (which only exist for limiting to-controller traffic)
+  // automatically. But not always easy! Naive learned/notlearned have some issues
+  // in that to use them one sometimes needs complex joins?
+
+  // Instead, bespoke optimizations that can be tested via change impact. (old, unoptimized ==
+  // new, optimized?)
+
+  INSERT (pkt.locSw, pkt.locPt, pkt.dlSrc) INTO learned WHERE
+    not learned(pkt.locSw, pkt.locPt, pkt.dlSrc);
+
+  DELETE (pkt.locSw, pt, pkt.dlSrc) FROM learned WHERE
+    not pt = pkt.locPt
+    // The optimization requirement: ctrlr will learn something new
+    AND not learned(pkt.locSw, pkt.locPt, pkt.dlSrc);
+
+    // This rule doesn't have the negations all at the end of the
+    // resulting clauses. If no pkts forwarded, it means negation-shuffling has failed.
+  DO forward(new) WHERE
+    (learned(pkt.locSw, new.locPt, pkt.dlDst) AND
+      // NOTE: this line wasn't required in fully reactive version.
+      // But now, we may have learned (sw=x,pt=y,mac=z) and see a packet for z
+      // on port y (because the switch on that end hasn't yet learned where z is.)
+      // This is missing from the stock Mac Learning Frenetic functionality, and
+      // lacking it can result in dupe packets when pinging  at topo=tree,3,3
+      pkt.locPt != new.locPt
+     )
+    OR
+    (NOT learned(pkt.locSw, x, pkt.dlDst) AND
+     NOT pkt.locPt = new.locPt
+     // Commented out as **optimization**, only sound if compiled.
+     // (If interpreted in XSB, will get a problem because new.locPt isn't bound)
+     // AND switch_has_port(pkt.locSw, new.locPt)
+    );
+
+
+ON switch_down(swd):
+  DELETE (swd.sw, ANY, ANY) FROM learned;
+
+
+/*******************************************************************************
+ *
+ * Primitive contents of "NIB.inc.flg"
+ *
+ * Populate switch_has_port
+ *
+ ******************************************************************************/
+
+// Table from switch to ports.
+TABLE switch_has_port(switchid, portid);
 
 ON switch_port_in(swpt):
   INSERT (swpt.sw, swpt.pt) INTO switch_has_port;
