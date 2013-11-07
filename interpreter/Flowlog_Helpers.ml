@@ -348,7 +348,7 @@ let get_fields_for_type_preproc (decls: sdecl list) (etype: string): string list
     filter_map (function       
         | ReactInc(typename, relname) when mem typename (built_in_subtypes notif.typeid) ->
           Some(FAtom("", relname,                      
-                     map (fun fld -> try TConst(StringMap.find fld notif.values) with | Not_found -> failwith "inc_event_to_formulas") 
+                     map (fun fld -> try TConst(StringMap.find fld notif.values) with | Not_found -> failwith ("inc_event_to_formulas: "^fld))
                      (get_fields_for_type p typename)))
         | _ -> None ) p.reacts;;
 
