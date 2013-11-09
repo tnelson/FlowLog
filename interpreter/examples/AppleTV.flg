@@ -6,12 +6,15 @@ TABLE atv_cxns(macaddr, macaddr);
 ON atv_connect(evt): // XXX: can't be named "event" btw (conflict with keyword)
   INSERT (evt.atv_mac, evt.client_mac) INTO atv_cxns;
   INSERT (evt.client_mac, evt.atv_mac) INTO atv_cxns;
-  // TODO: also generate IGMP membership report probably?
+  // TODO: also generate gratituous IGMP membership report probably?
+
+// XXX: IGMP is travleing on 224.0.0.22, it turns out!
 
 ON packet_in(pkt) WHERE pkt.dlTyp = 0x0800 and
+                        pkt.dlDst = 0x01005e0000fb and
                         pkt.nwDst = 0xE00000FB: // and // 224.0.0.251 (mDNS group)
         //                pkt.tpDst = 5353: // (mDns port)
 
   DO forward(new) WHERE
-    atv_cxns(pkt.dlSrc, ANY) and
+    atv_cxns(pkt.dlSrc, new.dlDst) and
     new.locPt != pkt.locPt; // flooding; TODO: should be forwarding directly
