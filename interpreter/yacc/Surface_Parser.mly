@@ -6,7 +6,7 @@
 
   %token EOF
 
-  %token IMPORT  
+  %token INCLUDE
   %token TABLE
   %token REMOTE
   %token OUTGOING
@@ -48,6 +48,7 @@
   %token <string> DOTTED_IP
   %token <string> NUMBER
   %token <string> NAME
+  %token <string> QUOTED_FILENAME
   
   %start main
 
@@ -66,10 +67,12 @@
   %%
 
   main: 
-            | import_list stmt_list EOF {AST($1, $2)}
+            | include_list EOF {AST($1, [])}
+            | include_list stmt_list EOF {AST($1, $2)}
             | stmt_list EOF {AST([], $1)};;
 
-  import: IMPORT NAME SEMICOLON {$2};
+  include_:
+            | INCLUDE QUOTED_FILENAME SEMICOLON {$2};
 
   stmt: 
             | reactive_stmt {[SReactive($1)]} 
@@ -162,6 +165,6 @@
             | stmt {$1} 
             | stmt stmt_list {$1 @ $2};
 
-  import_list:             
-            | import {[$1]} 
-            | import import_list {$1 :: $2};
+  include_list:
+            | include_ {[$1]}
+            | include_ include_list {$1 :: $2};

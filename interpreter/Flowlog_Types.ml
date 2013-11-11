@@ -171,8 +171,8 @@ open NetCore_Types
 
   let pretty_print_ast (ast: flowlog_ast): unit =
     match ast with
-      | AST(imports, stmts) ->
-        iter (fun imp -> printf "IMPORT %s;\n%!" imp) imports;
+      | AST(includes, stmts) ->
+        iter (fun inc -> printf "INCLUDE %s;\n%!" inc) includes;
         iter (fun stmt -> printf "%s\n%!" (string_of_stmt stmt)) stmts;;
 
   let string_of_clause ?(verbose: bool = false) (cl: clause): string =

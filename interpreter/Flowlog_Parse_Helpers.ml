@@ -12,10 +12,14 @@ open Partial_Eval_Validation
 
 (* Thanks to Jon Harrop on caml-list *)
 let from_case_insensitive_channel ic =
+  let in_quote = ref false in
   let aux buf n =
     let i = input ic buf 0 n in
     for i=0 to i-1 do
-      buf.[i] <- Char.lowercase buf.[i]
+      if buf.[i] = '"' then
+        ignore (in_quote := not !in_quote)
+      else if not !in_quote then
+        buf.[i] <- Char.lowercase buf.[i]
     done;
     i in
   Lexing.from_function aux
@@ -203,8 +207,7 @@ let well_formed_decls (decls: sdecl list): unit =
         else relname::acc
       | _ -> acc) [] decls);;
 
-(* + There is some information overlap between declarations and reactive definitions.
-   + "Imports" currently have a slot in the language, but they are un-used. *)
+(* + There is some information overlap between declarations and reactive definitions. *)
 
 let reacts_added_by_sugar (stmts: stmt list): sreactive list =
   (* If we have an event decl X, return an incoming reactive defn X if X is undeclared. *)
@@ -240,8 +243,54 @@ let add_built_ins (r: srule): srule =
               else act' in
     Rule(onrel, onvar, act'');;
 
-let desugared_program_of_ast (ast: flowlog_ast): flowlog_program =    
-    match ast with AST(imports, stmts) ->
+
+(*
+ * takes a list of ASTs and returns a single AST which includes the flattened
+ * list of statements, and a *unique* flattened list of includes
+ *)
+
+let flatten_asts (asts : flowlog_ast list) : flowlog_ast =
+  let merge_ast = fun l_ast r_ast ->
+    match l_ast with AST(l_includes, l_stmts) ->
+    match r_ast with AST(r_includes, r_stmts) ->
+    let maybe_merge_inc = fun acc inc -> if not (mem inc acc)
+                                         then (acc @ [inc])
+                                         else acc in
+    let includes = fold_left maybe_merge_inc l_includes r_includes in
+    AST(includes, l_stmts @ r_stmts) in
+
+  fold_left merge_ast (AST([], [])) asts
+
+(*
+ * takes an AST and a list of previously included files, returns a new AST
+ * where the included files have been turned into ASTs, appended to the given
+ * AST, with their own included files recurisvely expanded.
+ *
+ * the list of previously included files is needed to ensure that we don't
+ * include a file more than once
+ *)
+
+let rec expand_includes (ast : flowlog_ast) (prev_includes : string list) : flowlog_ast =
+  match ast with AST(quoted_includes, stmts) ->
+    if length quoted_includes = 0 then ast
+    else
+      let unquote = fun qfn -> String.sub qfn 1 ((String.length qfn) - 2) in
+      let includes = map unquote quoted_includes in
+      let maybe_read_ast filename = if mem filename prev_includes
+                                    then AST([], [])
+                                    else read_ast filename in
+
+      let flattened_ast = flatten_asts (map maybe_read_ast includes) in
+
+      match flattened_ast with AST(new_includes, new_stmts) ->
+        let new_ast = AST(new_includes, stmts @ new_stmts) in
+        expand_includes new_ast (prev_includes @ includes)
+
+
+
+let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_program =
+  let expanded_ast = expand_includes ast [filename] in
+    match expanded_ast with AST(_, stmts) ->
         (* requires extlib *)
         let the_decls  =  built_in_decls @ 
                           filter_map (function | SDecl(d) -> Some d   
@@ -251,8 +300,8 @@ let desugared_program_of_ast (ast: flowlog_ast): flowlog_program =
                           filter_map (function | SReactive(r) -> Some r 
                                                | _ -> None) stmts @
                           (reacts_added_by_sugar stmts) in 
-        let the_rules  =  filter_map (function |SRule(r) -> Some (add_built_ins r) 
-                                              | _ -> None) stmts in 
+        let the_rules  =  filter_map (function | SRule(r) -> Some (add_built_ins r)
+                                               | _ -> None) stmts in
             
 
             (* Validation done here and below! *)

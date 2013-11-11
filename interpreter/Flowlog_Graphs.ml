@@ -121,7 +121,7 @@ let pretty_string_of_dependencies (g: depend_graph): string =
 
   let files_to_graph (fnames: string list): depend_graph =  
     let prgms = map (fun fname -> 
-       {name=fname; program=desugared_program_of_ast (read_ast fname)}) fnames in
+       {name=fname; program=desugared_program_of_ast (read_ast fname) fname}) fnames in
       build_depend_graph prgms;;    
 
 (* Remember that cycles in the dependency graph do not mean Datalog recursion.

@@ -81,7 +81,7 @@ let main () =
 
   printf "Loading %s\n%!" filename;
   let ast = read_ast filename in
-  let program = (desugared_program_of_ast ast) in    
+  let program = (desugared_program_of_ast ast filename) in
     printf "-----------\n%!";    
 
     if !alloy then 
@@ -90,7 +90,7 @@ let main () =
     begin
       let filename2 = try hd (tl !args) with exn -> raise (Failure "Input a second .flg file name for use with change-impact.") in 
       let ast2 = read_ast filename2 in
-      let program2 = (desugared_program_of_ast ast2) in   
+      let program2 = (desugared_program_of_ast ast2 filename2) in
         write_as_alloy_change_impact program (alloy_filename filename) 
                                      program2 (alloy_filename filename)
     end;    

@@ -19,7 +19,7 @@ rule token = parse
   | "/*" {commenting lexbuf}
   | eof { EOF }
 
-  | "import" { IMPORT }  
+  | "include" { INCLUDE }
   | "do" { DO }
   | "into" { INTO }
   | "from" { FROM }
@@ -69,6 +69,7 @@ rule token = parse
   | ['a'-'z''A'-'Z''_''0'-'9''-']+ as name 
     { Printf.printf "Bad identifier: %s. Cannot use dashes. Use underscore instead.\n%!" name; 
       token lexbuf; }
+  | '"'['.''/''\\''a'-'z''A'-'Z''_''0'-'9''-']+'"' as filename { QUOTED_FILENAME(filename) }
   | _ as c { Printf.printf "Unknown character: %c\n" c; token lexbuf;}
 and commenting = parse 
   | "*/" { token lexbuf }

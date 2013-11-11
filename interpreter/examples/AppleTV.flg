@@ -1,14 +1,50 @@
+/*
+ * An application to create paired flows for multicast traffic between an
+ * AppleTV and the host which wishes to use it.
+ *
+ * TODO:
+ *  - Issue IGMP messages after creating the multicast group
+ *  - Make state soft state -- requires timeouts.
+ *  - We should delete entries in atv_cxns if either side moves -- this would
+ *    represent a laptop leaving a given conference room, for example.
+ */
+
+/*******************************************************************************
+ *
+ * Data Structures
+ *
+ ******************************************************************************/
 
 EVENT atv_connect { atv_mac, client_mac };
+EVENT atv_disconnect { mac };
 
 TABLE atv_cxns(macaddr, macaddr);
+
+/*******************************************************************************
+ *
+ * Handle updates to the database
+ *
+ ******************************************************************************/
 
 ON atv_connect(evt): // XXX: can't be named "event" btw (conflict with keyword)
   INSERT (evt.atv_mac, evt.client_mac) INTO atv_cxns;
   INSERT (evt.client_mac, evt.atv_mac) INTO atv_cxns;
-  // TODO: also generate gratituous IGMP membership report probably?
+  // TODO: also generate gratituous IGMP membership report probably? yes! need this
 
 // XXX: IGMP is travleing on 224.0.0.22, it turns out!
+
+
+// For now, let's go with a model that either side can break the connection
+ON atv_disconnect(evt):
+  DELETE (evt.mac, ANY) FROM atv_cxns;
+  DELETE (ANY, evt.mac) FROM atv_cxns;
+  // TODO: also generate IGMP membership departure
+
+/*******************************************************************************
+ *
+ * Packet handling
+ *
+ ******************************************************************************/
 
 ON packet_in(pkt) WHERE pkt.dlTyp = 0x0800 and
                         pkt.dlDst = 0x01005e0000fb and
