@@ -245,18 +245,18 @@ let add_built_ins (r: srule): srule =
 
 
 (*
- * takes a list of ASTs and returns a single AST which includes the flattened
- * list of statements, and a *unique* flattened list of includes
+ * takes a list of ASTs and returns a single AST which is comprised of the
+ * flattened list of statements, and a flattened, unique list of includes
  *)
 
 let flatten_asts (asts : flowlog_ast list) : flowlog_ast =
   let merge_ast = fun l_ast r_ast ->
+    let uniq = fun acc a -> if not (mem a acc)
+                            then a::acc
+                            else acc in
     match l_ast with AST(l_includes, l_stmts) ->
     match r_ast with AST(r_includes, r_stmts) ->
-    let maybe_merge_inc = fun acc inc -> if not (mem inc acc)
-                                         then (acc @ [inc])
-                                         else acc in
-    let includes = fold_left maybe_merge_inc l_includes r_includes in
+    let includes = fold_left uniq l_includes r_includes in
     AST(includes, l_stmts @ r_stmts) in
 
   fold_left merge_ast (AST([], [])) asts
