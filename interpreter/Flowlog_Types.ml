@@ -305,6 +305,51 @@ let switch_reg_relname = "switch_port_in";;
 let switch_down_relname = "switch_down";;
 let startup_relname = "startup";;
 
+(*************************************************************)
+(* Generalized notion of a flavor of packet, like ARP or ICMP. 
+   Avoids ugly multiple lists of "built-ins" where we can forget to add packet types, etc.
+   label = string which is prepended to "_packet_in" and appended to "emit_" to arrive at relations.
+   superflavor = immediate supertype. If None, means that this is a direct subtype of an ethernet packet.
+   condition = a function that, given a variable name, constructs a formula that describes that it means 
+               to be a member of this flavor. E.g., to be an ip packet, you must have your dltyp field = 0x800.
+   fields = New fields added by this flavor. Must not be present in any superflavors.
+ *)
+type packet_flavor = { label: string; superflavor: string option; condition: (string -> formula); fields: string list};;
+
+let packet_flavors =[
+   {label="arp"; superflavor=None;  
+    condition=(fun vname -> FEquals(TField(vname, "dltyp"), TConst("0x0806"))); 
+    fields=["arp_op";"arp_spa";"arp_sha";"arp_tpa";"arp_tha"]};
+   
+   {label="ip"; superflavor=None;  
+    condition=(fun vname -> FEquals(TField(vname, "dltyp"), TConst("0x0800"))); 
+    fields=["ipsrc"; "ipdest"; "ipproto"]};  (* missing: frag, tos, chksum, ident, ...*) 
+
+   {label="lldp"; superflavor=None;  
+    condition=(fun vname -> FEquals(TField(vname, "dltyp"), TConst("0x88CC"))); 
+    fields=["omgwtfbbq"]}; 
+   
+   {label="tcp"; superflavor=Some "ip";  
+    condition=(fun vname -> FAnd(FEquals(TField(vname, "dltyp"), TConst("0x0800")), 
+                                 FEquals(TField(vname, "nwproto"), TConst("0x6")))); 
+    fields=["tpsrc"; "tpdst"]};
+   
+   {label="udp"; superflavor=Some "ip";  
+    condition=(fun vname -> FAnd(FEquals(TField(vname, "dltyp"), TConst("0x0800")), 
+                                 FEquals(TField(vname, "nwproto"), TConst("0x11")))); 
+    fields=["tpsrc"; "tpdst"]};
+
+   {label="igmp"; superflavor=Some "ip";  
+    condition=(fun vname -> FAnd(FEquals(TField(vname, "dltyp"), TConst("0x0800")), 
+                                 FEquals(TField(vname, "nwproto"), TConst("0x2")))); 
+    fields=["omgwtfbbq"]};
+
+   {label="icmp"; superflavor=Some "ip";  
+    condition=(fun vname -> FAnd(FEquals(TField(vname, "dltyp"), TConst("0x0800")), 
+                                 FEquals(TField(vname, "nwproto"), TConst("0x1")))); 
+    fields=["omgwtfbbq"]};
+  ];;
+
 (**********************************************)
 
 (* Fields in a base packet *)
