@@ -183,33 +183,29 @@ let rec build_unsafe_switch_actions (oldpkt: string) (body: formula): action =
 
     | _ -> failwith ("create_port_actions: bad lit: "^(string_of_formula lit)) in
 
-(*
-  TODO: 
-  outDlVlan : dlVlan match_modify;
-  outDlVlanPcp : dlVlanPcp match_modify;  
-}*)
 
 
-  (* TODO: Netcore will support this soon (8/31) *)
-  (*let enhance_action_atom (afld: string) (aval: string) (anact: action_atom): action_atom =
+  (** Add NetCore action to set a packet's header fields during forwarding
+      TODO(adf): add support for VLAN and VLAN PCP once Flowlog includes those
+                 in the base packet type *)
+  let enhance_action_atom (afld: string) (aval: string) (anact: action_atom): action_atom =
   match anact with
     SwitchAction(oldout) ->
       match afld with 
         | "locpt" -> SwitchAction({oldout with outPort = NetCore_Pattern.Physical(Int32.of_string aval)})
-        | "dlsrc" -> SwitchAction({oldout with outDlSrc = (Int64.of_string aval) })
-        | "dldst" -> SwitchAction({oldout with outDlDst = (Int64.of_string aval) })
-        | "dltyp" -> SwitchAction({oldout with outDlTyp = (int_of_string aval) })
-        | "nwsrc" -> SwitchAction({oldout with outNwSrc = (Int32.of_string aval) })
-        | "nwdst" -> SwitchAction({oldout with outNwDst = (Int32.of_string aval) })
-        | "nwproto" -> SwitchAction({oldout with outNwProto = (int_of_string aval) })
+        | "dlsrc" -> SwitchAction({oldout with outDlSrc = Some (None, Int64.of_string aval) })
+        | "dldst" -> SwitchAction({oldout with outDlDst = Some (None, Int64.of_string aval) })
+        | "dltyp" -> failwith ("OpenFlow 1.0 does not allow this field to be updated")
+        | "nwsrc" -> SwitchAction({oldout with outNwSrc = Some (None, (Int32.of_string aval)) })
+        | "nwdst" -> SwitchAction({oldout with outNwDst = Some (None, (Int32.of_string aval)) })
+        | "nwproto" -> failwith ("OpenFlow 1.0 does not allow this field to be updated")
         | _ -> failwith ("enhance_action_atom: "^afld^" -> "^aval) in
 
   let create_mod_actions (actlist: action) (lit: formula): action =
     match lit with 
     | FFalse -> actlist
-    | FTrue -> failwith "create_mod_actions: passed true"
-    | FNot(_) -> 
-      failwith ("create_mod_actions: bad negation: "^(string_of_formula body))
+    | FTrue -> actlist
+    | FNot(_) -> actlist
     | FEquals(TField(var1, fld1), TField(var2, fld2)) ->
       failwith ("create_mod_actions: invalid equality "^(string_of_formula body))
 
@@ -222,7 +218,6 @@ let rec build_unsafe_switch_actions (oldpkt: string) (body: formula): action =
         actlist (* ignore involving newpkt *)
 
     | _ -> failwith ("create_mod_actions: "^(string_of_formula body)) in  
-*)
 
   (* list of SwitchAction(output)*)
   (* - this is only called for FORWARDING rules. so only newpkt should be involved *)
@@ -232,13 +227,12 @@ let rec build_unsafe_switch_actions (oldpkt: string) (body: formula): action =
     (* if any actions are false, folding is invalidated *)    
     try
       let port_actions = fold_left create_port_actions [] atoms in
-      let complete_actions = port_actions in (*fold_left create_mod_actions port_actions atoms in*)      
+      let complete_actions = fold_left create_mod_actions port_actions atoms in
       complete_actions
     with UnsatisfiableFlag -> [];;
 
 open NetCore_Pattern
 open NetCore_Wildcard
-
 
 (* worst ocaml error ever: used "val" for varname. *)
 

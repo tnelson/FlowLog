@@ -23,14 +23,6 @@ let compilable_field_to_test (fname: string): bool =
 
 let rec forbidden_assignment_check (newpkt: string) (f: formula) (innot: bool): unit = 
     
-    let check_netcore_temp_limit_eq (t1: term) (t2: term): unit = 
-      match (t1, t2) with 
-      | (TField(v1, f1), TConst(cstr)) ->
-        (* can't modify packet fields right now. *CAN* set the port, of course. *)
-        if (v1 = newpkt) && (f1 <> "locpt") then raise (IllegalModToNewpkt(t1,t2))
-      | _ -> ()
-    in
-
  	  let check_legal_pkt_fields = function  
 							| TField(varname, fld)
                 (* newpkt: must be legal to modify *)
@@ -97,7 +89,6 @@ let rec forbidden_assignment_check (newpkt: string) (f: formula) (innot: bool): 
     		check_legal_pkt_fields t2;
     		check_same_field_if_newpkt t1 t2; (* can't swap fields, etc. w/o controller *)
         check_not_same_pkt t1 t2;
-        check_netcore_temp_limit_eq t1 t2;
 
       	| FAtom(modname, relname, tlargs) ->       		
       		(* new field must be legal for modification by openflow *)
@@ -117,12 +108,7 @@ let rec common_existential_check (newpkt: string) (sofar: string list) (f: formu
 				if mem v sofar then raise (IllegalExistentialUse f)
 				else [v]
 			| TConst(_) -> []
-			(* | TField(,_) -> [] *)
-      (* netcore limitation in recent version, going away soon *)
-      | TField(fvar,ffld) -> 
-          if fvar = newpkt && ffld <> "locpt" then 
-            raise (IllegalModToNewpkt(t, t))
-          else [] 
+			| TField(_,_) -> []
 		in
 
 	match f with
