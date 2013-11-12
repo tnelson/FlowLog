@@ -362,21 +362,69 @@ let swdown_fields = ["sw"];;
 
 (**********************************************)
 
-(* Some declarations and reactive definitions are built in. E.g., packet_in. *)
-
 let flavor_to_typename (flav: packet_flavor): string = flav.label^"_packet";;
 let flavor_to_inrelname (flav: packet_flavor): string = flav.label^"_packet_in";;
 let flavor_to_emitrelname (flav: packet_flavor): string = "emit_"^flav.label;;
 
+(*************************************************************)
+
+(* For efficiency *)
+let map_from_typename_to_flavor: packet_flavor StringMap.t = 
+  fold_left (fun acc flav -> StringMap.add (flavor_to_typename flav) flav acc) StringMap.empty packet_flavors;;
+let map_from_label_to_flavor: packet_flavor StringMap.t = 
+  fold_left (fun acc flav -> StringMap.add flav.label flav acc) StringMap.empty packet_flavors;;
+let map_from_relname_to_flavor: packet_flavor StringMap.t = 
+  fold_left (fun acc flav -> StringMap.add (flavor_to_emitrelname flav) flav
+                                           (StringMap.add (flavor_to_inrelname flav) flav acc))
+            StringMap.empty packet_flavors;;
+
+(*************************************************************)
+
+(* If adding a new packet type, make sure to include self and all supertypes here. *)
+(* E.g. arp_packet always fires packet also. *)
+let rec built_in_supertypes (typename: string): string list = 
+  try
+    let flav = StringMap.find typename map_from_typename_to_flavor in
+    match flav.superflavor with
+      (* flavor has a label, not type name yet *)
+      | Some superlabel -> 
+        let superflav = StringMap.find superlabel map_from_label_to_flavor in
+          typename::(built_in_supertypes (flavor_to_typename superflav))
+      | None -> [typename]
+  with Not_found -> [typename];;
+
+let flavor_to_fields (flav: packet_flavor): string list = 
+  let typename = flavor_to_typename flav in
+  let supertypes = built_in_supertypes typename in  
+  let fieldslist = packet_fields @ (fold_left (fun acc supertype -> acc @ (StringMap.find supertype map_from_typename_to_flavor).fields) [] supertypes) in
+  let check_for_dupes = unique fieldslist in  
+  if (length fieldslist) <> (length check_for_dupes) then
+    failwith ("Packet flavor "^flav.label^" had duplicate fieldnames when parent flavor fields were added.")    
+  else fieldslist;;
+
+(*************************************************************)
+
+(* We don't yet have access to vname until we have a concrete rule *)
+(* Remember: field names must be lowercase *)
+(* both INCOMING and OUTGOING relations can call this. *)
+let built_in_where_for_variable (vart: term) (relname: string): formula = 
+  let vname = (match vart with | TVar(x) -> x | _ -> failwith "built_in_where_for_vname") in
+  try
+    let flav = StringMap.find relname map_from_relname_to_flavor in
+      (flav.build_condition vname)
+  with Not_found -> FTrue ;;
+
+(*************************************************************)
+
 let create_id_assign (k: string): assignment = {afield=k; atupvar=k};;
 let build_flavor_decls (flav: packet_flavor): sdecl list =   
   [DeclInc(flavor_to_inrelname flav, flavor_to_typename flav);
-   DeclEvent(flavor_to_typename flav, flav.fields); 
+   DeclEvent(flavor_to_typename flav, flavor_to_fields flav); 
    DeclOut(flavor_to_emitrelname flav, [flavor_to_typename flav])];;
 let build_flavor_reacts (flav: packet_flavor): sreactive list =   
   [ReactInc(flavor_to_typename flav, flavor_to_inrelname flav); 
-   ReactOut(flavor_to_emitrelname flav, flav.fields, flavor_to_typename flav, 
-            map create_id_assign flav.fields, OutEmit(flavor_to_typename flav))];;
+   ReactOut(flavor_to_emitrelname flav, flavor_to_fields flav, flavor_to_typename flav, 
+            map create_id_assign (flavor_to_fields flav), OutEmit(flavor_to_typename flav))];;
 
 let built_in_decls = [DeclInc(packet_in_relname, "packet");                       
                       DeclInc(switch_reg_relname, "switch_port"); 
@@ -405,37 +453,3 @@ let built_in_condensed_outrels = ["forward"; "emit"] @ map (fun flav -> flavor_t
 (* All packet types must go here; 
    these are the tables that flag a rule as being "packet-triggered".*)
 let built_in_packet_input_tables = [packet_in_relname] @ map (fun flav -> flavor_to_inrelname flav) packet_flavors;;
-
-(* For efficiency *)
-let map_from_typename_to_flavor: packet_flavor StringMap.t = 
-  fold_left (fun acc flav -> StringMap.add (flavor_to_typename flav) flav acc) StringMap.empty packet_flavors;;
-let map_from_relname_to_flavor: packet_flavor StringMap.t = 
-  fold_left (fun acc flav -> StringMap.add (flavor_to_emitrelname flav) flav
-                                           (StringMap.add (flavor_to_inrelname flav) flav acc))
-            StringMap.empty packet_flavors;;
-
-(*************************************************************)
-
-(* If adding a new packet type, make sure to include self and all supertypes here. *)
-(* E.g. arp_packet always fires packet also. *)
-let rec built_in_supertypes (typename: string): string list = 
-  try
-    let flav = StringMap.find typename map_from_typename_to_flavor in
-    match flav.superflavor with
-      | Some superflav -> typename::(built_in_supertypes superflav)
-      | None -> [typename]
-  with Not_found -> [typename];;
-    
-(*************************************************************)
-
-(* We don't yet have access to vname until we have a concrete rule *)
-(* Remember: field names must be lowercase *)
-(* both INCOMING and OUTGOING relations can call this. *)
-let built_in_where_for_variable (vart: term) (relname: string): formula = 
-  let vname = (match vart with | TVar(x) -> x | _ -> failwith "built_in_where_for_vname") in
-  try
-    let flav = StringMap.find relname map_from_relname_to_flavor in
-      (flav.build_condition vname)
-  with Not_found -> FTrue ;;
-
-(*************************************************************)
