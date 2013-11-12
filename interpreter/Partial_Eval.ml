@@ -190,7 +190,7 @@ let rec build_unsafe_switch_actions (oldpkt: string) (body: formula): action =
   match anact with
     SwitchAction(oldout) ->
       match afld with 
-        | "locpt" -> SwitchAction({oldout with outPort = NetCore_Pattern.Physical(Int32.of_string aval)})
+        | "locpt" -> anact
         | "dlsrc" -> SwitchAction({oldout with outDlSrc = Some (None, Int64.of_string aval) })
         | "dldst" -> SwitchAction({oldout with outDlDst = Some (None, Int64.of_string aval) })
         | "dltyp" -> failwith ("OpenFlow 1.0 does not allow this field to be updated")
