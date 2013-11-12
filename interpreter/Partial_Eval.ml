@@ -186,8 +186,8 @@ let rec build_unsafe_switch_actions (oldpkt: string) (body: formula): action =
 
 
   (** Add NetCore action to set a packet's header fields during forwarding
-      TODO(adf): add support for VLAN and VLAN PCP once Flowlog includes those
-                 in the base packet type *)
+      TODO(adf): add support for VLAN, VLAN PCP, IP ToS, and transport srcPort &
+                 dstPort once Flowlog includes in the packet types *)
   let enhance_action_atom (afld: string) (aval: string) (anact: action_atom): action_atom =
   match anact with
     SwitchAction(oldout) ->
