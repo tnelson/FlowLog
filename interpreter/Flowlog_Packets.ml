@@ -1,7 +1,10 @@
 open Flowlog_Types
+open Flowlog_Helpers
 open Packet
 open Packet.Ip
 open ExtList.List
+open NetCore_Types
+open Printf 
 
 (**********************************************)
 (**********************************************)
@@ -12,12 +15,9 @@ open ExtList.List
 (* TO ADD A NEW PACKET FLAVOR, ADD TO:
   (1) packet_flavors list
   (2) get_field_default (if defaults are desired)
-  (3) marshal_packet *)
+  (3) marshal_packet 
+  (4) pkt_to_event *)
 
-(* ends_with plus mirror-universe beard*)
-let starts_with (str1 : string) (str2 : string) : bool = 
-  if String.length str2 > String.length str1 then false
-    else (String.sub str1 0 (String.length str2)) = str2;;
 
 (* This is likely to change if we change engines.*)
 let field_is_defined (ev: event) (fname: string): bool = 
@@ -134,14 +134,22 @@ let marshal_packet (ev: event): Packet.bytes =
     | "tcp_packet" -> prepare_ethernet (make_ip ev (make_tcp ev))
     | _ -> failwith ("marshal_packet: unknown type: "^ev.typeid);;
 
+(* Fields in a base packet *)
+let packet_fields = ["locsw";"locpt";"dlsrc";"dldst";"dltyp"];;
+
 let packet_flavors = [
-   {label="arp"; superflavor=None;  
+   (* base type *)
+   {label=""; superflavor=None;
+    build_condition=(fun vname -> FTrue); 
+    fields=packet_fields};
+
+   {label="arp"; superflavor=Some "";  
     build_condition=(fun vname -> FEquals(TField(vname, "dltyp"), TConst("0x0806"))); 
     fields=["arp_op";"arp_spa";"arp_sha";"arp_tpa";"arp_tha"]};
    
-   {label="ip"; superflavor=None;  
+   {label="ip"; superflavor=Some "";  
     build_condition=(fun vname -> FEquals(TField(vname, "dltyp"), TConst("0x0800"))); 
-    fields=["ipsrc"; "ipdest"; "ipproto"]};  (* missing: frag, tos, chksum, ident, ...*) 
+    fields=["nwsrc"; "nwdst"; "nwproto"]};  (* missing: frag, tos, chksum, ident, ...*) 
   
   (* {label="lldp"; superflavor=None;  
     build_condition=(fun vname -> FEquals(TField(vname, "dltyp"), TConst("0x88CC"))); 
@@ -168,13 +176,52 @@ let packet_flavors = [
     fields=["icmp_type"; "icmp_code"]}; (* checksum will need calculation in runtime? *)    
   ];;
 
+(**********************************************)
+
+let get_arp (pkt: Packet.packet): (string*string) list =
+  match pkt.nw with
+    | Arp(Arp.Query(arp_sha, arp_spa, arp_tpa)) ->        
+      [("arp_sha", Int64.to_string arp_sha); ("arp_spa", Int32.to_string arp_spa); 
+       ("arp_tpa", Int32.to_string arp_tpa); ("arp_op", "1");
+       (* arp_packets all must have the same fields *)
+       ("arp_tha", "0")]
+    | Arp(Arp.Reply(arp_sha, arp_spa, arp_tha, arp_tpa)) -> 
+      [("arp_sha", Int64.to_string arp_sha); ("arp_spa", Int32.to_string arp_spa); 
+       ("arp_tpa", Int32.to_string arp_tpa); ("arp_op", "2");
+       ("arp_tha", Int64.to_string arp_tha)]
+    | Ip (_) -> []
+    | _ -> [];;
+  
+let get_ip (pkt: Packet.packet): (string*string) list =    
+  match pkt.nw with 
+   | Ip(_) -> 
+    [("nwsrc", Int32.to_string (Packet.nwSrc pkt));
+     ("nwdst", Int32.to_string (Packet.nwDst pkt));
+     ("nwproto", string_of_int (Packet.nwProto pkt))]
+     | _ -> [];;    
+
+
+let pkt_to_event (sw : switchId) (pt: port) (pkt : Packet.packet) : event =          
+   let values = [
+    ("locsw", Int64.to_string sw);
+    ("locpt", NetCore_Pretty.string_of_port pt);
+    ("dlsrc", Int64.to_string pkt.Packet.dlSrc);
+    ("dldst", Int64.to_string pkt.Packet.dlDst);
+    ("dltyp", string_of_int (Packet.dlTyp pkt))] 
+    @ (get_arp pkt) 
+    @ (get_ip pkt) in
+    let typeid = (match (Packet.dlTyp pkt) with  
+      | 0x0800 -> "ip_packet"
+      | 0x0806 -> "arp_packet"
+      | _ -> "packet") in   
+    {typeid=typeid; values=construct_map values};;
+    
+
+
 
 (**********************************************)
 (**********************************************)
 (**********************************************)
-
-(* Fields in a base packet *)
-let packet_fields = ["locsw";"locpt";"dlsrc";"dldst";"dltyp"];;
 
 (* Fields that OpenFlow permits modification of. *)
 let legal_to_modify_packet_fields = ["locpt";"dlsrc";"dldst";"dltyp";"nwsrc";"nwdst"];;
@@ -184,9 +231,9 @@ let swdown_fields = ["sw"];;
 
 (**********************************************)
 
-let flavor_to_typename (flav: packet_flavor): string = flav.label^"_packet";;
-let flavor_to_inrelname (flav: packet_flavor): string = flav.label^"_packet_in";;
-let flavor_to_emitrelname (flav: packet_flavor): string = "emit_"^flav.label;;
+let flavor_to_typename (flav: packet_flavor): string = if flav.label = "" then "packet" else flav.label^"_packet";;
+let flavor_to_inrelname (flav: packet_flavor): string = if flav.label = "" then "packet_in" else flav.label^"_packet_in";;
+let flavor_to_emitrelname (flav: packet_flavor): string = if flav.label = "" then "emit" else "emit_"^flav.label;;
 
 (*************************************************************)
 
@@ -206,19 +253,20 @@ let map_from_relname_to_flavor: packet_flavor StringMap.t =
 (* E.g. arp_packet always fires packet also. *)
 let rec built_in_supertypes (typename: string): string list = 
   try
-    let flav = StringMap.find typename map_from_typename_to_flavor in
+    let flav = StringMap.find typename map_from_typename_to_flavor in    
     match flav.superflavor with
       (* flavor has a label, not type name yet *)
       | Some superlabel -> 
-        let superflav = StringMap.find superlabel map_from_label_to_flavor in
+        let superflav = StringMap.find superlabel map_from_label_to_flavor in          
+          (*printf "supers: %s\n%!" (String.concat "," (typename::(built_in_supertypes (flavor_to_typename superflav))));*)
           typename::(built_in_supertypes (flavor_to_typename superflav))
-      | None -> [typename]
+      | None -> [typename] 
   with Not_found -> [typename];;
 
 let flavor_to_fields (flav: packet_flavor): string list = 
   let typename = flavor_to_typename flav in
   let supertypes = built_in_supertypes typename in  
-  let fieldslist = packet_fields @ (fold_left (fun acc supertype -> acc @ (StringMap.find supertype map_from_typename_to_flavor).fields) [] supertypes) in
+  let fieldslist = (fold_left (fun acc supertype -> acc @ (StringMap.find supertype map_from_typename_to_flavor).fields) [] supertypes) in
   let check_for_dupes = unique fieldslist in  
   if (length fieldslist) <> (length check_for_dupes) then
     failwith ("Packet flavor "^flav.label^" had duplicate fieldnames when parent flavor fields were added.")    
@@ -248,30 +296,29 @@ let build_flavor_reacts (flav: packet_flavor): sreactive list =
    ReactOut(flavor_to_emitrelname flav, flavor_to_fields flav, flavor_to_typename flav, 
             map create_id_assign (flavor_to_fields flav), OutEmit(flavor_to_typename flav))];;
 
-let built_in_decls = [DeclInc(packet_in_relname, "packet");                       
-                      DeclInc(switch_reg_relname, "switch_port"); 
+let built_in_decls = [DeclInc(switch_reg_relname, "switch_port"); 
                       DeclInc(switch_down_relname, "switch_down");
                       DeclInc(startup_relname, "startup");                      
-                      DeclOut("forward", ["packet"]);
-                      DeclOut("emit", ["packet"]);                      
-                      DeclEvent("packet", packet_fields);
+                      DeclOut("forward", ["packet"]);                                          
                       DeclEvent("startup", []);
                       DeclEvent("switch_port", swpt_fields);                      
                       DeclEvent("switch_down", swdown_fields)]
                     @ flatten (map build_flavor_decls packet_flavors);;
 
-let built_in_reacts = [ ReactInc("packet", packet_in_relname);                         
-                        ReactInc("switch_port", switch_reg_relname); 
+let built_in_reacts = [ ReactInc("switch_port", switch_reg_relname); 
                         ReactInc("switch_down", switch_down_relname); 
                         ReactInc("startup", startup_relname);                                               
-                        ReactOut("forward", packet_fields, "packet", map create_id_assign packet_fields, OutForward);
-                        ReactOut("emit", packet_fields, "packet", map create_id_assign packet_fields, OutEmit("packet"));                        
+                        ReactOut("forward", packet_fields, "packet", map create_id_assign packet_fields, OutForward);                      
                       ] @ flatten (map build_flavor_reacts packet_flavors);;
 
 (* These output relations have a "condensed" argument. That is, they are unary, 
    with a packet as the argument. Should only be done for certain built-ins. *)
-let built_in_condensed_outrels = ["forward"; "emit"] @ map (fun flav -> flavor_to_emitrelname flav) packet_flavors;;
+let built_in_condensed_outrels = ["forward"] @ map (fun flav -> flavor_to_emitrelname flav) packet_flavors;;
 
 (* All packet types must go here; 
    these are the tables that flag a rule as being "packet-triggered".*)
-let built_in_packet_input_tables = [packet_in_relname] @ map (fun flav -> flavor_to_inrelname flav) packet_flavors;;
+let built_in_packet_input_tables = map (fun flav -> flavor_to_inrelname flav) packet_flavors;;
+
+let is_packet_in_table (relname: string): bool =
+  mem relname built_in_packet_input_tables;;  
+
