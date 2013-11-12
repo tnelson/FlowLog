@@ -46,10 +46,9 @@ ON atv_disconnect(evt):
  *
  ******************************************************************************/
 
-ON packet_in(pkt) WHERE pkt.dlTyp = 0x0800 and
-                        pkt.dlDst = 0x01005e0000fb and
-                        pkt.nwDst = 0xE00000FB: // and // 224.0.0.251 (mDNS group)
-        //                pkt.tpDst = 5353: // (mDns port)
+ON ip_packet_in(pkt) WHERE pkt.dlDst = 0x01005e0000fb and
+                           pkt.nwDst = 0xE00000FB: // and // 224.0.0.251 (mDNS group)
+       //                pkt.tpDst = 5353: // (mDns port)
 
   DO forward(new) WHERE
     atv_cxns(pkt.dlSrc, new.dlDst) and
