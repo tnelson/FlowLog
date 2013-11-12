@@ -4,6 +4,7 @@
 
 open Printf
 open Flowlog_Types
+open Flowlog_Packets
 open Flowlog_Helpers
 open ExtList.List
 open Unix 

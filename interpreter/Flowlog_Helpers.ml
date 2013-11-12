@@ -1,4 +1,5 @@
 open Flowlog_Types
+open Flowlog_Packets
 open ExtList.List
 open Printf
 open NetCore_Types
@@ -8,11 +9,6 @@ open NetCore_Types
 let ends_with (str1 : string) (str2 : string) : bool = 
 	if String.length str2 > String.length str1 then false
     else (String.sub str1 ((String.length str1) - (String.length str2)) (String.length str2)) = str2;;
-
-(* ends_with plus mirror-universe beard*)
-let starts_with (str1 : string) (str2 : string) : bool = 
-  if String.length str2 > String.length str1 then false
-    else (String.sub str1 0 (String.length str2)) = str2;;
 
 (* return list of terms that match pred *)
 let rec get_terms (pred: term -> bool) (f: formula) : term list =   
@@ -287,10 +283,6 @@ let rec disj_to_top ?(ignore_negation: bool = false) (f: formula): formula =
         prgm.decls;;      
 
   (* TODO: when this all gets refactored again, should use record types for more types *)
-
-   (* raises not_found on invalid field *)
-  let get_field (ev: event) (fldname: string): string  = 
-  	StringMap.find fldname ev.values;; 
 
 let get_fields_for_type_preproc (decls: sdecl list) (etype: string): string list =  
     (*printf "get_fields_for_type_preproc: %s\n%!" etype;    *)

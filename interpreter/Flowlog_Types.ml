@@ -88,6 +88,11 @@ open NetCore_Types
   module StringMap = Map.Make(String);;
   type event = { typeid: string; values: string StringMap.t};;
 
+  (* raises not_found on invalid field *)
+  let get_field (ev: event) (fldname: string): string  = 
+    StringMap.find fldname ev.values;; 
+
+
   module FmlaMap = Map.Make(struct type t = formula let compare = compare end);;
 
 (*************************************************************)
@@ -288,7 +293,7 @@ let add_conjunct_to_action (act: action) (f: formula) =
 
 (************************************************************************************)
 (* BUILT-IN CONSTANTS, MAGIC-NUMBERS, EVENTS, REACTIVE DEFINITIONS, ETC.            *)
-(*   If adding a new packet type, new built-in definition, etc. do so here.         *)
+(* Packet flavors and built-in relations are governed by the Flowlog_Packets        *)
 (************************************************************************************)
 
 (* Note: all program text is lowercased by parser *)
@@ -303,153 +308,3 @@ let switch_reg_relname = "switch_port_in";;
 let switch_down_relname = "switch_down";;
 let startup_relname = "startup";;
 
-(*************************************************************)
-(* Generalized notion of a flavor of packet, like ARP or ICMP. 
-   Avoids ugly multiple lists of "built-ins" where we can forget to add packet types, etc.
-   label = string which is prepended to "_packet_in" and appended to "emit_" to arrive at relations.
-   superflavor = immediate supertype. If None, means that this is a direct subtype of an ethernet packet.
-   condition = a function that, given a variable name, constructs a formula that describes that it means 
-               to be a member of this flavor. E.g., to be an ip packet, you must have your dltyp field = 0x800.
-   fields = New fields added by this flavor. Must not be present in any superflavors.
- *)
-type packet_flavor = { label: string;                        superflavor: string option; 
-                       build_condition: (string -> formula); fields: string list};;
-
-let packet_flavors =[
-   {label="arp"; superflavor=None;  
-    build_condition=(fun vname -> FEquals(TField(vname, "dltyp"), TConst("0x0806"))); 
-    fields=["arp_op";"arp_spa";"arp_sha";"arp_tpa";"arp_tha"]};
-   
-   {label="ip"; superflavor=None;  
-    build_condition=(fun vname -> FEquals(TField(vname, "dltyp"), TConst("0x0800"))); 
-    fields=["ipsrc"; "ipdest"; "ipproto"]};  (* missing: frag, tos, chksum, ident, ...*) 
-
-  (* {label="lldp"; superflavor=None;  
-    build_condition=(fun vname -> FEquals(TField(vname, "dltyp"), TConst("0x88CC"))); 
-    fields=["omgwtfbbq"]}; *)
-   
-   {label="tcp"; superflavor=Some "ip";  
-    build_condition=(fun vname -> FAnd(FEquals(TField(vname, "dltyp"), TConst("0x0800")), 
-                                 FEquals(TField(vname, "nwproto"), TConst("0x6")))); 
-    fields=["tpsrc"; "tpdst"]}; (* expect we'll want flags eventually *)
-   
-   {label="udp"; superflavor=Some "ip";  
-    build_condition=(fun vname -> FAnd(FEquals(TField(vname, "dltyp"), TConst("0x0800")), 
-                                 FEquals(TField(vname, "nwproto"), TConst("0x11")))); 
-    fields=["tpsrc"; "tpdst"]};
-
-  (* {label="igmp"; superflavor=Some "ip";  
-    build_condition=(fun vname -> FAnd(FEquals(TField(vname, "dltyp"), TConst("0x0800")), 
-                                 FEquals(TField(vname, "nwproto"), TConst("0x2")))); 
-    fields=["omgwtfbbq"]};*)
-
-   {label="icmp"; superflavor=Some "ip";  
-    build_condition=(fun vname -> FAnd(FEquals(TField(vname, "dltyp"), TConst("0x0800")), 
-                                 FEquals(TField(vname, "nwproto"), TConst("0x1")))); 
-    fields=["icmp_type"; "icmp_code"]}; (* checksum will need calculation in runtime? *)
-  ];;
-
-(**********************************************)
-
-(* Fields in a base packet *)
-let packet_fields = ["locsw";"locpt";"dlsrc";"dldst";"dltyp"];;
-
-(* Fields that OpenFlow permits modification of. *)
-let legal_to_modify_packet_fields = ["locpt";"dlsrc";"dldst";"dltyp";"nwsrc";"nwdst"];;
-
-let swpt_fields = ["sw";"pt"];;
-let swdown_fields = ["sw"];;
-
-(**********************************************)
-
-let flavor_to_typename (flav: packet_flavor): string = flav.label^"_packet";;
-let flavor_to_inrelname (flav: packet_flavor): string = flav.label^"_packet_in";;
-let flavor_to_emitrelname (flav: packet_flavor): string = "emit_"^flav.label;;
-
-(*************************************************************)
-
-(* For efficiency *)
-let map_from_typename_to_flavor: packet_flavor StringMap.t = 
-  fold_left (fun acc flav -> StringMap.add (flavor_to_typename flav) flav acc) StringMap.empty packet_flavors;;
-let map_from_label_to_flavor: packet_flavor StringMap.t = 
-  fold_left (fun acc flav -> StringMap.add flav.label flav acc) StringMap.empty packet_flavors;;
-let map_from_relname_to_flavor: packet_flavor StringMap.t = 
-  fold_left (fun acc flav -> StringMap.add (flavor_to_emitrelname flav) flav
-                                           (StringMap.add (flavor_to_inrelname flav) flav acc))
-            StringMap.empty packet_flavors;;
-
-(*************************************************************)
-
-(* If adding a new packet type, make sure to include self and all supertypes here. *)
-(* E.g. arp_packet always fires packet also. *)
-let rec built_in_supertypes (typename: string): string list = 
-  try
-    let flav = StringMap.find typename map_from_typename_to_flavor in
-    match flav.superflavor with
-      (* flavor has a label, not type name yet *)
-      | Some superlabel -> 
-        let superflav = StringMap.find superlabel map_from_label_to_flavor in
-          typename::(built_in_supertypes (flavor_to_typename superflav))
-      | None -> [typename]
-  with Not_found -> [typename];;
-
-let flavor_to_fields (flav: packet_flavor): string list = 
-  let typename = flavor_to_typename flav in
-  let supertypes = built_in_supertypes typename in  
-  let fieldslist = packet_fields @ (fold_left (fun acc supertype -> acc @ (StringMap.find supertype map_from_typename_to_flavor).fields) [] supertypes) in
-  let check_for_dupes = unique fieldslist in  
-  if (length fieldslist) <> (length check_for_dupes) then
-    failwith ("Packet flavor "^flav.label^" had duplicate fieldnames when parent flavor fields were added.")    
-  else fieldslist;;
-
-(*************************************************************)
-
-(* We don't yet have access to vname until we have a concrete rule *)
-(* Remember: field names must be lowercase *)
-(* both INCOMING and OUTGOING relations can call this. *)
-let built_in_where_for_variable (vart: term) (relname: string): formula = 
-  let vname = (match vart with | TVar(x) -> x | _ -> failwith "built_in_where_for_vname") in
-  try
-    let flav = StringMap.find relname map_from_relname_to_flavor in
-      (flav.build_condition vname)
-  with Not_found -> FTrue ;;
-
-(*************************************************************)
-
-let create_id_assign (k: string): assignment = {afield=k; atupvar=k};;
-let build_flavor_decls (flav: packet_flavor): sdecl list =   
-  [DeclInc(flavor_to_inrelname flav, flavor_to_typename flav);
-   DeclEvent(flavor_to_typename flav, flavor_to_fields flav); 
-   DeclOut(flavor_to_emitrelname flav, [flavor_to_typename flav])];;
-let build_flavor_reacts (flav: packet_flavor): sreactive list =   
-  [ReactInc(flavor_to_typename flav, flavor_to_inrelname flav); 
-   ReactOut(flavor_to_emitrelname flav, flavor_to_fields flav, flavor_to_typename flav, 
-            map create_id_assign (flavor_to_fields flav), OutEmit(flavor_to_typename flav))];;
-
-let built_in_decls = [DeclInc(packet_in_relname, "packet");                       
-                      DeclInc(switch_reg_relname, "switch_port"); 
-                      DeclInc(switch_down_relname, "switch_down");
-                      DeclInc(startup_relname, "startup");                      
-                      DeclOut("forward", ["packet"]);
-                      DeclOut("emit", ["packet"]);                      
-                      DeclEvent("packet", packet_fields);
-                      DeclEvent("startup", []);
-                      DeclEvent("switch_port", swpt_fields);                      
-                      DeclEvent("switch_down", swdown_fields)]
-                    @ flatten (map build_flavor_decls packet_flavors);;
-
-let built_in_reacts = [ ReactInc("packet", packet_in_relname);                         
-                        ReactInc("switch_port", switch_reg_relname); 
-                        ReactInc("switch_down", switch_down_relname); 
-                        ReactInc("startup", startup_relname);                                               
-                        ReactOut("forward", packet_fields, "packet", map create_id_assign packet_fields, OutForward);
-                        ReactOut("emit", packet_fields, "packet", map create_id_assign packet_fields, OutEmit("packet"));                        
-                      ] @ flatten (map build_flavor_reacts packet_flavors);;
-
-(* These output relations have a "condensed" argument. That is, they are unary, 
-   with a packet as the argument. Should only be done for certain built-ins. *)
-let built_in_condensed_outrels = ["forward"; "emit"] @ map (fun flav -> flavor_to_emitrelname flav) packet_flavors;;
-
-(* All packet types must go here; 
-   these are the tables that flag a rule as being "packet-triggered".*)
-let built_in_packet_input_tables = [packet_in_relname] @ map (fun flav -> flavor_to_inrelname flav) packet_flavors;;

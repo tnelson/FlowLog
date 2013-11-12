@@ -3,6 +3,7 @@
 (****************************************************************)
 
 open Flowlog_Types
+open Flowlog_Packets
 open Flowlog_Helpers
 open NetCore_Types
 open ExtList.List
@@ -689,90 +690,15 @@ let forward_packet (ev: event): unit =
     SwitchAction({id with outPort = Physical(Int32.of_string (get_field ev "locpt"))}) 
     :: !fwd_actions;;
 
-(* Query (srcMac, srcIP,dstIP) *)
-(* Reply (srcMac, srcIP, dstMac, dstIP) *)
-let make_arp (ev: event): nw = 
-  let arp_sha = Int64.of_string (get_field ev "arp_sha") in 
-  let arp_spa = Int32.of_string (get_field ev "arp_spa") in   
-  let arp_tpa = Int32.of_string (get_field ev "arp_tpa") in     
-  let arp_op = int_of_string (get_field ev "arp_op") in       
-    match arp_op with
-    | 1 -> (* query *)
-      Arp(Query(arp_sha, arp_spa, arp_tpa))
-    | 2 -> (* reply *)
-      let arp_tha = Int64.of_string (get_field ev "arp_tha") in   
-        Arp(Reply(arp_sha, arp_spa, arp_tha, arp_tpa))
-    | _ -> failwith "bad arp op";;
-
-(* This is likely to change if we change engines.*)
-let field_is_defined (ev: event) (fname: string): bool = 
-  not (starts_with (get_field ev fname) "_");;
-
-let get_field_default (ev: event) (fname: string): string =
-  (* Assuming that the field is THERE... it may be set to a "dunno" by xsb *)
-  try
-    let evval = (get_field ev fname) in
-      (*printf "get_field/default: %s %s\n%!" fname evval;*)
-      if field_is_defined ev fname then evval
-      else (match ev.typeid, fname with        
-        | _,"nwsrc" -> "0"
-        | _,"nwdst" -> "0"
-        | _,"nwproto" -> "0"
-        | _,"nwfrag" -> "0"
-        | _,"nwttl" -> "0"
-        | _,"nwtos" -> "0"      
-        | _,"nwchksum" -> "0"
-        | _,"nwident" -> "0"     
-        | _ -> failwith ("get_field_default. no default specified for: "^fname))
-  with 
-    | Not_found -> failwith ("get_field_default: not found field "^fname);;
-
-let make_ip (ev: event): nw =
-  let nwSrc = Int32.of_string (get_field_default ev "nwsrc") in 
-  let nwDst = Int32.of_string (get_field_default ev "nwdst") in 
-  let nwProto = int_of_string (get_field_default ev "nwproto") in   
-  let nwFrag = int_of_string (get_field_default ev "nwfrag") in   
-  let nwTtl = int_of_string (get_field_default ev "nwttl") in   
-  let nwTos = int_of_string (get_field_default ev "nwtos") in   
-  let nwChksum = int_of_string (get_field_default ev "nwchksum") in   
-  let nwIdent = int_of_string (get_field_default ev "nwident") in     
-    Ip({src=nwSrc; dst=nwDst; 
-     flags={Packet.Ip.Flags.df=false;Packet.Ip.Flags.mf=false}; frag=nwFrag;
-     tos=nwTos; ident=nwIdent; ttl=nwTtl; chksum=nwChksum;
-     tp=Packet.Ip.Unparsable(nwProto, Cstruct.create(0))});;
-
-
 let emit_packet (ev: event): unit =  
   printf "emitting: %s\n%!" (string_of_event ev);
   write_log (sprintf ">>> emitting: %s\n%!" (string_of_event ev));
   let swid = (Int64.of_string (get_field_default ev "locsw")) in
   let pt = (Int32.of_string (get_field_default ev "locpt")) in
-  let dlSrc = Int64.of_string (get_field_default ev "dlsrc") in 
-  let dlDst = Int64.of_string (get_field_default ev "dldst") in 
-  let dlTyp = int_of_string (get_field_default ev "dltyp") in   
-
-  (* kludgey version to start: hardcode type names to test methods of creation *)
-  (* TODO: confirm dltyp isn't wrong *)
   
-  match ev.typeid with  
-  | "packet" ->           
-      guarded_emit_push swid pt (Packet.marshal
-            {Packet.dlSrc = dlSrc; Packet.dlDst = dlDst;
-             Packet.dlVlan = None; Packet.dlVlanPcp = 0;
-             nw = Packet.Unparsable(dlTyp, Cstruct.create(0))}) 
-  | "ip_packet" -> 
-      failwith "unsupported";
-      (*guarded_emit_push swid pt (Packet.marshal
-            {Packet.dlSrc = dlSrc; Packet.dlDst = dlDst;
-             Packet.dlVlan = None; Packet.dlVlanPcp = 0;             
-             nw = make_nw ev}) *)
-  | "arp_packet" ->
-      guarded_emit_push swid pt (Packet.marshal
-            {Packet.dlSrc = dlSrc; Packet.dlDst = dlDst;
-             Packet.dlVlan = None; Packet.dlVlanPcp = 0;             
-             nw = make_arp ev}) 
-  | _ -> failwith "bad packet type";;
-  
+  (* TODO: confirm dltyp/nwProto etc. are consistent with whatever type of packet we're producing 
+     At the moment, someone can emit_arp with dlTyp = 0x000 or something dumb like that. *)
+  guarded_emit_push swid pt (marshal_packet ev);;  
 
 let send_event (ev: event) (ip: string) (pt: string): unit =
   printf ">>> sending: %s\n%!" (string_of_event ev);  
