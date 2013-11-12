@@ -14,6 +14,9 @@ let starts_with (str1 : string) (str2 : string) : bool =
   if String.length str2 > String.length str1 then false
     else (String.sub str1 0 (String.length str2)) = str2;;
 
+let construct_map (bindings: (string * string) list): (string StringMap.t) =
+  fold_left (fun acc (bx, by) -> StringMap.add bx by acc) StringMap.empty bindings
+
 (* return list of terms that match pred *)
 let rec get_terms (pred: term -> bool) (f: formula) : term list =   
 	match f with
@@ -242,9 +245,6 @@ let rec disj_to_top ?(ignore_negation: bool = false) (f: formula): formula =
         | _ -> false) 
         prgm.decls;;  
 
-  let is_packet_in_table (relname: string): bool =
-    mem relname built_in_packet_input_tables;;  
-
   let is_outgoing_table (prgm: flowlog_program) (relname: string): bool =
     exists (function      
         | DeclOut(rname, argtype) when rname = relname -> true 
@@ -288,10 +288,6 @@ let rec disj_to_top ?(ignore_negation: bool = false) (f: formula): formula =
 
   (* TODO: when this all gets refactored again, should use record types for more types *)
 
-   (* raises not_found on invalid field *)
-  let get_field (ev: event) (fldname: string): string  = 
-  	StringMap.find fldname ev.values;; 
-
 let get_fields_for_type_preproc (decls: sdecl list) (etype: string): string list =  
     (*printf "get_fields_for_type_preproc: %s\n%!" etype;    *)
       let decl = find (function       
@@ -318,49 +314,7 @@ let get_fields_for_type_preproc (decls: sdecl list) (etype: string): string list
       | ReactOut(outrel, _, eventid, _, _) ->
         get_fields_for_type_preproc decls eventid
       | _ -> failwith "get_valid_fields_for_output_rel";;
-
-  (* in this IO relation, at index idx, there should be something of type T. What are T's fields, in order? *)
-  let get_io_fields_for_index (prgm: flowlog_program) (relname: string) (idx: int): (string list) option =
-    let decl = find (function       
-        | DeclInc(rname, argtype) when rname = relname -> true 
-        | DeclOut(rname, argtypelst) when rname = relname -> true
-        | _ -> false) prgm.decls in 
-      match decl with 
-        | DeclInc(rname, argtype) when rname = relname -> 
-          Some (get_fields_for_type prgm argtype)
-        | DeclOut(rname, argtypelst) when rname = relname ->
-        	if mem relname built_in_condensed_outrels then
-        		Some(get_fields_for_type prgm (nth argtypelst idx))
-        	else
-        		None
-          (*get_fields_for_type prgm (nth argtypelst idx)*)
-        | _ -> failwith "get_io_fields_for_index";;
-
-
-  (* ASSUMED: We're dealing with one event at a time, and so each relation we populate gets only one tuple. *)
-  (* raises Not_found if nothing to do for this event *)
-  let inc_event_to_formulas (p: flowlog_program) (notif: event): formula list =
-    (* event contains k=v mappings and a type. convert to a formula via defns in program*)
-    (*printf "Converting event to formula: %s\n%!" (string_of_event notif);*)
-    filter_map (function       
-        | ReactInc(typename, relname) when mem typename (built_in_subtypes notif.typeid) ->
-          Some(FAtom("", relname,                      
-                     map (fun fld -> try TConst(StringMap.find fld notif.values) with | Not_found -> failwith ("inc_event_to_formulas: "^fld))
-                     (get_fields_for_type p typename)))
-        | _ -> None ) p.reacts;;
-
-   (* in modname.relname, the ith element has which fields? *)
-  let decls_expand_fields (prgm: flowlog_program) (modname: string) (relname: string) (i: int) (t: term): term list =  	
-    match t with 
-      | TVar(vname) when is_io_rel prgm modname relname -> 
-      	(match (get_io_fields_for_index prgm relname i) with
-      		| Some fieldlist -> map (fun fldname -> TField(vname, fldname)) fieldlist
-      		| None -> [t])
-      | _ -> [t];;
-
-let construct_map (bindings: (string * string) list): (string StringMap.t) =
-  fold_left (fun acc (bx, by) -> StringMap.add bx by acc) StringMap.empty bindings
-
+      
 let rec get_atoms (f: formula): formula list = 
 	match f with
 		| FTrue -> []

@@ -1,0 +1,20 @@
+/*
+  h1 arping h2
+  h3 ping h1
+
+  Should see ethtest(1), ethtest(3), iptest(...3), arptest(...1)
+*/
+
+TABLE arptest(ipaddr);
+TABLE iptest(ipaddr);
+TABLE ethtest(macaddr);
+
+ON packet_in(p):
+  INSERT (p.dlSrc) INTO ethtest;
+
+ON ip_packet_in(p): 
+  INSERT (p.nwSrc) INTO iptest;
+
+ON arp_packet_in(p):
+  INSERT (p.arp_spa) INTO arptest;
+

@@ -88,6 +88,11 @@ open NetCore_Types
   module StringMap = Map.Make(String);;
   type event = { typeid: string; values: string StringMap.t};;
 
+  (* raises not_found on invalid field *)
+  let get_field (ev: event) (fldname: string): string  = 
+    StringMap.find fldname ev.values;; 
+
+
   module FmlaMap = Map.Make(struct type t = formula let compare = compare end);;
 
 (*************************************************************)
@@ -143,7 +148,7 @@ open NetCore_Types
       | DeclTable(tname, argtypes) -> "TABLE "^tname^" "^(String.concat "," argtypes);
       | DeclRemoteTable(tname, argtypes) -> "REMOTE TABLE "^tname^" "^(String.concat "," argtypes);
       | DeclInc(tname, argtype) -> "INCOMING "^tname^" "^argtype;
-      | DeclOut(tname, argtypes) -> "OUTGOING "^tname^(String.concat "," argtypes);
+      | DeclOut(tname, argtypes) -> "OUTGOING "^tname^" "^(String.concat "," argtypes);
       | DeclEvent(evname, argnames) -> "EVENT "^evname^" "^(String.concat "," argnames);;
 
   let string_of_outspec (spec: spec_out) =
@@ -288,7 +293,7 @@ let add_conjunct_to_action (act: action) (f: formula) =
 
 (************************************************************************************)
 (* BUILT-IN CONSTANTS, MAGIC-NUMBERS, EVENTS, REACTIVE DEFINITIONS, ETC.            *)
-(*   If adding a new packet type, new built-in definition, etc. do so here.         *)
+(* Packet flavors and built-in relations are governed by the Flowlog_Packets        *)
 (************************************************************************************)
 
 (* Note: all program text is lowercased by parser *)
@@ -296,92 +301,10 @@ let add_conjunct_to_action (act: action) (f: formula) =
 (* These are prepended to relation names when we pass insert/delete rules to Prolog *)
 let plus_prefix = "plus";;
 let minus_prefix = "minus";;
-
 (* Avoid using strings for hard-coded type names and relation names. 
    Use these definitions instead. *)
 let packet_in_relname = "packet_in";;
-let arp_packet_in_relname = "arp_packet_in";;
 let switch_reg_relname = "switch_port_in";;
 let switch_down_relname = "switch_down";;
 let startup_relname = "startup";;
 
-(**********************************************)
-
-(* Fields in a base packet *)
-let packet_fields = ["locsw";"locpt";"dlsrc";"dldst";"dltyp";"nwsrc";"nwdst";"nwproto"];;
-(* Fields that OpenFlow permits modification of *)
-let legal_to_modify_packet_fields = ["locpt";"dlsrc";"dldst";"dltyp";"nwsrc";"nwdst"];;
-
-(* custom packet type: ARP packet (source/target; protocol/hardware) *)
-let arp_packet_fields = packet_fields @ ["arp_op";"arp_spa";"arp_sha";"arp_tpa";"arp_tha"];;
-
-let swpt_fields = ["sw";"pt"];;
-let swdown_fields = ["sw"];;
-
-(**********************************************)
-
-(* Some declarations and reactive definitions are built in. E.g., packet_in. *)
-
-let built_in_decls = [DeclInc(packet_in_relname, "packet"); 
-                      DeclInc(arp_packet_in_relname, "arp_packet"); 
-                      DeclInc(switch_reg_relname, "switch_port"); 
-                      DeclInc(switch_down_relname, "switch_down");
-                      DeclInc(startup_relname, "startup");
-                      
-                      DeclOut("forward", ["packet"]);
-                      DeclOut("emit", ["packet"]);
-                      DeclOut("emit_arp", ["arp_packet"]);
-
-                      DeclEvent("packet", packet_fields);
-                      DeclEvent("startup", []);
-                      DeclEvent("switch_port", swpt_fields);
-                      DeclEvent("arp_packet", arp_packet_fields);
-                      DeclEvent("switch_down", swdown_fields)];;
-
-let create_id_assign (k: string): assignment = {afield=k; atupvar=k};;
-
-let built_in_reacts = [ ReactInc("packet", packet_in_relname); 
-                        ReactInc("arp_packet", arp_packet_in_relname); 
-                        ReactInc("switch_port", switch_reg_relname); 
-                        ReactInc("switch_down", switch_down_relname); 
-                        ReactInc("startup", startup_relname);   
-                                              
-                        ReactOut("forward", packet_fields, "packet", map create_id_assign packet_fields, OutForward);
-                        ReactOut("emit", packet_fields, "packet", map create_id_assign packet_fields, OutEmit("packet"));
-                        ReactOut("emit_arp", arp_packet_fields, "arp_packet", map create_id_assign arp_packet_fields, OutEmit("arp_packet"));
-                      ];;
-
-(* These output relations have a "condensed" argument. That is, they are unary, 
-   with a packet as the argument. Should only be done for certain built-ins. *)
-let built_in_condensed_outrels = ["forward"; "emit"; "emit_arp"];;
-
-(* All packet types must go here; 
-   these are the tables that flag a rule as being "packet-triggered".*)
-let built_in_packet_input_tables = [packet_in_relname; arp_packet_in_relname];;
-
-(*************************************************************)
-
-(* If adding a new packet type, make sure to include self and all supertypes here. *)
-(* E.g. arp_packet always fires packet also. *)
-let built_in_subtypes (typename: string): string list = 
-  match typename with
-    | "arp_packet" -> ["arp_packet"; "packet"]
-    | "icmp_packet" -> ["icmp_packet"; "packet"]
-    | _ -> [typename];;
-  
-(*************************************************************)
-
-(* We don't yet have access to vname until we have a concrete rule *)
-(* Remember: field names must be lowercase *)
-(* both INCOMING and OUTGOING relations can call this. *)
-let built_in_where_for_variable (vart: term) (relname: string): formula = 
-  let vname = (match vart with | TVar(x) -> x | _ -> failwith "built_in_where_for_vname") in
-  match relname with 
-    | "arp_packet_in"
-    | "emit_arp" -> FEquals(TField(vname, "dltyp"), TConst("0x0806"))
-    | "lldp_packet_in" -> FEquals(TField(vname, "dltyp"), TConst("0x88CC"))
-    | "icmp_packet_in" -> FAnd(FEquals(TField(vname, "dltyp"), TConst("0x0800")), 
-                               FEquals(TField(vname, "nwproto"), TConst("0x1")))    
-    | _ -> FTrue ;;
-
-(*************************************************************)

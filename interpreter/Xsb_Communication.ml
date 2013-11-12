@@ -8,6 +8,7 @@ open Unix
 open Printf
 open Flowlog_Types
 open Flowlog_Helpers
+open Flowlog_Packets
 open Flowlog_Thrift_Out
 open Str
 open ExtList.List
@@ -227,6 +228,48 @@ end
 (* Provides functions for high level communication with XSB. *)
 (* Right now ignoring queries. *)
 module Communication = struct
+  (* ASSUMED: We're dealing with one event at a time, and so each relation we populate gets only one tuple. *)
+  (* raises Not_found if nothing to do for this event *)
+  let inc_event_to_formulas (p: flowlog_program) (notif: event): formula list =
+    (* event contains k=v mappings and a type. convert to a formula via defns in program*)
+    (*printf "Converting event to formula: %s\n%!" (string_of_event notif);*)
+    filter_map (function       
+        | ReactInc(typename, relname) when mem typename (built_in_supertypes notif.typeid) ->
+          Some(FAtom("", relname,                      
+                     map (fun fld -> try TConst(StringMap.find fld notif.values) with | Not_found -> failwith ("inc_event_to_formulas: "^fld))
+                     (get_fields_for_type p typename)))
+        | _ -> None ) p.reacts;;
+
+
+  (* in this IO relation, at index idx, there should be something of type T. What are T's fields, in order? *)
+  let get_io_fields_for_index (prgm: flowlog_program) (relname: string) (idx: int): (string list) option =
+    let decl = find (function       
+        | DeclInc(rname, argtype) when rname = relname -> true 
+        | DeclOut(rname, argtypelst) when rname = relname -> true
+        | _ -> false) prgm.decls in 
+      match decl with 
+        | DeclInc(rname, argtype) when rname = relname -> 
+          Some (get_fields_for_type prgm argtype)
+        | DeclOut(rname, argtypelst) when rname = relname ->
+          (* treat condensed output rels (forward, emit, ...) differently *)
+        	if mem relname built_in_condensed_outrels then
+        		Some(get_fields_for_type prgm (nth argtypelst idx))
+        	else
+        		None
+          (*get_fields_for_type prgm (nth argtypelst idx)*)
+        | _ -> failwith "get_io_fields_for_index";;
+
+   (* in modname.relname, the ith element has which fields? *)
+  let decls_expand_fields (prgm: flowlog_program) (modname: string) (relname: string) (i: int) (t: term): term list =  	
+    match t with 
+      | TVar(vname) when is_io_rel prgm modname relname -> 
+      	(match (get_io_fields_for_index prgm relname i) with
+      		| Some fieldlist -> map (fun fldname -> TField(vname, fldname)) fieldlist
+      		| None -> [t])
+      | _ -> [t];;
+
+
+
 	(* assertion, number of answers to expect (number of variables in clause) *)
 	(* if this is a query with 0 variables, will call send_assert and thus need to provide [] vs [[]] *)
 	(* VITAL: The CALLER must add the terminating period to message. *)
@@ -288,8 +331,7 @@ module Communication = struct
 			ignore (send_message ("assert((" ^ (clause_to_xsb subs_cls) ^ ")).") 
 				                 (length (get_all_clause_vars subs_cls)));
 		();;
-		
-
+	
 	(* assuming all implicitly defined clauses have been added to list of clauses *)
 	let start_program (prgm : flowlog_program) (notables: bool): unit =
 		printf "-------------------\nStarting Flowlog Program...\n%!";		

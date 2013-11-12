@@ -3,6 +3,7 @@
 (****************************************************************)
 
 open Flowlog_Types
+open Flowlog_Packets
 open Flowlog_Helpers
 open Surface_Parser
 open Surface_Lexer
