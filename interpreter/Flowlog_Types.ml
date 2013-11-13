@@ -56,9 +56,7 @@ open NetCore_Types
       | DeclOut of string * string list    
       | DeclEvent of string * string list;;
 
-  type srule = 
-       (* onrel, onvar, action*)
-      | Rule of string * string * action;;
+  type srule = {onrel: string; onvar: string; action: action};;
 
   type stmt = 
       | SReactive of sreactive 
@@ -78,11 +76,18 @@ open NetCore_Types
                   body: formula; (* should be always conjunctive *)
                   };;
 
+  (* triggers: inrels -> outrels *)
+  (* We use Hashtbl's built in find_all function to extend the values to string list. *)
+  type program_memos = {out_triggers: (string, string) Hashtbl.t;
+                        insert_triggers: (string, string) Hashtbl.t;
+                        delete_triggers: (string, string) Hashtbl.t};;
+
   type flowlog_program = {  decls: sdecl list; 
                             reacts: sreactive list; 
                             clauses: clause list;
                             (* subset of <clauses> *)
-                            can_fully_compile_to_fwd_clauses: clause list; };;
+                            can_fully_compile_to_fwd_clauses: clause list; 
+                            memos: program_memos};;
 
   (* context for values given by decls *)
   module StringMap = Map.Make(String);;
@@ -133,15 +138,13 @@ open NetCore_Types
       outrel^"("^argstring^") WHERE "^(string_of_formula ~verbose:true fmla);;
 
   let string_of_rule (r: srule): string =
-    match r with 
-      | Rule(trigrel, trigvar, act) -> 
-        match act with 
-          | ADelete(outrel, argterms, fmla) ->  
-            "ON "^trigrel^"("^trigvar^"): DELETE "^(action_string outrel argterms fmla);                         
-          | AInsert(outrel, argterms, fmla) ->
-            "ON "^trigrel^"("^trigvar^"): INSERT "^(action_string outrel argterms fmla);
-          | ADo(outrel, argterms, fmla) ->  
-            "ON "^trigrel^"("^trigvar^"): DO "^(action_string outrel argterms fmla);;
+    match r.action with 
+      | ADelete(outrel, argterms, fmla) ->  
+        "ON "^r.onrel^"("^r.onvar^"): DELETE "^(action_string outrel argterms fmla);                         
+      | AInsert(outrel, argterms, fmla) ->
+        "ON "^r.onrel^"("^r.onvar^"): INSERT "^(action_string outrel argterms fmla);
+      | ADo(outrel, argterms, fmla) ->  
+        "ON "^r.onrel^"("^r.onvar^"): DO "^(action_string outrel argterms fmla);;
 
   let string_of_declaration (d: sdecl): string =
     match d with 

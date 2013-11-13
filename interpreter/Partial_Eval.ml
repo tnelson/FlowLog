@@ -224,8 +224,8 @@ let rec build_unsafe_switch_actions (oldpkt: string) (body: formula): action =
    (* printf "  >> build_switch_actions: %s\n%!" (String.concat " ; " (map (string_of_formula ~verbose:true) atoms));*)
     (* if any actions are false, folding is invalidated *)    
     try
-      let port_actions = fold_left create_port_actions [] atoms in
-      let complete_actions = fold_left create_mod_actions port_actions atoms in
+      let port_actions = fold_left create_port_actions [] atoms in      
+      let complete_actions = fold_left create_mod_actions port_actions atoms in      
       complete_actions
     with UnsatisfiableFlag -> [];;
 
@@ -738,6 +738,12 @@ let expire_remote_state_in_xsb (p: flowlog_program) : unit =
 
     FmlaMap.iter (expire_remote_if_time p) !remote_cache;;
 
+let get_output_defns_triggered (p: flowlog_program) (notif: event): sreactive list =
+  (get_output_defns p);;
+
+let get_local_tables_triggered (p: flowlog_program) (sign: bool) (notif: event): sdecl list =
+  (get_local_tables p);;
+
 (* separate to own module once works for sw/pt *)
 let respond_to_notification (p: flowlog_program) (notif: event): unit =
   try
@@ -760,13 +766,14 @@ let respond_to_notification (p: flowlog_program) (notif: event): unit =
     pre_load_all_remote_queries p;
 
     (* for all declared outgoing events ...*)
-    let outgoing_defns = get_output_defns p in
+    let outgoing_defns = (get_output_defns_triggered p notif) in
       iter (execute_output p) outgoing_defns;
 
     (* for all declared tables +/- *)
-    let table_decls = get_local_tables p in
-    let to_assert = flatten (map (change_table_how p true) table_decls) in
-    let to_retract = flatten (map (change_table_how p false) table_decls) in
+    let triggered_insert_table_decls = get_local_tables_triggered p true notif in
+    let triggered_delete_table_decls = get_local_tables_triggered p false notif in
+    let to_assert = flatten (map (change_table_how p true) triggered_insert_table_decls) in
+    let to_retract = flatten (map (change_table_how p false) triggered_delete_table_decls) in
     if !global_verbose >= 2 && (length to_assert > 0 || length to_retract > 0) then 
     begin 
       printf "  *** WILL ADD: %s\n%!" (String.concat " ; " (map string_of_formula to_assert));

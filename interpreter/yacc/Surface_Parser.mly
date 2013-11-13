@@ -112,7 +112,7 @@
 
   rule_stmt: on_clause COLON action_clause_list 
     {map (fun act -> let triggerrel, triggervar, optwhere = $1 in 
-           Rule(triggerrel, triggervar, (add_conjunct_to_action act optwhere))) $3};
+           {onrel=triggerrel; onvar=triggervar; action=(add_conjunct_to_action act optwhere)}) $3};
 
   on_clause: ON NAME LPAREN NAME RPAREN optional_fmla {($2,$4,$6)};
 

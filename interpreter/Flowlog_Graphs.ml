@@ -54,15 +54,14 @@ let depends_from_rule (prgm: named_program) (datamod: string) (triggerrel: strin
   let trigger_source = make_data_node prgm triggerrel in
     map (fun src -> {dsrc = src; dsink=sink; mode=datamod}) (trigger_source::body_sources);;
 
-
 let depends_from_clause (prgm: named_program) (cl: clause): data_edge list =  
-  match cl.orig_rule with
-    | Rule(triggerrel, _, AInsert(headrel, _, fmla)) ->
-      depends_from_rule prgm "+" triggerrel headrel fmla
-    | Rule(triggerrel, _, ADelete(headrel, _, fmla)) ->
-      depends_from_rule prgm "-" triggerrel headrel fmla
-    | Rule(triggerrel, _, ADo(headrel, _, fmla)) -> 
-      depends_from_rule prgm "" triggerrel headrel fmla;;
+  match cl.orig_rule.action with
+    | AInsert(headrel, _, fmla) ->
+      depends_from_rule prgm "+" cl.orig_rule.onrel headrel fmla
+    | ADelete(headrel, _, fmla) ->
+      depends_from_rule prgm "-" cl.orig_rule.onrel headrel fmla
+    | ADo(headrel, _, fmla) -> 
+      depends_from_rule prgm "" cl.orig_rule.onrel headrel fmla;;
 
 let enhance_graph_with_clause (prgm: named_program) (acc: depend_graph) (cl: clause): depend_graph =
   let new_dependencies = unique (depends_from_clause prgm cl @ acc.dependencies) in

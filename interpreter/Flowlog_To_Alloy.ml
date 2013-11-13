@@ -168,17 +168,14 @@ let alloy_actions (out: out_channel) (p: flowlog_program): unit =
       sprintf "%s.%s" evid foundassign.afield
   in*) 
 
-  let make_rule (r: srule): pred_fragment = 
-    match r with 
-    | Rule(increl, incvar, act) ->
-      match act with
-        | ADelete(outrel, outargs, where) ->
-          {outrel = (minus_prefix^"_"^outrel); outargs = outargs; where = where; increl = increl; incvar = incvar}
-
-        | AInsert(outrel, outargs, where) -> 
-          {outrel = (plus_prefix^"_"^outrel);  outargs = outargs; where = where; increl = increl; incvar = incvar}
-        | ADo(outrel, outargs, where) -> 
-          {outrel = outrel;                    outargs = outargs; where = where; increl = increl; incvar = incvar}
+  let make_rule (r: srule): pred_fragment =       
+    match r.action with
+      | ADelete(outrel, outargs, where) ->
+        {outrel = (minus_prefix^"_"^outrel); outargs = outargs; where = where; increl = r.onrel; incvar = r.onvar}
+      | AInsert(outrel, outargs, where) -> 
+        {outrel = (plus_prefix^"_"^outrel);  outargs = outargs; where = where; increl = r.onrel; incvar = r.onvar}
+      | ADo(outrel, outargs, where) -> 
+        {outrel = outrel;                    outargs = outargs; where = where; increl = r.onrel; incvar = r.onvar}
   in
   
   let outarg_to_poss_equality (evrestricted: string) (i: int) (outarg: term): string =
@@ -251,16 +248,16 @@ let alloy_actions (out: out_channel) (p: flowlog_program): unit =
 
 
 let plus_rule_exists (p: flowlog_program) (tblname: string): bool =
-  exists (fun cl -> match cl.orig_rule with 
-    | Rule(_, _, AInsert(rtbl, _, _)) when tblname = rtbl -> true
+  exists (fun cl -> match cl.orig_rule.action with 
+    | AInsert(rtbl, _, _) when tblname = rtbl -> true
     | _ -> false) p.clauses;;
 let minus_rule_exists (p: flowlog_program) (tblname: string): bool =
-  exists (fun cl -> match cl.orig_rule with 
-    | Rule(_, _, ADelete(rtbl, _, _)) when tblname = rtbl -> true
+  exists (fun cl -> match cl.orig_rule.action with 
+    | ADelete(rtbl, _, _) when tblname = rtbl -> true
     | _ -> false) p.clauses;;
 let do_rule_exists (p: flowlog_program) (tblname: string): bool =
-  exists (fun cl -> match cl.orig_rule with 
-    | Rule(_, _, ADo(rtbl, _, _)) when tblname = rtbl -> true
+  exists (fun cl -> match cl.orig_rule.action with 
+    | ADo(rtbl, _, _) when tblname = rtbl -> true
     | _ -> false) p.clauses;;
 
 (**********************************************************)

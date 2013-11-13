@@ -56,10 +56,9 @@ let build_clause (r: srule) (in_atom: formula) (relname: string) (terms: term li
     let body = FAnd(in_atom, conj) in
     {orig_rule = r; head = head; body = negations_to_end body};;
 
-let clauses_of_rule (r: srule): clause list =
-    match r with Rule(increlname, incterm, act) ->    
-    let atom_for_on = FAtom("", increlname, [TVar(incterm)]) in (* local atom, no module name *)
-    match act with 
+let clauses_of_rule (r: srule): clause list =    
+    let atom_for_on = FAtom("", r.onrel, [TVar(r.onvar)]) in (* local atom, no module name *)
+    match r.action with 
         | ADelete(relname, terms, condition) -> 
             map (build_clause r atom_for_on relname terms (Some minus_prefix)) (disj_to_list (disj_to_top (nnf condition)));
         | AInsert(relname, terms, condition) -> 
@@ -116,15 +115,15 @@ let well_formed_rule (decls: sdecl list) (reacts: sreactive list) (r: srule): un
            if this is a DO rule and the term is a field var... deal with similar to above. 
            if this is an insert/delete rule, disallow non = inargname fields.  *)        
       | TField(vname, fname) when mem vname (field_vars_in condensed headterms) ->              
-        (match r with 
-          | Rule(inrelname, inrelarg, ADo(_, outrelterms, where)) -> 
+        (match r.action with 
+          | ADo(_, outrelterms, where) -> 
             (try
               let valid_fields = get_valid_fields_for_output_rel decls reacts headrelname in                    
               if not (mem fname valid_fields) then 
                 raise (UndeclaredField(vname, fname))
             with | Not_found -> raise (UndeclaredOutgoingRelation headrelname))
-          | Rule(inrelname, inrelarg, AInsert(_, outrelterms, where))  
-          | Rule(inrelname, inrelarg, ADelete(_, outrelterms, where)) -> 
+          | AInsert(_, outrelterms, where)  
+          | ADelete(_, outrelterms, where) -> 
             raise (UndeclaredField(vname, fname)))
 
       (* any other field... must be undeclared *)
@@ -163,10 +162,10 @@ let well_formed_rule (decls: sdecl list) (reacts: sreactive list) (r: srule): un
       raise (UndeclaredIncomingRelation inrelname)
   in 
 
-  match r with     
+  match r.action with     
     (* DO must have outgoing relation in action, and must be correct arity *)
-    | Rule(inrelname, inrelarg, ADo(outrelname, outrelterms, where)) -> 
-        validate_common_elements inrelname inrelarg outrelname outrelterms where;
+    |  ADo(outrelname, outrelterms, where) -> 
+        validate_common_elements r.onrel r.onvar outrelname outrelterms where;
         (try
           let dargs = first (filter_map (function | DeclOut(dname, dargs) when dname = outrelname -> Some dargs | _ -> None) decls) in
           if (length outrelterms) <> (length dargs) then
@@ -174,9 +173,9 @@ let well_formed_rule (decls: sdecl list) (reacts: sreactive list) (r: srule): un
         with Not_found -> raise (UndeclaredOutgoingRelation outrelname))
 
     (* insert and delete must have local table in action, of correct arity *)
-    | Rule(inrelname, inrelarg, AInsert(relname, outrelterms, where))  
-    | Rule(inrelname, inrelarg, ADelete(relname, outrelterms, where)) ->
-        validate_common_elements inrelname inrelarg relname outrelterms where;        
+    | AInsert(relname, outrelterms, where)  
+    | ADelete(relname, outrelterms, where) ->
+        validate_common_elements r.onrel r.onvar relname outrelterms where;        
         (try
           let dargs = first (filter_map (function | DeclTable(dname, dargs) when dname = relname -> Some dargs | _ -> None) decls) in
           if (length outrelterms) <> (length dargs) then
@@ -229,20 +228,19 @@ let decls_added_by_sugar (stmts: stmt list): sdecl list =
                       | _ -> failwith "decls_added_by_sugar") [] event_decls;;
 
 (* built_in_where_for_vname (vname: string) (relname: string): *)
-let add_built_ins (r: srule): srule =  
-  match r with | Rule(onrel, onvar, act) ->  
-  let to_add_for_incoming = (built_in_where_for_variable (TVar(onvar)) onrel) in
+let add_built_ins (r: srule): srule =    
+  let to_add_for_incoming = (built_in_where_for_variable (TVar(r.onvar)) r.onrel) in
   (* built-in outgoing additions will only work on condensed rels as written (note the length = 1 check) *)
-  let to_add_for_outgoing = (match act with | ADo(outrel, outterms, where) when (length outterms) = 1 ->
+  let to_add_for_outgoing = (match r.action with | ADo(outrel, outterms, where) when (length outterms) = 1 ->
                                                 (built_in_where_for_variable (first outterms) outrel ) 
                                             | _ -> FTrue) in      
   let act' = if to_add_for_incoming <> FTrue  
-             then add_conjunct_to_action act to_add_for_incoming 
-             else act in
+             then add_conjunct_to_action r.action to_add_for_incoming 
+             else r.action in
   let act'' = if to_add_for_outgoing <> FTrue 
               then add_conjunct_to_action act' to_add_for_outgoing
               else act' in
-    Rule(onrel, onvar, act'');;
+    {r with action=act''};;
 
 
 (*
@@ -287,7 +285,19 @@ let rec expand_includes (ast : flowlog_ast) (prev_includes : string list) : flow
         let new_ast = AST(new_includes, stmts @ new_stmts) in
         expand_includes new_ast (prev_includes @ includes)
 
-
+(* some duplication here from Flowlog_Graphs for now. *)
+  let build_memos_for_program (rules: srule list): program_memos =   
+    let memos = {out_triggers = Hashtbl.create 5; insert_triggers = Hashtbl.create 5; delete_triggers = Hashtbl.create 5;} in
+    let depends_from_rule (r: srule): unit =  
+      match r.action with
+        | AInsert(headrel, _, fmla) ->
+          Hashtbl.add memos.insert_triggers r.onrel headrel
+        | ADelete(headrel, _, fmla) ->
+          Hashtbl.add memos.delete_triggers r.onrel headrel
+        | ADo(headrel, _, fmla) -> 
+          Hashtbl.add memos.out_triggers r.onrel headrel in
+     iter depends_from_rule rules;
+     memos;;
 
 let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_program =
   let expanded_ast = expand_includes ast [filename] in
@@ -318,5 +328,9 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
               printf "Reacts: %s\n%!" (String.concat ", " (map string_of_reactive the_reacts));
               printf "Decls: %s\n%!" (String.concat ", " (map string_of_declaration the_decls));
                 {decls = the_decls; reacts = the_reacts; clauses = simplified_clauses; 
-                 can_fully_compile_to_fwd_clauses = can_fully_compile_simplified};;
+                 can_fully_compile_to_fwd_clauses = can_fully_compile_simplified;
+                 memos = build_memos_for_program the_rules};;
+
+
+        
 
