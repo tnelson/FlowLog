@@ -3,6 +3,7 @@
  * AppleTV and the host which wishes to use it.
  *
  * TODO:
+ *  - Rules should be placed on the switches where the hosts are attached
  *  - Issue IGMP messages after creating the multicast group
  *  - Make state soft state -- requires timeouts.
  *  - We should delete entries in atv_cxns if either side moves -- this would
@@ -46,9 +47,9 @@ ON atv_disconnect(evt):
  *
  ******************************************************************************/
 
-ON ip_packet_in(pkt) WHERE pkt.dlDst = 0x01005e0000fb and
-                           pkt.nwDst = 0xE00000FB: // and // 224.0.0.251 (mDNS group)
-       //                pkt.tpDst = 5353: // (mDns port)
+ON udp_packet_in(pkt) WHERE pkt.dlDst = 0x01005e0000fb and
+                            pkt.nwDst = 0xE00000FB and // and // 224.0.0.251 (mDNS group)
+                            pkt.tpDst = 5353: // (mDns port)
 
   DO forward(new) WHERE
     atv_cxns(pkt.dlSrc, new.dlDst) and

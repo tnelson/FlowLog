@@ -43,13 +43,13 @@ type packet_flavor = {
 };;
 
 (* Fields in a base packet *)
-let packet_fields = ["locsw"; "locpt"; "dlsrc"; "dldst"; "dltyp"];;
+let eth_packet_fields = ["locsw"; "locpt"; "dlsrc"; "dldst"; "dltyp"];;
 
 let packet_flavors = [
    (* base type (Ethernet) *)
    {label = ""; superflavor = None;
     build_condition = (fun vname -> FTrue);
-    fields = packet_fields};
+    fields = eth_packet_fields};
 
    {label = "arp"; superflavor = Some "";
     build_condition = (fun vname -> FEquals(TField(vname, "dltyp"), TConst("0x0806")));
@@ -296,10 +296,13 @@ let pkt_to_event (sw : switchId) (pt: port) (pkt : Packet.packet) : event =
 (**********************************************)
 
 (* Fields that OpenFlow 1.0 permits modification of. *)
-let legal_to_modify_packet_fields = ["locpt"; "dlsrc"; "dldst"; "dltyp";
+let legal_to_modify_packet_fields = ["locpt"; "dlsrc"; "dldst";
                                      "dlvlan"; "dlvlanpcp";
                                      "nwsrc"; "nwdst"; "nwtos";
                                      "tpsrc"; "tpdst"];;
+
+let legal_to_match_packet_fields = ["dltyp"; "nwproto"]
+                                   @ legal_to_modify_packet_fields;;
 
 let swpt_fields = ["sw";"pt"];;
 let swdown_fields = ["sw"];;
@@ -383,7 +386,8 @@ let built_in_decls = [DeclInc(switch_reg_relname, "switch_port");
 let built_in_reacts = [ ReactInc("switch_port", switch_reg_relname);
                         ReactInc("switch_down", switch_down_relname);
                         ReactInc("startup", startup_relname);
-                        ReactOut("forward", packet_fields, "packet", map create_id_assign packet_fields, OutForward);
+                        ReactOut("forward", eth_packet_fields, "packet",
+                                 map create_id_assign eth_packet_fields, OutForward);
                       ] @ flatten (map build_flavor_reacts packet_flavors);;
 
 (* These output relations have a "condensed" argument. That is, they are unary,

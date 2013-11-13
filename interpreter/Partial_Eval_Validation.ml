@@ -20,7 +20,7 @@ let legal_field_to_modify (fname: string): bool =
 	mem fname legal_to_modify_packet_fields;;
 
 let compilable_field_to_test (fname: string): bool =
-  mem fname packet_fields;;
+  mem fname legal_to_match_packet_fields;;
 
 let rec forbidden_assignment_check (newpkt: string) (f: formula) (innot: bool): unit = 
     
