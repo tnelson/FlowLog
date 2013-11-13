@@ -643,14 +643,14 @@ let forward_packet (ev: event): unit =
   (* TODO use allpackets here. compilation uses it, but XSB returns every port individually. *)
   printf "WARNING: field modifications not yet supported in netcore.\n%!";  
   fwd_actions := 
-    SwitchAction({id with outPort = Physical(Int32.of_string (get_field ev "locpt"))}) 
+    SwitchAction({id with outPort = Physical(Int32.of_string (get_field ev "locpt" None))})
     :: !fwd_actions;;
 
 let emit_packet (ev: event): unit =  
   printf "emitting: %s\n%!" (string_of_event ev);
   write_log (sprintf ">>> emitting: %s\n%!" (string_of_event ev));
-  let swid = (Int64.of_string (get_field_default ev "locsw")) in
-  let pt = (Int32.of_string (get_field_default ev "locpt")) in
+  let swid = (Int64.of_string (get_field ev "locsw" None)) in
+  let pt = (Int32.of_string (get_field ev "locpt" None)) in
   
   (* TODO: confirm dltyp/nwProto etc. are consistent with whatever type of packet we're producing 
      At the moment, someone can emit_arp with dlTyp = 0x000 or something dumb like that. *)

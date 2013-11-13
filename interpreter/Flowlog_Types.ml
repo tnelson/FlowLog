@@ -88,11 +88,6 @@ open NetCore_Types
   module StringMap = Map.Make(String);;
   type event = { typeid: string; values: string StringMap.t};;
 
-  (* raises not_found on invalid field *)
-  let get_field (ev: event) (fldname: string): string  = 
-    StringMap.find fldname ev.values;; 
-
-
   module FmlaMap = Map.Make(struct type t = formula let compare = compare end);;
 
 (*************************************************************)
