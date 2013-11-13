@@ -59,6 +59,14 @@ let packet_flavors = [
     build_condition = (fun vname -> FEquals(TField(vname, "dltyp"), TConst("0x0800")));
     fields = ["nwsrc"; "nwdst"; "nwproto"]};  (* missing: frag, tos, chksum, ident, ...*)
 
+  (* {label = "ipv6"; superflavor = Some "";
+    build_condition = (fun vname -> FEquals(TField(vname, "dltyp"), TConst("0x86DD")));
+    fields = ["omgwtfbbq"]}; *)
+
+  (* {label = "8021x"; superflavor = Some "";
+    build_condition = (fun vname -> FEquals(TField(vname, "dltyp"), TConst("0x888E")));
+    fields = ["omgwtfbbq"]}; *)
+
   (* {label = "lldp"; superflavor = None;
     build_condition = (fun vname -> FEquals(TField(vname, "dltyp"), TConst("0x88CC")));
     fields = ["omgwtfbbq"]}; *)
@@ -177,6 +185,14 @@ let make_tcp (ev: event): Packet.Ip.tp =
          (* empty payload *)
          payload = Cstruct.create 0});;
 
+let make_udp (ev: event): Packet.Ip.tp =
+  let tpSrc = int_of_string (get_field ev "tpsrc" None) in
+  let tpDst = int_of_string (get_field ev "tpdst" None) in
+  let tpChksum = int_of_string (get_field ev "tpchksum" None) in
+    Udp({Udp.src = tpSrc; dst = tpDst; chksum = tpChksum;
+         (* empty payload *)
+         payload = Cstruct.create 0});;
+
 (* Avoid gyrations with variant types by having these separate from the flavor declarations.
   Originally wanted each flavor to carry its own marshal function, but due to different Packet
   module types + heterogenous lists, it would have been involved.
@@ -197,8 +213,8 @@ let marshal_packet (ev: event): Packet.bytes =
     | "arp_packet" -> make_eth ev (make_arp ev)
     | "icmp_packet" -> failwith "icmp unsupported"
     | "igmp_packet" -> failwith "igmp unsupported"
-    | "udp_packet" ->  failwith "udp unsupported"
     | "tcp_packet" -> make_eth ev (make_ip ev (make_tcp ev))
+    | "udp_packet" -> make_eth ev (make_ip ev (make_udp ev))
     | _ -> failwith ("marshal_packet: unknown type: "^ev.typeid);;
 
 
@@ -233,7 +249,25 @@ let get_ip (pkt: Packet.packet): (string*string) list =
     [("nwsrc", Int32.to_string (Packet.nwSrc pkt));
      ("nwdst", Int32.to_string (Packet.nwDst pkt));
      ("nwproto", string_of_int (Packet.nwProto pkt))]
-     | _ -> [];;
+   | _ -> [];;
+
+let get_tcp (pkt: Packet.packet): (string*string) list =
+  match pkt.nw with
+   | Ip(ip_pkt) -> (match ip_pkt.tp with
+      | Tcp(_) ->
+        [("tpsrc", string_of_int (Packet.tpSrc pkt));
+         ("tpdst", string_of_int (Packet.tpDst pkt))]
+      | _ -> [])
+   | _ -> [];;
+
+let get_udp (pkt: Packet.packet): (string*string) list =
+  match pkt.nw with
+   | Ip(ip_pkt) -> (match ip_pkt.tp with
+      | Udp(_) ->
+        [("tpsrc", string_of_int (Packet.tpSrc pkt));
+        ("tpdst", string_of_int (Packet.tpDst pkt))]
+      | _ -> [])
+   | _ -> [];;
 
 
 let pkt_to_event (sw : switchId) (pt: port) (pkt : Packet.packet) : event =
@@ -244,10 +278,15 @@ let pkt_to_event (sw : switchId) (pt: port) (pkt : Packet.packet) : event =
     ("dldst", Int64.to_string pkt.Packet.dlDst);
     ("dltyp", string_of_int (Packet.dlTyp pkt))]
     @ (get_arp pkt)
-    @ (get_ip pkt) in
+    @ (get_ip pkt)
+    @ (get_tcp pkt)
+    @ (get_udp pkt) in
     let typeid = (match (Packet.dlTyp pkt) with
-      | 0x0800 -> "ip_packet"
       | 0x0806 -> "arp_packet"
+      | 0x0800 -> (match (Packet.nwProto pkt) with
+                    | 0x06 -> "tcp_packet"
+                    | 0x11 -> "udp_packet"
+                    | _ -> "ip_packet")
       | _ -> "packet") in
     {typeid = typeid; values = construct_map values};;
 
@@ -256,8 +295,11 @@ let pkt_to_event (sw : switchId) (pt: port) (pkt : Packet.packet) : event =
 (**********************************************)
 (**********************************************)
 
-(* Fields that OpenFlow permits modification of. *)
-let legal_to_modify_packet_fields = ["locpt";"dlsrc";"dldst";"dltyp";"nwsrc";"nwdst"];;
+(* Fields that OpenFlow 1.0 permits modification of. *)
+let legal_to_modify_packet_fields = ["locpt"; "dlsrc"; "dldst"; "dltyp";
+                                     "dlvlan"; "dlvlanpcp";
+                                     "nwsrc"; "nwdst"; "nwtos";
+                                     "tpsrc"; "tpdst"];;
 
 let swpt_fields = ["sw";"pt"];;
 let swdown_fields = ["sw"];;

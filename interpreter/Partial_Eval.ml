@@ -244,6 +244,8 @@ let field_to_pattern (fld: string) (aval:string): NetCore_Pattern.t =
     | "nwsrc" -> {all with ptrnNwSrc = WildcardExact (Int32.of_string aval) }
     | "nwdst" ->  {all with ptrnNwDst = WildcardExact (Int32.of_string aval) }
     | "nwproto" -> {all with ptrnNwProto = WildcardExact (int_of_string aval) }
+    | "tpsrc" -> {all with ptrnTpSrc = WildcardExact (int_of_string aval) }
+    | "tpdst" ->  {all with ptrnTpDst = WildcardExact (int_of_string aval) }
     | _ -> failwith ("field_to_pattern: "^fld^" -> "^aval) in
     (* TODO: dlVLan, dlVLanPCP *)
 
@@ -366,7 +368,7 @@ let rec strip_incoming_atom (oldpkt: string) (cl: clause): clause =
         | FNot(FEquals(TField(v, f), TField(v2, f2))) when v = v2 && f2 <> f -> 
           begin
             if !global_verbose >= 3 then 
-              printf "Removing atom: %s\n%!" (string_of_formula lit);
+              printf "Removing atom (pkt equality): %s\n%!" (string_of_formula lit);
             acc end            
 
           (* weaken if referring to a non-table packet field (like ARP fields) *)
@@ -377,14 +379,14 @@ let rec strip_incoming_atom (oldpkt: string) (cl: clause): clause =
           when not (compilable_field_to_test fld) -> 
           begin
             if !global_verbose >= 3 then 
-              printf "Removing atom: %s\n%!" (string_of_formula lit);
+              printf "Removing atom (not compilable; equality): %s\n%!" (string_of_formula lit);
             acc end            
         | FAtom(_,_,args) 
         | FNot(FAtom(_,_,args)) 
           when exists (function | TField(_, fld) -> not (compilable_field_to_test fld) | _ -> false) args -> 
           begin 
             if !global_verbose >= 3 then 
-              printf "Removing atom: %s\n%!" (string_of_formula lit);
+              printf "Removing atom (not compilable; atomic): %s\n%!" (string_of_formula lit);
             acc end                      
 
         (* If this atom involves an already-seen variable not in tlargs, remove it *)
@@ -394,7 +396,7 @@ let rec strip_incoming_atom (oldpkt: string) (cl: clause): clause =
           begin
             (* removing this atom, so a fresh term shouldnt be remembered *)
             if !global_verbose >= 3 then
-              printf "Removing atom: %s\n%!" (string_of_formula lit);
+              printf "Removing atom (already seen): %s\n%!" (string_of_formula lit);
             acc
           end 
           else if fmlasofar = FTrue then
