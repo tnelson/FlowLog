@@ -338,8 +338,9 @@ module Communication = struct
 		(* prevent XSB from locking up if unknown relation seen. will assume false if unknown now.*)
 		ignore (send_message "set_prolog_flag(unknown, fail)." 0);
 		(* Add a clause if it's not fully compiled, OR we're in no-compilation mode *)
+		let fully_compiled = map (fun tc -> tc.clause) prgm.can_fully_compile_to_fwd_clauses in
 		List.iter (fun cl -> 
-					if notables || (not (mem cl prgm.can_fully_compile_to_fwd_clauses)) then
+					if notables || (not (mem cl fully_compiled)) then
 					 (start_clause prgm cl)) prgm.clauses;
 		Xsb.debug_print_listings();;
 

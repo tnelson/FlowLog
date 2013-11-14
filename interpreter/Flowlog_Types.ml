@@ -78,11 +78,24 @@ open NetCore_Types
                   body: formula; (* should be always conjunctive *)
                   };;
 
+
+  (* triggers: inrels -> outrels *)
+  (* We use Hashtbl's built in find_all function to extend the values to string list. *)
+  type program_memos = {out_triggers: (string, string) Hashtbl.t;
+                        insert_triggers: (string, string) Hashtbl.t;
+                        delete_triggers: (string, string) Hashtbl.t};;
+
+  (* partial-evaluation needs to know what variable is being used for the old packet in a clause *)
+  type triggered_clause = {clause: clause; oldpkt: string};;
+
   type flowlog_program = {  decls: sdecl list; 
                             reacts: sreactive list; 
                             clauses: clause list;
-                            (* subset of <clauses> *)
-                            can_fully_compile_to_fwd_clauses: clause list; };;
+                            (* subsets of <clauses> used to avoid recomputation*)
+                            can_fully_compile_to_fwd_clauses: triggered_clause list;                             
+                            weakened_cannot_compile_pt_clauses: triggered_clause list;
+                            (* Additional info used to avoid recomputation *)
+                            memos: program_memos};;
 
   (* context for values given by decls *)
   module StringMap = Map.Make(String);;
@@ -183,6 +196,9 @@ open NetCore_Types
   let string_of_clause ?(verbose: bool = false) (cl: clause): string =
     "CLAUSE: "^(string_of_formula ~verbose:verbose cl.head)^" :- "^(string_of_formula ~verbose:verbose cl.body)^"\n"^
     (if verbose then "FROM RULE: "^(string_of_rule cl.orig_rule) else "");;
+
+  let string_of_triggered_clause ?(verbose: bool = false) (cl: triggered_clause): string =
+    "TRIGGER: "^cl.oldpkt^" "^(string_of_clause cl.clause);;
 
 (*************************************************************)
 

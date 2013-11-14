@@ -312,11 +312,24 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
 
             let clauses = (fold_left (fun acc r -> (clauses_of_rule r) @ acc) [] the_rules) in 
             let simplified_clauses = map simplify_clause clauses in 
-            let can_fully_compile_simplified = filter can_compile_clause_to_fwd simplified_clauses in
-              printf "Loaded AST. There were %d clauses, %d of which were fully compilable forwarding clauses.\n%!"              
-                (length simplified_clauses) (length can_fully_compile_simplified);
+            (* pre-determine what can be fully compiled. pre-determine weakened versions of other packet-triggered clauses*)
+            let can_fully_compile_simplified, weakened_cannot_compile_pt_clauses = 
+              fold_left (fun (acc_comp, acc_weaken) cl -> let (v, t) = trim_packet_from_body cl.body in                         
+                                     if v = "" then (* not packet-triggered *)
+                                       (acc_comp, acc_weaken)
+                                     else if can_compile_clause_to_fwd cl then (* fully compilable *)
+                                       ({oldpkt=v; clause={head = cl.head; orig_rule = cl.orig_rule; body = t}} :: acc_comp, acc_weaken)
+                                     else (* needs weakening *)
+                                       (acc_comp, {oldpkt=v; clause=weaken_uncompilable_packet_triggered_clause v 
+                                                               {head = cl.head; orig_rule = cl.orig_rule; body = t}} :: acc_weaken))
+                          ([],[]) simplified_clauses in 
+
+              printf "Loaded AST. There were %d clauses, %d of which were fully compilable forwarding clauses and %d were weakened pkt-triggered clauses.\n%!"              
+                (length simplified_clauses) (length can_fully_compile_simplified) (length weakened_cannot_compile_pt_clauses);
               printf "Reacts: %s\n%!" (String.concat ", " (map string_of_reactive the_reacts));
               printf "Decls: %s\n%!" (String.concat ", " (map string_of_declaration the_decls));
-                {decls = the_decls; reacts = the_reacts; clauses = simplified_clauses; 
-                 can_fully_compile_to_fwd_clauses = can_fully_compile_simplified};;
 
+                {decls = the_decls; reacts = the_reacts; clauses = simplified_clauses; 
+                 weakened_cannot_compile_pt_clauses = weakened_cannot_compile_pt_clauses;
+                 can_fully_compile_to_fwd_clauses = can_fully_compile_simplified;
+                 memos = build_memos_for_program the_rules};;
