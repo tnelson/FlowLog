@@ -823,6 +823,8 @@ let make_policy_stream (p: flowlog_program)
           let used = (Unix.gettimeofday() -. startt) in
             ms_on_packet_processing := !ms_on_packet_processing +. used;
             printf "Time used: %fs. Average: %fs\n%!" used (!ms_on_packet_processing /. (float_of_int !counter_inc_pkt));
+            printf "Asserts: %d. Retracts: %d. Send_asserts: %d. Send_queries: %d\n%!" 
+              !count_assert_formula !count_retract_formula !count_send_assert !count_send_query;
         end;
         if !global_verbose >= 2 then
           printf "actions will be = %s\n%!" (NetCore_Pretty.string_of_action !fwd_actions);        

@@ -17,6 +17,11 @@ open ExtList.List
 
 let debug = false;;
 
+let count_assert_formula = ref 0;;
+let count_retract_formula = ref 0;;
+let count_send_assert = ref 0;;
+let count_send_query = ref 0;;
+
 module Xsb = struct
 	
     (* creates a pair channels for talking to xsb, starts xsb, and returns the channels *)
@@ -144,6 +149,7 @@ module Xsb = struct
    	      answer := (!answer ^ "\n" ^ String.trim !next_str);
 		done;
 		if debug then Printf.printf "send_assert answer: %s\n%!" (String.trim !answer); 
+		if !global_verbose >= 1 then count_send_assert := !count_send_assert + 1;
 		String.trim !answer;;
 
 
@@ -219,7 +225,8 @@ module Xsb = struct
 			end;
 			(* TODO If num_vars is wrong, this will freeze. Can we improve? *)
 		done;
-		if debug then Printf.printf "send_query finished. answers: [%s]\n%!" (String.concat ", " !answer);		
+		if debug then Printf.printf "send_query finished. answers: [%s]\n%!" (String.concat ", " !answer);	
+		if !global_verbose >= 1 then count_send_query := !count_send_query + 1;	
 		List.map (fun (l : string list) -> List.map after_equals l) (group (List.rev !answer) num_vars);;
 
 end
@@ -349,10 +356,12 @@ module Communication = struct
 
 		(* engine will sometimes be told to retract _, need to retract ALL matches, not just first match *)
 	let retract_formula (tup: formula): unit = 
+	    if !global_verbose >= 1 then count_retract_formula := !count_retract_formula + 1;
 		ignore (send_message ("retractall("^(string_of_formula tup)^").") 0);;
 
 	let assert_formula (tup: formula): unit = 
 		(* avoid storing multiples of same tuple *)
+		if !global_verbose >= 1 then count_assert_formula := !count_assert_formula + 1;
 		retract_formula tup; 
 		ignore (send_message ("assert("^(string_of_formula tup)^").") 0);;
 
