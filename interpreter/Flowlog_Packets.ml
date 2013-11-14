@@ -301,7 +301,7 @@ let legal_to_modify_packet_fields = ["locpt"; "dlsrc"; "dldst";
                                      "nwsrc"; "nwdst"; "nwtos";
                                      "tpsrc"; "tpdst"];;
 
-let legal_to_match_packet_fields = ["dltyp"; "nwproto"]
+let legal_to_match_packet_fields = ["dltyp"; "nwproto"; "locsw"]
                                    @ legal_to_modify_packet_fields;;
 
 let swpt_fields = ["sw";"pt"];;

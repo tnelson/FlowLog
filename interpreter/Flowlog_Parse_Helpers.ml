@@ -323,23 +323,26 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
             let clauses = (fold_left (fun acc r -> (clauses_of_rule r) @ acc) [] the_rules) in 
             let simplified_clauses = map simplify_clause clauses in 
             (* pre-determine what can be fully compiled. pre-determine weakened versions of other packet-triggered clauses*)
-            let can_fully_compile_simplified, weakened_cannot_compile_pt_clauses = 
-              fold_left (fun (acc_comp, acc_weaken) cl -> let (v, t) = trim_packet_from_body cl.body in                         
+            let can_fully_compile_simplified, weakened_cannot_compile_pt_clauses, not_fully_compiled_clauses = 
+              fold_left (fun (acc_comp, acc_weaken, acc_unweakened) cl -> 
+                                   let (v, t) = trim_packet_from_body cl.body in                         
                                      if v = "" then (* not packet-triggered *)
-                                       (acc_comp, acc_weaken)
+                                       (acc_comp, acc_weaken, cl::acc_unweakened)
                                      else if can_compile_clause_to_fwd cl then (* fully compilable *)
-                                       ({oldpkt=v; clause={head = cl.head; orig_rule = cl.orig_rule; body = t}} :: acc_comp, acc_weaken)
-                                     else (* needs weakening *)
+                                       ({oldpkt=v; clause={head = cl.head; orig_rule = cl.orig_rule; body = t}} :: acc_comp, acc_weaken, acc_unweakened)
+                                     else (* needs weakening AND needs storing for XSB *)
                                        (acc_comp, {oldpkt=v; clause=weaken_uncompilable_packet_triggered_clause v 
-                                                               {head = cl.head; orig_rule = cl.orig_rule; body = t}} :: acc_weaken))
-                          ([],[]) simplified_clauses in 
+                                                               {head = cl.head; orig_rule = cl.orig_rule; body = t}} :: acc_weaken, cl::acc_unweakened))
+                          ([],[],[]) simplified_clauses in 
 
-              printf "Loaded AST. There were %d clauses, %d of which were fully compilable forwarding clauses and %d were weakened pkt-triggered clauses.\n%!"              
-                (length simplified_clauses) (length can_fully_compile_simplified) (length weakened_cannot_compile_pt_clauses);
+              printf "\n  Loaded AST. There were %d clauses, \n    %d of which were fully compilable forwarding clauses and\n    %d were weakened pkt-triggered clauses.\n    %d will be given, unweakened, to XSB.\n%!"              
+                (length simplified_clauses) (length can_fully_compile_simplified) (length weakened_cannot_compile_pt_clauses) (length not_fully_compiled_clauses);
               printf "Reacts: %s\n%!" (String.concat ", " (map string_of_reactive the_reacts));
               printf "Decls: %s\n%!" (String.concat ", " (map string_of_declaration the_decls));
 
                 {decls = the_decls; reacts = the_reacts; clauses = simplified_clauses; 
                  weakened_cannot_compile_pt_clauses = weakened_cannot_compile_pt_clauses;
                  can_fully_compile_to_fwd_clauses = can_fully_compile_simplified;
+                 (* Remember: these are unweakened, and so can be used by XSB. *)
+                 not_fully_compiled_clauses = not_fully_compiled_clauses;
                  memos = build_memos_for_program the_rules};;

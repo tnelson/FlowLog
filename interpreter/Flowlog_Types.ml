@@ -91,6 +91,8 @@ open NetCore_Types
                             (* subsets of <clauses> used to avoid recomputation*)
                             can_fully_compile_to_fwd_clauses: triggered_clause list;                             
                             weakened_cannot_compile_pt_clauses: triggered_clause list;
+                            (* These are *UNWEAKENED* for direct use in XSB. Therefore not same as clauses minus can_fully_compile... *)
+                            not_fully_compiled_clauses: clause list;
                             (* Additional info used to avoid recomputation *)
                             memos: program_memos};;
 

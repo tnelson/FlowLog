@@ -373,19 +373,20 @@ module Communication = struct
 						orig_rule = cls.orig_rule}  in
 			printf "subs cls: %s\n%!" (string_of_clause cls);
 			ignore (send_message ("assert((" ^ (clause_to_xsb subs_cls) ^ ")).") 
-				                 (length (get_all_clause_vars subs_cls)));
-		();;
+				                 (length (get_all_clause_vars subs_cls)));;
 	
 	(* assuming all implicitly defined clauses have been added to list of clauses *)
 	let start_program (prgm : flowlog_program) (notables: bool): unit =
 		printf "-------------------\nStarting Flowlog Program...\n%!";		
 		(* prevent XSB from locking up if unknown relation seen. will assume false if unknown now.*)
 		ignore (send_message "set_prolog_flag(unknown, fail)." 0);
-		(* Add a clause if it's not fully compiled, OR we're in no-compilation mode *)
-		let fully_compiled = map (fun tc -> tc.clause) prgm.can_fully_compile_to_fwd_clauses in
-		List.iter (fun cl -> 
-					if notables || (not (mem cl fully_compiled)) then
-					 (start_clause prgm cl)) prgm.clauses;
+		
+		(* Add a clause if it's not fully compiled, OR we're in no-compilation mode *)				
+		if notables then 
+		  List.iter (start_clause prgm) prgm.clauses
+	    else 
+		  List.iter (start_clause prgm) prgm.not_fully_compiled_clauses;
+
 		Xsb.debug_print_listings();;
 
 end
