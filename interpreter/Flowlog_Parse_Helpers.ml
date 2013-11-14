@@ -338,6 +338,7 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
                 (length simplified_clauses) (length can_fully_compile_simplified) (length weakened_cannot_compile_pt_clauses);
               printf "Reacts: %s\n%!" (String.concat ", " (map string_of_reactive the_reacts));
               printf "Decls: %s\n%!" (String.concat ", " (map string_of_declaration the_decls));
+
                 {decls = the_decls; reacts = the_reacts; clauses = simplified_clauses; 
                  weakened_cannot_compile_pt_clauses = weakened_cannot_compile_pt_clauses;
                  can_fully_compile_to_fwd_clauses = can_fully_compile_simplified;
