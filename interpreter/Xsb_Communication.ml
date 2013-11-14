@@ -224,7 +224,6 @@ module Xsb = struct
 
 end
 
-
 (* Provides functions for high level communication with XSB. *)
 (* Right now ignoring queries. *)
 module Communication = struct

@@ -188,8 +188,8 @@ let rec build_unsafe_switch_actions (oldpkt: string) (body: formula): action =
                  dstPort once Flowlog includes in the packet types *)
   let enhance_action_atom (afld: string) (aval: string) (anact: action_atom): action_atom =
   match anact with
-    SwitchAction(oldout) ->
-      match afld with 
+    | SwitchAction(oldout) ->
+      (match afld with 
         | "locpt" -> anact
         | "dlsrc" -> SwitchAction({oldout with outDlSrc = Some (None, Int64.of_string aval) })
         | "dldst" -> SwitchAction({oldout with outDlDst = Some (None, Int64.of_string aval) })
@@ -197,7 +197,8 @@ let rec build_unsafe_switch_actions (oldpkt: string) (body: formula): action =
         | "nwsrc" -> SwitchAction({oldout with outNwSrc = Some (None, (Int32.of_string aval)) })
         | "nwdst" -> SwitchAction({oldout with outNwDst = Some (None, (Int32.of_string aval)) })
         | "nwproto" -> failwith ("OpenFlow 1.0 does not allow this field to be updated")
-        | _ -> failwith ("enhance_action_atom: "^afld^" -> "^aval) in
+        | _ -> failwith ("enhance_action_atom unknown afld: "^afld^" -> "^aval))
+    | _ -> failwith ("enhance_action_atom non SwitchAction: "^afld^" -> "^aval) in
 
   let create_mod_actions (actlist: action) (lit: formula): action =
     match lit with 
@@ -740,11 +741,38 @@ let expire_remote_state_in_xsb (p: flowlog_program) : unit =
 
     FmlaMap.iter (expire_remote_if_time p) !remote_cache;;
 
-let get_output_defns_triggered (p: flowlog_program) (notif: event): sreactive list =
-  (get_output_defns p);;
+(* Todo: Ok, we're wasting a lot of cycles with this reactive/decl distinction. 
+    Should use a map or hash table instead of a list, and not split/duplicate the data. *)
+let inc_event_to_relnames (p: flowlog_program) (notif: event): string list =
+  filter_map (function       
+        | ReactInc(typename, relname) when mem typename (built_in_supertypes notif.typeid) ->
+          Some(relname)                
+        | _ -> None ) p.reacts;;
 
+let get_output_defns_triggered (p: flowlog_program) (notif: event): sreactive list =
+  let defns = (get_output_defns p) in 
+  (*printf "number of out defns %d\n%!" (length defns);*)
+  let inrelnames = inc_event_to_relnames p notif in
+  let outrelnames = fold_left (fun acc inrel -> (Hashtbl.find_all p.memos.out_triggers inrel ) @ acc) [] inrelnames in
+  let possibly_triggered = filter (fun def -> match def with 
+      | ReactOut(defoutrelname, _, _, _, _) when mem defoutrelname outrelnames -> true 
+      | _ -> false) defns in
+    (*printf "possibly triggered: %s\n%!" (String.concat ",\n" (map string_of_reactive possibly_triggered));*)
+    possibly_triggered;;
+
+(* TODO: note duplicate code here between output and table trigger funcs *)
 let get_local_tables_triggered (p: flowlog_program) (sign: bool) (notif: event): sdecl list =
-  (get_local_tables p);;
+  let tables = (get_local_tables p) in
+  (*printf "number of tbl defns %d\n%!" (length tables);*)
+  let inrelnames = inc_event_to_relnames p notif in
+  let outrelnames = fold_left 
+    (fun acc inrel -> (Hashtbl.find_all 
+                        (if sign then p.memos.insert_triggers else p.memos.delete_triggers) inrel) @ acc) [] inrelnames in
+  let possibly_triggered = filter (fun def -> match def with 
+      | DeclTable(deftablename, _) when mem deftablename outrelnames -> true 
+      | _ -> false) tables in
+    (*printf "possibly triggered: %s\n%!" (String.concat ",\n" (map string_of_declaration possibly_triggered));*)
+    possibly_triggered;;
 
 (* separate to own module once works for sw/pt *)
 let respond_to_notification (p: flowlog_program) (notif: event): unit =
@@ -773,7 +801,7 @@ let respond_to_notification (p: flowlog_program) (notif: event): unit =
 
     (* for all declared tables +/- *)
     let triggered_insert_table_decls = get_local_tables_triggered p true notif in
-    let triggered_delete_table_decls = get_local_tables_triggered p false notif in
+    let triggered_delete_table_decls = get_local_tables_triggered p false notif in 
     let to_assert = flatten (map (change_table_how p true) triggered_insert_table_decls) in
     let to_retract = flatten (map (change_table_how p false) triggered_delete_table_decls) in
     if !global_verbose >= 2 && (length to_assert > 0 || length to_retract > 0) then 

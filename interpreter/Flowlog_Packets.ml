@@ -101,23 +101,23 @@ let packet_flavors = [
  ******************************************************************************)
 
 (* raises Not_found on invalid field, which is why we wrap with get_field *)
-let get_field_helper (ev: event) (fldname: string): string  =
+let get_field_helper (ev: event) (fldname: string): string  =  
     StringMap.find fldname ev.values;;
 
 (* XSB specific: This is likely to change if we change engines.*)
 let field_is_defined (ev: event) (fldname: string): bool =
   not (starts_with (get_field_helper ev fldname) "_");;
 
-let get_field (ev: event) (fldname: string) (default: string option): string =
-  let get_default = match default with
+let get_field (ev: event) (fldname: string) (default: string option): string =  
+  let get_default() = match default with
         | Some d -> d
         | None -> failwith ("get_field. no default specified for: "^fldname) in
   try
     let evval = get_field_helper ev fldname in
       if field_is_defined ev fldname then evval
-      else get_default
+      else get_default()
   with
-    | Not_found -> get_default;;
+    | Not_found -> get_default();;
 
 
 (*******************************************************************************
