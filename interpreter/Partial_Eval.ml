@@ -12,13 +12,6 @@ open Xsb_Communication
 open Flowlog_Thrift_Out
 open Partial_Eval_Validation
 
-(* output verbosity *)
-(* 0 = default, no debug info at all *)
-(* 2 adds XSB listings between events *)
-(* 3 adds weakening and partial-evaluation info *)
-(* 10 = even XSB messages *)
-let global_verbose = ref 0;;
-
 (* XSB is shared state. We also have the remember_for_forwarding and packet_queue business *)
 let xsbmutex = Mutex.create();;
 
@@ -306,121 +299,6 @@ let field_to_pattern (fld: string) (aval:string): NetCore_Pattern.t =
               | _ when acc = Nothing -> acc 
               | _ -> And(acc, pred)) Everything predlist;; 
 
-(* todo: lots of code overlap in these functions. should unify *)
-(* removes the packet_in atom (since that's meaningless here). 
-   returns the var the old packet was bound to, and the trimmed fmla *)
-let rec trim_packet_from_body (p: flowlog_program) (body: formula): (string * formula) =
-  match body with
-    | FTrue -> ("", body)
-    | FFalse -> ("", body)
-    | FEquals(t1, t2) -> ("", body)
-    | FAnd(f1, f2) -> 
-      let (var1, trimmed1) = trim_packet_from_body p f1 in
-      let (var2, trimmed2) = trim_packet_from_body p f2 in
-      let trimmed = if trimmed1 = FTrue then 
-                      trimmed2 
-                    else if trimmed2 = FTrue then
-                      trimmed1 
-                    else
-                      FAnd(trimmed1, trimmed2) in
-      if (var1 = var2) || var1 = "" then
-        (var2, trimmed)
-      else if var2 = "" then
-        (var1, trimmed)
-      else failwith ("trim_packet_from_clause: multiple variables used in packet_in: "^var1^" and "^var2)
-    | FNot(f) ->
-      let (v, t) = trim_packet_from_body p f in
-        (v, FNot(t))
-    | FOr(f1, f2) -> failwith "trim_packet_from_clause"           
-    (* Don't remove non-packet input tables. Those flag caller that the clause is not packet-triggered *)   
-    | FAtom("", relname, [TVar(varstr)]) when (is_packet_in_table relname) ->  
-      (varstr, FTrue)
-    | _ -> ("", body);;    
-
-  	
-(***************************************************************************************)
-
-(* Used to pre-filter controller notifications as much as possible *)
-let rec strip_incoming_atom (oldpkt: string) (cl: clause): clause =
-  (* for now, naive solution: remove offensive literals outright. easy to prove correctness 
-    of goal: result is a fmla that is implied by the real body. *)
-    (* acc contains formula built so far, plus the variables seen *)
-    let safeargs = (match cl.head with | FAtom(_, _, args) -> args | _ -> failwith "strip_incoming_atom") in
-      if !global_verbose >= 3 then
-        printf "   --- WEAKENING: Checking clause body in case need to weaken: %s\n%!" (string_of_formula cl.body);
-      
-      (* 'seen' keeps track of the terms used in relational lits so far *)
-      let may_strip_literal (acc: formula * term list) (lit: formula): (formula * term list) = 
-        let (fmlasofar, seen) = acc in         
-
-        let not_is_oldpkt_field (atomarg: term): bool = 
-          match atomarg with
-            | TField(fvar, ffld) when oldpkt = fvar -> false
-            | _ -> true in
-
-        match lit with 
-        | FTrue -> acc
-        | FFalse -> (FFalse, seen)
-        | FNot(FTrue) -> (FFalse, seen)
-        | FNot(FFalse) -> acc
-
-        (* pkt.x = pkt.y  <--- can't be done in OF 1.0. just remove. *)
-        | FEquals(TField(v, f), TField(v2, f2)) 
-        | FNot(FEquals(TField(v, f), TField(v2, f2))) when v = v2 && f2 <> f -> 
-          begin
-            if !global_verbose >= 3 then 
-              printf "Removing atom (pkt equality): %s\n%!" (string_of_formula lit);
-            acc end            
-
-          (* weaken if referring to a non-table packet field (like ARP fields) *)
-        | FEquals(TField(_, fld), _) 
-        | FNot(FEquals(TField(_, fld), _)) 
-        | FEquals(_, TField(_, fld)) 
-        | FNot(FEquals(_,TField(_, fld)))
-          when not (compilable_field_to_test fld) -> 
-          begin
-            if !global_verbose >= 3 then 
-              printf "Removing atom (not compilable; equality): %s\n%!" (string_of_formula lit);
-            acc end            
-        | FAtom(_,_,args) 
-        | FNot(FAtom(_,_,args)) 
-          when exists (function | TField(_, fld) -> not (compilable_field_to_test fld) | _ -> false) args -> 
-          begin 
-            if !global_verbose >= 3 then 
-              printf "Removing atom (not compilable; atomic): %s\n%!" (string_of_formula lit);
-            acc end                      
-
-        (* If this atom involves an already-seen variable not in tlargs, remove it *)
-        | FAtom (_, _, atomargs)  
-        | FNot(FAtom (_, _, atomargs)) ->
-          if length (list_intersection (subtract (filter not_is_oldpkt_field atomargs) safeargs) seen) > 0 then 
-          begin
-            (* removing this atom, so a fresh term shouldnt be remembered *)
-            if !global_verbose >= 3 then
-              printf "Removing atom (already seen): %s\n%!" (string_of_formula lit);
-            acc
-          end 
-          else if fmlasofar = FTrue then
-             (lit, (unique (seen @ atomargs)))
-          else 
-            (FAnd(fmlasofar, lit), (unique (seen @ atomargs))) 
-
-        | FOr(_, _) -> failwith "may_strip_literal: unsupported disjunction"
-
-        (* everything else, just build the conjunction *)        
-        | _ -> 
-          if fmlasofar = FTrue then (lit, seen)
-          else (FAnd(fmlasofar, lit), seen)
-        in 
-
-      let literals = conj_to_list cl.body in
-        match literals with 
-        | [] -> cl
-        | _ ->
-          let (final_formula, seen) = fold_left may_strip_literal (FTrue, []) literals in
-          (*printf "   --- Final body was:%s\n%!" (string_of_formula final_formula);*)
-          {head = cl.head; orig_rule = cl.orig_rule; body = final_formula};;
-
 let is_all_ports_atom (a: action_atom): bool = 
   a = allportsatom;;
 
@@ -458,25 +336,18 @@ let handle_all_and_port_together (oldpkt: string) (apred: pred) (acts: action_at
   end;;
 
 (* Side effect: reads current state in XSB *)
-(* Throws exception rather than using option type: more granular error result *)
-let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_handler option) (cl: clause): (pred * action) list =   
+(* Note: if given a non-packet-triggered clause, this function will happily compile it, but the trigger relation will be empty in current state
+   and this reduce the clause to <false>. If the caller wants efficiency, it should pass only packet-triggered clauses. *)
+let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_handler option) (tcl: triggered_clause): (pred * action) list =   
     if !global_verbose > 4 then (match callback with 
-      | None -> printf "\n--- Packet triggered clause to netcore (FULL COMPILE) on: \n%s\n%!" (string_of_clause cl)
-      | Some(_) -> printf "\n--- Packet triggered clause to netcore (~CONTROLLER~) on: \n%s\n%!" (string_of_clause cl));
+      | None -> printf "\n--- Packet triggered clause to netcore (FULL COMPILE) on: \n%s\n%!" (string_of_triggered_clause tcl)
+      | Some(_) -> printf "\n--- Packet triggered clause to netcore (~CONTROLLER~) on: \n%s\n%!" (string_of_triggered_clause tcl));
 
-    match cl.head with 
-      | FAtom(_, _, headargs) ->
-        let (oldpkt, trimmedbody) = trim_packet_from_body p cl.body in 
-        (*printf "Trimmed packet from body: (%s, %s)\n%!" oldpkt (string_of_formula trimmedbody);*)
-
-        (* Get a new fmla that is implied by the original, and can be compiled to a pred *)
-        let safebody = (match callback with
-          | Some(f) -> (strip_incoming_atom oldpkt {head = cl.head; orig_rule = cl.orig_rule; body = trimmedbody}).body
-          | None ->    trimmedbody) in
-
+    match tcl.clause.head with 
+      | FAtom(_, _, headargs) ->        
         (* Do partial evaluation. Need to know which terms are of the incoming packet.
           All others can be factored out. *)
-        let pebody = partial_evaluation p oldpkt safebody in
+        let pebody = partial_evaluation p tcl.oldpkt tcl.clause.body in
                 
         (* partial eval may insert disjunctions because of multiple tuples to match 
            so we need to pull those disjunctions up and create multiple policies 
@@ -499,15 +370,15 @@ let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_h
         let result = 
           match callback with
             | None -> map (fun body ->  
-                let unsafe_pred = build_unsafe_switch_pred oldpkt body in
-                let unsafe_acts = build_unsafe_switch_actions oldpkt body in
+                let unsafe_pred = build_unsafe_switch_pred tcl.oldpkt body in
+                let unsafe_acts = build_unsafe_switch_actions tcl.oldpkt body in
                   (* Need to deal with cases where all-ports and physical(x)
                      coexist. Remember that all-ports FORBIDS input port! *)
-                  handle_all_and_port_together oldpkt unsafe_pred unsafe_acts)
+                  handle_all_and_port_together tcl.oldpkt unsafe_pred unsafe_acts)
                           bodies                   
             | Some(f) -> 
               (* Action is always sending to controller. So don't extract action *)
-              let bigpred = fold_left (fun acc body -> Or(acc, build_unsafe_switch_pred oldpkt body)) Nothing bodies in
+              let bigpred = fold_left (fun acc body -> Or(acc, build_unsafe_switch_pred tcl.oldpkt body)) Nothing bodies in
                 [(bigpred, [ControllerAction(f)])] in      
 
           result          
@@ -515,7 +386,7 @@ let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_h
 
 (* return the union of policies for each clause *)
 (* Side effect: reads current state in XSB *)
-let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: clause list) (callback: get_packet_handler option): pol =  
+let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: triggered_clause list) (callback: get_packet_handler option): pol =  
   (*printf "ENTERING pkt_triggered_clauses_to_netcore!\n%!";*)
   let pre_unique_pas = appendall (map (pkt_triggered_clause_to_netcore p callback) clauses) in
   
@@ -613,13 +484,14 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: clause list)
 
 (* Side effect: reads current state in XSB *)
 (* Set up policies for all packet-triggered clauses *)
-let program_to_netcore (p: flowlog_program) (callback: get_packet_handler): (pol * pol) =
-  (*printf "\n\n---------------------------------\nCompiling as able...\n%!";  *)
+let program_to_netcore (p: flowlog_program) (callback: get_packet_handler): (pol * pol) =  
+  (* posn 1: fully compilable packet-triggered. 
+     posn 2: pre-weakened, non-fully-compilable packet-triggered *)
     (pkt_triggered_clauses_to_netcore p 
       p.can_fully_compile_to_fwd_clauses 
       None,
      pkt_triggered_clauses_to_netcore p 
-     (subtract p.clauses p.can_fully_compile_to_fwd_clauses)
+      p.weakened_cannot_compile_pt_clauses
      (Some callback));;
 
 (* TODO: ugly func, should be cleaned up.*)

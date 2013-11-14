@@ -3,6 +3,12 @@ open ExtList.List
 open Printf
 open NetCore_Types
 
+(* output verbosity *)
+(* 0 = default, no debug info at all *)
+(* 2 adds XSB listings between events *)
+(* 3 adds weakening and partial-evaluation info *)
+(* 10 = even XSB messages *)
+let global_verbose = ref 0;;
 
 (* True if string str1 ends with string str2 *)
 let ends_with (str1 : string) (str2 : string) : bool = 

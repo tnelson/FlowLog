@@ -155,3 +155,120 @@ let can_compile_clause_to_fwd (cl: clause): bool =
     | IllegalModToNewpkt(_, _) -> if debug then printf "IllegalModToNewpkt\n%!"; false
     | IllegalEquality(_,_) -> if debug then printf "IllegalEquality\n%!"; false;;
 
+
+(************ WEAKENING ************)
+
+(* todo: lots of code overlap in these functions. should unify *)
+(* removes the packet_in atom (since that's meaningless here). 
+   returns the var the old packet was bound to, and the trimmed fmla *)
+let rec trim_packet_from_body (body: formula): (string * formula) =
+  match body with
+    | FTrue -> ("", body)
+    | FFalse -> ("", body)
+    | FEquals(t1, t2) -> ("", body)
+    | FAnd(f1, f2) -> 
+      let (var1, trimmed1) = trim_packet_from_body f1 in
+      let (var2, trimmed2) = trim_packet_from_body f2 in
+      let trimmed = if trimmed1 = FTrue then 
+                      trimmed2 
+                    else if trimmed2 = FTrue then
+                      trimmed1 
+                    else
+                      FAnd(trimmed1, trimmed2) in
+      if (var1 = var2) || var1 = "" then
+        (var2, trimmed)
+      else if var2 = "" then
+        (var1, trimmed)
+      else failwith ("trim_packet_from_clause: multiple variables used in packet_in: "^var1^" and "^var2)
+    | FNot(f) ->
+      let (v, t) = trim_packet_from_body f in
+        (v, FNot(t))
+    | FOr(f1, f2) -> failwith "trim_packet_from_clause"           
+    (* Don't remove non-packet input tables. Those flag caller that the clause is not packet-triggered *)   
+    | FAtom("", relname, [TVar(varstr)]) when (is_packet_in_table relname) ->  
+      (varstr, FTrue)
+    | _ -> ("", body);;    
+    
+(***************************************************************************************)
+
+(* Used to pre-filter controller notifications as much as possible *)
+let weaken_uncompilable_packet_triggered_clause (oldpkt: string) (cl: clause): clause =
+  (* for now, naive solution: remove offensive literals outright. easy to prove correctness 
+    of goal: result is a fmla that is implied by the real body. *)
+    (* acc contains formula built so far, plus the variables seen *)
+    let safeargs = (match cl.head with | FAtom(_, _, args) -> args | _ -> failwith "strip_incoming_atom") in
+      if !global_verbose >= 3 then
+        printf "   --- WEAKENING: Checking clause body in case need to weaken: %s\n%!" (string_of_formula cl.body);
+      
+      (* 'seen' keeps track of the terms used in relational lits so far *)
+      let may_strip_literal (acc: formula * term list) (lit: formula): (formula * term list) = 
+        let (fmlasofar, seen) = acc in         
+
+        let not_is_oldpkt_field (atomarg: term): bool = 
+          match atomarg with
+            | TField(fvar, ffld) when oldpkt = fvar -> false
+            | _ -> true in
+
+        match lit with 
+        | FTrue -> acc
+        | FFalse -> (FFalse, seen)
+        | FNot(FTrue) -> (FFalse, seen)
+        | FNot(FFalse) -> acc
+
+        (* pkt.x = pkt.y  <--- can't be done in OF 1.0. just remove. *)
+        | FEquals(TField(v, f), TField(v2, f2)) 
+        | FNot(FEquals(TField(v, f), TField(v2, f2))) when v = v2 && f2 <> f -> 
+          begin
+            if !global_verbose >= 3 then 
+              printf "Removing atom (pkt equality): %s\n%!" (string_of_formula lit);
+            acc end            
+
+          (* weaken if referring to a non-table packet field (like ARP fields) *)
+        | FEquals(TField(_, fld), _) 
+        | FNot(FEquals(TField(_, fld), _)) 
+        | FEquals(_, TField(_, fld)) 
+        | FNot(FEquals(_,TField(_, fld)))
+          when not (compilable_field_to_test fld) -> 
+          begin
+            if !global_verbose >= 3 then 
+              printf "Removing atom (not compilable; equality): %s\n%!" (string_of_formula lit);
+            acc end            
+        | FAtom(_,_,args) 
+        | FNot(FAtom(_,_,args)) 
+          when exists (function | TField(_, fld) -> not (compilable_field_to_test fld) | _ -> false) args -> 
+          begin 
+            if !global_verbose >= 3 then 
+              printf "Removing atom (not compilable; atomic): %s\n%!" (string_of_formula lit);
+            acc end                      
+
+        (* If this atom involves an already-seen variable not in tlargs, remove it *)
+        | FAtom (_, _, atomargs)  
+        | FNot(FAtom (_, _, atomargs)) ->
+          if length (list_intersection (subtract (filter not_is_oldpkt_field atomargs) safeargs) seen) > 0 then 
+          begin
+            (* removing this atom, so a fresh term shouldnt be remembered *)
+            if !global_verbose >= 3 then
+              printf "Removing atom (already seen): %s\n%!" (string_of_formula lit);
+            acc
+          end 
+          else if fmlasofar = FTrue then
+             (lit, (unique (seen @ atomargs)))
+          else 
+            (FAnd(fmlasofar, lit), (unique (seen @ atomargs))) 
+
+        | FOr(_, _) -> failwith "may_strip_literal: unsupported disjunction"
+
+        (* everything else, just build the conjunction *)        
+        | _ -> 
+          if fmlasofar = FTrue then (lit, seen)
+          else (FAnd(fmlasofar, lit), seen)
+        in 
+
+      let literals = conj_to_list cl.body in
+        match literals with 
+        | [] -> cl
+        | _ ->
+          let (final_formula, seen) = fold_left may_strip_literal (FTrue, []) literals in
+          (*printf "   --- Final body was:%s\n%!" (string_of_formula final_formula);*)
+          {head = cl.head; orig_rule = cl.orig_rule; body = final_formula};;
+
