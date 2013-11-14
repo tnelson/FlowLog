@@ -39,6 +39,7 @@ let guarded_emit_push (swid: switchId) (pt: portId) (bytes: Packet.bytes): unit 
     | None -> printf "Packet stream has not been created yet. Error!\n%!"
     | Some f -> f (Some (swid,pt,bytes));;
 
+let ms_on_packet_processing = ref 0.;;
 let counter_inc_pkt = ref 0;;
 let counter_inc_all = ref 0;;
 let counter_pols_pushed = ref 0;;
@@ -810,7 +811,11 @@ let make_policy_stream (p: flowlog_program)
         trigger_policy_recreation_thunk();
 
         if !global_verbose >= 1 then
-          printf "Time used: %fs\n%!" (Unix.gettimeofday() -. startt);
+        begin
+          let used = (Unix.gettimeofday() -. startt) in
+            ms_on_packet_processing := !ms_on_packet_processing +. used;
+            printf "Time used: %fs. Average: %fs\n%!" used (!ms_on_packet_processing /. (float_of_int !counter_inc_pkt));
+        end;
         if !global_verbose >= 2 then
           printf "actions will be = %s\n%!" (NetCore_Pretty.string_of_action !fwd_actions);        
         (* This callback returns an action set to Frenetic. *) 
