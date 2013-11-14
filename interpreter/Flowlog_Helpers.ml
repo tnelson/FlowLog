@@ -320,6 +320,11 @@ let get_fields_for_type_preproc (decls: sdecl list) (etype: string): string list
       | ReactOut(outrel, _, eventid, _, _) ->
         get_fields_for_type_preproc decls eventid
       | _ -> failwith "get_valid_fields_for_output_rel";;
+
+let atom_to_relname (f: formula): string =
+  match f with
+    | FAtom(_, r, _) -> r 
+    | _ -> failwith "atom_to_relname";;
       
 let rec get_atoms (f: formula): formula list = 
 	match f with

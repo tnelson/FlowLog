@@ -59,7 +59,7 @@ let run_flowlog (p: flowlog_program): unit Lwt.t =
     emit_push := Some push_pkt;
 
     (* Send the "startup" notification. Enables initialization, etc. in programs *)         
-    respond_to_notification p {typeid="startup"; values=StringMap.empty};
+    ignore (respond_to_notification p {typeid="startup"; values=StringMap.empty});
 
       (* pick cancels all threads given if one terminates *)             
       (* DO NOT attempt to copy ox/frenetic's switch connection detection code here. It will clash with 

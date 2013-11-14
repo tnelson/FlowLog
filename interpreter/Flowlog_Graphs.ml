@@ -40,11 +40,6 @@ let make_data_node (prgm: named_program) (r: string): data_node =
   else if is_outgoing_table prgm.program r then NOutgoingTable(r)
   else failwith ("make_data_node: unknown "^r);;    
 
-let atom_to_relname (f: formula): string =
-  match f with
-    | FAtom(_, r, _) -> r 
-    | _ -> failwith "atom_to_relname";;
-
 let depends_from_rule (prgm: named_program) (datamod: string) (triggerrel: string) 
                       (headrel: string) (wherefmla: formula): data_edge list =  
   let sink = make_data_node prgm headrel in

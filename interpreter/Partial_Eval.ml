@@ -647,8 +647,8 @@ let get_local_tables_triggered (p: flowlog_program) (sign: bool) (notif: event):
     (*printf "possibly triggered: %s\n%!" (String.concat ",\n" (map string_of_declaration possibly_triggered));*)
     possibly_triggered;;
 
-(* separate to own module once works for sw/pt *)
-let respond_to_notification (p: flowlog_program) (notif: event): unit =
+(* Returns list of names of tables that have been modified *)
+let respond_to_notification (p: flowlog_program) (notif: event): string list =
   try
       Mutex.lock xsbmutex;
       counter_inc_all := !counter_inc_all + 1;
@@ -701,8 +701,14 @@ let respond_to_notification (p: flowlog_program) (notif: event): unit =
     Mutex.unlock xsbmutex;  
     printf "~~~~~~~~~~~~~~~~~~~FINISHED EVENT (%d total, %d packets) ~~~~~~~~~~~~~~~\n%!"
           !counter_inc_all !counter_inc_pkt;
+    (* Return the tables that have actually being modified.
+       TODO: not as smart as it could be: we aren't checking whether this stuff actually *changes the state*,
+             just whether facts are being asserted/retracted. *)
+    let modifications = map atom_to_relname (to_assert @ (subtract to_retract to_assert)) in
+      modifications
+
   with
-   | Not_found -> Mutex.unlock xsbmutex; printf "Nothing to do for this event.\n%!";
+   | Not_found -> Mutex.unlock xsbmutex; printf "Nothing to do for this event.\n%!"; [];
    | exn -> 
       begin  
       Format.printf "Unexpected exception on event: %s\n----------\n%s\n%!"
@@ -735,14 +741,14 @@ let make_policy_stream (p: flowlog_program)
             else None)
             feats.ports in
         printf "SWITCH %Ld connected. Flowlog events triggered: %s\n%!" sw (String.concat ", " (map string_of_event notifs));
-        List.iter (fun notif -> respond_to_notification p notif) notifs;
+        List.iter (fun notif -> ignore (respond_to_notification p notif)) notifs;
         trigger_policy_recreation_thunk()
 
       | SwitchDown(swid) -> 
         let sw_string = Int64.to_string swid in        
         let notif = {typeid="switch_down"; values=construct_map [("sw", sw_string)]} in          
           printf "SWITCH %Ld went down. Triggered: %s\n%!" swid (string_of_event notif);
-          respond_to_notification p notif;
+          ignore(respond_to_notification p notif);
           trigger_policy_recreation_thunk()        
     and
 
@@ -806,9 +812,11 @@ let make_policy_stream (p: flowlog_program)
 
       (* Parse the packet and send it to XSB. Deal with the results *)
       let notif = (pkt_to_event sw pt pkt) in           
-        printf "... notif: %s\n%!" (string_of_event notif);
-        respond_to_notification p notif;      
-        trigger_policy_recreation_thunk();
+        printf "~~~ Incoming Notif:\n %s\n%!" (string_of_event notif);
+        let modified_tables = respond_to_notification p notif in       
+          (* Don't recreate a policy if there are no state changes! *)
+          if (length modified_tables > 0) then
+            trigger_policy_recreation_thunk();
 
         if !global_verbose >= 1 then
         begin
