@@ -285,6 +285,51 @@ module Communication = struct
 	let get_state (f: formula): (string list) list =
 		send_message ((string_of_formula f)^".") (length (get_vars_and_fieldvars f));;
 
+	(* Extract the entire local controller state from XSB. This lets us do pretty-printing, rather
+	   than just using XSB's "listing." command, among other things.
+	   Table declaration ---> formulas in that table (use flatten find_all to extract all of them) *)
+	let get_full_state_for_program (p: flowlog_program): (sdecl, formula list) Hashtbl.t = 
+	  let get_state_helper (tname: string) (nargs: int) = 
+        get_state (FAtom("", tname, init nargs (fun i -> TVar("X"^(string_of_int i))))) in
+      
+      let statehash = (Hashtbl.create 5) in
+      let add_to_hash_for_table (tdecl: sdecl) : unit = 
+        match tdecl with
+          | DeclTable(tname, ttypes) -> 
+            (* this produces a list of formulas. which get added on top of prior lists. hence flatten find_all *)
+            Hashtbl.add statehash tdecl (map (reassemble_xsb_atom "" tname) (get_state_helper tname (length ttypes))) 
+          | _ -> failwith "add_to_hash_for_table" in
+		
+		iter add_to_hash_for_table (get_local_tables p);
+		statehash;;
+
+  (**************)
+  (* improve this when we have more than strings running around *)
+    let pretty_print_constant (typename: string) (c: term): string =    
+      let strval = (match c with | TConst(s) -> s | _ -> failwith ("pretty_print_constant: non constant")) in
+      match typename with
+      | "ipaddr" -> Packet.string_of_ip (Int32.of_string strval)
+      | "macaddr" -> Packet.string_of_mac (Int64.of_string strval) 
+      | "portid" -> strval
+      | "switchid" -> strval
+      | _ -> strval;;
+
+  let pretty_print_fact (tdecl: sdecl) (f: formula): string =
+    match tdecl, f with
+      | DeclTable(tname, ttypes), FAtom(_, rname, rargs) when (length rargs) = (length ttypes) -> 
+        sprintf "%s(%s)." rname (String.concat ", " (map2 pretty_print_constant ttypes rargs))
+      | _ -> failwith "pretty_print_fact";;
+  let get_and_print_xsb_state (p: flowlog_program): unit = 
+    let currstate = get_full_state_for_program p in       
+    let get_tblstrs (tbl: sdecl) : string = 
+      match tbl with 
+      | DeclTable(tname, ttypes) -> 
+        let fmlasfortbl = flatten (Hashtbl.find_all currstate tbl) in
+          sprintf "%s:\n%s" tname (String.concat "\n" (map (pretty_print_fact tbl) fmlasfortbl))
+      | _ -> failwith "get_and_print_state" in 
+    printf "-------\n|STATE|\n-------\n%s\n%!" (String.concat "\n" (map get_tblstrs (get_local_tables p)));;
+    (**************)
+
 	let clause_to_xsb (cls: clause): string =
 		(string_of_formula cls.head)^" :- "^(string_of_formula cls.body);;
 

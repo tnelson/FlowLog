@@ -689,7 +689,10 @@ let respond_to_notification (p: flowlog_program) (notif: event): unit =
     iter Communication.assert_formula to_assert;
     
     if !global_verbose >= 2 then
-      Xsb.debug_print_listings();   
+    begin      
+      (*Xsb.debug_print_listings();*)
+      Communication.get_and_print_xsb_state p;
+    end;
 
     (* depopulate event EDB *)
     Communication.retract_event_and_subevents p notif;  
