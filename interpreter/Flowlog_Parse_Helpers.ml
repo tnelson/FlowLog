@@ -117,8 +117,12 @@ let well_formed_rule (decls: sdecl list) (reacts: sreactive list) (r: srule): un
       | TField(vname, fname) when mem vname (field_vars_in condensed headterms) ->              
         (match r.action with 
           | ADo(_, outrelterms, where) -> 
-            (try
-              let valid_fields = get_valid_fields_for_output_rel decls reacts headrelname in                    
+            (try              
+              (* forward is a special case: it has the type of its trigger. *)
+              let valid_fields = (if headrelname <> "forward" then 
+                                    get_valid_fields_for_output_rel decls reacts headrelname
+                                  else 
+                                    get_valid_fields_for_input_rel decls reacts inrelname) in                    
               if not (mem fname valid_fields) then 
                 raise (UndeclaredField(vname, fname))
             with | Not_found -> raise (UndeclaredOutgoingRelation headrelname))
