@@ -10,7 +10,7 @@ default: yacc flowlog.native
 all: $(patsubst %.ml,%.native,$(wildcard *.ml))
 
 %.native: .force
-	$(OCAMLBUILD) -cflag -ppopt -cflag -lwt-debug $@
+	$(OCAMLBUILD) -cflag -g -cflag -ppopt -cflag -lwt-debug $@
 
 clean:
 	$(OCAMLBUILD) -clean
