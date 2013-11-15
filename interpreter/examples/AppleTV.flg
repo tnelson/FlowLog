@@ -30,9 +30,24 @@ TABLE atv_cxns(macaddr, macaddr);
 ON atv_connect(evt): // XXX: can't be named "event" btw (conflict with keyword)
   INSERT (evt.atv_mac, evt.client_mac) INTO atv_cxns;
   INSERT (evt.client_mac, evt.atv_mac) INTO atv_cxns;
-  // TODO: also generate gratituous IGMP membership report probably? yes! need this
 
-// XXX: IGMP is travleing on 224.0.0.22, it turns out!
+  DO emit_igmp(new) WHERE
+    new.nwSrc = 0x0A0A0A01 and // TODO(adf): should be smater about this
+    new.nwDst = 0xE0000016 and // 224.0.0.22 (IGMP)
+
+    new.igmp_ver_and_typ = 0x22 and
+    new.igmp_v3typ = 0x4 and
+    new.igmp_addr = 0xE00000FB and // 224.0.0.251 (mDNS)
+
+    // Constrain ethernet header appropriately
+    new.dlDst = evt.client_mac and
+    new.dlSrc = evt.atv_mac and
+
+    // TODO(adf): dumb hack
+    new.locSw = 1 and
+    new.locPt = 1;
+
+  // TODO: also generate gratituous IGMP membership report probably? yes! need this
 
 
 // For now, let's go with a model that either side can break the connection

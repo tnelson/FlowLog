@@ -81,10 +81,10 @@ let packet_flavors = [
                                     FEquals(TField(vname, "nwproto"), TConst("0x11"))));
     fields = ["tpsrc"; "tpdst"]};
 
-  (* {label = "igmp"; superflavor = Some "ip";
+   {label = "igmp"; superflavor = Some "ip";
     build_condition = (fun vname -> FAnd(FEquals(TField(vname, "dltyp"), TConst("0x0800")),
                                     FEquals(TField(vname, "nwproto"), TConst("0x2"))));
-    fields = ["omgwtfbbq"]};*)
+    fields = ["igmp_ver_and_typ"; "igmp_addr"; "igmp_v3typ"]};
 
    {label = "icmp"; superflavor = Some "ip";
     build_condition = (fun vname -> FAnd(FEquals(TField(vname, "dltyp"), TConst("0x0800")),
@@ -193,6 +193,22 @@ let make_udp (ev: event): Packet.Ip.tp =
          (* empty payload *)
          payload = Cstruct.create 0});;
 
+let make_igmp2 (ev: event): Packet.Igmp.msg =
+  let addr = Int32.of_string (get_field ev "igmp_addr" None) in
+    Igmp.Igmp1and2({Igmp1and2.mrt = 0; chksum = 0; addr = addr})
+
+let make_igmp3 (ev: event): Packet.Igmp.msg =
+  let v3typ = int_of_string (get_field ev "igmp_v3typ" None) in
+  let addr = Int32.of_string (get_field ev "igmp_addr" None) in
+    Igmp.Igmp3({Igmp3.chksum = 0; grs =
+                  [{Igmp3.GroupRec.typ = v3typ;
+                    addr = addr; sources = []}]})
+
+let make_igmp (ev: event): Packet.Ip.tp =
+  let ver_and_typ = int_of_string (get_field ev "igmp_ver_and_typ" None) in
+  let msg = if ver_and_typ = 0x22 then make_igmp3 ev else make_igmp2 ev in
+    Igmp({Igmp.ver_and_typ = ver_and_typ; msg = msg})
+
 (* Avoid gyrations with variant types by having these separate from the flavor declarations.
   Originally wanted each flavor to carry its own marshal function, but due to different Packet
   module types + heterogenous lists, it would have been involved.
@@ -212,7 +228,7 @@ let marshal_packet (ev: event): Packet.bytes =
     | "ip_packet" -> make_eth ev (make_ip ev (generic_ip_body ev))
     | "arp_packet" -> make_eth ev (make_arp ev)
     | "icmp_packet" -> failwith "icmp unsupported"
-    | "igmp_packet" -> failwith "igmp unsupported"
+    | "igmp_packet" -> make_eth ev (make_ip ev (make_igmp ev))
     | "tcp_packet" -> make_eth ev (make_ip ev (make_tcp ev))
     | "udp_packet" -> make_eth ev (make_ip ev (make_udp ev))
     | _ -> failwith ("marshal_packet: unknown type: "^ev.typeid);;
@@ -265,10 +281,28 @@ let get_udp (pkt: Packet.packet): (string*string) list =
    | Ip(ip_pkt) -> (match ip_pkt.tp with
       | Udp(_) ->
         [("tpsrc", string_of_int (Packet.tpSrc pkt));
-        ("tpdst", string_of_int (Packet.tpDst pkt))]
+         ("tpdst", string_of_int (Packet.tpDst pkt))]
       | _ -> [])
    | _ -> [];;
 
+let get_igmp_helper (igmp_pkt: Packet.Igmp.t): (string*string) list =
+  match igmp_pkt.Igmp.msg with
+    | Igmp.Igmp1and2(i12) ->
+      [("igmp_addr", Int32.to_string (i12.Igmp1and2.addr));
+       ("igmp_v3typ", "")]
+    | Igmp.Igmp3(i3) -> (let gr = hd i3.Igmp3.grs in
+      [("igmp_addr", Int32.to_string (gr.Igmp3.GroupRec.addr));
+       ("igmp_v3typ",(string_of_int (gr.Igmp3.GroupRec.typ)))])
+    | _ -> []
+
+let get_igmp (pkt: Packet.packet): (string*string) list =
+  match pkt.nw with
+   | Ip(ip_pkt) -> (match ip_pkt.tp with
+      | Igmp(igmp_pkt) ->
+        [("igmp_ver_and_typ", string_of_int (igmp_pkt.Igmp.ver_and_typ))]
+        @ (get_igmp_helper igmp_pkt)
+      | _ -> [])
+   | _ -> [];;
 
 let pkt_to_event (sw : switchId) (pt: port) (pkt : Packet.packet) : event =
    let values = [
@@ -280,10 +314,12 @@ let pkt_to_event (sw : switchId) (pt: port) (pkt : Packet.packet) : event =
     @ (get_arp pkt)
     @ (get_ip pkt)
     @ (get_tcp pkt)
-    @ (get_udp pkt) in
+    @ (get_udp pkt)
+    @ (get_igmp pkt) in
     let typeid = (match (Packet.dlTyp pkt) with
       | 0x0806 -> "arp_packet"
       | 0x0800 -> (match (Packet.nwProto pkt) with
+                    | 0x02 -> "igmp_packet"
                     | 0x06 -> "tcp_packet"
                     | 0x11 -> "udp_packet"
                     | _ -> "ip_packet")
