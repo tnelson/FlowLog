@@ -50,7 +50,11 @@ module Xsb = struct
 	let halt_xsb () : unit = 
 		let out_ch, _ = get_ch () in
 		output_string out_ch "halt.\n";
-		flush out_ch;;
+		flush out_ch;
+		(* to enable restart *)
+	    ref_out_ch := None;
+	    ref_in_ch := None;
+	    ref_err_ch := None;;
 
 	
 	let print_or_flush_errors (print_too: bool) : unit =
@@ -274,8 +278,6 @@ module Communication = struct
       		| None -> [t])
       | _ -> [t];;
 
-
-
 	(* assertion, number of answers to expect (number of variables in clause) *)
 	(* if this is a query with 0 variables, will call send_assert and thus need to provide [] vs [[]] *)
 	(* VITAL: The CALLER must add the terminating period to message. *)
@@ -341,7 +343,7 @@ module Communication = struct
 		(string_of_formula cls.head)^" :- "^(string_of_formula cls.body);;
 
 	(* Substitute notif vars for their fields and produce a string for XSB to consume *)	
-	let rec subs_xsb_formula (prgm: flowlog_program) (f: formula): formula = 
+	let rec subs_xsb_formula (prgm: flowlog_program) (f: formula): formula =
 		match f with
 		| FTrue -> FTrue
 		| FFalse -> FFalse
@@ -349,7 +351,7 @@ module Communication = struct
 		| FAnd(f1, f2) -> FAnd(subs_xsb_formula prgm f1, subs_xsb_formula prgm f2)
 		| FOr(f1, f2) -> FOr(subs_xsb_formula prgm f1, subs_xsb_formula prgm f2)
 		| FEquals(_, _) -> f
-		| FAtom(modname, relname, tlargs) -> 			
+		| FAtom(modname, relname, tlargs) ->
 			let subsarglists = mapi (decls_expand_fields prgm modname relname) tlargs in
 			let subargs = fold_left (fun acc lst -> acc @ lst) [] subsarglists in
 			FAtom(modname, relname, subargs);;
