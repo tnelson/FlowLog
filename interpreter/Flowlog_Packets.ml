@@ -132,6 +132,12 @@ let get_field (ev: event) (fldname: string) (default: string option): string =
  *
  ******************************************************************************)
 
+let nwaddr_of_string (s: string): Int32.t =
+  let n = int_of_string s in
+  if n <= Int32.to_int Int32.max_int
+  then Int32.of_int n
+  else Int32.of_int (n - 0xFFFFFFFF - 1)
+
 let make_eth (ev: event) (nw: Packet.nw): Packet.bytes =
   let dlSrc = Int64.of_string (get_field ev "dlsrc" (Some "0")) in
   let dlDst = Int64.of_string (get_field ev "dldst" (Some "0")) in
@@ -141,8 +147,8 @@ let make_eth (ev: event) (nw: Packet.nw): Packet.bytes =
 
 let make_arp (ev: event): Packet.nw =
   let arp_sha = Int64.of_string (get_field ev "arp_sha" None) in
-  let arp_spa = Int32.of_string (get_field ev "arp_spa" None) in
-  let arp_tpa = Int32.of_string (get_field ev "arp_tpa" None) in
+  let arp_spa = nwaddr_of_string (get_field ev "arp_spa" None) in
+  let arp_tpa = nwaddr_of_string (get_field ev "arp_tpa" None) in
   let arp_op = int_of_string (get_field ev "arp_op" None) in
     match arp_op with
     | 1 -> (* request *)
@@ -154,8 +160,8 @@ let make_arp (ev: event): Packet.nw =
 
 (* TODO(adf): add support for IP flags, stored as booleans by ocaml-packet *)
 let make_ip (ev: event) (tp: Ip.tp): Packet.nw =
-  let nwSrc = Int32.of_string (get_field ev "nwsrc" None) in
-  let nwDst = Int32.of_string (get_field ev "nwdst" None) in
+  let nwSrc = nwaddr_of_string (get_field ev "nwsrc" None) in
+  let nwDst = nwaddr_of_string (get_field ev "nwdst" None) in
   let nwFrag = int_of_string (get_field ev "nwfrag" (Some "0")) in
   let nwTTL = int_of_string (get_field ev "nwttl" (Some "255")) in
   let nwTos = int_of_string (get_field ev "nwtos" (Some "0")) in
@@ -170,8 +176,8 @@ let make_ip (ev: event) (tp: Ip.tp): Packet.nw =
 let make_tcp (ev: event): Packet.Ip.tp =
   let tpSrc = int_of_string (get_field ev "tpsrc" None) in
   let tpDst = int_of_string (get_field ev "tpdst" None) in
-  let tpSeq = Int32.of_string (get_field ev "tpseq" None) in
-  let tpAck = Int32.of_string (get_field ev "tpack" (Some "0")) in
+  let tpSeq = nwaddr_of_string (get_field ev "tpseq" None) in
+  let tpAck = nwaddr_of_string (get_field ev "tpack" (Some "0")) in
   let tpOffset = int_of_string (get_field ev "tpoffset" (Some "0")) in
   let tpWindow = int_of_string (get_field ev "tpwindow" (Some "0")) in
   let tpChksum = int_of_string (get_field ev "tpchksum" None) in
@@ -194,12 +200,12 @@ let make_udp (ev: event): Packet.Ip.tp =
          payload = Cstruct.create 0});;
 
 let make_igmp2 (ev: event): Packet.Igmp.msg =
-  let addr = Int32.of_string (get_field ev "igmp_addr" None) in
+  let addr = nwaddr_of_string (get_field ev "igmp_addr" None) in
     Igmp.Igmp1and2({Igmp1and2.mrt = 0; chksum = 0; addr = addr})
 
 let make_igmp3 (ev: event): Packet.Igmp.msg =
   let v3typ = int_of_string (get_field ev "igmp_v3typ" None) in
-  let addr = Int32.of_string (get_field ev "igmp_addr" None) in
+  let addr = nwaddr_of_string (get_field ev "igmp_addr" None) in
     Igmp.Igmp3({Igmp3.chksum = 0; grs =
                   [{Igmp3.GroupRec.typ = v3typ;
                     addr = addr; sources = []}]})
