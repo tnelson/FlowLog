@@ -7,6 +7,7 @@
  *  - Make state soft state -- requires timeouts.
  *  - We should delete entries in atv_cxns if either side moves -- this would
  *    represent a laptop leaving a given conference room, for example.
+ *  - Also remove pairings by listening to client-initated IGMP departures
  */
 
 /*******************************************************************************
@@ -31,34 +32,27 @@ ON atv_connect(evt): // XXX: can't be named "event" btw (conflict with keyword)
   INSERT (evt.client_mac, evt.atv_mac) INTO atv_cxns;
 
   DO emit_igmp(new) WHERE
-    new.nwSrc = 0x0A0A0A01 and // TODO(adf): do we need correct IP addrs?
-    new.nwDst = 0xE0000016 and // 224.0.0.22 (IGMP)
-
-    new.igmp_ver_and_typ = 0x22 and
-    new.igmp_v3typ = 0x4 and
-    new.igmp_addr = 0xE00000FB and // 224.0.0.251 (mDNS)
-
     new.dlDst = evt.client_mac and
     new.dlSrc = evt.atv_mac and
-
-    new.locSw = 0x1b219cfe57 and // DPID of switch controller is connected to
-    new.locPt = 0xfff9; // OFPP_TABLE
-
-  // TODO(adf): any way to re-use the code above without copy and paste?
-  DO emit_igmp(new) WHERE
     new.nwSrc = 0x0A0A0A01 and // TODO(adf): do we need correct IP addrs?
     new.nwDst = 0xE0000016 and // 224.0.0.22 (IGMP)
-
     new.igmp_ver_and_typ = 0x22 and
     new.igmp_v3typ = 0x4 and
     new.igmp_addr = 0xE00000FB and // 224.0.0.251 (mDNS)
-
-    new.dlDst = evt.atv_mac and
-    new.dlSrc = evt.client_mac and
-
     new.locSw = 0x1b219cfe57 and // DPID of switch controller is connected to
     new.locPt = 0xfff9; // OFPP_TABLE
 
+  DO emit_igmp(new) WHERE
+    new.dlDst = evt.atv_mac and
+    new.dlSrc = evt.client_mac and
+    // TODO(adf): any way to re-use the code above without copy and paste?
+    new.nwSrc = 0x0A0A0A01 and // TODO(adf): do we need correct IP addrs?
+    new.nwDst = 0xE0000016 and // 224.0.0.22 (IGMP)
+    new.igmp_ver_and_typ = 0x22 and
+    new.igmp_v3typ = 0x4 and
+    new.igmp_addr = 0xE00000FB and // 224.0.0.251 (mDNS)
+    new.locSw = 0x1b219cfe57 and // DPID of switch controller is connected to
+    new.locPt = 0xfff9; // OFPP_TABLE
 
 
 // For now, let's go with a model that either side can break the connection
@@ -79,7 +73,9 @@ ON udp_packet_in(pkt) WHERE pkt.dlDst = 0x01005e0000fb and // mDNS IPv4 ethernet
 
   DO forward(new) WHERE
     atv_cxns(pkt.dlSrc, new.dlDst) and
-    pkt.locPt = 4 and // TODO(adf): temp HACK since pronto does not support wildcarded
-                      // in-port for a rule like this (either the ALL or the mod_dl_dst
-                      // is breaking it. see /local/logs/ofswd/current on the switch
+    pkt.locPt = 4 and // TODO(adf): temp HACK since Pronto does not support wildcarded
+                      // in-port for rules with more than one output port (eg, ALL).
+                      // We should be setting this more carefully based on the NIB, but
+                      // for now, capitalize on the fact that the AppleTV is connected
+                      // to the same port num on the Pronto as wifi is on the Pantou.
     new.locPt != pkt.locPt; // flooding; TODO: should be forwarding directly
