@@ -4,7 +4,6 @@
  *
  * TODO:
  *  - Rules should be placed on the switches where the hosts are attached
- *  - Issue IGMP messages after creating the multicast group
  *  - Make state soft state -- requires timeouts.
  *  - We should delete entries in atv_cxns if either side moves -- this would
  *    represent a laptop leaving a given conference room, for example.
@@ -32,14 +31,13 @@ ON atv_connect(evt): // XXX: can't be named "event" btw (conflict with keyword)
   INSERT (evt.client_mac, evt.atv_mac) INTO atv_cxns;
 
   DO emit_igmp(new) WHERE
-    new.nwSrc = 0x0A0A0A01 and // TODO(adf): should be smater about this
+    new.nwSrc = 0x0A0A0A01 and // TODO(adf): should be smater about this. do we need IP addrs?
     new.nwDst = 0xE0000016 and // 224.0.0.22 (IGMP)
 
     new.igmp_ver_and_typ = 0x22 and
     new.igmp_v3typ = 0x4 and
     new.igmp_addr = 0xE00000FB and // 224.0.0.251 (mDNS)
 
-    // Constrain ethernet header appropriately
     new.dlDst = evt.client_mac and
     new.dlSrc = evt.atv_mac and
 
@@ -47,14 +45,29 @@ ON atv_connect(evt): // XXX: can't be named "event" btw (conflict with keyword)
     new.locSw = 1 and
     new.locPt = 1;
 
-  // TODO: also generate gratituous IGMP membership report probably? yes! need this
+  // TODO(adf): any way to re-use the code above without copy and paste?
+  DO emit_igmp(new) WHERE
+    new.nwSrc = 0x0A0A0A01 and // TODO(adf): should be smater about this. do we need IP addrs?
+    new.nwDst = 0xE0000016 and // 224.0.0.22 (IGMP)
+
+    new.igmp_ver_and_typ = 0x22 and
+    new.igmp_v3typ = 0x4 and
+    new.igmp_addr = 0xE00000FB and // 224.0.0.251 (mDNS)
+
+    new.dlDst = evt.atv_mac and
+    new.dlSrc = evt.client_mac and
+
+    // TODO(adf): dumb hack
+    new.locSw = 1 and
+    new.locPt = 1;
+
 
 
 // For now, let's go with a model that either side can break the connection
 ON atv_disconnect(evt):
   DELETE (evt.mac, ANY) FROM atv_cxns;
   DELETE (ANY, evt.mac) FROM atv_cxns;
-  // TODO: also generate IGMP membership departure
+  // TODO: also generate IGMP membership departure (igmp_v3typ = 0x03)
 
 /*******************************************************************************
  *
@@ -62,8 +75,8 @@ ON atv_disconnect(evt):
  *
  ******************************************************************************/
 
-ON udp_packet_in(pkt) WHERE pkt.dlDst = 0x01005e0000fb and
-                            pkt.nwDst = 0xE00000FB and // and // 224.0.0.251 (mDNS group)
+ON udp_packet_in(pkt) WHERE pkt.dlDst = 0x01005e0000fb and // mDNS IPv4 ethernet address
+                            pkt.nwDst = 0xE00000FB and // 224.0.0.251 (mDNS group)
                             pkt.tpDst = 5353: // (mDns port)
 
   DO forward(new) WHERE
