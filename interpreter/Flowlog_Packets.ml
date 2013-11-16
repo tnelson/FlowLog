@@ -295,7 +295,7 @@ let get_igmp_helper (igmp_pkt: Packet.Igmp.t): (string*string) list =
   match igmp_pkt.Igmp.msg with
     | Igmp.Igmp1and2(i12) ->
       [("igmp_addr", Int32.to_string (i12.Igmp1and2.addr));
-       ("igmp_v3typ", "")]
+       ("igmp_v3typ", "0")]
     | Igmp.Igmp3(i3) -> (let gr = hd i3.Igmp3.grs in
       [("igmp_addr", Int32.to_string (gr.Igmp3.GroupRec.addr));
        ("igmp_v3typ",(string_of_int (gr.Igmp3.GroupRec.typ)))])
