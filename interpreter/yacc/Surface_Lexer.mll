@@ -58,8 +58,7 @@ rule token = parse
   | '}' { RCURLY }
   | ',' { COMMA }
   | '(' { LPAREN }
-  | ')' { RPAREN }
-  | '"' { DOUBLEQUOTE }
+  | ')' { RPAREN }  
 
   | "any" { any_counter := !any_counter+1; NAME("any"^(string_of_int !any_counter)) }
 
@@ -68,8 +67,8 @@ rule token = parse
   | ['a'-'z''A'-'Z''_''0'-'9']+ as name { NAME(name) }
   | ['a'-'z''A'-'Z''_''0'-'9''-']+ as name 
     { Printf.printf "Bad identifier: %s. Cannot use dashes. Use underscore instead.\n%!" name; 
-      token lexbuf; }
-  | '"'['.''/''\\''a'-'z''A'-'Z''_''0'-'9''-']+'"' as filename { QUOTED_FILENAME(filename) }
+      token lexbuf; }    
+  | '"'['.''/''\\''a'-'z''A'-'Z''_''0'-'9''-']+'"' as id { QUOTED_IDENTIFIER(id) }
   | _ as c { Printf.printf "Unknown character: %c\n" c; token lexbuf;}
 and commenting = parse 
   | "*/" { token lexbuf }

@@ -43,12 +43,11 @@
   %token COMMA
   %token LPAREN
   %token RPAREN
-  %token DOUBLEQUOTE
+  %token <string> QUOTED_IDENTIFIER
   %token <bool> BOOLEAN
   %token <string> DOTTED_IP
   %token <string> NUMBER
   %token <string> NAME
-  %token <string> QUOTED_FILENAME
   
   %start main
 
@@ -72,7 +71,7 @@
             | stmt_list EOF {AST([], $1)};;
 
   include_:
-            | INCLUDE QUOTED_FILENAME SEMICOLON {$2};
+            | INCLUDE QUOTED_IDENTIFIER SEMICOLON {$2};
 
   stmt: 
             | reactive_stmt {[SReactive($1)]} 
@@ -141,7 +140,8 @@
   term: 
             | NAME {TVar($1)} 
             | NUMBER {TConst($1)} 
-            | DOUBLEQUOTE NAME DOUBLEQUOTE {TConst($2)} 
+             // Don't include wrapper quotes in const, or XSB will happily create a Prolog list...
+            | QUOTED_IDENTIFIER {TConst(String.sub $1 1 (String.length $1 - 2))} 
             | NAME PERIOD NAME {TField($1, $3)};
 
   term_list: 

@@ -189,7 +189,7 @@ let well_formed_rule (decls: sdecl list) (reacts: sreactive list) (r: srule): un
 let simplify_clause (cl: clause): clause =   
     {head = cl.head; orig_rule = cl.orig_rule; body = minimize_variables cl.body};;
 
-let well_formed_reacts (reacts: sreactive list): unit = 
+let well_formed_reacts (reacts: sreactive list): unit =  
   ignore (fold_left (fun acc react -> 
     match react with 
       | ReactOut(relname, _, evtype, _, _) 
@@ -218,8 +218,9 @@ let reacts_added_by_sugar (stmts: stmt list): sreactive list =
   let inc_events_with_react = filter_map (function SReactive(ReactInc(evname,_)) -> Some evname | _ -> None) stmts in  
   let event_decls = filter_map (function SDecl(DeclEvent(_,_) as d) -> Some d     | _ -> None) stmts in 
   fold_left (fun acc decl -> match decl with
-                      | DeclEvent(ename, _) when not (mem ename inc_events_with_react) -> 
+                      | DeclEvent(ename, _) when not (mem ename inc_events_with_react) ->                           
                           ReactInc(ename, ename)::acc
+                      | DeclEvent(_,_) -> acc
                       | _ -> failwith "reacts_added_by_sugar") [] event_decls;;
 
 let decls_added_by_sugar (stmts: stmt list): sdecl list =
@@ -227,9 +228,11 @@ let decls_added_by_sugar (stmts: stmt list): sdecl list =
   let inc_events_with_decl = filter_map (function SDecl(DeclInc(_,evname)) -> Some evname | _ -> None) stmts in  
   let event_decls = filter_map (function SDecl(DeclEvent(_,_) as d) -> Some d     | _ -> None) stmts in 
   fold_left (fun acc decl -> match decl with
+                       (* need to add the inc declaration? *)
                       | DeclEvent(ename, _) when not (mem ename inc_events_with_decl) -> 
                           DeclInc(ename, ename)::acc
-                      | _ -> failwith "decls_added_by_sugar") [] event_decls;;
+                      | DeclEvent(_,_) -> acc
+                      | _ -> failwith ("decls_added_by_sugar: "^(string_of_declaration decl))) [] event_decls;;
 
 (* built_in_where_for_vname (vname: string) (relname: string): *)
 let add_built_ins (r: srule): srule =    
