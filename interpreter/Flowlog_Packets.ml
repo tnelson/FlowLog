@@ -90,6 +90,10 @@ let packet_flavors = [
     build_condition = (fun vname -> FAnd(FEquals(TField(vname, "dltyp"), TConst("0x0800")),
                                     FEquals(TField(vname, "nwproto"), TConst("0x1"))));
     fields = ["icmp_type"; "icmp_code"]}; (* checksum will need calculation in runtime? *)
+
+   {label = "mdns"; superflavor = Some "udp";
+    build_condition = (fun vname -> FEquals(TField(vname, "tpdst"), TConst("5353")));
+    fields = ["mdns_question"]};
   ];;
 
 
@@ -180,24 +184,23 @@ let make_tcp (ev: event): Packet.Ip.tp =
   let tpAck = nwaddr_of_string (get_field ev "tpack" (Some "0")) in
   let tpOffset = int_of_string (get_field ev "tpoffset" (Some "0")) in
   let tpWindow = int_of_string (get_field ev "tpwindow" (Some "0")) in
-  let tpChksum = int_of_string (get_field ev "tpchksum" None) in
   let tpUrgent = int_of_string (get_field ev "tpurgent" (Some "0")) in
   let tpFlags =  { Tcp.Flags.ns = false; cwr = false; ece = false;
                    urg = false; ack = false; psh = false; rst = false;
                    syn = false; fin = false} in
     Tcp({Tcp.src = tpSrc; dst = tpDst; flags = tpFlags; seq = tpSeq;
          ack = tpAck; offset = tpOffset; window = tpWindow;
-         chksum = tpChksum; urgent = tpUrgent;
+         chksum = 0; urgent = tpUrgent;
          (* empty payload *)
          payload = Cstruct.create 0});;
 
-let make_udp (ev: event): Packet.Ip.tp =
+let make_udp (ev: event) (payload : Cstruct.t option) : Packet.Ip.tp =
   let tpSrc = int_of_string (get_field ev "tpsrc" None) in
   let tpDst = int_of_string (get_field ev "tpdst" None) in
-  let tpChksum = int_of_string (get_field ev "tpchksum" None) in
-    Udp({Udp.src = tpSrc; dst = tpDst; chksum = tpChksum;
-         (* empty payload *)
-         payload = Cstruct.create 0});;
+  let payload = match payload with
+                 |None -> Cstruct.create 0 (* empty payload *)
+                 |Some payload -> payload in
+    Udp({Udp.src = tpSrc; dst = tpDst; chksum = 0; payload = payload});;
 
 let make_igmp2 (ev: event): Packet.Igmp.msg =
   let addr = nwaddr_of_string (get_field ev "igmp_addr" None) in
@@ -214,6 +217,12 @@ let make_igmp (ev: event): Packet.Ip.tp =
   let ver_and_typ = int_of_string (get_field ev "igmp_ver_and_typ" None) in
   let msg = if ver_and_typ = 0x22 then make_igmp3 ev else make_igmp2 ev in
     Igmp({Igmp.ver_and_typ = ver_and_typ; msg = msg})
+
+let make_mdns (ev: event): Packet.Dns.t =
+  let qname = get_field ev "mdns_question" None in
+  Printf.printf "ADF qname = '%s'\n%!" qname;
+    {Dns.id = 0; flags = 0;
+     questions = [{Dns.Qd.name = qname; typ = 0x000c; class_ = 0x0001}]}
 
 (* Avoid gyrations with variant types by having these separate from the flavor declarations.
   Originally wanted each flavor to carry its own marshal function, but due to different Packet
@@ -236,7 +245,9 @@ let marshal_packet (ev: event): Packet.bytes =
     | "icmp_packet" -> failwith "icmp unsupported"
     | "igmp_packet" -> make_eth ev (make_ip ev (make_igmp ev))
     | "tcp_packet" -> make_eth ev (make_ip ev (make_tcp ev))
-    | "udp_packet" -> make_eth ev (make_ip ev (make_udp ev))
+    | "udp_packet" -> make_eth ev (make_ip ev (make_udp ev None))
+    | "mdns_packet" -> make_eth ev (make_ip ev (make_udp ev (Some(
+                          Dns.serialize (make_mdns ev)))))
     | _ -> failwith ("marshal_packet: unknown type: "^ev.typeid);;
 
 

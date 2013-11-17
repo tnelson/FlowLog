@@ -34,24 +34,35 @@ ON atv_connect(evt): // XXX: can't be named "event" btw (conflict with keyword)
   DO emit_igmp(new) WHERE
     new.dlDst = evt.client_mac and
     new.dlSrc = evt.atv_mac and
-    new.nwSrc = 0x0A0A0A01 and // TODO(adf): do we need correct IP addrs?
+    new.nwSrc = 0x0A0A006A and // TODO(adf): do we need correct IP addrs?
     new.nwDst = 0xE0000016 and // 224.0.0.22 (IGMP)
-    new.igmp_ver_and_typ = 0x22 and
+    new.igmp_ver_and_typ = 0x16 and // 0x22
     new.igmp_v3typ = 0x4 and
     new.igmp_addr = 0xE00000FB and // 224.0.0.251 (mDNS)
-    new.locSw = 0x1b219cfe57 and // DPID of switch controller is connected to
+    new.locSw = 1 and // DPID of switch controller is connected to
     new.locPt = 0xfff9; // OFPP_TABLE
 
   DO emit_igmp(new) WHERE
     new.dlDst = evt.atv_mac and
     new.dlSrc = evt.client_mac and
     // TODO(adf): any way to re-use the code above without copy and paste?
-    new.nwSrc = 0x0A0A0A01 and // TODO(adf): do we need correct IP addrs?
+    new.nwSrc = 0x0A0A0064 and // TODO(adf): do we need correct IP addrs?
     new.nwDst = 0xE0000016 and // 224.0.0.22 (IGMP)
-    new.igmp_ver_and_typ = 0x22 and
+    new.igmp_ver_and_typ = 0x16 and // 0x22
     new.igmp_v3typ = 0x4 and
     new.igmp_addr = 0xE00000FB and // 224.0.0.251 (mDNS)
-    new.locSw = 0x1b219cfe57 and // DPID of switch controller is connected to
+    new.locSw = 1 and // DPID of switch controller is connected to (0x1b219cfe57)
+    new.locPt = 0xfff9; // OFPP_TABLE
+
+  DO emit_mdns(new) WHERE
+    new.dlDst = evt.atv_mac and
+    new.dlSrc = evt.client_mac and
+    new.nwSrc = 0x0A0A0001 and
+    new.nwDst = 0xE0000016 and // 224.0.0.22 (IGMP)
+    new.tpSrc = 5353 and
+    new.tpDst = 5353 and
+    new.mdns_question = "_airplay._tcp._local" and
+    new.locSw = 1 and // DPID of switch controller is connected to
     new.locPt = 0xfff9; // OFPP_TABLE
 
 
