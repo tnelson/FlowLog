@@ -12,6 +12,8 @@ open Xsb_Communication
 open Flowlog_Thrift_Out
 open Partial_Eval_Validation
 
+let policy_recreation_thunk: (unit -> unit) option ref = ref None;;
+
 (* XSB is shared state. We also have the remember_for_forwarding and packet_queue business *)
 let xsbmutex = Mutex.create();;
 
@@ -544,12 +546,12 @@ let send_event (ev: event) (ip: string) (pt: string): unit =
   write_log (sprintf "sending: %s\n%!" (string_of_event ev));
   doBBnotify ev ip pt;;
 
-let execute_output (p: flowlog_program) (defn: sreactive): unit =  
+let prepare_output (p: flowlog_program) (defn: sreactive): (event * spec_out) list =  
   match defn with 
     | ReactOut(relname, argstrlist, outtype, assigns, spec) ->
      
-      let execute_tuple (tup: term list): unit =
-        printf "EXECUTING OUTPUT... tuple: %s\n%!" (String.concat ";" (map string_of_term tup));
+      let prepare_tuple (tup: term list): (event * spec_out) =
+        (*printf "PREPARING OUTPUT... tuple: %s\n%!" (String.concat ";" (map string_of_term tup));*)
         (* arglist orders the xsb results. assigns says how to use them, spec how to send them. *)
         let initev = (match spec with 
                   | OutForward -> {typeid = "packet"; values=StringMap.empty}      
@@ -558,18 +560,21 @@ let execute_output (p: flowlog_program) (defn: sreactive): unit =
                   | OutPrint 
                   | OutSend(_, _) -> {typeid=outtype; values=StringMap.empty}) in                
         let ev = fold_left (event_with_assn p argstrlist tup) initev assigns in          
-          match spec with 
-            | OutForward -> forward_packet ev
-            | OutEmit(_) -> emit_packet ev
-            | OutPrint -> printf "PRINT RULE FIRED: %s\n%!" (string_of_event ev)
-            | OutLoopback -> failwith "loopback unsupported currently"
-            | OutSend(ip, pt) -> send_event ev ip pt in
+          (ev, spec) in
 
-      (* query xsb for this output relation *)  
-      let xsb_results = (Communication.get_state (FAtom("", relname, map (fun s -> TVar(s)) argstrlist))) in        
-        (* execute the results *)
-        iter execute_tuple xsb_results 
-    | _ -> failwith "execute_output";;
+      (* query xsb for this output relation *)        
+      let xsb_results = (Communication.get_state (FAtom("", relname, map (fun s -> TVar(s)) argstrlist))) in              
+        (* return the results to be executed later *)
+        map prepare_tuple xsb_results 
+    | _ -> failwith "prepare_output";;
+
+let execute_output ((ev, spec): event * spec_out) : unit =
+  match spec with 
+   | OutForward -> forward_packet ev
+   | OutEmit(_) -> emit_packet ev
+   | OutPrint -> printf "PRINT RULE FIRED: %s\n%!" (string_of_event ev)
+   | OutLoopback -> failwith "loopback unsupported currently"
+   | OutSend(ip, pt) -> send_event ev ip pt;;
 
 (* XSB query on plus or minus for table *)
 let change_table_how (p: flowlog_program) (toadd: bool) (tbldecl: sdecl): formula list =
@@ -675,10 +680,6 @@ let respond_to_notification (p: flowlog_program) (notif: event): string list =
        For instance, if foo(X, pkt.dlSrc) is used, ask for foo(X,Y) *)
     pre_load_all_remote_queries p;
 
-    (* for all declared outgoing events ...*)
-    let outgoing_defns = (get_output_defns_triggered p notif) in
-      iter (execute_output p) outgoing_defns;
-
     (* for all declared tables +/- *)
     let triggered_insert_table_decls = get_local_tables_triggered p true notif in
     let triggered_delete_table_decls = get_local_tables_triggered p false notif in 
@@ -691,28 +692,58 @@ let respond_to_notification (p: flowlog_program) (notif: event): string list =
     end;
     write_log (sprintf "  *** WILL ADD: %s\n%!" (String.concat " ; " (map string_of_formula to_assert)));
     write_log (sprintf "  *** WILL DELETE: %s\n%!" (String.concat " ; " (map string_of_formula to_retract)));
-    (* update state as dictated by +/-
-      Semantics demand that retraction happens before assertion here! *)
-    iter Communication.retract_formula to_retract;
-    iter Communication.assert_formula to_assert;
     
-    if !global_verbose >= 2 then
-    begin      
-      (*Xsb.debug_print_listings();*)
-      Communication.get_and_print_xsb_state p;
-    end;
+   (**********************************************************)
+   (* Prepare packets/events to be sent. *)
+   (* This must be done BEFORE xsb is updated (output + updates must
+      be computed from same EDB, and BEFORE we retract the event *)
+   (* for all declared outgoing events ...*)
+    let outgoing_defns = (get_output_defns_triggered p notif) in
+    let prepared_output = flatten (map (prepare_output p) outgoing_defns) in
+   (**********************************************************)
+
 
     (* depopulate event EDB *)
     Communication.retract_event_and_subevents p notif;  
-
     Mutex.unlock xsbmutex;  
-    printf "~~~~~~~~~~~~~~~~~~~FINISHED EVENT (%d total, %d packets) ~~~~~~~~~~~~~~~\n%!"
-          !counter_inc_all !counter_inc_pkt;
+
     (* Return the tables that have actually being modified.
        TODO: not as smart as it could be: we aren't checking whether this stuff actually *changes the state*,
              just whether facts are being asserted/retracted. *)
     let modifications = map atom_to_relname (to_assert @ (subtract to_retract to_assert)) in
-      modifications
+
+   (* Now that all the queries are completed, actually do stuff. *)
+
+   (**********************************************************)
+   (* UPDATE STATE IN XSB as dictated by +/- results stored before
+      Semantics demand that retraction happens before assertion here! *)
+   (* THIS MUST HAPPEN BEFORE POLICY IS UPDATED *)
+    iter Communication.retract_formula to_retract;
+    iter Communication.assert_formula to_assert;
+    if !global_verbose >= 2 then
+    begin      
+      (*Xsb.debug_print_listings();*)
+      Communication.get_and_print_xsb_state p;
+    end;    
+   (**********************************************************)   
+
+   (**********************************************************)
+   (* UPDATE POLICY ON SWITCHES  (use the NEW state)         *)
+   (* Don't recreate a policy if there are no state changes! *)
+    (match !policy_recreation_thunk with
+      | Some(t) when (length modifications) > 0 -> t();
+      | Some(t) -> (); (* we have a thunk, but no updates are necessary *)
+      | None -> ());    
+   (**********************************************************)
+
+   (**********************************************************)
+   (* Finally actually send output *)
+    iter execute_output prepared_output;
+   (**********************************************************) 
+
+    printf "~~~~~~~~~~~~~~~~~~~FINISHED EVENT (%d total, %d packets) ~~~~~~~~~~~~~~~\n%!"
+          !counter_inc_all !counter_inc_pkt;
+    modifications (* return tables that may have changed *)
 
   with
    | Not_found -> Mutex.unlock xsbmutex; printf "Nothing to do for this event.\n%!"; [];
@@ -748,15 +779,13 @@ let make_policy_stream (p: flowlog_program)
             else None)
             feats.ports in
         printf "SWITCH %Ld connected. Flowlog events triggered: %s\n%!" sw (String.concat ", " (map string_of_event notifs));
-        List.iter (fun notif -> ignore (respond_to_notification p notif)) notifs;
-        trigger_policy_recreation_thunk()
+        List.iter (fun notif -> ignore (respond_to_notification p notif)) notifs;        
 
       | SwitchDown(swid) -> 
         let sw_string = Int64.to_string swid in        
         let notif = {typeid="switch_down"; values=construct_map [("sw", sw_string)]} in          
           printf "SWITCH %Ld went down. Triggered: %s\n%!" swid (string_of_event notif);
-          ignore(respond_to_notification p notif);
-          trigger_policy_recreation_thunk()        
+          ignore(respond_to_notification p notif);                
     and
 
     reportPacketCallback (sw: switchId) (pt: port) (pkt: Packet.packet) : NetCore_Types.action =   
@@ -820,10 +849,7 @@ let make_policy_stream (p: flowlog_program)
       (* Parse the packet and send it to XSB. Deal with the results *)
       let notif = (pkt_to_event sw pt pkt) in           
         printf "~~~ Incoming Notif:\n %s\n%!" (string_of_event notif);
-        let modified_tables = respond_to_notification p notif in       
-          (* Don't recreate a policy if there are no state changes! *)
-          if (length modified_tables > 0) then
-            trigger_policy_recreation_thunk();
+        ignore (respond_to_notification p notif);
 
         if !global_verbose >= 1 then
         begin
@@ -843,6 +869,9 @@ let make_policy_stream (p: flowlog_program)
           printf "actions will be = %s\n%!" (NetCore_Pretty.string_of_action !fwd_actions);        
         (* This callback returns an action set to Frenetic. *) 
         !fwd_actions in
+
+    (* For use elsewhere: call this to trigger policy update on switches. *)
+    policy_recreation_thunk := Some trigger_policy_recreation_thunk;
 
     if not notables then
     begin
