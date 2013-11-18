@@ -2,7 +2,6 @@
 (* Main flowlog executable                                      *)
 (****************************************************************)
 
-
 open Flowlog_Types
 open Flowlog_Helpers
 open Partial_Eval
@@ -12,6 +11,7 @@ open Flowlog_To_Alloy
 open Lwt
 open Flowlog_Parse_Helpers
 open Xsb_Communication
+open Flowlog_Chase
 
 (* Use ExtList.List instead -- provides filter_map, but also tail-recursive combine *)
 open ExtList.List
@@ -25,6 +25,7 @@ let usage = Printf.sprintf "Usage: %s
                              file.flg" (Filename.basename Sys.argv.(0));;
 let alloy = ref false;;
 let cimp = ref false;;
+let cimpuniform = ref false;;
 let notables = ref false;;
 let reportall = ref false;;
 let depend = ref false;;
@@ -34,6 +35,7 @@ let speclist = [
   ("-verbose", Arg.Int (fun lvl -> global_verbose := lvl), ": set level of debug output");
   ("-alloy", Arg.Unit (fun () -> alloy := true), ": convert to Alloy");
   ("-cimp", Arg.Unit (fun () -> cimp := true), ": convert two files to Alloy and compare their semantics");
+  ("-cimpuniform", Arg.Unit (fun () -> cimpuniform := true), ": change impact via uniform containment");
   ("-depend", Arg.Unit (fun () -> depend := true), ": output a JSON dependency graph");  
   ("-reportall", Arg.Unit (fun () -> reportall := true), ": report all packets. WARNING: VERY SLOW!");
   (* Not calling this "reactive" because reactive still implies sending table entries. *)
@@ -93,9 +95,18 @@ let main () =
       let program2 = (desugared_program_of_ast ast2 filename2) in
         write_as_alloy_change_impact program (alloy_filename filename) 
                                      program2 (alloy_filename filename)
-    end;    
+    end
+    else if !cimpuniform then    
+    begin
+      let filename2 = try hd (tl !args) with exn -> raise (Failure "Input a second .flg file name for use with change-impact.") in 
+      let ast2 = read_ast filename2 in
+      let program2 = (desugared_program_of_ast ast2 filename2) in
+      let results = build_chase_equivalence program program2 in      
+        printf "LACKING: %s\n%!" (String.concat ";\n " (map string_of_pmodel results));              
+    end;        
 
-    if (not !alloy) && (not !cimp) then (* ACTUALLY RUN THE PROGRAM HERE *)
+    (* ACTUALLY RUN THE PROGRAM HERE *)
+    if (not !alloy) && (not !cimp) && (not !cimpuniform) then 
     begin
       (* Intercede when Ctrl-C is pressed to close XSB, etc. *)
       Sys.catch_break true;

@@ -109,7 +109,7 @@ open NetCore_Types
   let string_of_event (notif: event): string =
     notif.typeid^": ["^(String.concat ";" (map (fun (k, v) -> k^":"^v) (StringMap.bindings notif.values)))^"]";;  
 
-  type printmode = Xsb | Verbose | Brief;;
+  type printmode = Xsb | Verbose | Brief | XsbForcePositive;;
 
   (* If verbose flag is not set, prepare for XSB. Otherwise, add extra info for debug. *)
   let string_of_term ?(verbose:printmode = Brief) (t: term): string = 
@@ -133,7 +133,10 @@ open NetCore_Types
       | FTrue -> "true"
       | FFalse -> "false"
       | FEquals(t1, t2) -> (string_of_term ~verbose:verbose t1) ^ " = "^ (string_of_term ~verbose:verbose t2)
-      | FNot(f) ->  "(not "^(string_of_formula ~verbose:verbose f)^")"
+      | FNot(f) ->  
+        (match verbose with 
+          | XsbForcePositive -> "not_"^(string_of_formula ~verbose:verbose f)
+          | _ -> "(not "^(string_of_formula ~verbose:verbose f)^")")
       | FAtom("", relname, tlargs) -> 
           relname^"("^(String.concat "," (map (string_of_term ~verbose:verbose) tlargs))^")"
       | FAtom(modname, relname, tlargs) -> 

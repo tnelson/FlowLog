@@ -1,0 +1,15 @@
+/* 
+  May not be executable Flowlog, but meant to test change-impact.
+*/ 
+
+TABLE p(switchid); 
+TABLE r(switchid); 
+
+ON packet_in(p):
+  
+  // Should be equivalent to version without examining R
+  DO forward(n) WHERE 
+    p(n.locSw) and not r(n.locSw);
+  DO forward(n) WHERE 
+    p(n.locSw) and r(n.locSw);
+  

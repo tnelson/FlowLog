@@ -23,7 +23,7 @@ let query_containment (prgm: flowlog_program) (db: pmodel) (expected: formula): 
   
   (* Do we get the expected formula?*)
   let results = (Communication.get_state expected) in
-  let found = (length results ) > 0 in
+  let found = (length results) > 0 in
 
     iter Communication.retract_formula db;
     printf "done checking containment. found=%b\n%!" found;  
@@ -70,7 +70,9 @@ let build_chase_containment (prgm1: flowlog_program) (prgm2: flowlog_program): p
   (* reset XSB *)  
   Xsb.halt_xsb();
   (* Hand XSB the clauses of the program we're leaving intact *)
-  Communication.start_program prgm2 true;
+  Communication.start_program prgm2 ~forcepositive:true true;
+
+  (* Hand XSB "xor" axioms for relations *)
 
   (* test each rule of the program we're breaking up *)
   fold_left (fun (acc: pmodel list) (cl: clause) -> 
@@ -83,6 +85,7 @@ let build_chase_equivalence (prgm1: flowlog_program) (prgm2: flowlog_program): p
   build_chase_containment prgm1 prgm2 @ 
   build_chase_containment prgm2 prgm1;;
 
+(*
 let example_run(): unit = 
   let test1 = build_chase_equivalence
       (desugared_program_of_ast (read_ast "examples/Mac_Learning.flg") "examples/Mac_Learning.flg")
@@ -92,10 +95,15 @@ let example_run(): unit =
       (desugared_program_of_ast (read_ast "examples/Mac_Learning.flg") "examples/Mac_Learning.flg")
       (desugared_program_of_ast (read_ast "tests/Mac_Learning_Missing_Flood.flg") "tests/Mac_Learning_Missing_Flood.flg") in
      
-    printf "1 < 2 LACKING: %s\n%!" (String.concat ";\n " (map string_of_pmodel test1));
-    printf "2 < 1 LACKING: %s\n%!" (String.concat ";\n " (map string_of_pmodel test2));;
-
+    printf "1 < 2 or 2 > 1LACKING: %s\n%!" (String.concat ";\n " (map string_of_pmodel test1));;    
+*)
 
 (* TODO: check examples. especially ones that involve equality. do we need to axiomatize to be sound? etc. *)
+
+(* Concern 1: Equality. Unsound since do not produce symmetric/reflexive/transitive facts? *)
+(* Concern 2: Negation. Need to express p xor np. Also: is this still sound/complete? *)
+(* Concern 3: Coverage. Can't give planner _every_ model in the partial returned here, 
+   because may be SOME overlap. Just know that there exists a model in the partial that 
+   isn't reflected in other program.*)
 
 (*  example_run();;    *)

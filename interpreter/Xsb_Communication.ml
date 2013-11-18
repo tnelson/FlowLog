@@ -340,8 +340,9 @@ module Communication = struct
     printf "-------\n|STATE|\n-------\n%s\n%!" (String.concat "\n" (map get_tblstrs (get_local_tables p)));;
     (**************)
 
-	let clause_to_xsb (cls: clause): string =
-		(string_of_formula ~verbose:Xsb cls.head)^" :- "^(string_of_formula ~verbose:Xsb cls.body);;
+	let clause_to_xsb ?(forcepositive = false) (cls: clause): string =
+	  let fpflag = if forcepositive then XsbForcePositive else Xsb in
+		(string_of_formula ~verbose:fpflag cls.head)^" :- "^(string_of_formula ~verbose:fpflag cls.body);;
 
 	(* Substitute notif vars for their fields and produce a string for XSB to consume *)	
 	let rec subs_xsb_formula (prgm: flowlog_program) (f: formula): formula =
@@ -374,30 +375,30 @@ module Communication = struct
 	let retract_event_and_subevents (p: flowlog_program) (notif: event): unit = 
 			iter retract_formula (inc_event_to_formulas p notif);;
 
-	let start_clause (prgm: flowlog_program) (cls : clause) : unit =
+	let start_clause (prgm: flowlog_program) ?(forcepositive = false) (cls : clause) : unit =
 		(*if debug then print_endline ("start_clause: assert((" ^ (Type_Helpers.clause_to_string cls) ^ ")).");
 		if debug then (List.iter (fun t -> (Printf.printf "var: %s\n%!" (Type_Helpers.term_to_string t))) (get_vars cls));*)
 		let new_head = subs_xsb_formula prgm cls.head in
-		let new_body = subs_xsb_formula prgm cls.body in
+		let new_body = subs_xsb_formula prgm cls.body in		
 		printf "start_clause substituted: %s :- %s" (string_of_formula ~verbose:Xsb new_head) (string_of_formula ~verbose:Xsb new_body);
 		let subs_cls = {head = new_head; 
 		                body = new_body;
 						orig_rule = cls.orig_rule}  in
 			printf "subs cls: %s\n%!" (string_of_clause cls);
-			ignore (send_message ("assert((" ^ (clause_to_xsb subs_cls) ^ ")).") 
+			ignore (send_message ("assert((" ^ (clause_to_xsb ~forcepositive:forcepositive subs_cls) ^ ")).") 
 				                 (length (get_all_clause_vars subs_cls)));;
 	
 	(* assuming all implicitly defined clauses have been added to list of clauses *)
-	let start_program (prgm : flowlog_program) (notables: bool): unit =
+	let start_program (prgm : flowlog_program) ?(forcepositive = false) (notables: bool): unit =
 		printf "-------------------\nStarting Flowlog Program...\n%!";		
 		(* prevent XSB from locking up if unknown relation seen. will assume false if unknown now.*)
 		ignore (send_message "set_prolog_flag(unknown, fail)." 0);
 		
 		(* Add a clause if it's not fully compiled, OR we're in no-compilation mode *)				
 		if notables then 
-		  List.iter (start_clause prgm) prgm.clauses
+		  List.iter (start_clause prgm ~forcepositive:forcepositive) prgm.clauses
 	    else 
-		  List.iter (start_clause prgm) prgm.not_fully_compiled_clauses;
+		  List.iter (start_clause prgm ~forcepositive:forcepositive) prgm.not_fully_compiled_clauses;
 
 		Xsb.debug_print_listings();;
 

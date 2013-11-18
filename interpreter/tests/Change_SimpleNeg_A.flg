@@ -1,0 +1,12 @@
+/* 
+  May not be executable Flowlog, but meant to test change-impact.
+*/ 
+
+TABLE p(switchid); 
+TABLE r(switchid); 
+
+ON packet_in(p):
+  
+  DO forward(n) WHERE 
+    p(n.locSw);
+    

@@ -1,0 +1,11 @@
+
+TABLE test(ipaddr);
+
+ON arp_packet_in(apkt): 
+   INSERT (apkt.arp_spa) INTO test;
+
+ON packet_in(pkt):
+  DO forward(new) WHERE     
+    NOT pkt.locPt = new.locPt ;
+    // AND switch_has_port(pkt.locSw, new.locPt);
+    

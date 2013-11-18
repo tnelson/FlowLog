@@ -1,0 +1,11 @@
+/* 
+  May not be executable Flowlog, but meant to test change-impact.
+*/ 
+
+ON packet_in(p):
+   
+  DO forward(n) WHERE 
+    n.locSw = p.locPt and 
+    p.locSw = n.locSw;
+  
+  
