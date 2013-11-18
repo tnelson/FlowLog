@@ -222,9 +222,9 @@ let make_igmp (ev: event): Packet.Ip.tp =
 
 let make_mdns (ev: event): Packet.Dns.t =
   let qname = get_field ev "mdns_question" None in
-  Printf.printf "ADF qname = '%s'\n%!" qname;
     {Dns.id = 0; flags = 0;
-     questions = [{Dns.Qd.name = qname; typ = 0x000c; class_ = 0x0001}]}
+     questions = [{Dns.Qd.name = qname; typ = 0x000c; class_ = 0x0001}];
+     answers = []; authority = []; additional = [] }
 
 (* Avoid gyrations with variant types by having these separate from the flavor declarations.
   Originally wanted each flavor to carry its own marshal function, but due to different Packet

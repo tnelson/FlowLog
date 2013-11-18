@@ -61,7 +61,7 @@ ON atv_connect(evt): // XXX: can't be named "event" btw (conflict with keyword)
     new.nwDst = 0xE0000016 and // 224.0.0.22 (IGMP)
     new.tpSrc = 5353 and
     new.tpDst = 5353 and
-    new.mdns_question = "_airplay._tcp._local" and
+    new.mdns_question = "_airplay._tcp.local" and
     new.locSw = 1 and // DPID of switch controller is connected to
     new.locPt = 0xfff9; // OFPP_TABLE
 
