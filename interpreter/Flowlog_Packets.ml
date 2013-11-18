@@ -92,7 +92,9 @@ let packet_flavors = [
     fields = ["icmp_type"; "icmp_code"]}; (* checksum will need calculation in runtime? *)
 
    {label = "mdns"; superflavor = Some "udp";
-    build_condition = (fun vname -> FEquals(TField(vname, "tpdst"), TConst("5353")));
+    build_condition = (fun vname -> FAnd(FEquals(TField(vname, "tpdst"), TConst("5353")),
+                                         FAnd(FEquals(TField(vname, "nwproto"), TConst("0x11")),
+                                              FEquals(TField(vname, "dltyp"), TConst("0x800")))));
     fields = ["mdns_question"]};
   ];;
 
@@ -108,14 +110,14 @@ let packet_flavors = [
 let get_field_helper (ev: event) (fldname: string): string  =  
     StringMap.find fldname ev.values;;
 
-(* XSB specific: This is likely to change if we change engines.*)
+(*  Should really be something more contentful than the empty string. *)
 let field_is_defined (ev: event) (fldname: string): bool =
-  not (starts_with (get_field_helper ev fldname) "_");;
+  (get_field_helper ev fldname) <> "";;
 
 let get_field (ev: event) (fldname: string) (default: string option): string =  
   let get_default() = match default with
         | Some d -> d
-        | None -> failwith ("get_field. no default specified for: "^fldname) in
+        | None -> failwith ("get_field. no default specified for: "^fldname^" of "^ev.typeid) in
   try
     let evval = get_field_helper ev fldname in
       if field_is_defined ev fldname then evval

@@ -140,7 +140,8 @@
   term: 
             | NAME {TVar($1)} 
             | NUMBER {TConst($1)} 
-             // Don't include wrapper quotes in const, or XSB will happily create a Prolog list...
+             // (a) Don't include wrapper quotes in const, or XSB will happily create a Prolog list...
+             // (b) Escape + wrap in single quotes when passing to XSB (in string_of_term)
             | QUOTED_IDENTIFIER {TConst(String.sub $1 1 (String.length $1 - 2))} 
             | NAME PERIOD NAME {TField($1, $3)};
 

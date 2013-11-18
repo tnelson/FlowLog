@@ -97,7 +97,7 @@ open NetCore_Types
                             memos: program_memos};;
 
   (* context for values given by decls *)
-  module StringMap = Map.Make(String);;
+  module StringMap = Map.Make(String);;  
   type event = { typeid: string; values: string StringMap.t};;
 
   module FmlaMap = Map.Make(struct type t = formula let compare = compare end);;
@@ -107,22 +107,28 @@ open NetCore_Types
 
 (*************************************************************)
   let string_of_event (notif: event): string =
-    notif.typeid^": ["^(String.concat ";" (map (fun (k, v) -> k^":"^v) (StringMap.bindings notif.values)))^"]";;
+    notif.typeid^": ["^(String.concat ";" (map (fun (k, v) -> k^":"^v) (StringMap.bindings notif.values)))^"]";;  
+
+  type printmode = Xsb | Verbose | Brief;;
 
   (* If verbose flag is not set, prepare for XSB. Otherwise, add extra info for debug. *)
-  let string_of_term ?(verbose:bool = false) (t: term): string = 
+  let string_of_term ?(verbose:printmode = Brief) (t: term): string = 
     match t with
       | TConst(s) -> 
-        if verbose then "TConst("^s^")" 
-        else (String.lowercase s)
+        if verbose = Verbose then "TConst("^s^")" 
+        else if verbose = Brief then s
+        else if (Str.string_match (Str.regexp "[0-9]") s 0) then
+          s
+        else 
+          "'constesc"^(String.lowercase s)^"'"        
       | TVar(s) ->
-        if verbose then "TVar("^s^")"
+        if verbose = Verbose then "TVar("^s^")"
         else (String.uppercase s)
       | TField(varname, fname) -> 
-        if verbose then "TField("^varname^"."^fname^")" 
+        if verbose = Verbose then "TField("^varname^"."^fname^")" 
         else (String.uppercase (varname^"__"^fname));;
 
-  let rec string_of_formula ?(verbose:bool = false) (f: formula): string = 
+  let rec string_of_formula ?(verbose:printmode = Brief) (f: formula): string = 
     match f with
       | FTrue -> "true"
       | FFalse -> "false"
@@ -136,8 +142,8 @@ open NetCore_Types
       | FOr(f1, f2) -> (string_of_formula ~verbose:verbose f1) ^ " or "^ (string_of_formula ~verbose:verbose f2)
   
   let action_string outrel argterms fmla: string = 
-    let argstring = (String.concat "," (map (string_of_term ~verbose:true) argterms)) in
-      outrel^"("^argstring^") WHERE "^(string_of_formula ~verbose:true fmla);;
+    let argstring = (String.concat "," (map (string_of_term ~verbose:Verbose) argterms)) in
+      outrel^"("^argstring^") WHERE "^(string_of_formula ~verbose:Verbose fmla);;
 
   let string_of_rule (r: srule): string =
     match r.action with 
@@ -185,9 +191,9 @@ open NetCore_Types
         iter (fun inc -> printf "INCLUDE %s;\n%!" inc) includes;
         iter (fun stmt -> printf "%s\n%!" (string_of_stmt stmt)) stmts;;
 
-  let string_of_clause ?(verbose: bool = false) (cl: clause): string =
+  let string_of_clause ?(verbose: printmode = Brief) (cl: clause): string =
     "CLAUSE: "^(string_of_formula ~verbose:verbose cl.head)^" :- "^(string_of_formula ~verbose:verbose cl.body)^"\n"^
-    (if verbose then "FROM RULE: "^(string_of_rule cl.orig_rule) else "");;
+    (if verbose = Verbose then "FROM RULE: "^(string_of_rule cl.orig_rule) else "");;
 
   let string_of_triggered_clause ?(verbose: bool = false) (cl: triggered_clause): string =
     "TRIGGER: "^cl.oldpkt^" "^(string_of_clause cl.clause);;

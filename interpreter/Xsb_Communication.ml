@@ -281,18 +281,19 @@ module Communication = struct
 	(* assertion, number of answers to expect (number of variables in clause) *)
 	(* if this is a query with 0 variables, will call send_assert and thus need to provide [] vs [[]] *)
 	(* VITAL: The CALLER must add the terminating period to message. *)
-	let send_message (message : string) (num_ans : int) : (string list) list =
+	let send_message (message : string) (num_ans : int) : (term list) list =
 		if debug then (printf "send_message: %s (expected: %d)\n%!" message num_ans);
 		if num_ans > 0 then
-		    Xsb.send_query message num_ans 
+		    let strresults = Xsb.send_query message num_ans in
+		      map (fun tuplestr -> map reassemble_xsb_term tuplestr) strresults
 	    else 
 	        let yn = Xsb.send_assert message in
 		        if (ends_with yn "yes") then [[]]
 		        else []
 
-	(* Perfectly valid to ask "r(X, 2)" here. *)
-	let get_state (f: formula): (string list) list =
-		send_message ((string_of_formula f)^".") (length (get_vars_and_fieldvars f));;
+	(* Perfectly valid to ask "r(X, 2)" here. *)	
+	let get_state (f: formula): (term list) list =
+		send_message ((string_of_formula ~verbose:Xsb f)^".") (length (get_vars_and_fieldvars f));;		
 
 	(* Extract the entire local controller state from XSB. This lets us do pretty-printing, rather
 	   than just using XSB's "listing." command, among other things.
@@ -306,7 +307,7 @@ module Communication = struct
         match tdecl with
           | DeclTable(tname, ttypes) -> 
             (* this produces a list of formulas. which get added on top of prior lists. hence flatten find_all *)
-            Hashtbl.add statehash tdecl (map (reassemble_xsb_atom "" tname) (get_state_helper tname (length ttypes))) 
+            Hashtbl.add statehash tdecl (map (fun args -> FAtom("", tname, args)) (get_state_helper tname (length ttypes))) 
           | _ -> failwith "add_to_hash_for_table" in
 		
 		iter add_to_hash_for_table (get_local_tables p);
@@ -340,7 +341,7 @@ module Communication = struct
     (**************)
 
 	let clause_to_xsb (cls: clause): string =
-		(string_of_formula cls.head)^" :- "^(string_of_formula cls.body);;
+		(string_of_formula ~verbose:Xsb cls.head)^" :- "^(string_of_formula ~verbose:Xsb cls.body);;
 
 	(* Substitute notif vars for their fields and produce a string for XSB to consume *)	
 	let rec subs_xsb_formula (prgm: flowlog_program) (f: formula): formula =
@@ -359,13 +360,13 @@ module Communication = struct
 		(* engine will sometimes be told to retract _, need to retract ALL matches, not just first match *)
 	let retract_formula (tup: formula): unit = 
 	    if !global_verbose >= 1 then count_retract_formula := !count_retract_formula + 1;
-		ignore (send_message ("retractall("^(string_of_formula tup)^").") 0);;
+		ignore (send_message ("retractall("^(string_of_formula ~verbose:Xsb tup)^").") 0);;
 
 	let assert_formula (tup: formula): unit = 
 		(* avoid storing multiples of same tuple *)
 		if !global_verbose >= 1 then count_assert_formula := !count_assert_formula + 1;
 		retract_formula tup; 
-		ignore (send_message ("assert("^(string_of_formula tup)^").") 0);;
+		ignore (send_message ("assert("^(string_of_formula ~verbose:Xsb tup)^").") 0);;
 
 	let assert_event_and_subevents (p: flowlog_program) (notif: event): unit =	
 			iter assert_formula (inc_event_to_formulas p notif);;
@@ -378,7 +379,7 @@ module Communication = struct
 		if debug then (List.iter (fun t -> (Printf.printf "var: %s\n%!" (Type_Helpers.term_to_string t))) (get_vars cls));*)
 		let new_head = subs_xsb_formula prgm cls.head in
 		let new_body = subs_xsb_formula prgm cls.body in
-		printf "start_clause substituted: %s :- %s" (string_of_formula new_head)(string_of_formula new_body);
+		printf "start_clause substituted: %s :- %s" (string_of_formula ~verbose:Xsb new_head) (string_of_formula ~verbose:Xsb new_body);
 		let subs_cls = {head = new_head; 
 		                body = new_body;
 						orig_rule = cls.orig_rule}  in

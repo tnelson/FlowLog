@@ -104,17 +104,27 @@ let after_equals (str : string) : string =
    All variables that are not fields should be ignored: under the above assumptions,
    either they are head vars of a non-fwd clause, or are existentials. 
    (This assumes weakening has already taken place if needed by join.) *)
-let reassemble_xsb_equality (incpkt: string) (tlargs: term list) (tuple: string list) : formula list =  
-    map2 (fun aterm astr -> 
-    	if (String.get astr 0) = '_' then
-		    failwith "reassemble_xsb_equality: unconstrained variable"
-      else match aterm with 
-        | TVar(vname) -> FTrue        
-		    | _ -> FEquals(aterm, TConst(astr)))
+
+(* Remember to deal with escapes for non-numeric constants! 
+   Also make variables if returned _...*)
+let reassemble_xsb_term (tstr: string): term = 
+  if (starts_with tstr "_") then
+    TVar(tstr)
+  else if (starts_with tstr "constesc") then 
+    TConst(String.sub tstr 8 ((String.length tstr) - 8)) 
+  else TConst(tstr);;
+
+let reassemble_xsb_equality (incpkt: string) (tlargs: term list) (tuple: term list) : formula list =  
+    map2 (fun origterm xsbterm ->      
+		  match xsbterm,origterm with 
+        | TVar(_), _ -> failwith "reassemble_xsb_equality: unconstrained variable"
+        | TField(_, _), _ -> failwith "field def in xsb term returned"
+        | _, TVar(vname) -> FTrue  (* COMPILATION: free variable *)
+		    | _ -> FEquals(origterm, xsbterm))
     	 tlargs tuple;;
 
 let reassemble_xsb_atom (modname:string) (relname: string) (tuple: string list): formula =
-    FAtom(modname, relname, map (fun x -> TConst(x)) tuple);;
+    FAtom(modname, relname, map reassemble_xsb_term tuple);;
 
 let subtract (biglst: 'a list) (toremove: 'a list): 'a list =
   (filter (fun ele -> not (mem ele toremove)) biglst);;
