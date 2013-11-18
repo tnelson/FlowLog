@@ -109,7 +109,7 @@ open NetCore_Types
   let string_of_event (notif: event): string =
     notif.typeid^": ["^(String.concat ";" (map (fun (k, v) -> k^":"^v) (StringMap.bindings notif.values)))^"]";;  
 
-  type printmode = Xsb | Verbose | Brief | XsbForcePositive;;
+  type printmode = Xsb | Verbose | Brief | XsbForcePositive | XsbAddUnderscoreVars;;
 
   (* If verbose flag is not set, prepare for XSB. Otherwise, add extra info for debug. *)
   let string_of_term ?(verbose:printmode = Brief) (t: term): string = 
@@ -122,11 +122,15 @@ open NetCore_Types
         else 
           "'constesc"^(String.lowercase s)^"'"        
       | TVar(s) ->
-        if verbose = Verbose then "TVar("^s^")"
-        else (String.uppercase s)
+        (match verbose with 
+          | Verbose -> "TVar("^s^")"
+          | XsbAddUnderscoreVars | XsbForcePositive -> "_"^(String.uppercase s)
+          |  _ -> (String.uppercase s))
       | TField(varname, fname) -> 
-        if verbose = Verbose then "TField("^varname^"."^fname^")" 
-        else (String.uppercase (varname^"__"^fname));;
+        (match verbose with
+          | Verbose -> "TField("^varname^"."^fname^")" 
+          | XsbAddUnderscoreVars | XsbForcePositive -> "_"^(String.uppercase (varname^"__"^fname))
+          | _ -> (String.uppercase (varname^"__"^fname)));;
 
   let rec string_of_formula ?(verbose:printmode = Brief) (f: formula): string = 
     match f with

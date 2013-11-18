@@ -43,7 +43,7 @@ let ms_on_packet_processing = ref 0.;;
 let counter_inc_pkt = ref 0;;
 let counter_inc_all = ref 0;;
 let counter_pols_pushed = ref 0;;
-
+let longest_used_packet_ms = ref 0.;;
 let last_policy_pushed = ref (Action([]));;
 
 exception ContradictoryActions of (string * string);;
@@ -828,8 +828,14 @@ let make_policy_stream (p: flowlog_program)
         if !global_verbose >= 1 then
         begin
           let used = (Unix.gettimeofday() -. startt) in
+            
             ms_on_packet_processing := !ms_on_packet_processing +. used;
-            printf "Time used: %fs. Average: %fs\n%!" used (!ms_on_packet_processing /. (float_of_int !counter_inc_pkt));
+            
+            if !longest_used_packet_ms < used then 
+              longest_used_packet_ms := used;
+
+            printf "Time used: %fs. Average: %fs. Longest: %fs.\n%!"
+               used (!ms_on_packet_processing /. (float_of_int !counter_inc_pkt)) !longest_used_packet_ms;
             printf "Asserts: %d. Retracts: %d. Send_asserts: %d. Send_queries: %d\n%!" 
               !count_assert_formula !count_retract_formula !count_send_assert !count_send_query;
         end;

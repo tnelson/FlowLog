@@ -13,8 +13,7 @@ open Flowlog_Thrift_Out
 open Str
 open ExtList.List
 
-(*let debug = true;;*)
-
+(* Enable insanely verbose debugging info *)
 let debug = false;;
 
 let count_assert_formula = ref 0;;
@@ -88,17 +87,6 @@ module Xsb = struct
 		done;
 		!next_str;;
 
-	let flush_xsb_with_dummy out_ch in_ch: unit = 
-		output_string out_ch "false.\n";
-		flush out_ch;
-		if debug then printf "Flushing with dummy false... expect a no response\n%!";
-		let l = ref "" in
-			while not (!l = "no") do
-				l := get_line_gingerly in_ch out_ch "false.\n" ;
-				l := String.trim (Str.global_replace (Str.regexp "| \\?-") "" !l);
-			done;;
-
-
 	(* Prints the XSB listings currently asserted to stdout.
 	   This function is useful for confirming that XSB knows what we think it knows. *)
 	let debug_print_listings () : unit =
@@ -126,8 +114,6 @@ module Xsb = struct
 	    if debug then Printf.printf "send_assert: %s\n%!" str;
 		let out_ch, in_ch = get_ch () in
 
-		(* Begin by clearing out any error state due to semicolons *)	
-		flush_xsb_with_dummy out_ch in_ch;
 
 		output_string out_ch (str ^ "\n");
 		flush out_ch;		
@@ -172,6 +158,16 @@ module Xsb = struct
 			| f1 :: r1 -> if List.length f1 < num
 						then (f :: f1) :: r1
 						else [f] :: (f1 :: r1);;
+    
+	(* For variables not proceeded with underscore, XSB prints binding sets and requires a semicolon between them.
+	   This is problematic since we have no way of knowing how many semicolons to enter. Instead, tell XSB
+	   exactly how to print the results, with no semicolons between binding sets. *)
+	let build_xsb_query_string (f: formula) : string = 
+		let varstrs = map (string_of_term ~verbose:Xsb) (get_vars_and_fieldvars f) in
+		let varoutfrags = map (fun varstr -> sprintf "write('%s='), writeln(_%s)" varstr varstr) varstrs in 
+		let fstr = (string_of_formula ~verbose:XsbAddUnderscoreVars f) in		
+		    (* printf "%s\n(%s, %s, fail).\n%!" (string_of_formula f) fstr (String.concat "," varoutfrags);*)
+			sprintf "(%s, %s, fail)." fstr (String.concat "," varoutfrags);;
 
 	(* Takes a string query (thing with semicolon answers), 
 	 and the number of variables involved.
@@ -180,57 +176,24 @@ module Xsb = struct
 	    if debug then Printf.printf "send_query: %s (#vars: %d)\n%!" str num_vars;
 		let out_ch, in_ch = get_ch () in
 
-		(* Begin by clearing out any error state due to semicolons *)
-		flush_xsb_with_dummy out_ch in_ch;
-
 		(* Send the query *)
 		output_string out_ch (str ^ "\n");
 		flush out_ch;
-
-		if num_vars = 1 then
-		begin
-			if debug then Printf.printf "forcing initial semicolon.\n%!";
-			output_string out_ch ";\n"; flush out_ch
-		end;
 		
 		let answer = ref [] in
-		let next_str = ref "" in        		
-		let counter = ref 0 in
-		while not (ends_with !next_str "no") do			
-
+		let next_str = ref "" in        				
+		while not (ends_with !next_str "no") && not (ends_with !next_str "yes") do			
             next_str := get_line_gingerly in_ch out_ch str;		  		
 			next_str := String.trim (Str.global_replace (Str.regexp "| \\?-") "" !next_str);
-
-			if debug then Printf.printf "%d > '%s'\n%!" !counter !next_str;
-			(* This function is tricky:
-			    The last line won't be followed by a newline until we give it a ';'. 
-				Since we don't know how many blocks total, we may send an extra ';'.
-				This is dealt with by the get_line_gingerly function.
-				
-				We need to send a semicolon before asking for a line if num_vars = 1.
-	  	    *)
-			
-			(* need to account for "X=3no" as well as "no" *)
-
-			if (String.length !next_str > 0) then 
-			begin					(* Time to be a coder, not a mathematician: =, not \cong *)
-				if (!counter mod num_vars = ((num_vars - 2)) mod num_vars) 
-				   && not (ends_with !next_str "no") 
-				   && not (ends_with !next_str "yes") then
-				begin
-			  		if debug then Printf.printf "time for semicolon. at %d, of %d\n%!" !counter num_vars;
-			  		output_string out_ch ";\n"; flush out_ch;
-				end;			
-				counter := !counter + 1;			
-
-				(* If we have a value to save *)
-				if !next_str <> "no" then 
-					answer := (remove_from_end !next_str "no") :: !answer;			        	
-			end;
-			(* TODO If num_vars is wrong, this will freeze. Can we improve? *)
+						
+			(* may get a blank line. if so, ignore it. terminate only on "no" *)
+			if (String.length !next_str > 0) && !next_str <> "no" then 			
+				answer := (remove_from_end !next_str "no") :: !answer				
 		done;
+
 		if debug then Printf.printf "send_query finished. answers: [%s]\n%!" (String.concat ", " !answer);	
 		if !global_verbose >= 1 then count_send_query := !count_send_query + 1;	
+		(* separate the list into a list of lists *)
 		List.map (fun (l : string list) -> List.map after_equals l) (group (List.rev !answer) num_vars);;
 
 end
@@ -293,7 +256,8 @@ module Communication = struct
 
 	(* Perfectly valid to ask "r(X, 2)" here. *)	
 	let get_state (f: formula): (term list) list =
-		send_message ((string_of_formula ~verbose:Xsb f)^".") (length (get_vars_and_fieldvars f));;		
+		(*send_message ((string_of_formula ~verbose:Xsb f)^".") (length (get_vars_and_fieldvars f));;		*)
+		send_message (Xsb.build_xsb_query_string f) (length (get_vars_and_fieldvars f));;		
 
 	(* Extract the entire local controller state from XSB. This lets us do pretty-printing, rather
 	   than just using XSB's "listing." command, among other things.
@@ -340,8 +304,8 @@ module Communication = struct
     printf "-------\n|STATE|\n-------\n%s\n%!" (String.concat "\n" (map get_tblstrs (get_local_tables p)));;
     (**************)
 
-	let clause_to_xsb ?(forcepositive = false) (cls: clause): string =
-	  let fpflag = if forcepositive then XsbForcePositive else Xsb in
+	let clause_to_xsb ?(forcepositive = false) (cls: clause): string =	  
+	  let fpflag = if forcepositive then XsbForcePositive else XsbAddUnderscoreVars in
 		(string_of_formula ~verbose:fpflag cls.head)^" :- "^(string_of_formula ~verbose:fpflag cls.body);;
 
 	(* Substitute notif vars for their fields and produce a string for XSB to consume *)	
@@ -364,9 +328,8 @@ module Communication = struct
 		ignore (send_message ("retractall("^(string_of_formula ~verbose:Xsb tup)^").") 0);;
 
 	let assert_formula (tup: formula): unit = 
-		(* avoid storing multiples of same tuple *)
+		(* with trie indexing, we no longer need to worry about storing multiples of the same tuple *)
 		if !global_verbose >= 1 then count_assert_formula := !count_assert_formula + 1;
-		retract_formula tup; 
 		ignore (send_message ("assert("^(string_of_formula ~verbose:Xsb tup)^").") 0);;
 
 	let assert_event_and_subevents (p: flowlog_program) (notif: event): unit =	
@@ -393,7 +356,11 @@ module Communication = struct
 		printf "-------------------\nStarting Flowlog Program...\n%!";		
 		(* prevent XSB from locking up if unknown relation seen. will assume false if unknown now.*)
 		ignore (send_message "set_prolog_flag(unknown, fail)." 0);
-		
+	
+		(* Require =SET= semantics, not bag semantics. Without these commands, we'd need to
+		   retract before every assert to prevent fact bloat over time. *)
+		iter (fun (tname, tarity) -> ignore (send_message (sprintf "index(%s/%d,trie)." tname tarity) 0)) (get_all_tables_name_and_arity prgm);
+
 		(* Add a clause if it's not fully compiled, OR we're in no-compilation mode *)				
 		if notables then 
 		  List.iter (start_clause prgm ~forcepositive:forcepositive) prgm.clauses

@@ -232,7 +232,11 @@ let rec disj_to_top ?(ignore_negation: bool = false) (f: formula): formula =
     					| DeclRemoteTable(drel, dargs) when drel = relname -> true 
     					| _ -> false) prgm.decls)
         | _ -> None) 
-        prgm.reacts;;    
+        prgm.reacts;;   
+
+  let get_all_tables_name_and_arity (prgm: flowlog_program): (string * int) list =
+    filter_map (function | DeclTable(n,lst) | DeclRemoteTable(n,lst) -> Some (n, length lst) | _ -> None ) 
+        prgm.decls;;
 
   let get_remote_table (prgm: flowlog_program) (goalrel: string) : (sreactive * sdecl) =
   	let the_react = find (function   
