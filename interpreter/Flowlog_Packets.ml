@@ -149,7 +149,7 @@ let make_eth (ev: event) (nw: Packet.nw): Packet.bytes =
   let dlDst = Int64.of_string (get_field ev "dldst" (Some "0")) in
     Packet.marshal {Packet.dlSrc = dlSrc; Packet.dlDst = dlDst;
                     Packet.dlVlan = None; Packet.dlVlanPcp = 0;
-                    nw = nw };;
+                    Packet.dlVlanDei = false; nw = nw };;
 
 let make_arp (ev: event): Packet.nw =
   let arp_sha = Int64.of_string (get_field ev "arp_sha" None) in
@@ -173,10 +173,12 @@ let make_ip (ev: event) (tp: Ip.tp): Packet.nw =
   let nwTos = int_of_string (get_field ev "nwtos" (Some "0")) in
   let nwChksum = int_of_string (get_field ev "nwchksum" (Some "0")) in
   let nwIdent = int_of_string (get_field ev "nwident" (Some "0")) in
+  let nwOptions = Cstruct.create 0 in
   let nwFlags = { Packet.Ip.Flags.df = false;
                   Packet.Ip.Flags.mf = false} in
-    Ip({src = nwSrc; dst = nwDst; flags = nwFlags; frag = nwFrag; tos = nwTos;
-        ident = nwIdent; ttl = nwTTL; chksum = nwChksum; tp = tp});;
+    Ip({src = nwSrc; dst = nwDst; flags = nwFlags; frag = nwFrag;
+        tos = nwTos; ident = nwIdent; ttl = nwTTL; chksum = nwChksum;
+        options = nwOptions; tp = tp});;
 
 (* TODO(adf): add support for TCP flags, stored as booleans by ocaml-packet *)
 let make_tcp (ev: event): Packet.Ip.tp =
