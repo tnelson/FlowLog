@@ -860,6 +860,10 @@ let make_policy_stream (p: flowlog_program)
             if !longest_used_packet_ms < used then 
               longest_used_packet_ms := used;
 
+            (* Keep an eye on XSB's status *)
+            (*if (!counter_inc_pkt mod 200) = 199 then
+              Xsb.print_statistics();*)
+
             printf "Time used: %fs. Average: %fs. Longest: %fs.\n%!"
                used (!ms_on_packet_processing /. (float_of_int !counter_inc_pkt)) !longest_used_packet_ms;
             printf "Asserts: %d. Retracts: %d. Send_asserts: %d. Send_queries: %d\n%!" 

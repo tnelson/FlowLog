@@ -55,7 +55,7 @@ module Xsb = struct
 	    ref_in_ch := None;
 	    ref_err_ch := None;;
 
-	
+	(* Flush out the error buffer. *)
 	let print_or_flush_errors (print_too: bool) : unit =
 	  let errstr = ref "" in
 	  try
@@ -64,39 +64,52 @@ module Xsb = struct
                (match !ref_err_ch with 
                    | Some(ch) -> ch;
                    | _ -> raise (End_of_file))));   
-	    done
-	  with | End_of_file -> if print_too then Printf.printf "%s\n%!" !errstr;
-	       | Sys_blocked_io -> if print_too then Printf.printf "%s\n%!" !errstr;
-	  if print_too then Printf.printf "-------------------------------------------------\n%!";;
+	    done;	    
+	  with | End_of_file -> if print_too && (String.length (String.trim !errstr)) > 0 then Printf.printf "[ERROR] EoF: '%s'%!" !errstr;
+	       | Sys_blocked_io -> if print_too && (String.length (String.trim !errstr)) > 0 then Printf.printf "[ERROR] Blocked: '%s'\n%!" !errstr;;
 
-    (* we cannot read a line at a time, since XSB will not give a newline on errors *)
-	let get_line_gingerly (in_ch: in_channel) (out_ch: out_channel) (orig: string): string =
-		let next_str = ref "" in	    	    
-        while not (ends_with !next_str "\n") do
-  		    next_str := (!next_str) ^ (String.make 1 (input_char in_ch));		 
-  		  		 
-  		    (*Printf.printf "glg: %s\n%!" !next_str;*)
-		    while (ends_with !next_str "| ?- | ?-") do		    
+    (* If the line ends with "error", print the stderr stream, terminate XSB, and halt execution. *)
+	let rec get_line_gingerly (in_ch: in_channel) ~(printerror: bool): string =
+		let next_str = input_line in_ch in	    	    
+
+		if (ends_with next_str "error") then 
+		begin		
+		    if printerror then (* avoid infinite loop if debug_print_listings fails *)
+		    begin
+				printf "------------ XSB ERROR ------------\n%!";
+				sleep(1); (* Give XSB time to print the error to stderr *)
+				print_or_flush_errors true;
+				debug_print_listings(); (* also flushes errors *)
+				printf "-----------------------------------\n%!";
+			end;
+			halt_xsb();
+			
+			failwith "XSB returned an error."
+		end;
+
+
+            (*Printf.printf "glg: %s\n%!" !next_str;*)
+		    (*while (ends_with !next_str "| ?- | ?-") do		    
 		    	print_or_flush_errors (if debug then true else false);
 		    	(* we may have asked an extra semicolon and caused a syntax error. *)
 		    	if debug then Printf.printf "XSB Error. Asking again.\n%!";
 		  		output_string out_ch (orig ^ "\n");
 		    	flush out_ch;
 		    	next_str := "";
-		  	done
-		done;
-		!next_str;;
+		  	done*)
+		
+		next_str
 
 	(* Prints the XSB listings currently asserted to stdout.
 	   This function is useful for confirming that XSB knows what we think it knows. *)
-	let debug_print_listings () : unit =
+	and debug_print_listings () : unit =
 	    Printf.printf "---------------- PRINTING LISTINGS ----------------\n%!";
 		let out_ch, in_ch = get_ch () in
 		output_string out_ch ("listing.\n"); flush out_ch;
 
 		let next_str = ref "" in
 		  while not (ends_with (String.trim !next_str) "yes") do		  	
-			next_str := get_line_gingerly in_ch out_ch "listing.\n";
+			next_str := get_line_gingerly in_ch ~printerror:false;			
 			next_str := String.trim (Str.global_replace (Str.regexp "| \\?-") "" !next_str);
 			next_str := String.trim (Str.global_replace (Str.regexp "\n\n") "\n" !next_str);
 			Printf.printf "%s\n%!" !next_str;
@@ -107,6 +120,15 @@ module Xsb = struct
 		     which would cause XSB to block. *)
 		  print_or_flush_errors false;;		  
 
+	let print_statistics(): unit =
+	    Printf.printf "---------------- STATISTICS ----------------\n%!";
+		let out_ch, in_ch = get_ch () in
+		output_string out_ch ("statistics.\n"); flush out_ch;
+		let next_str = ref "" in
+		  while not (ends_with (String.trim !next_str) "yes") do		  	
+			next_str := get_line_gingerly in_ch ~printerror:false;			
+			Printf.printf "%s\n%!" !next_str;
+		  done;;		  
 
 	(* This takes in a string command (not query, this doesn't deal with the semicolons).
 	It writes the command to xsb and returns the resulting text. *)
@@ -132,7 +154,7 @@ module Xsb = struct
 		while (not (ends_with (String.trim !next_str) "yes") && not (ends_with (String.trim !next_str) "no")) do		
         	(*next_str := input_line in_ch;*)
           (* get a char at a time, because errors won't send a newline *)
-          next_str := get_line_gingerly in_ch out_ch str;		  
+          next_str := get_line_gingerly in_ch ~printerror:true;
 		  next_str := String.trim (Str.global_replace (Str.regexp "| \\?-") "" !next_str);
 
           if debug then Printf.printf "DEBUG: send_assert %s getting response. Line was: %s\n%!" str (!next_str);
@@ -183,7 +205,7 @@ module Xsb = struct
 		let answer = ref [] in
 		let next_str = ref "" in        				
 		while not (ends_with !next_str "no") && not (ends_with !next_str "yes") do			
-            next_str := get_line_gingerly in_ch out_ch str;		  		
+            next_str := get_line_gingerly in_ch ~printerror:true;		  		
 			next_str := String.trim (Str.global_replace (Str.regexp "| \\?-") "" !next_str);
 						
 			(* may get a blank line. if so, ignore it. terminate only on "no" *)
@@ -245,6 +267,9 @@ module Communication = struct
 	(* if this is a query with 0 variables, will call send_assert and thus need to provide [] vs [[]] *)
 	(* VITAL: The CALLER must add the terminating period to message. *)
 	let send_message (message : string) (num_ans : int) : (term list) list =
+	    (* Begin by flushing the error buffer.
+	       XSB will send newlines in stderr for (seemingly) no reason...*)
+		Xsb.print_or_flush_errors true;
 		if debug then (printf "send_message: %s (expected: %d)\n%!" message num_ans);
 		if num_ans > 0 then
 		    let strresults = Xsb.send_query message num_ans in
@@ -354,12 +379,25 @@ module Communication = struct
 	(* assuming all implicitly defined clauses have been added to list of clauses *)
 	let start_program (prgm : flowlog_program) ?(forcepositive = false) (notables: bool): unit =
 		printf "-------------------\nStarting Flowlog Program...\n%!";		
-		(* prevent XSB from locking up if unknown relation seen. will assume false if unknown now.*)
+	
+		(* prevent XSB from locking up if unknown relation seen. will assume false if unknown now.*)		
 		ignore (send_message "set_prolog_flag(unknown, fail)." 0);
 	
 		(* Require =SET= semantics, not bag semantics. Without these commands, we'd need to
 		   retract before every assert to prevent fact bloat over time. *)
 		iter (fun (tname, tarity) -> ignore (send_message (sprintf "index(%s/%d,trie)." tname tarity) 0)) (get_all_tables_name_and_arity prgm);
+
+		(* Import function that lets us write to the error stream separately. *)
+		ignore (send_message "import error_writeln/1 from standard." 0);	
+
+		(* Any uncaught XSB error will now force "error\n" to be printed to stdout, then send the error to stderr.
+	       This allows us to catch the "error" line when reading from XSB. 
+	       Note the use of _X instead of X, to prevent XSB from printing a "value" for X here. *)
+	    ignore (send_message "assert((default_user_error_handler(_X) :- writeln('error'), error_writeln(_X)))." 0);	
+                
+	    (*ignore (send_message "jdnfsjdnf(,)." 0);*)
+
+		(* remember that if the string contains >1 ., the error may come in the next read *)
 
 		(* Add a clause if it's not fully compiled, OR we're in no-compilation mode *)				
 		if notables then 

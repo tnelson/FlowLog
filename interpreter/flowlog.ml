@@ -118,7 +118,9 @@ let main () =
         if !notables then printf "\n*** FLOW TABLE COMPILATION DISABLED! ***\n%!";
         Lwt_main.at_exit (fun () -> return (printf "LWT exiting~\n%!") );
         at_exit (fun () -> (printf "Ocaml exiting~\n%!"));        
-        Lwt_main.run (run_flowlog program);     
+        Lwt_main.run (run_flowlog program);
+        (*Lwt_main.run (Lwt.catch (fun () -> (run_flowlog program)) (fun exn -> Lwt.return (printf "SDFGASDGFASDFASDF\n\n\n\n\n\n\n%!")));     *)
+        
         printf "LWT Terminated!\n%!";
       with
         | Sys.Break ->
