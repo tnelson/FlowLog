@@ -119,9 +119,9 @@ let well_formed_rule (p: flowlog_program) (r: srule): unit =
           | ADo(_, outrelterms, where) -> 
             (try              
               (* forward is a special case: it has the type of its trigger. *)
-              let valid_fields = (match get_valid_fields_for_output_rel p headrelname with
-                                    | FixedFields(fdecls) -> map (fun (n, _) -> n) fdecls
-                                    | AllFields -> [fname] (* any should work *)
+              let valid_fields = (match (get_outgoing p headrelname).outarity with
+                                    | FixedFields(fdecls) -> fdecls
+                                    | AnyFields -> [fname] (* any should work *)
                                     | SameAsOnFields -> get_valid_fields_for_input_rel p inrelname) in                    
               if not (mem fname valid_fields) then 
                 raise (UndeclaredField(vname, fname))
@@ -138,19 +138,11 @@ let well_formed_rule (p: flowlog_program) (r: srule): unit =
   let well_formed_atom (headrelname: string) (headterms: term list) (inrelname: string) (inargname: string) (atom: formula) :unit =
     match atom with 
       | FAtom(modname, relname, argtl) -> 
-        (try           
-          let decl = (find (function
-                                 | DeclTable(dname, _) when dname = relname -> true 
-                                 | DeclRemoteTable(dname, _) when dname = relname -> true 
-                                 | _ -> false) decls) in              
-              (match decl with 
-                | DeclTable(_, typeargs) 
-                | DeclRemoteTable(_, typeargs) ->
-                  if length typeargs <> length argtl then
-                    raise (BadArityOfTable relname);
-                | _ -> failwith "validate_rule");                   
-          iter (well_formed_term headrelname headterms inrelname inargname) argtl;
-        with | Not_found -> raise (UndeclaredTable relname))
+        (try    
+          if (length (get_table p relname).tablearity) <> length argtl then 
+            raise (BadArityOfTable relname);
+            iter (well_formed_term headrelname headterms inrelname inargname) argtl;
+         with | Not_found -> raise (UndeclaredTable relname))
 
       | FEquals(t1, t2) ->
         well_formed_term headrelname headterms inrelname inargname t1;
@@ -158,12 +150,14 @@ let well_formed_rule (p: flowlog_program) (r: srule): unit =
       | _ -> failwith "validate_rule" in
 
   (* regardless whether this rule is DO or INSERT etc. check these: *)
-  let validate_common_elements inrelname inrelarg outrelname outrelterms where = 
+  let validate_common_elements inrelname inrelarg outrelname outrelterms where: unit = 
     iter (well_formed_atom outrelname outrelterms inrelname inrelarg) (get_atoms where);        
     iter (fun (_, f) -> (well_formed_atom outrelname outrelterms inrelname inrelarg f)) (get_equalities where);        
     iter (well_formed_term outrelname outrelterms inrelname inrelarg) outrelterms;
-    if not (exists (function | DeclInc(dname, _) when dname = inrelname -> true | _ -> false) decls) then    
-      raise (UndeclaredIncomingRelation inrelname)
+    try
+      ignore (get_event p inrelname)
+    with
+      | Not_found -> raise (UndeclaredIncomingRelation inrelname)          
   in 
 
   match r.action with     
@@ -171,9 +165,14 @@ let well_formed_rule (p: flowlog_program) (r: srule): unit =
     |  ADo(outrelname, outrelterms, where) -> 
         validate_common_elements r.onrel r.onvar outrelname outrelterms where;
         (try
-          let dargs = first (filter_map (function | DeclOut(dname, dargs) when dname = outrelname -> Some dargs | _ -> None) decls) in
-          if (length outrelterms) <> (length dargs) then
-            raise (BadArityOfTable outrelname)          
+          match (get_outgoing p outrelname).outarity with
+            | AnyFields -> () 
+            | FixedFields(dargs) -> 
+              if (length outrelterms) <> (length dargs) then          
+                raise (BadArityOfTable outrelname)         
+            | SameAsOnFields -> 
+              if (length outrelterms) <> 1 then
+                raise (BadArityOfTable outrelname)
         with Not_found -> raise (UndeclaredOutgoingRelation outrelname))
 
     (* insert and delete must have local table in action, of correct arity *)
@@ -181,9 +180,9 @@ let well_formed_rule (p: flowlog_program) (r: srule): unit =
     | ADelete(relname, outrelterms, where) ->
         validate_common_elements r.onrel r.onvar relname outrelterms where;        
         (try
-          let dargs = first (filter_map (function | DeclTable(dname, dargs) when dname = relname -> Some dargs | _ -> None) decls) in
-          if (length outrelterms) <> (length dargs) then
-            raise (BadArityOfTable relname)          
+          let dargs = (get_table p relname).tablearity in            
+            if (length outrelterms) <> (length dargs) then          
+              raise (BadArityOfTable relname)                     
         with Not_found -> raise (UndeclaredTable relname));;
 
 let simplify_clause (cl: clause): clause =   
@@ -289,8 +288,12 @@ let rec expand_includes (ast : flowlog_ast) (prev_includes : string list) : flow
           expand_includes new_ast (prev_includes @ includes)
 
 (* some duplication here from Flowlog_Graphs for now. *)
-  let build_memos_for_program (rules: srule list): program_memos =   
-    let memos = {out_triggers = Hashtbl.create 5; insert_triggers = Hashtbl.create 5; delete_triggers = Hashtbl.create 5;} in
+  let build_memos_for_program (rules: srule list) (tables: table_def list) (outgoings: outgoing_def list) (events: event_def list): program_memos =   
+    let memos = {out_triggers = Hashtbl.create 5; insert_triggers = Hashtbl.create 5; 
+                 delete_triggers = Hashtbl.create 5;
+                 tablemap = Hashtbl.create 5; eventmap = Hashtbl.create 5;
+                 outgoingmap = Hashtbl.create 5; 
+                 } in
     let depends_from_rule (r: srule): unit =  
       match r.action with
         | AInsert(headrel, _, fmla) ->
@@ -301,6 +304,15 @@ let rec expand_includes (ast : flowlog_ast) (prev_includes : string list) : flow
           Hashtbl.add memos.out_triggers r.onrel headrel in
      iter depends_from_rule rules;
      memos;;
+
+let make_tables (decls: sdecl list) (defns: sreactive list): table_def list =
+  filter_map (function | DeclTable(n, tlist) -> Some {name=n; tablearity=tlist; source=LocalTable}
+                       | DeclRemoteTable(n, tlist) -> 
+                          (match (find (function | ReactRemote(tname,_,_,_,_) when tname = n -> true | _ -> false ) defns) with
+                            | ReactRemote(_, qid, ipaddr, tcpport, refreshsetting) ->
+                              Some {name=n; tablearity=tlist; source=RemoteTable(qid, (ipaddr, tcpport), refreshsetting)}
+                            | _ -> failwith "make_tables")
+                       | _ -> None) decls;;
 
 let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_program =
   let expanded_ast = expand_includes ast [filename] in    
@@ -340,14 +352,19 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
               printf "\n  Loaded AST. There were %d clauses, \n    %d of which were fully compilable forwarding clauses and\n    %d were weakened pkt-triggered clauses.\n    %d will be given, unweakened, to XSB.\n%!"              
                 (length simplified_clauses) (length can_fully_compile_simplified) (length weakened_cannot_compile_pt_clauses) (length not_fully_compiled_clauses);              
 
-                let p = {decls = the_decls; reacts = the_reacts; clauses = simplified_clauses; 
+                (* Convert decls and defns syntax (with built ins) into a program *)
+
+                let p = {
+                 tables = make_tables the_decls the_reacts;
+                 outgoings = make_outgoings the_decls the_reacts;
+                 events = make_events the_decls the_reacts;
+                 clauses = simplified_clauses; 
                  weakened_cannot_compile_pt_clauses = weakened_cannot_compile_pt_clauses;
                  can_fully_compile_to_fwd_clauses = can_fully_compile_simplified;
                  (* Remember: these are unweakened, and so can be used by XSB. *)
                  not_fully_compiled_clauses = not_fully_compiled_clauses;
-                 memos = build_memos_for_program the_rules} in
+                 memos = build_memos_for_program the_rules the_tables the_outgoings the_events} in
 
                   (* Validation *)
                   iter (well_formed_rule p) the_rules;   
-
-                   p;;
+                  p;;
