@@ -260,12 +260,10 @@ let flatten_asts (asts : flowlog_ast list) : flowlog_ast =
     let uniq = fun acc a -> if not (mem a acc)
                             then a::acc
                             else acc in
-    match l_ast with AST(l_includes, l_stmts) ->
-    match r_ast with AST(r_includes, r_stmts) ->
-    let includes = fold_left uniq l_includes r_includes in
-    AST(includes, l_stmts @ r_stmts) in
+    let includes = fold_left uniq l_ast.includes r_ast.includes in
+    {includes=includes; statements= l_ast.statements @ r_ast.statements} in
 
-  fold_left merge_ast (AST([], [])) asts
+  fold_left merge_ast {includes=[]; statements=[]} asts
 
 (*
  * takes an AST and a list of previously included files, returns a new AST
@@ -276,21 +274,19 @@ let flatten_asts (asts : flowlog_ast list) : flowlog_ast =
  * include a file more than once
  *)
 
-let rec expand_includes (ast : flowlog_ast) (prev_includes : string list) : flowlog_ast =
-  match ast with AST(quoted_includes, stmts) ->
-    if length quoted_includes = 0 then ast
+let rec expand_includes (ast : flowlog_ast) (prev_includes : string list) : flowlog_ast =  
+    if length ast.includes = 0 then ast
     else
       let unquote = fun qfn -> String.sub qfn 1 ((String.length qfn) - 2) in
-      let includes = map unquote quoted_includes in
+      let includes = map unquote ast.includes in
       let maybe_read_ast filename = if mem filename prev_includes
-                                    then AST([], [])
+                                    then {includes=[]; statements=[]}
                                     else read_ast filename in
 
       let flattened_ast = flatten_asts (map maybe_read_ast includes) in
-
-      match flattened_ast with AST(new_includes, new_stmts) ->
-        let new_ast = AST(new_includes, stmts @ new_stmts) in
-        expand_includes new_ast (prev_includes @ includes)
+      
+        let new_ast = {includes=flattened_ast.includes; statements=ast.statements @ flattened_ast.statements} in
+          expand_includes new_ast (prev_includes @ includes)
 
 (* some duplication here from Flowlog_Graphs for now. *)
   let build_memos_for_program (rules: srule list): program_memos =   
@@ -307,8 +303,8 @@ let rec expand_includes (ast : flowlog_ast) (prev_includes : string list) : flow
      memos;;
 
 let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_program =
-  let expanded_ast = expand_includes ast [filename] in
-    match expanded_ast with AST(_, stmts) ->
+  let expanded_ast = expand_includes ast [filename] in    
+  let stmts = expanded_ast.statements in
         (* requires extlib *)
         let the_decls  =  built_in_decls @ 
                           filter_map (function | SDecl(d) -> Some d   
