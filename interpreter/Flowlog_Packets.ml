@@ -361,8 +361,8 @@ let legal_to_modify_packet_fields = ["locpt"; "dlsrc"; "dldst";
 let legal_to_match_packet_fields = ["dltyp"; "nwproto"; "locsw"]
                                    @ legal_to_modify_packet_fields;;
 
-let swpt_fields = ["sw";"pt"];;
-let swdown_fields = ["sw"];;
+let swpt_fields = [("sw", "switchid");("pt", "portid")];;
+let swdown_fields = [("sw", "switchid")];;
 
 (**********************************************)
 
@@ -398,14 +398,17 @@ let rec built_in_supertypes (typename: string): string list =
       | None -> [typename]
   with Not_found -> [typename];;
 
-let flavor_to_fields (flav: packet_flavor): string list =
+let flavor_to_field_decls (flav: packet_flavor): (string * typeid) list =
   let typename = flavor_to_typename flav in
   let supertypes = built_in_supertypes typename in
   let fieldslist = (fold_left (fun acc supertype -> acc @ (StringMap.find supertype map_from_typename_to_flavor).fields) [] supertypes) in
   let check_for_dupes = unique fieldslist in
   if (length fieldslist) <> (length check_for_dupes) then
     failwith ("Packet flavor "^flav.label^" had duplicate fieldnames when parent flavor fields were added.")
-  else fieldslist;;
+  else (map (fun fn -> (fn, "DUMMY")) fieldslist);; (* @@@ TODO TYPES*)
+
+let flavor_to_fields (flav: packet_flavor): string list =
+  map (fun (fname, _) -> fname) (flavor_to_field_decls flav);;
 
 (*************************************************************)
 
@@ -424,7 +427,7 @@ let built_in_where_for_variable (vart: term) (relname: string): formula =
 let create_id_assign (k: string): assignment = {afield=k; atupvar=k};;
 let build_flavor_decls (flav: packet_flavor): sdecl list =
   [DeclInc(flavor_to_inrelname flav, flavor_to_typename flav);
-   DeclEvent(flavor_to_typename flav, flavor_to_fields flav);
+   DeclEvent(flavor_to_typename flav, flavor_to_field_decls flav);
    DeclOut(flavor_to_emitrelname flav, [flavor_to_typename flav])];;
 let build_flavor_reacts (flav: packet_flavor): sreactive list =
   [ReactInc(flavor_to_typename flav, flavor_to_inrelname flav);

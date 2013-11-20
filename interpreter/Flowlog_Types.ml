@@ -24,8 +24,11 @@ open NetCore_Types
               | FAnd of formula * formula 
               | FOr of formula * formula;;
 
+type typeid = string;;
+
 (**************************************************)
-(* AST-level definitions for syntactic rules, etc.*)
+(* AST-level definitions for syntactic rules, etc.*)  
+
   type action = 
               | ADelete of string * term list * formula 
               | AInsert of string * term list * formula 
@@ -59,7 +62,7 @@ open NetCore_Types
       | DeclRemoteTable of string * string list    
       | DeclInc of string * string   
       | DeclOut of string * string list    
-      | DeclEvent of string * string list;;
+      | DeclEvent of string * (string * typeid) list;;
 
   type srule = {onrel: string; onvar: string; action: action};;
 
@@ -80,18 +83,55 @@ open NetCore_Types
                   body: formula; (* should be always conjunctive *)
                   };;
 
-  (* triggers: inrels -> outrels *)
-  (* We use Hashtbl's built in find_all function to extend the values to string list. *)
-  type program_memos = {out_triggers: (string, string) Hashtbl.t;
-                        insert_triggers: (string, string) Hashtbl.t;
-                        delete_triggers: (string, string) Hashtbl.t};;
+  (* Every event has a name and a string of fieldnames, each with a type. *)  
+  type event_def = { name: string;
+                     fields: (string * typeid) list };;
+
 
   (* partial-evaluation needs to know what variable is being used for the old packet in a clause *)
   type triggered_clause = {clause: clause; oldpkt: string};;
 
-  type flowlog_program = {  decls: sdecl list; 
-                            reacts: sreactive list; 
+
+  (* SameAsOnFields: Unary relation. Type of argument is same type from the ON trigger.
+                     Used by "forward".
+     AnyFields: Any arity, any types. Used for behavior like "print"ing. 
+     Fixedfields: Fixed arity with fixed types in each position. For events, etc. 
+     An outgoing is "CONDENSED" if it has SameAsOnFields or Fixedfields has an *event* typeid. *)
+  type outgoing_fields = | SameAsOnFields | AnyFields | FixedFields of typeid list;;
+
+  type outgoing_def = { name: string;
+                        arity: outgoing_fields;
+                        react: spec_out };;
+
+  type queryid = string;;
+  type agent = string * string;;                       
+  type table_source = | LocalTable 
+                      | RemoteTable of queryid * agent * refresh;;
+
+  type table_def = { name: string;
+                    arity: typeid list;
+                    source: table_source };;  
+
+  (* triggers: inrels -> outrels *)
+  (* We use Hashtbl's built in find_all function to extend the values to string list. *)
+  type program_memos = {out_triggers: (string, string) Hashtbl.t;
+                        insert_triggers: (string, string) Hashtbl.t;
+                        delete_triggers: (string, string) Hashtbl.t;
+                        tablemap: (string, table_def) Hashtbl.t;
+                        eventmap: (string, event_def) Hashtbl.t;
+                        outgoingmap: (string, outgoing_def) Hashtbl.t;
+                       };;
+
+  type flowlog_program = {  (* for state tables only (local or remote)*)
+                            tables: table_def list;
+                            
+                            (* events and outgoings will require some built_ins *)    
+                            (* incomings are entirely defined by event defns *)                                                    
+                            events: event_def list; 
+                            outgoings: outgoing_def list;
+
                             clauses: clause list;
+
                             (* subsets of <clauses> used to avoid recomputation*)
                             can_fully_compile_to_fwd_clauses: triggered_clause list;                             
                             weakened_cannot_compile_pt_clauses: triggered_clause list;
@@ -165,13 +205,16 @@ open NetCore_Types
       | ADo(outrel, argterms, fmla) ->  
         "ON "^r.onrel^"("^r.onvar^"): DO "^(action_string outrel argterms fmla);;
 
+  let string_of_field_decl (d : (string * typeid)): string = 
+    let s1, s2 = d in s1^s2;;
+
   let string_of_declaration (d: sdecl): string =
     match d with 
       | DeclTable(tname, argtypes) -> "TABLE "^tname^" "^(String.concat "," argtypes);
       | DeclRemoteTable(tname, argtypes) -> "REMOTE TABLE "^tname^" "^(String.concat "," argtypes);
       | DeclInc(tname, argtype) -> "INCOMING "^tname^" "^argtype;
       | DeclOut(tname, argtypes) -> "OUTGOING "^tname^" "^(String.concat "," argtypes);
-      | DeclEvent(evname, argnames) -> "EVENT "^evname^" "^(String.concat "," argnames);;
+      | DeclEvent(evname, argdecls) -> "EVENT "^evname^" "^(String.concat "," (map string_of_field_decl argdecls));;
 
   let string_of_outspec (spec: spec_out) =
     match spec with 
