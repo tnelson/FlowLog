@@ -58,10 +58,10 @@ type typeid = string;;
       | ReactInc of string * string;;
 
   type sdecl = 
-      | DeclTable of string * string list    
-      | DeclRemoteTable of string * string list    
+      | DeclTable of string * typeid list    
+      | DeclRemoteTable of string * typeid list    
       | DeclInc of string * string   
-      | DeclOut of string * string list    
+      | DeclOut of string * typeid list    
       | DeclEvent of string * (string * typeid) list;;
 
   type srule = {onrel: string; onvar: string; action: action};;
@@ -85,7 +85,7 @@ type typeid = string;;
 
   (* Every event has a name and a string of fieldnames, each with a type. *)  
   type event_def = { name: string;
-                     fields: (string * typeid) list };;
+                     evfields: (string * typeid) list };;
 
 
   (* partial-evaluation needs to know what variable is being used for the old packet in a clause *)
@@ -100,7 +100,7 @@ type typeid = string;;
   type outgoing_fields = | SameAsOnFields | AnyFields | FixedFields of typeid list;;
 
   type outgoing_def = { name: string;
-                        arity: outgoing_fields;
+                        outarity: outgoing_fields;
                         react: spec_out };;
 
   type queryid = string;;
@@ -109,7 +109,7 @@ type typeid = string;;
                       | RemoteTable of queryid * agent * refresh;;
 
   type table_def = { name: string;
-                    arity: typeid list;
+                    tablearity: typeid list;
                     source: table_source };;  
 
   (* triggers: inrels -> outrels *)
