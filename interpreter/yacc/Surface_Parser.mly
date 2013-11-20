@@ -81,7 +81,7 @@
   decl_stmt: 
             | TABLE NAME LPAREN name_list RPAREN SEMICOLON {DeclTable($2, $4)} 
             | REMOTE TABLE NAME LPAREN name_list RPAREN SEMICOLON {DeclRemoteTable($3, $5)}
-            | EVENT NAME LCURLY name_list RCURLY SEMICOLON {DeclEvent($2, $4)}
+            | EVENT NAME LCURLY field_decl_list RCURLY SEMICOLON {DeclEvent($2, $4)}
             | INCOMING NAME LPAREN NAME RPAREN SEMICOLON {DeclInc($2, $4)}
             | OUTGOING NAME LPAREN name_list RPAREN SEMICOLON {DeclOut($2, $4)};
 
@@ -152,6 +152,10 @@
   name_list: 
             | NAME {[$1]} 
             | NAME COMMA name_list {$1 :: $3};
+  
+  field_decl_list:
+            | NAME COLON NAME {[($1, $3)]}
+            | NAME COLON NAME COMMA field_decl_list {($1, $3) :: $5};
 
   action_clause_list: 
             | action_clause {[$1]}  

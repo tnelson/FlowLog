@@ -221,119 +221,51 @@ let rec disj_to_top ?(ignore_negation: bool = false) (f: formula): formula =
 
 (*****************************************************)
 
-  let get_local_tables (prgm: flowlog_program): sdecl list =
-    filter (function | DeclTable(relname, argtypes) -> true | _ -> false ) 
-        prgm.decls;;
-(* table name, query name, ip, port, refresh settings *)
-  let get_remote_tables (prgm: flowlog_program): (sreactive * sdecl) list =
-    filter_map (function   
-    	| ReactRemote(relname, qryname, ip, port, refresh) as x -> 
-    		Some (x, find (function 
-    					| DeclRemoteTable(drel, dargs) when drel = relname -> true 
-    					| _ -> false) prgm.decls)
-        | _ -> None) 
-        prgm.reacts;;   
+  let get_local_tables (prgm: flowlog_program): table_def list =
+    filter (fun t -> match t.source with | LocalTable -> true | RemoteTable(_,_,_) -> false) prgm.tables;;
 
-  let get_all_tables_name_and_arity (prgm: flowlog_program): (string * int) list =
+  let get_remote_tables (prgm: flowlog_program): table_def list =
+    filter (fun t -> match t.source with | LocalTable -> false | RemoteTable(_,_,_) -> true) prgm.tables;;
+
+  (*let get_all_tables_name_and_arity (prgm: flowlog_program): (string * int) list =
     filter_map (function | DeclTable(n,lst) | DeclRemoteTable(n,lst) -> Some (n, length lst) | _ -> None ) 
-        prgm.decls;;
+        prgm.decls;;*)
 
-  let get_remote_table (prgm: flowlog_program) (goalrel: string) : (sreactive * sdecl) =
-  	let the_react = find (function   
-    	| ReactRemote(relname, qryname, ip, port, refresh) when relname = goalrel -> true    		
-        | _ -> false) prgm.reacts in
-    let the_decl  = find (function 
-    	| DeclRemoteTable(relname, dargs) when relname = goalrel -> true 
-    	| _ -> false) prgm.decls in
-	(the_react, the_decl);;
+  let get_table (prgm: flowlog_program) (goalrel: string) : table_def =
+    Hashtbl.find prgm.memos.tablemap goalrel;;  	
+  let get_event (prgm: flowlog_program) (goalrel: string) : event_def =
+    Hashtbl.find prgm.memos.eventmap goalrel;;    
+  let get_outgoing (prgm: flowlog_program) (goalrel: string) : outgoing_def =
+    Hashtbl.find prgm.memos.outgoingmap goalrel;;    
 
-  let is_local_table (prgm: flowlog_program) (relname: string) = 
-    exists (function      
-        | DeclTable(rname, _) when rname = relname -> true         
-        | _ -> false) 
-        prgm.decls;;
-
-  let is_remote_table (prgm: flowlog_program) (relname: string): bool =   
-    exists (function      
-        | DeclRemoteTable(rname, _) when rname = relname -> true         
-        | _ -> false) 
-        prgm.decls;;
-
+  let is_local_table (prgm: flowlog_program) (relname: string): bool = 
+     match (get_table prgm relname).source with | LocalTable -> true | RemoteTable(_,_,_) -> false;;
+  let is_remote_table (prgm: flowlog_program) (relname: string): bool = 
+     match (get_table prgm relname).source with | LocalTable -> false | RemoteTable(_,_,_) -> true;;
+  (* @@@ TODO TYPES*)
+  (* TODO: "packet_in"<x> are special case since event type is "packet"<x> *)
   let is_incoming_table (prgm: flowlog_program) (relname: string): bool =
-    exists (function      
-        | DeclInc(rname, argtype) when rname = relname -> true 
-        | _ -> false) 
-        prgm.decls;;  
-
+    try ignore (get_event prgm relname); true with | Not_found -> false;;  
   let is_outgoing_table (prgm: flowlog_program) (relname: string): bool =
-    exists (function      
-        | DeclOut(rname, argtype) when rname = relname -> true 
-        | _ -> false) 
-        prgm.decls;;  
+    try ignore (get_outgoing prgm relname); true with | Not_found -> false;;  
+  let is_io_rel (prgm: flowlog_program) (relname: string): bool =
+    is_incoming_table prgm relname or is_outgoing_table prgm relname;;
 
-  let get_output_defns (prgm: flowlog_program): sreactive list =
-    filter_map (function      
-        | ReactOut(relname, arglist, outtype, assigns, spec) as x -> Some x       
-        | _ -> None) 
-        prgm.reacts;;      
-
-  let relation_name_of_defn (r: sreactive): string =
-    match r with
-      | ReactOut(relname, arglist, outtype, assigns, spec) -> relname
-      | ReactRemote(relname, qryname, ip, port, refresh) ->  relname
-      | ReactInc(evname, relname) -> relname;;
-
-  let get_input_defn_for_rel_preproc (reacts: sreactive list) (goalrel: string): sreactive =
-    find (function      
-          | ReactInc(intype, relname) when goalrel = relname -> true 
-          | _ -> false) 
-        reacts;;      
-
-  let get_output_defn_for_rel_preproc (reacts: sreactive list) (goalrel: string): sreactive =    
-    find (function      
-          | ReactOut(outrel, _, eventid, _, _) when goalrel = outrel -> true 
-          | _ -> false) 
-        reacts;;     
-
-  let get_input_defn_for_rel (prgm: flowlog_program) (goalrel: string): sreactive =
-    get_input_defn_for_rel_preproc prgm.reacts goalrel;;      
-
-  let is_io_rel (prgm: flowlog_program) (modname: string) (relname: string): bool =
-    (* exists is ocaml's ormap *)
-    exists (function      
-        | DeclInc(rname, argtype) when rname = relname -> true 
-        | DeclOut(rname, argtypelst) when rname = relname -> true
-        | _ -> false) 
-        prgm.decls;;      
-
-  (* TODO: when this all gets refactored again, should use record types for more types *)
-
-let get_fields_for_type_preproc (decls: sdecl list) (etype: string): string list =  
-    (*printf "get_fields_for_type_preproc: %s\n%!" etype;    *)
+(* This version is meant to work on a list of AST decls. *)  
+(*let get_fields_for_type_preproc (decls: sdecl list) (etype: string): string list =      
       let decl = find (function       
-        | DeclEvent(evname, evtypelst) when evname = etype -> true 
+        | DeclEvent(evname, evfielddecls) when evname = etype -> true 
         | _ -> false) decls in       
       match decl with 
-        | DeclEvent(evname, evfieldlst) -> 
-          evfieldlst
-        | _ -> failwith "get_fields_for_type";;
+        | DeclEvent(evname, evfielddecls) -> 
+          (map (fun (fname, _) -> fname) evfielddecls)
+        | _ -> failwith "get_fields_for_type";;*)
 
-  let get_fields_for_type (prgm: flowlog_program) (etype: string): string list =  
-      get_fields_for_type_preproc prgm.decls etype;;
+  let get_fields_for_type (prgm: flowlog_program) (etype: string): string list =      
+    map (fun (n,_) -> n) (get_event prgm etype).fields;;
 
-  let get_valid_fields_for_input_rel (decls: sdecl list) (reacts: sreactive list) (rname: string): (string list) =  
-    let defn = get_input_defn_for_rel_preproc reacts rname in     
-    match defn with 
-      | ReactInc(intype, _) ->                
-        get_fields_for_type_preproc decls intype
-      | _ -> failwith "get_valid_fields_for_input_rel";;
-
-  let get_valid_fields_for_output_rel (decls: sdecl list) (reacts: sreactive list) (rname: string): (string list) =
-    let defn = get_output_defn_for_rel_preproc reacts rname in 
-    match defn with 
-      | ReactOut(outrel, _, eventid, _, _) ->
-        get_fields_for_type_preproc decls eventid
-      | _ -> failwith "get_valid_fields_for_output_rel";;
+  let get_valid_fields_for_input_rel (p: flowlog_program) (rname: string): (string list) =  
+    map (fun (fname, _) -> fname) (get_event p rname).fields;;
 
 let atom_to_relname (f: formula): string =
   match f with

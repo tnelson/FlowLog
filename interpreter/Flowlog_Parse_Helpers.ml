@@ -88,7 +88,7 @@ let field_vars_in (condensed: bool) (tl: term list): string list =
     | TConst(_) -> None
     | TField(vname, _) -> Some vname) tl
 
-let well_formed_rule (decls: sdecl list) (reacts: sreactive list) (r: srule): unit =    
+let well_formed_rule (p: flowlog_program) (r: srule): unit =    
 
     (* This may be called for a term in the head OR in the body.*)
     let well_formed_term (headrelname: string) (headterms: term list) (inrelname: string) (inargname: string) (t: term): unit = 
@@ -106,7 +106,7 @@ let well_formed_rule (decls: sdecl list) (reacts: sreactive list) (r: srule): un
         (* variable name in input relation *)
       | TField(vname, fname) when vname = inargname ->    
         (try         
-          let valid_fields = get_valid_fields_for_input_rel decls reacts inrelname in        
+          let valid_fields = get_valid_fields_for_input_rel p inrelname in        
           if not (mem fname valid_fields) then 
             raise (UndeclaredField(vname, fname))
         with | Not_found -> raise (UndeclaredIncomingRelation inrelname))
@@ -119,10 +119,10 @@ let well_formed_rule (decls: sdecl list) (reacts: sreactive list) (r: srule): un
           | ADo(_, outrelterms, where) -> 
             (try              
               (* forward is a special case: it has the type of its trigger. *)
-              let valid_fields = (if headrelname <> "forward" then 
-                                    get_valid_fields_for_output_rel decls reacts headrelname
-                                  else 
-                                    get_valid_fields_for_input_rel decls reacts inrelname) in                    
+              let valid_fields = (match get_valid_fields_for_output_rel p headrelname with
+                                    | FixedFields(fdecls) -> map (fun (n, _) -> n) fdecls
+                                    | AllFields -> [fname] (* any should work *)
+                                    | SameAsOnFields -> get_valid_fields_for_input_rel p inrelname) in                    
               if not (mem fname valid_fields) then 
                 raise (UndeclaredField(vname, fname))
             with | Not_found -> raise (UndeclaredOutgoingRelation headrelname))
@@ -317,12 +317,11 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
         let the_rules  =  filter_map (function | SRule(r) -> Some (add_built_ins r)
                                                | _ -> None) stmts in
             
-
-            (* Validation done here and below! *)
-            iter (well_formed_rule the_decls the_reacts) the_rules;   
+            (* Validation *) 
             well_formed_reacts the_reacts;
             well_formed_decls the_decls;       
 
+            (* Create and simplify clauses. Test for what can be compiled. Weaken as needed. *)
             let clauses = (fold_left (fun acc r -> (clauses_of_rule r) @ acc) [] the_rules) in 
             let simplified_clauses = map simplify_clause clauses in 
             (* pre-determine what can be fully compiled. pre-determine weakened versions of other packet-triggered clauses*)
@@ -339,13 +338,16 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
                           ([],[],[]) simplified_clauses in 
 
               printf "\n  Loaded AST. There were %d clauses, \n    %d of which were fully compilable forwarding clauses and\n    %d were weakened pkt-triggered clauses.\n    %d will be given, unweakened, to XSB.\n%!"              
-                (length simplified_clauses) (length can_fully_compile_simplified) (length weakened_cannot_compile_pt_clauses) (length not_fully_compiled_clauses);
-              printf "Reacts: %s\n%!" (String.concat ", " (map string_of_reactive the_reacts));
-              printf "Decls: %s\n%!" (String.concat ", " (map string_of_declaration the_decls));
+                (length simplified_clauses) (length can_fully_compile_simplified) (length weakened_cannot_compile_pt_clauses) (length not_fully_compiled_clauses);              
 
-                {decls = the_decls; reacts = the_reacts; clauses = simplified_clauses; 
+                let p = {decls = the_decls; reacts = the_reacts; clauses = simplified_clauses; 
                  weakened_cannot_compile_pt_clauses = weakened_cannot_compile_pt_clauses;
                  can_fully_compile_to_fwd_clauses = can_fully_compile_simplified;
                  (* Remember: these are unweakened, and so can be used by XSB. *)
                  not_fully_compiled_clauses = not_fully_compiled_clauses;
-                 memos = build_memos_for_program the_rules};;
+                 memos = build_memos_for_program the_rules} in
+
+                  (* Validation *)
+                  iter (well_formed_rule p) the_rules;   
+
+                   p;;
