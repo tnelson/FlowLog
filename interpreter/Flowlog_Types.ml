@@ -1,16 +1,19 @@
 (****************************************************************)
 (* Most type definitions and a few helpers                      *)
+(* Includes both AST-level and program-level types              *)
 (****************************************************************)
 
 open Printf
 open ExtList.List
 open NetCore_Types
 
+
+(***********************************************)
+(* Formula types are shared by AST and program *)
   type term = 
               | TConst of string 
               | TVar of string 
               | TField of string * string;;  
-
   type formula = 
               | FTrue 
               | FFalse 
@@ -21,6 +24,8 @@ open NetCore_Types
               | FAnd of formula * formula 
               | FOr of formula * formula;;
 
+(**************************************************)
+(* AST-level definitions for syntactic rules, etc.*)
   type action = 
               | ADelete of string * term list * formula 
               | AInsert of string * term list * formula 
@@ -63,8 +68,7 @@ open NetCore_Types
       | SDecl of sdecl 
       | SRule of srule;;
 
-  type flowlog_ast = 
-      | AST of string list * stmt list;;
+  type flowlog_ast = {includes: string list; statements: stmt list};;
 
 (*************************************************************)  
 
@@ -193,10 +197,8 @@ open NetCore_Types
       | SRule(rstmt) -> (string_of_rule rstmt);;
 
   let pretty_print_ast (ast: flowlog_ast): unit =
-    match ast with
-      | AST(includes, stmts) ->
-        iter (fun inc -> printf "INCLUDE %s;\n%!" inc) includes;
-        iter (fun stmt -> printf "%s\n%!" (string_of_stmt stmt)) stmts;;
+    iter (fun inc -> printf "INCLUDE %s;\n%!" inc) ast.includes;
+    iter (fun stmt -> printf "%s\n%!" (string_of_stmt stmt)) ast.statements;;
 
   let string_of_clause ?(verbose: printmode = Brief) (cl: clause): string =
     "CLAUSE: "^(string_of_formula ~verbose:verbose cl.head)^" :- "^(string_of_formula ~verbose:verbose cl.body)^"\n"^

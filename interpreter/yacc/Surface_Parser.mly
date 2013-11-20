@@ -66,9 +66,9 @@
   %%
 
   main: 
-            | include_list EOF {AST($1, [])}
-            | include_list stmt_list EOF {AST($1, $2)}
-            | stmt_list EOF {AST([], $1)};;
+            | include_list EOF {{includes=$1; statements=[]}}
+            | include_list stmt_list EOF {{includes=$1; statements=$2}}
+            | stmt_list EOF { {includes=[]; statements=$1} };;
 
   include_:
             | INCLUDE QUOTED_IDENTIFIER SEMICOLON {$2};
