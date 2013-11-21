@@ -227,10 +227,6 @@ let rec disj_to_top ?(ignore_negation: bool = false) (f: formula): formula =
   let get_remote_tables (prgm: flowlog_program): table_def list =
     filter (fun t -> match t.source with | LocalTable -> false | RemoteTable(_,_,_) -> true) prgm.tables;;
 
-  (*let get_all_tables_name_and_arity (prgm: flowlog_program): (string * int) list =
-    filter_map (function | DeclTable(n,lst) | DeclRemoteTable(n,lst) -> Some (n, length lst) | _ -> None ) 
-        prgm.decls;;*)
-
   let get_table (prgm: flowlog_program) (goalrel: string) : table_def =
     Hashtbl.find prgm.memos.tablemap goalrel;;  	
   let get_event (prgm: flowlog_program) (goalrel: string) : event_def =
