@@ -326,7 +326,7 @@ let make_outgoings (decls: sdecl list) (defns: sreactive list): outgoing_def lis
                               let outarity = (if      mem dname any_arity_outrels then AnyFields 
                                               else if mem dname on_arity_outrels then SameAsOnFields
                                               else      FixedFields(argtypes)) in 
-                              Some {outname=dname; outarity=outarity; react=outspec}
+                              Some {outname=dname; outarity=outarity; react=outspec; assignments=ass}
                             | _ -> failwith "make_tables")
                        | _ -> None) decls;;
 

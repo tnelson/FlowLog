@@ -47,7 +47,7 @@ type typeid = string;;
       | OutEmit of string
       | OutLoopback
       | OutPrint 
-      | OutSend of string * string;;
+      | OutSend of typeid * string * string;;
 
   type sreactive = 
         (* table name, query name, ip, port, refresh settings *)
@@ -101,7 +101,8 @@ type typeid = string;;
 
   type outgoing_def = { outname: string;
                         outarity: outgoing_fields;
-                        react: spec_out };;
+                        react: spec_out;
+                        assignments: assignment list };;
 
   type queryid = string;;
   type agent = string * string;;                       
@@ -222,7 +223,7 @@ type typeid = string;;
       | OutEmit(typ) -> "emit["^typ^"]"
       | OutPrint -> "print"
       | OutLoopback -> "loopback"
-      | OutSend(ip, pt) -> ip^":"^pt;;  
+      | OutSend(evtype, ip, pt) -> "event("^evtype^") to "^ip^":"^pt;;  
 
   let string_of_reactive (r: sreactive): string =
     match r with       

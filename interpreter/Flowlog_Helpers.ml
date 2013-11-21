@@ -229,6 +229,12 @@ let rec disj_to_top ?(ignore_negation: bool = false) (f: formula): formula =
 
   let get_table (prgm: flowlog_program) (goalrel: string) : table_def =
     Hashtbl.find prgm.memos.tablemap goalrel;;  	
+  let get_remote_table (prgm: flowlog_program) (goalrel: string) : table_def =
+    let tbl = (get_table prgm goalrel) in
+      match tbl.source with
+        | RemoteTable(_,_,_) -> tbl
+        | _ -> raise Not_found;;        
+
   let get_event (prgm: flowlog_program) (goalrel: string) : event_def =
     Hashtbl.find prgm.memos.eventmap goalrel;;    
   let get_outgoing (prgm: flowlog_program) (goalrel: string) : outgoing_def =
