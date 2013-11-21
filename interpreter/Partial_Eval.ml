@@ -64,8 +64,9 @@ let rec get_state_maybe_remote (p: flowlog_program) (f: formula): term list list
       (* Otherwise, need to call out to the blackbox. *)
       else
       begin
-        match get_remote_table p relname with
-          | (ReactRemote(relname, qryname, ip, port, refresh), DeclRemoteTable(drel, dargs)) ->            
+        let remtbl = get_remote_table p relname in
+        match remtbl.source with
+          | RemoteTable(qryname, (ip, port), refresh) ->            
             (* qryname, not relname, when querying *)
             printf "REMOTE STATE --- REFRESHING: %s\n%!" (string_of_formula f);
             let bb_results = Flowlog_Thrift_Out.doBBquery qryname ip port args in
@@ -546,9 +547,9 @@ let send_event (ev: event) (ip: string) (pt: string): unit =
   write_log (sprintf "sending: %s\n%!" (string_of_event ev));
   doBBnotify ev ip pt;;
 
-let prepare_output (p: flowlog_program) (defn: sreactive): (event * spec_out) list =  
+let prepare_output (p: flowlog_program) (defn: outgoing_def): (event * spec_out) list =  
   match defn with 
-    | ReactOut(relname, argstrlist, outtype, assigns, spec) ->
+    | ReactOut(argstrlist) ->
      
       let prepare_tuple (tup: term list): (event * spec_out) =
         (*printf "PREPARING OUTPUT... tuple: %s\n%!" (String.concat ";" (map string_of_term tup));*)
@@ -558,12 +559,12 @@ let prepare_output (p: flowlog_program) (defn: sreactive): (event * spec_out) li
                   | OutEmit(typ) -> {typeid = typ; values=StringMap.empty}      
                   | OutLoopback -> failwith "loopback unsupported currently"
                   | OutPrint 
-                  | OutSend(_, _) -> {typeid=outtype; values=StringMap.empty}) in                
-        let ev = fold_left (event_with_assn p argstrlist tup) initev assigns in          
-          (ev, spec) in
+                  | OutSend(outtype, _, _) -> {typeid=outtype; values=StringMap.empty}) in                
+        let ev = fold_left (event_with_assn p argstrlist tup) initev defn.assigns in          
+          (ev, defn.outspec) in
 
       (* query xsb for this output relation *)        
-      let xsb_results = (Communication.get_state (FAtom("", relname, map (fun s -> TVar(s)) argstrlist))) in              
+      let xsb_results = (Communication.get_state (FAtom("", defn.outname, map (fun s -> TVar(s)) argstrlist))) in              
         (* return the results to be executed later *)
         map prepare_tuple xsb_results 
     | _ -> failwith "prepare_output";;
@@ -577,14 +578,12 @@ let execute_output ((ev, spec): event * spec_out) : unit =
    | OutSend(ip, pt) -> send_event ev ip pt;;
 
 (* XSB query on plus or minus for table *)
-let change_table_how (p: flowlog_program) (toadd: bool) (tbldecl: sdecl): formula list =
-  match tbldecl with
-    | DeclTable(relname, argtypes) -> 
-      let modrelname = if toadd then (plus_prefix^"_"^relname) else (minus_prefix^"_"^relname) in
-      let varlist = init (length argtypes) (fun i -> TVar("X"^string_of_int i)) in
-      let xsb_results = Communication.get_state (FAtom("", modrelname, varlist)) in
-      map (fun tup -> FAtom("", relname, tup)) xsb_results
-    | _ -> failwith "change_table_how";;
+let change_table_how (p: flowlog_program) (toadd: bool) (tbldecl: table_def): formula list =
+  let relname,argtypes = tbldecl.tablename, tbldecl.tablearity in
+    let modrelname = if toadd then (plus_prefix^"_"^relname) else (minus_prefix^"_"^relname) in
+    let varlist = init (length argtypes) (fun i -> TVar("X"^string_of_int i)) in
+    let xsb_results = Communication.get_state (FAtom("", modrelname, varlist)) in
+    map (fun tup -> FAtom("", relname, tup)) xsb_results;;
 
 let expire_remote_state_in_xsb (p: flowlog_program) : unit =
 
@@ -595,8 +594,9 @@ let expire_remote_state_in_xsb (p: flowlog_program) : unit =
     match keyfmla with
       | FAtom(modname, relname, args) -> 
       begin
-      match get_remote_table p relname with
-        | (ReactRemote(relname, qryname, ip, port, refresh), DeclRemoteTable(drel, dargs)) ->
+        let remtbl = get_remote_table p relname in
+         match remtbl.source with
+          | RemoteTable(qryname, (ip, port), refresh) ->  
           begin
             match refresh with 
               | RefreshTimeout(num, units) when units = "seconds" -> 
@@ -605,7 +605,7 @@ let expire_remote_state_in_xsb (p: flowlog_program) : unit =
                   printf "REMOTE STATE --- Expiring remote for formula (duration expired): %s\n%!" 
                         (string_of_formula keyfmla);
                   remote_cache := FmlaMap.remove keyfmla !remote_cache;
-                  iter (fun tup -> Communication.retract_formula (FAtom(modname, drel, tup))) xsb_results
+                  iter (fun tup -> Communication.retract_formula (FAtom(modname, relname, tup))) xsb_results
                 end else 
                   printf "REMOTE STATE --- Allowing relation to remain: %s %s %s\n%!" 
                     (string_of_formula keyfmla) (string_of_int num) (string_of_float timestamp);
@@ -617,7 +617,7 @@ let expire_remote_state_in_xsb (p: flowlog_program) : unit =
                 (* expire everything under this table, every evaluation cycle *)
                 printf "REMOTE STATE --- Expiring remote for formula: %s\n%!" (string_of_formula keyfmla);
                 remote_cache := FmlaMap.remove keyfmla !remote_cache;
-                iter (fun tup -> Communication.retract_formula (FAtom(modname, drel, tup))) xsb_results;
+                iter (fun tup -> Communication.retract_formula (FAtom(modname, relname, tup))) xsb_results;
               | RefreshTimeout(_,_) -> failwith "expire_remote_state_in_xsb: bad timeout" 
           end
         | _ -> failwith "expire_remote_state_in_xsb: bad defn_decl" 
@@ -626,36 +626,23 @@ let expire_remote_state_in_xsb (p: flowlog_program) : unit =
 
     FmlaMap.iter (expire_remote_if_time p) !remote_cache;;
 
-(* Todo: Ok, we're wasting a lot of cycles with this reactive/decl distinction. 
-    Should use a map or hash table instead of a list, and not split/duplicate the data. *)
+(* @@@ TODO: assumes event ids all same as in relation *)
 let inc_event_to_relnames (p: flowlog_program) (notif: event): string list =
-  filter_map (function       
-        | ReactInc(typename, relname) when mem typename (built_in_supertypes notif.typeid) ->
-          Some(relname)                
-        | _ -> None ) p.reacts;;
+  (built_in_supertypes notif.typeid);;
 
-let get_output_defns_triggered (p: flowlog_program) (notif: event): sreactive list =
-  let defns = (get_output_defns p) in 
-  (*printf "number of out defns %d\n%!" (length defns);*)
+let get_output_defns_triggered (p: flowlog_program) (notif: event): outgoing_def list =    
   let inrelnames = inc_event_to_relnames p notif in
   let outrelnames = fold_left (fun acc inrel -> (Hashtbl.find_all p.memos.out_triggers inrel ) @ acc) [] inrelnames in
-  let possibly_triggered = filter (fun def -> match def with 
-      | ReactOut(defoutrelname, _, _, _, _) when mem defoutrelname outrelnames -> true 
-      | _ -> false) defns in
+  let possibly_triggered = filter (fun def -> mem def.outname outrelnames) p.outgoings in
     (*printf "possibly triggered: %s\n%!" (String.concat ",\n" (map string_of_reactive possibly_triggered));*)
     possibly_triggered;;
 
-(* TODO: note duplicate code here between output and table trigger funcs *)
-let get_local_tables_triggered (p: flowlog_program) (sign: bool) (notif: event): sdecl list =
-  let tables = (get_local_tables p) in
-  (*printf "number of tbl defns %d\n%!" (length tables);*)
+let get_local_tables_triggered (p: flowlog_program) (sign: bool) (notif: event): table_def list =    
   let inrelnames = inc_event_to_relnames p notif in
   let outrelnames = fold_left 
     (fun acc inrel -> (Hashtbl.find_all 
                         (if sign then p.memos.insert_triggers else p.memos.delete_triggers) inrel) @ acc) [] inrelnames in
-  let possibly_triggered = filter (fun def -> match def with 
-      | DeclTable(deftablename, _) when mem deftablename outrelnames -> true 
-      | _ -> false) tables in
+  let possibly_triggered = filter (fun def -> mem def.tablename outrelnames) p.tables in
     (*printf "possibly triggered: %s\n%!" (String.concat ",\n" (map string_of_declaration possibly_triggered));*)
     possibly_triggered;;
 
