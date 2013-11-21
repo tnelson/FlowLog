@@ -221,44 +221,44 @@ module Xsb = struct
 end
 
 (* Provides functions for high level communication with XSB. *)
-(* Right now ignoring queries. *)
 module Communication = struct
+
   (* ASSUMED: We're dealing with one event at a time, and so each relation we populate gets only one tuple. *)
   (* raises Not_found if nothing to do for this event *)
   let inc_event_to_formulas (p: flowlog_program) (notif: event): formula list =
     (* event contains k=v mappings and a type. convert to a formula via defns in program*)
     (*printf "Converting event to formula: %s\n%!" (string_of_event notif);*)
-    filter_map (function       
-        | ReactInc(typename, relname) when mem typename (built_in_supertypes notif.typeid) ->
-          Some(FAtom("", relname,                      
-                     map (fun fld -> try TConst(StringMap.find fld notif.values) with | Not_found -> failwith ("inc_event_to_formulas: "^fld))
+    map (fun typename ->         
+          FAtom("", typename, map 
+          	         (fun fld -> try TConst(StringMap.find fld notif.values) with | Not_found -> failwith ("inc_event_to_formulas: "^fld))
                      (get_fields_for_type p typename)))
-        | _ -> None ) p.reacts;;
+        (built_in_supertypes notif.typeid);;
 
 
   (* in this IO relation, at index idx, there should be something of type T. What are T's fields, in order? *)
-  let get_io_fields_for_index (prgm: flowlog_program) (relname: string) (idx: int): (string list) option =
-    let decl = find (function       
-        | DeclInc(rname, argtype) when rname = relname -> true 
-        | DeclOut(rname, argtypelst) when rname = relname -> true
-        | _ -> false) prgm.decls in 
-      match decl with 
-        | DeclInc(rname, argtype) when rname = relname -> 
-          Some (get_fields_for_type prgm argtype)
-        | DeclOut(rname, argtypelst) when rname = relname ->
-          (* treat condensed output rels (forward, emit, ...) differently *)
+  let get_io_fields_for_index (prgm: flowlog_program) (relname: string) (idx: int) (context_on: event_def option): (string list) option =
+  	try
+  		Some (get_fields_for_type prgm relname)
+  	with
+  	| Not_found -> 
+  	  	let out = get_outgoing prgm relname in 
+            (* treat condensed output rels (forward, emit, ...) differently *)
         	if mem relname built_in_condensed_outrels then
-        		Some(get_fields_for_type prgm (nth argtypelst idx))
+        		(match out.outarity with 
+        			| SameAsOnFields -> (match context_on with 
+        				| Some(e) -> Some (map (fun (n,_) -> n) e.evfields) 
+        				| None -> failwith "get_io_fields_for_index: no On context given")
+        			| FixedFields(flds) -> Some(get_fields_for_type prgm (nth flds idx))
+        		    | AnyFields -> failwith "get_io_fields_for_index: unsupported AnyFields")
         	else
-        		None
-          (*get_fields_for_type prgm (nth argtypelst idx)*)
+        		None (* event type not allowed in this position*)          
         | _ -> failwith "get_io_fields_for_index";;
 
    (* in modname.relname, the ith element has which fields? *)
-  let decls_expand_fields (prgm: flowlog_program) (modname: string) (relname: string) (i: int) (t: term): term list =  	
+  let decls_expand_fields (prgm: flowlog_program) (modname: string) (relname: string) (context_on: event_def option) (i: int) (t: term): term list =  	
     match t with 
-      | TVar(vname) when is_io_rel prgm modname relname -> 
-      	(match (get_io_fields_for_index prgm relname i) with
+      | TVar(vname) when is_io_rel prgm relname -> 
+      	(match (get_io_fields_for_index prgm relname i context_on) with
       		| Some fieldlist -> map (fun fldname -> TField(vname, fldname)) fieldlist
       		| None -> [t])
       | _ -> [t];;
@@ -287,17 +287,15 @@ module Communication = struct
 	(* Extract the entire local controller state from XSB. This lets us do pretty-printing, rather
 	   than just using XSB's "listing." command, among other things.
 	   Table declaration ---> formulas in that table (use flatten find_all to extract all of them) *)
-	let get_full_state_for_program (p: flowlog_program): (sdecl, formula list) Hashtbl.t = 
+	let get_full_state_for_program (p: flowlog_program): (table_def, formula list) Hashtbl.t = 
 	  let get_state_helper (tname: string) (nargs: int) = 
         get_state (FAtom("", tname, init nargs (fun i -> TVar("X"^(string_of_int i))))) in
       
       let statehash = (Hashtbl.create 5) in
-      let add_to_hash_for_table (tdecl: sdecl) : unit = 
-        match tdecl with
-          | DeclTable(tname, ttypes) -> 
+      let add_to_hash_for_table (tdef: table_def) : unit =         
             (* this produces a list of formulas. which get added on top of prior lists. hence flatten find_all *)
-            Hashtbl.add statehash tdecl (map (fun args -> FAtom("", tname, args)) (get_state_helper tname (length ttypes))) 
-          | _ -> failwith "add_to_hash_for_table" in
+            Hashtbl.add statehash tdef (map (fun args -> FAtom("", tdef.tablename, args))
+                                            (get_state_helper tdef.tablename (length tdef.tablearity))) in
 		
 		iter add_to_hash_for_table (get_local_tables p);
 		statehash;;
@@ -313,19 +311,18 @@ module Communication = struct
       | "switchid" -> strval
       | _ -> strval;;
 
-  let pretty_print_fact (tdecl: sdecl) (f: formula): string =
-    match tdecl, f with
-      | DeclTable(tname, ttypes), FAtom(_, rname, rargs) when (length rargs) = (length ttypes) -> 
-        sprintf "%s(%s)." rname (String.concat ", " (map2 pretty_print_constant ttypes rargs))
+  let pretty_print_fact (tdecl: table_def) (f: formula): string =
+    match f with
+      | FAtom(_, rname, rargs) when (length rargs) = (length tdecl.tablearity) -> 
+        sprintf "%s(%s)." rname (String.concat ", " (map2 pretty_print_constant tdecl.tablearity rargs))
       | _ -> failwith "pretty_print_fact";;
+
   let get_and_print_xsb_state (p: flowlog_program): unit = 
     let currstate = get_full_state_for_program p in       
-    let get_tblstrs (tbl: sdecl) : string = 
-      match tbl with 
-      | DeclTable(tname, ttypes) -> 
+    let get_tblstrs (tbl: table_def) : string = 
         let fmlasfortbl = flatten (Hashtbl.find_all currstate tbl) in
-          sprintf "%s:\n%s" tname (String.concat "\n" (map (pretty_print_fact tbl) fmlasfortbl))
-      | _ -> failwith "get_and_print_state" in 
+          sprintf "%s:\n%s" tbl.tablename (String.concat "\n" (map (pretty_print_fact tbl) fmlasfortbl)) in
+
     printf "-------\n|STATE|\n-------\n%s\n%!" (String.concat "\n" (map get_tblstrs (get_local_tables p)));;
     (**************)
 
@@ -334,7 +331,7 @@ module Communication = struct
 		(string_of_formula ~verbose:fpflag cls.head)^" :- "^(string_of_formula ~verbose:fpflag cls.body);;
 
 	(* Substitute notif vars for their fields and produce a string for XSB to consume *)	
-	let rec subs_xsb_formula (prgm: flowlog_program) (f: formula): formula =
+	let rec subs_xsb_formula (prgm: flowlog_program) ?(context_on: event_def option = None) (f: formula): formula =
 		match f with
 		| FTrue -> FTrue
 		| FFalse -> FFalse
@@ -343,7 +340,7 @@ module Communication = struct
 		| FOr(f1, f2) -> FOr(subs_xsb_formula prgm f1, subs_xsb_formula prgm f2)
 		| FEquals(_, _) -> f
 		| FAtom(modname, relname, tlargs) ->
-			let subsarglists = mapi (decls_expand_fields prgm modname relname) tlargs in
+			let subsarglists = mapi (decls_expand_fields prgm modname relname context_on) tlargs in
 			let subargs = fold_left (fun acc lst -> acc @ lst) [] subsarglists in
 			FAtom(modname, relname, subargs);;
 
@@ -385,7 +382,8 @@ module Communication = struct
 	
 		(* Require =SET= semantics, not bag semantics. Without these commands, we'd need to
 		   retract before every assert to prevent fact bloat over time. *)
-		iter (fun (tname, tarity) -> ignore (send_message (sprintf "index(%s/%d,trie)." tname tarity) 0)) (get_all_tables_name_and_arity prgm);
+		iter (fun tdef -> ignore (send_message (sprintf "index(%s/%d,trie)." tdef.tablename (length tdef.tablearity)) 0)) 
+		  ((get_local_tables prgm) @ (get_remote_tables prgm));
 
 		(* Import function that lets us write to the error stream separately. *)
 		ignore (send_message "import error_writeln/1 from standard." 0);	

@@ -306,13 +306,32 @@ let rec expand_includes (ast : flowlog_ast) (prev_includes : string list) : flow
      memos;;
 
 let make_tables (decls: sdecl list) (defns: sreactive list): table_def list =
-  filter_map (function | DeclTable(n, tlist) -> Some {name=n; tablearity=tlist; source=LocalTable}
+  filter_map (function | DeclTable(n, tlist) -> Some {tablename=n; tablearity=tlist; source=LocalTable}
                        | DeclRemoteTable(n, tlist) -> 
                           (match (find (function | ReactRemote(tname,_,_,_,_) when tname = n -> true | _ -> false ) defns) with
                             | ReactRemote(_, qid, ipaddr, tcpport, refreshsetting) ->
-                              Some {name=n; tablearity=tlist; source=RemoteTable(qid, (ipaddr, tcpport), refreshsetting)}
+                              Some {tablename=n; tablearity=tlist; source=RemoteTable(qid, (ipaddr, tcpport), refreshsetting)}
                             | _ -> failwith "make_tables")
                        | _ -> None) decls;;
+
+let make_events (decls: sdecl list) (defns: sreactive list): event_def list =
+  filter_map (function | DeclEvent(n, tlist) -> Some {eventname=n; evfields=tlist}
+                       | _ -> None) decls;;
+
+(* All declared outgoings have fixed fields. Non-fixed are all built in*)
+let make_outgoings (decls: sdecl list) (defns: sreactive list): outgoing_def list =
+  filter_map (function | DeclOut(dname, argtypes) -> 
+                          (match (find (function | ReactOut(tname,_,_,_,_) when tname = dname -> true | _ -> false ) defns) with
+                            | ReactOut(_, _, _, ass, outspec) ->
+                              let outarity = (if      mem dname any_arity_outrels then AnyFields 
+                                              else if mem dname on_arity_outrels then SameAsOnFields
+                                              else      FixedFields(argtypes)) in 
+                              Some {outname=dname; outarity=outarity; react=outspec}
+                            | _ -> failwith "make_tables")
+                       | _ -> None) decls;;
+
+
+(* @@@ TODO assignment bindings? *)
 
 let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_program =
   let expanded_ast = expand_includes ast [filename] in    
@@ -353,11 +372,13 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
                 (length simplified_clauses) (length can_fully_compile_simplified) (length weakened_cannot_compile_pt_clauses) (length not_fully_compiled_clauses);              
 
                 (* Convert decls and defns syntax (with built ins) into a program *)
-
+                let the_tables = make_tables the_decls the_reacts in
+                let the_outgoings = make_outgoings the_decls the_reacts in
+                let the_events = make_events the_decls the_reacts in
                 let p = {
-                 tables = make_tables the_decls the_reacts;
-                 outgoings = make_outgoings the_decls the_reacts;
-                 events = make_events the_decls the_reacts;
+                 tables = the_tables;
+                 outgoings = the_outgoings;
+                 events = the_events;
                  clauses = simplified_clauses; 
                  weakened_cannot_compile_pt_clauses = weakened_cannot_compile_pt_clauses;
                  can_fully_compile_to_fwd_clauses = can_fully_compile_simplified;

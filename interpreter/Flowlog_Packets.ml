@@ -458,6 +458,9 @@ let built_in_condensed_outrels = ["forward"] @ map (fun flav -> flavor_to_emitre
    these are the tables that flag a rule as being "packet-triggered".*)
 let built_in_packet_input_tables = map (fun flav -> flavor_to_inrelname flav) packet_flavors;;
 
+let on_arity_outrels = ["forward"];;
+let any_arity_outrels = ["print"];;
+
 let is_packet_in_table (relname: string): bool =
   mem relname built_in_packet_input_tables;;
 

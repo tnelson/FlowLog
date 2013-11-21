@@ -84,7 +84,7 @@ type typeid = string;;
                   };;
 
   (* Every event has a name and a string of fieldnames, each with a type. *)  
-  type event_def = { name: string;
+  type event_def = { eventname: string;
                      evfields: (string * typeid) list };;
 
 
@@ -99,7 +99,7 @@ type typeid = string;;
      An outgoing is "CONDENSED" if it has SameAsOnFields or Fixedfields has an *event* typeid. *)
   type outgoing_fields = | SameAsOnFields | AnyFields | FixedFields of typeid list;;
 
-  type outgoing_def = { name: string;
+  type outgoing_def = { outname: string;
                         outarity: outgoing_fields;
                         react: spec_out };;
 
@@ -108,7 +108,7 @@ type typeid = string;;
   type table_source = | LocalTable 
                       | RemoteTable of queryid * agent * refresh;;
 
-  type table_def = { name: string;
+  type table_def = { tablename: string;
                     tablearity: typeid list;
                     source: table_source };;  
 
