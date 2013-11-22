@@ -66,15 +66,6 @@ let clauses_of_rule (r: srule): clause list =
         | ADo(relname, terms, condition) -> 
             map (build_clause r atom_for_on relname terms None) (disj_to_list (disj_to_top (nnf condition)));;     
 
-exception UndeclaredIncomingRelation of string;;
-exception UndeclaredOutgoingRelation of string;;
-exception UndeclaredTable of string;;
-exception BadArityOfTable of string;;
-exception UndeclaredField of string * string;;
-exception NonCondensedNoField of string;;
-exception RelationHadMultipleReacts of string;;
-exception RelationHadMultipleDecls of string;;
-
 let field_var_or_var (t: term): string =
   match t with
     | TVar(vname) -> vname
@@ -96,6 +87,8 @@ let well_formed_rule (p: flowlog_program) (r: srule): unit =
          All other output relations or tables have base types for args. *)
       let condensed = (mem headrelname built_in_condensed_outrels) in    
 
+(* @@@ TODO: needs accounting for fact that DOs are always unary now... *)
+
       match t with 
       | TConst(cval) -> () (* constant is always OK *)
 
@@ -111,6 +104,9 @@ let well_formed_rule (p: flowlog_program) (r: srule): unit =
             raise (UndeclaredField(vname, fname))
         with | Not_found -> raise (UndeclaredIncomingRelation inrelname))
         
+
+(* @@@ TODO parser: head of DO must be unary*)
+
         (* the variable here is in the clause head. e.g. "newpkt"
            if this is a DO rule and the term is a field var... deal with similar to above. 
            if this is an insert/delete rule, disallow non = inargname fields.  *)        
@@ -207,7 +203,9 @@ let well_formed_decls (decls: sdecl list): unit =
         else relname::acc
       | _ -> acc) [] decls);;
 
-(* + There is some information overlap between declarations and reactive definitions. *)
+(* There is some information overlap between declarations and reactive definitions.
+   They are now purely syntax-level constructs, though. Leaving them in in case we
+   really want to expand what reactive defns can do. *)
 
 let reacts_added_by_sugar (stmts: stmt list): sreactive list =
   (* If we have an event decl X, return an incoming reactive defn X if X is undeclared. *)
@@ -222,13 +220,18 @@ let reacts_added_by_sugar (stmts: stmt list): sreactive list =
 let decls_added_by_sugar (stmts: stmt list): sdecl list =
   (* If we have an event decl X, return an incoming decl X if X is undeclared. *)  
   let inc_events_with_decl = filter_map (function SDecl(DeclInc(_,evname)) -> Some evname | _ -> None) stmts in  
-  let event_decls = filter_map (function SDecl(DeclEvent(_,_) as d) -> Some d     | _ -> None) stmts in 
-  fold_left (fun acc decl -> match decl with
-                       (* need to add the inc declaration? *)
-                      | DeclEvent(ename, _) when not (mem ename inc_events_with_decl) -> 
-                          DeclInc(ename, ename)::acc
-                      | DeclEvent(_,_) -> acc
-                      | _ -> failwith ("decls_added_by_sugar: "^(string_of_declaration decl))) [] event_decls;;
+  let event_decls = filter_map (function SDecl(DeclEvent(_,_) as d) -> Some d     | _ -> None) stmts in   
+  let incsfromevents = fold_left (fun acc decl -> match decl with                       
+                        | DeclEvent(ename, _) when not (mem ename inc_events_with_decl) -> 
+                          DeclInc(ename, ename)::acc                      
+                        | _ -> acc) [] event_decls in
+  (* If we have an outgoing reactive defn, make an outgoing decl if undeclared in program. *)
+  let out_with_decl = filter_map (function SDecl(DeclOut(rname,_)) -> Some rname | _ -> None) stmts in  
+  let out_decls_needed = filter_map (function SReactive(ReactOut(outrel, outf, spec)) when not (mem outrel out_with_decl) -> Some(DeclOut(outrel, outf)) | _ -> None) stmts in   
+  (* If we have a remote-table reactive defn, make a remote-table decl if needed... *)
+  let remote_with_decl = filter_map (function SDecl(DeclRemoteTable(rname,_)) -> Some rname | _ -> None) stmts in  
+  let remote_decls_needed = filter_map (function SReactive(ReactRemote(tblname, argtypes, _,_,_,_)) when not (mem tblname remote_with_decl) -> Some(DeclRemoteTable(tblname, argtypes)) | _ -> None) stmts in   
+    remote_decls_needed @ out_decls_needed @ incsfromevents;;
 
 (* built_in_where_for_vname (vname: string) (relname: string): *)
 let add_built_ins (r: srule): srule =    
@@ -300,6 +303,9 @@ let rec expand_includes (ast : flowlog_ast) (prev_includes : string list) : flow
         | ADo(headrel, _, fmla) -> 
           Hashtbl.add memos.out_triggers r.onrel headrel in
      iter depends_from_rule rules;
+     iter (fun tdef -> Hashtbl.add memos.tablemap tdef.tablename tdef) tables;
+     iter (fun odef -> Hashtbl.add memos.outgoingmap odef.outname odef) outgoings;
+     iter (fun edef -> Hashtbl.add memos.eventmap edef.eventname edef) events;
      memos;;
 
 let make_tables (decls: sdecl list) (defns: sreactive list): table_def list =
@@ -323,9 +329,6 @@ let make_outgoings (decls: sdecl list) (defns: sreactive list): outgoing_def lis
                               Some {outname=dname; outarity=outarity; react=outspec}
                             | _ -> failwith "make_tables")
                        | _ -> None) decls;;
-
-
-(* @@@ TODO assignment bindings? *)
 
 let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_program =
   let expanded_ast = expand_includes ast [filename] in    
@@ -364,6 +367,8 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
 
               printf "\n  Loaded AST. There were %d clauses, \n    %d of which were fully compilable forwarding clauses and\n    %d were weakened pkt-triggered clauses.\n    %d will be given, unweakened, to XSB.\n%!"              
                 (length simplified_clauses) (length can_fully_compile_simplified) (length weakened_cannot_compile_pt_clauses) (length not_fully_compiled_clauses);              
+              printf "DECLS: %s\n%!" (String.concat ",\n"(map string_of_declaration the_decls));
+              printf "REACTS: %s\n%!" (String.concat ",\n"(map string_of_reactive the_reacts));
 
                 (* Convert decls and defns syntax (with built ins) into a program *)
                 let the_tables = make_tables the_decls the_reacts in

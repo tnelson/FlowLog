@@ -44,12 +44,14 @@ ON stolen_laptop_cancel(rec):
 ON stolen_laptop_report(stolen):
   INSERT (stolen.mac) INTO stolen;
 
-ON packet_in(pkt): 
+ON packet(pkt): 
   // For demonstration only: flood.
   DO forward(new) WHERE 
     new.locPt != pkt.locPt;    
 
-  DO notify_police(pkt.dlSrc, pkt.locSw, time) WHERE 
+  //DO notify_police(pkt.dlSrc, pkt.locSw, time) WHERE 
+    DO notify_police(sto) WHERE 
+    sto.mac = pkt.dlSrc AND sto.time=time AND sto.swid = pkt.locSw AND
     stolen(pkt.dlSrc) AND 
     get_time(time);  
 

@@ -10,6 +10,16 @@ open NetCore_Types
 (* 10 = even XSB messages *)
 let global_verbose = ref 0;;
 
+
+exception UndeclaredIncomingRelation of string;;
+exception UndeclaredOutgoingRelation of string;;
+exception UndeclaredTable of string;;
+exception BadArityOfTable of string;;
+exception UndeclaredField of string * string;;
+exception NonCondensedNoField of string;;
+exception RelationHadMultipleReacts of string;;
+exception RelationHadMultipleDecls of string;;
+
 (* True if string str1 ends with string str2 *)
 let ends_with (str1 : string) (str2 : string) : bool = 
 	if String.length str2 > String.length str1 then false
@@ -238,14 +248,13 @@ let rec disj_to_top ?(ignore_negation: bool = false) (f: formula): formula =
   let get_event (prgm: flowlog_program) (goalrel: string) : event_def =
     Hashtbl.find prgm.memos.eventmap goalrel;;    
   let get_outgoing (prgm: flowlog_program) (goalrel: string) : outgoing_def =
+    (*Hashtbl.iter (fun k v -> printf "%s %s %b\n%!" goalrel k (k = goalrel)) prgm.memos.outgoingmap;*)
     Hashtbl.find prgm.memos.outgoingmap goalrel;;    
 
   let is_local_table (prgm: flowlog_program) (relname: string): bool = 
      match (get_table prgm relname).source with | LocalTable -> true | RemoteTable(_,_,_) -> false;;
   let is_remote_table (prgm: flowlog_program) (relname: string): bool = 
      match (get_table prgm relname).source with | LocalTable -> false | RemoteTable(_,_,_) -> true;;
-  (* @@@ TODO TYPES*)
-  (* TODO: "packet_in"<x> are special case since event type is "packet"<x> *)
   let is_incoming_table (prgm: flowlog_program) (relname: string): bool =
     try ignore (get_event prgm relname); true with | Not_found -> false;;  
   let is_outgoing_table (prgm: flowlog_program) (relname: string): bool =
@@ -266,8 +275,10 @@ let rec disj_to_top ?(ignore_negation: bool = false) (f: formula): formula =
   let get_fields_for_type (prgm: flowlog_program) (etype: string): string list =      
     map (fun (n,_) -> n) (get_event prgm etype).evfields;;
 
-  let get_valid_fields_for_input_rel (p: flowlog_program) (rname: string): (string list) =  
-    map (fun (fname, _) -> fname) (get_event p rname).evfields;;
+  let get_valid_fields_for_input_rel (p: flowlog_program) (rname: string): (string list) = 
+    try
+      map (fun (fname, _) -> fname) (get_event p rname).evfields
+    with | Not_found -> raise (UndeclaredIncomingRelation rname);;
   
 
 let atom_to_relname (f: formula): string =
