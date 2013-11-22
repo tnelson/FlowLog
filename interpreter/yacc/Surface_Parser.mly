@@ -96,8 +96,8 @@
               DOTTED_IP optional_colon NUMBER refresh_clause SEMICOLON 
               {ReactRemote($3, $5, $8, $10, $12, $13)}   
             | OUTGOING NAME LPAREN NAME RPAREN THEN 
-              SEND EVENT NAME TO DOTTED_IP optional_colon NUMBER SEMICOLON 
-              {ReactOut($2, FixedEvent($4), OutSend($9, $11, $13))}   
+              SEND TO DOTTED_IP optional_colon NUMBER SEMICOLON 
+              {ReactOut($2, FixedEvent($4), OutSend($4, $9, $11))}   
             | INCOMING NAME THEN INSERT INTO NAME SEMICOLON 
               {ReactInc($2, $6)};
   

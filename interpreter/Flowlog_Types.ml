@@ -207,7 +207,7 @@ type typeid = string;;
         "ON "^r.onrel^"("^r.onvar^"): DO "^(action_string outrel argterms fmla);;
 
   let string_of_field_decl (d : (string * typeid)): string = 
-    let s1, s2 = d in s1^s2;;
+    let s1, s2 = d in s1^":"^s2;;
 
   let string_of_outgoing_fields (ofld: outgoing_fields): string = 
     match ofld with

@@ -36,34 +36,31 @@ open Printf
  ******************************************************************************)
 
 type packet_flavor = {
-  label: string;
-  superflavor: string option;
+  label: typeid;
+  superflavor: typeid option;
   build_condition: (string -> formula);
-  fields: string list
+  fields: (string * typeid) list
 };;
-
-(* Fields in a base packet *)
-let eth_packet_fields = ["locsw"; "locpt"; "dlsrc"; "dldst"; "dltyp"];;
 
 let packet_flavors = [
    (* base type (Ethernet) *)
-   {label = ""; superflavor = None;
+   {label = "packet"; superflavor = None;
     build_condition = (fun vname -> FTrue);
-    fields = eth_packet_fields};
+    fields = [("locsw", "switchid"); ("locpt", "portid"); ("dlsrc", "macaddr"); ("dldst", "macaddr"); ("dltyp", "macaddr")]};
 
-   {label = "arp"; superflavor = Some "";
+   {label = "arp"; superflavor = Some "packet";
     build_condition = (fun vname -> FEquals(TField(vname, "dltyp"), TConst("0x0806")));
-    fields = ["arp_op"; "arp_spa"; "arp_sha"; "arp_tpa"; "arp_tha"]};
+    fields = [("arp_op", "int"); ("arp_spa", "ipaddr"); ("arp_sha", "macaddr"); ("arp_tpa", "ipaddr"); ("arp_tha", "macaddr")]};
 
-   {label = "ip"; superflavor = Some "";
+   {label = "ip"; superflavor = Some "packet";
     build_condition = (fun vname -> FEquals(TField(vname, "dltyp"), TConst("0x0800")));
-    fields = ["nwsrc"; "nwdst"; "nwproto"]};  (* missing: frag, tos, chksum, ident, ...*)
+    fields = [("nwsrc", "ipaddr"); ("nwdst", "ipaddr"); ("nwproto", "int")]};  (* missing: frag, tos, chksum, ident, ...*)
 
-  (* {label = "ipv6"; superflavor = Some "";
+  (* {label = "ipv6"; superflavor = Some "packet";
     build_condition = (fun vname -> FEquals(TField(vname, "dltyp"), TConst("0x86DD")));
     fields = ["omgwtfbbq"]}; *)
 
-  (* {label = "8021x"; superflavor = Some "";
+  (* {label = "8021x"; superflavor = Some "packet";
     build_condition = (fun vname -> FEquals(TField(vname, "dltyp"), TConst("0x888E")));
     fields = ["omgwtfbbq"]}; *)
 
@@ -74,28 +71,28 @@ let packet_flavors = [
    {label = "tcp"; superflavor = Some "ip";
     build_condition = (fun vname -> FAnd(FEquals(TField(vname, "dltyp"), TConst("0x0800")),
                                     FEquals(TField(vname, "nwproto"), TConst("0x6"))));
-    fields = ["tpsrc"; "tpdst"]}; (* expect we'll want flags eventually *)
+    fields = [("tpsrc", "tcpport"); ("tpdst", "tcpport")]}; (* expect we'll want flags eventually *)
 
    {label = "udp"; superflavor = Some "ip";
     build_condition = (fun vname -> FAnd(FEquals(TField(vname, "dltyp"), TConst("0x0800")),
                                     FEquals(TField(vname, "nwproto"), TConst("0x11"))));
-    fields = ["tpsrc"; "tpdst"]};
+    fields = [("tpsrc", "udpport"); ("tpdst", "udpport")]};
 
    {label = "igmp"; superflavor = Some "ip";
     build_condition = (fun vname -> FAnd(FEquals(TField(vname, "dltyp"), TConst("0x0800")),
                                     FEquals(TField(vname, "nwproto"), TConst("0x2"))));
-    fields = ["igmp_ver_and_typ"; "igmp_addr"; "igmp_v3typ"]};
+    fields = [("igmp_ver_and_typ", "int"); ("igmp_addr", "ipaddr"); ("igmp_v3typ", "int")]};
 
    {label = "icmp"; superflavor = Some "ip";
     build_condition = (fun vname -> FAnd(FEquals(TField(vname, "dltyp"), TConst("0x0800")),
                                     FEquals(TField(vname, "nwproto"), TConst("0x1"))));
-    fields = ["icmp_type"; "icmp_code"]}; (* checksum will need calculation in runtime? *)
+    fields = [("icmp_type", "int"); ("icmp_code", "int")]}; (* checksum will need calculation in runtime? *)
 
    {label = "mdns"; superflavor = Some "udp";
     build_condition = (fun vname -> FAnd(FEquals(TField(vname, "tpdst"), TConst("5353")),
                                          FAnd(FEquals(TField(vname, "nwproto"), TConst("0x11")),
                                               FEquals(TField(vname, "dltyp"), TConst("0x800")))));
-    fields = ["mdns_question"]};
+    fields = [("mdns_question", "string")]};
   ];;
 
 
@@ -366,9 +363,9 @@ let swdown_fields = [("sw", "switchid")];;
 
 (**********************************************)
 
-let flavor_to_typename (flav: packet_flavor): string = if flav.label = "" then "packet" else flav.label^"_packet";;
-let flavor_to_inrelname (flav: packet_flavor): string = if flav.label = "" then "packet_in" else flav.label^"_packet_in";;
-let flavor_to_emitrelname (flav: packet_flavor): string = if flav.label = "" then "emit" else "emit_"^flav.label;;
+let flavor_to_typename (flav: packet_flavor): string = if flav.label = "packet" then "packet" else flav.label^"_packet";;
+let flavor_to_inrelname (flav: packet_flavor): string = if flav.label = "packet" then "packet" else flav.label^"_packet";;
+let flavor_to_emitrelname (flav: packet_flavor): string = if flav.label = "packet" then "emit" else "emit_"^flav.label;;
 
 (*************************************************************)
 
@@ -405,7 +402,7 @@ let flavor_to_field_decls (flav: packet_flavor): (string * typeid) list =
   let check_for_dupes = unique fieldslist in
   if (length fieldslist) <> (length check_for_dupes) then
     failwith ("Packet flavor "^flav.label^" had duplicate fieldnames when parent flavor fields were added.")
-  else (map (fun fn -> (fn, "DUMMY")) fieldslist);; (* @@@ TODO TYPES*)
+  else fieldslist;;
 
 let flavor_to_fields (flav: packet_flavor): string list =
   map (fun (fname, _) -> fname) (flavor_to_field_decls flav);;
@@ -446,8 +443,7 @@ let built_in_decls = [DeclInc(switch_reg_relname, "switch_port");
 let built_in_reacts = [ ReactInc("switch_port", switch_reg_relname);
                         ReactInc("switch_down", switch_down_relname);
                         ReactInc("startup", startup_relname);
-                        ReactOut("forward", SameAsOnFields, 
-                                 (*map create_id_assign eth_packet_fields,*) OutForward);
+                        ReactOut("forward", SameAsOnFields, OutForward);
                       ] @ flatten (map build_flavor_reacts packet_flavors);;
 
 (* These output relations have a "condensed" argument. That is, they are unary,

@@ -607,8 +607,8 @@ let expire_remote_state_in_xsb (p: flowlog_program) : unit =
       | _ -> failwith "expire_remote_state_in_xsb: bad key formula" in 
 
     FmlaMap.iter (expire_remote_if_time p) !remote_cache;;
-
-(* @@@ TODO: assumes event ids all same as in relation *)
+    
+  (* ASSUMPTION: event ids all same as their incoming relation name*)
 let inc_event_to_relnames (p: flowlog_program) (notif: event): string list =
   (built_in_supertypes notif.typeid);;
 
