@@ -424,20 +424,20 @@ let built_in_where_for_variable (vart: term) (relname: string): formula =
 
 (*************************************************************)
 
-let create_id_assign (k: string): assignment = {afield=k; atupvar=k};;
+(*let create_id_assign (k: string): assignment = {afield=k; atupvar=k};;*)
 let build_flavor_decls (flav: packet_flavor): sdecl list =
   [DeclInc(flavor_to_inrelname flav, flavor_to_typename flav);
    DeclEvent(flavor_to_typename flav, flavor_to_field_decls flav);
-   DeclOut(flavor_to_emitrelname flav, [flavor_to_typename flav])];;
+   DeclOut(flavor_to_emitrelname flav, FixedEvent(flavor_to_typename flav))];;
 let build_flavor_reacts (flav: packet_flavor): sreactive list =
   [ReactInc(flavor_to_typename flav, flavor_to_inrelname flav);
-   ReactOut(flavor_to_emitrelname flav, flavor_to_fields flav, flavor_to_typename flav,
-            map create_id_assign (flavor_to_fields flav), OutEmit(flavor_to_typename flav))];;
+   ReactOut(flavor_to_emitrelname flav, FixedEvent(flavor_to_typename flav), 
+            (*map create_id_assign (flavor_to_fields flav), *) OutEmit(flavor_to_typename flav))];;
 
 let built_in_decls = [DeclInc(switch_reg_relname, "switch_port");
                       DeclInc(switch_down_relname, "switch_down");
                       DeclInc(startup_relname, "startup");
-                      DeclOut("forward", ["packet"]);
+                      DeclOut("forward", SameAsOnFields);
                       DeclEvent("startup", []);
                       DeclEvent("switch_port", swpt_fields);
                       DeclEvent("switch_down", swdown_fields)]
@@ -446,8 +446,8 @@ let built_in_decls = [DeclInc(switch_reg_relname, "switch_port");
 let built_in_reacts = [ ReactInc("switch_port", switch_reg_relname);
                         ReactInc("switch_down", switch_down_relname);
                         ReactInc("startup", startup_relname);
-                        ReactOut("forward", eth_packet_fields, "packet",
-                                 map create_id_assign eth_packet_fields, OutForward);
+                        ReactOut("forward", SameAsOnFields, 
+                                 (*map create_id_assign eth_packet_fields,*) OutForward);
                       ] @ flatten (map build_flavor_reacts packet_flavors);;
 
 (* These output relations have a "condensed" argument. That is, they are unary,
@@ -458,8 +458,7 @@ let built_in_condensed_outrels = ["forward"] @ map (fun flav -> flavor_to_emitre
    these are the tables that flag a rule as being "packet-triggered".*)
 let built_in_packet_input_tables = map (fun flav -> flavor_to_inrelname flav) packet_flavors;;
 
-let on_arity_outrels = ["forward"];;
-let any_arity_outrels = ["print"];;
+let built_in_event_names = map (fun flav -> flavor_to_typename flav) packet_flavors;;
 
 let is_packet_in_table (relname: string): bool =
   mem relname built_in_packet_input_tables;;

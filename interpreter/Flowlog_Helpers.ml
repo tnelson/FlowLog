@@ -268,6 +268,7 @@ let rec disj_to_top ?(ignore_negation: bool = false) (f: formula): formula =
 
   let get_valid_fields_for_input_rel (p: flowlog_program) (rname: string): (string list) =  
     map (fun (fname, _) -> fname) (get_event p rname).evfields;;
+  
 
 let atom_to_relname (f: formula): string =
   match f with

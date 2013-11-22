@@ -120,9 +120,9 @@ let well_formed_rule (p: flowlog_program) (r: srule): unit =
             (try              
               (* forward is a special case: it has the type of its trigger. *)
               let valid_fields = (match (get_outgoing p headrelname).outarity with
-                                    | FixedFields(fdecls) -> fdecls
-                                    | AnyFields -> [fname] (* any should work *)
-                                    | SameAsOnFields -> get_valid_fields_for_input_rel p inrelname) in                    
+                                   | FixedEvent(evname) -> get_valid_fields_for_input_rel p evname
+                                   | AnyFields -> [fname] (* any should work *)
+                                   | SameAsOnFields -> get_valid_fields_for_input_rel p inrelname) in
               if not (mem fname valid_fields) then 
                 raise (UndeclaredField(vname, fname))
             with | Not_found -> raise (UndeclaredOutgoingRelation headrelname))
@@ -167,12 +167,9 @@ let well_formed_rule (p: flowlog_program) (r: srule): unit =
         (try
           match (get_outgoing p outrelname).outarity with
             | AnyFields -> () 
-            | FixedFields(dargs) -> 
-              if (length outrelterms) <> (length dargs) then          
-                raise (BadArityOfTable outrelname)         
-            | SameAsOnFields -> 
-              if (length outrelterms) <> 1 then
-                raise (BadArityOfTable outrelname)
+            | _ when (length outrelterms) <> 1 -> 
+                raise (BadArityOfTable outrelname)  
+            | _ -> ()       
         with Not_found -> raise (UndeclaredOutgoingRelation outrelname))
 
     (* insert and delete must have local table in action, of correct arity *)
@@ -191,8 +188,8 @@ let simplify_clause (cl: clause): clause =
 let well_formed_reacts (reacts: sreactive list): unit =  
   ignore (fold_left (fun acc react -> 
     match react with 
-      | ReactOut(relname, _, evtype, _, _) 
-      | ReactInc(evtype, relname) -> 
+      | ReactOut(relname, _, _) 
+      | ReactInc(_, relname) -> 
         if mem relname acc then
           raise (RelationHadMultipleReacts(relname))
         else relname::acc
@@ -308,8 +305,8 @@ let rec expand_includes (ast : flowlog_ast) (prev_includes : string list) : flow
 let make_tables (decls: sdecl list) (defns: sreactive list): table_def list =
   filter_map (function | DeclTable(n, tlist) -> Some {tablename=n; tablearity=tlist; source=LocalTable}
                        | DeclRemoteTable(n, tlist) -> 
-                          (match (find (function | ReactRemote(tname,_,_,_,_) when tname = n -> true | _ -> false ) defns) with
-                            | ReactRemote(_, qid, ipaddr, tcpport, refreshsetting) ->
+                          (match (find (function | ReactRemote(tname,_,_,_,_,_) when tname = n -> true | _ -> false ) defns) with
+                            | ReactRemote(_, argtypes, qid, ipaddr, tcpport, refreshsetting) ->
                               Some {tablename=n; tablearity=tlist; source=RemoteTable(qid, (ipaddr, tcpport), refreshsetting)}
                             | _ -> failwith "make_tables")
                        | _ -> None) decls;;
@@ -320,13 +317,10 @@ let make_events (decls: sdecl list) (defns: sreactive list): event_def list =
 
 (* All declared outgoings have fixed fields. Non-fixed are all built in*)
 let make_outgoings (decls: sdecl list) (defns: sreactive list): outgoing_def list =
-  filter_map (function | DeclOut(dname, argtypes) -> 
-                          (match (find (function | ReactOut(tname,_,_,_,_) when tname = dname -> true | _ -> false ) defns) with
-                            | ReactOut(_, _, _, ass, outspec) ->
-                              let outarity = (if      mem dname any_arity_outrels then AnyFields 
-                                              else if mem dname on_arity_outrels then SameAsOnFields
-                                              else      FixedFields(argtypes)) in 
-                              Some {outname=dname; outarity=outarity; react=outspec; assignments=ass}
+  filter_map (function | DeclOut(dname, outarity) -> 
+                          (match (find (function | ReactOut(tname,_,_) when tname = dname -> true | _ -> false ) defns) with
+                            | ReactOut(_, _, outspec) ->                            
+                              Some {outname=dname; outarity=outarity; react=outspec}
                             | _ -> failwith "make_tables")
                        | _ -> None) decls;;
 
@@ -376,6 +370,8 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
                 let the_outgoings = make_outgoings the_decls the_reacts in
                 let the_events = make_events the_decls the_reacts in
                 let p = {
+                 desugared_decls = the_decls;
+                 desugared_reacts = the_reacts;
                  tables = the_tables;
                  outgoings = the_outgoings;
                  events = the_events;

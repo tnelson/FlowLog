@@ -83,7 +83,7 @@
             | REMOTE TABLE NAME LPAREN name_list RPAREN SEMICOLON {DeclRemoteTable($3, $5)}
             | EVENT NAME LCURLY field_decl_list RCURLY SEMICOLON {DeclEvent($2, $4)}
             | INCOMING NAME LPAREN NAME RPAREN SEMICOLON {DeclInc($2, $4)}
-            | OUTGOING NAME LPAREN name_list RPAREN SEMICOLON {DeclOut($2, $4)};
+            | OUTGOING NAME LPAREN NAME RPAREN SEMICOLON {DeclOut($2, FixedEvent($4))};
 
 // OUTGOING notify-police(mac, swid, t) THEN 
 // SEND EVENT stolen-laptop-found {mac:=mac, swid:=swid, time:=t} TO 127.0.0.1 5050;
@@ -91,18 +91,17 @@
   optional_colon: 
             | COLON {()} | {()};
 
-  reactive_stmt:              
-            | REMOTE TABLE NAME FROM NAME AT 
+  reactive_stmt:      
+            | REMOTE TABLE NAME LPAREN name_list RPAREN FROM NAME AT 
               DOTTED_IP optional_colon NUMBER refresh_clause SEMICOLON 
-              {ReactRemote($3, $5, $7, $9, $10)}             
-            | OUTGOING NAME LPAREN name_list RPAREN THEN 
-              SEND EVENT NAME LCURLY possempty_assign_list RCURLY 
-              TO DOTTED_IP optional_colon NUMBER SEMICOLON 
-              {ReactOut($2, $4, $9, $11, OutSend($14, $16))}              
+              {ReactRemote($3, $5, $8, $10, $12, $13)}   
+            | OUTGOING NAME LPAREN NAME RPAREN THEN 
+              SEND EVENT NAME TO DOTTED_IP optional_colon NUMBER SEMICOLON 
+              {ReactOut($2, FixedEvent($4), OutSend($9, $11, $13))}   
             | INCOMING NAME THEN INSERT INTO NAME SEMICOLON 
               {ReactInc($2, $6)};
   
-  assign: NAME COLON_EQUALS NAME {{afield=$1; atupvar=$3}};
+  //assign: NAME COLON_EQUALS NAME {{afield=$1; atupvar=$3}};
 
   refresh_clause:
             | TIMEOUT NUMBER NAME {RefreshTimeout(int_of_string($2), $3)} 
@@ -161,10 +160,10 @@
             | action_clause {[$1]}  
             | action_clause action_clause_list {$1 :: $2};
 
-  possempty_assign_list:          
-            | assign {[$1]} 
-            | assign COMMA possempty_assign_list {$1 :: $3}
-            | {[]};
+  //possempty_assign_list:          
+  //          | assign {[$1]} 
+  //          | assign COMMA possempty_assign_list {$1 :: $3}
+  //          | {[]};
 
   stmt_list: 
             | stmt {$1} 

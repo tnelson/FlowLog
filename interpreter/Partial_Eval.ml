@@ -498,31 +498,7 @@ let program_to_netcore (p: flowlog_program) (callback: get_packet_handler): (pol
      pkt_triggered_clauses_to_netcore p 
       p.weakened_cannot_compile_pt_clauses
      (Some callback));;
-
-(* TODO: ugly func, should be cleaned up.*)
-(* augment <ev_so_far> with assignment <assn>, using tuple <tup> for values *)
-let event_with_assn (p: flowlog_program) (arglist: string list) (tup: term list) (ev_so_far : event) (assn: assignment): event =
-  (* for this assignment, plug in the appropriate value in tup *)
-  (*printf "event_with_assn %s %s %s %s\n%!" (String.concat ";" tup) (string_of_event ev_so_far) assn.afield assn.atupvar;*)
-  (*let fieldnames = (get_fields_for_type p ev_so_far.typeid) in  *)  
-  (* fieldnames is fields of *event*. don't use that here. 
-     e.g. 'time=t' will error, expecting time, not t.*)
-  try    
-    let (index, _) = (findi (fun idx ele -> ele = assn.atupvar) arglist) in  
-    let const = (nth tup index) in 
-      match const with 
-        | TConst(cval) -> 
-          {ev_so_far with values=(StringMap.add assn.afield cval ev_so_far.values)}
-        | _ ->
-          if !global_verbose > 1 then 
-             printf "--> Using default for field: %s. Got: %s.\n%!" assn.afield (string_of_term const);
-          {ev_so_far with values=(StringMap.add assn.afield "" ev_so_far.values)} (* flag: no value *)
-  with Not_found -> 
-    begin
-      printf "Error assigning event field <%s> from variable <%s>: did not find that variable.\n%!" assn.afield assn.atupvar;
-      exit(102)
-    end;;
-
+  
 let forward_packet (ev: event): unit =
   printf "forwarding: %s\n%!" (string_of_event ev);
   write_log (sprintf ">>> forwarding: %s\n%!" (string_of_event ev));
@@ -547,27 +523,33 @@ let send_event (ev: event) (ip: string) (pt: string): unit =
   write_log (sprintf "sending: %s\n%!" (string_of_event ev));
   doBBnotify ev ip pt;;
 
-let prepare_output (p: flowlog_program) (defn: outgoing_def): (event * spec_out) list =  
-  match defn with 
-    | ReactOut(argstrlist) ->
-     
-      let prepare_tuple (tup: term list): (event * spec_out) =
-        (*printf "PREPARING OUTPUT... tuple: %s\n%!" (String.concat ";" (map string_of_term tup));*)
-        (* arglist orders the xsb results. assigns says how to use them, spec how to send them. *)
-        let initev = (match spec with 
-                  | OutForward -> {typeid = "packet"; values=StringMap.empty}      
-                  | OutEmit(typ) -> {typeid = typ; values=StringMap.empty}      
-                  | OutLoopback -> failwith "loopback unsupported currently"
-                  | OutPrint 
-                  | OutSend(outtype, _, _) -> {typeid=outtype; values=StringMap.empty}) in                
-        let ev = fold_left (event_with_assn p argstrlist tup) initev defn.assigns in          
-          (ev, defn.outspec) in
+let event_with_field (p: flowlog_program) (ev_so_far : event) (fieldn: string) (avalue: term) : event =  
+  match avalue with 
+    | TConst(x) -> {ev_so_far with values=(StringMap.add fieldn x ev_so_far.values)}
+    | _ -> failwith ("event_with_field:"^(string_of_term avalue));;
 
+let prepare_output (p: flowlog_program) (defn: outgoing_def): (event * spec_out) list =  
+    let fieldnames = (match defn.outarity,defn.react with
+                          | FixedEvent(evname),_ -> get_fields_for_type p evname
+                          (*| AnyFields,OutPrint -> init (length tup) (fun i -> "x"^(string_of_int i))  *)
+                          | SameAsOnFields,OutForward -> get_valid_fields_for_input_rel p "forward"
+                          | _ -> failwith "prepare_tuple") in
+    let prepare_tuple (tup: term list): (event * spec_out) =
+      (*printf "PREPARING OUTPUT... tuple: %s\n%!" (String.concat ";" (map string_of_term tup));*)
+      (* arglist orders the xsb results. assigns says how to use them, spec how to send them. *)
+      let initev = (match defn.react with 
+                | OutForward -> {typeid = "packet"; values=StringMap.empty}      
+                | OutEmit(typ) -> {typeid = typ; values=StringMap.empty}      
+                | OutLoopback -> failwith "loopback unsupported currently"
+                | OutPrint -> failwith "print unsupported currently"
+                | OutSend(outtype, _, _) -> {typeid=outtype; values=StringMap.empty}) in                   
+      let ev = fold_left2 (event_with_field p) initev fieldnames tup in          
+        (ev, defn.react) in
+      
       (* query xsb for this output relation *)        
-      let xsb_results = (Communication.get_state (FAtom("", defn.outname, map (fun s -> TVar(s)) argstrlist))) in              
-        (* return the results to be executed later *)
-        map prepare_tuple xsb_results 
-    | _ -> failwith "prepare_output";;
+      let xsb_results = (Communication.get_state (FAtom("", defn.outname, map (fun s -> TVar(s)) fieldnames))) in                    
+      (* return the results to be executed later *)
+      map prepare_tuple xsb_results;;
 
 let execute_output ((ev, spec): event * spec_out) : unit =
   match spec with 
@@ -575,7 +557,7 @@ let execute_output ((ev, spec): event * spec_out) : unit =
    | OutEmit(_) -> emit_packet ev
    | OutPrint -> printf "PRINT RULE FIRED: %s\n%!" (string_of_event ev)
    | OutLoopback -> failwith "loopback unsupported currently"
-   | OutSend(ip, pt) -> send_event ev ip pt;;
+   | OutSend(_, ip, pt) -> send_event ev ip pt;;
 
 (* XSB query on plus or minus for table *)
 let change_table_how (p: flowlog_program) (toadd: bool) (tbldecl: table_def): formula list =
