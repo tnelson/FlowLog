@@ -5,39 +5,31 @@
 
 // EVENT, OUTGOING, etc. for packet handling is all built in.
 
-EVENT stolen_laptop_report {mac};
-EVENT stolen_laptop_cancel {mac};
-EVENT stolen_laptop_found {mac, swid, time};
+EVENT stolen_laptop_report {mac: macaddr};
+EVENT stolen_laptop_cancel {mac: macaddr};
+EVENT stolen_laptop_found {mac: macaddr, swid: switchid, time: int};
 
 TABLE stolen(int48); 
-
-// TODO: Make these un-necessary in surface syntax? Only complication is types for Alloy/bugdetection
-REMOTE TABLE get_time(int); 
-OUTGOING notify_police(int48, int, int);
 
 //////////
 // Reactive
 //////////
 
-// TODO: allow something like this
 /*
-EVENT stolen_laptop_found {mac: macaddr, swid: switchid, time: int};
-
 // abstraction like "named pipe": the notify_police pipe takes these events, 
 // and sends them to X, Y, ...
 // another pipe that takes the same events but sends to a different destination
-OUTGOING notify_police(stolen_laptop_found) THEN 
-  SEND TO 127.0.0.1 5050;
 
 REMOTE TABLE get_time(time: int)
   CALL time AT 127.0.0.1 9091 
   TIMEOUT 1 seconds;
 */
 
-OUTGOING notify_police(mac, swid, t) THEN 
-  SEND EVENT stolen_laptop_found {mac:=mac, swid:=swid, time:=t} TO 127.0.0.1 5050;
+// Outgoing defn just defines a named pipe for events:
+OUTGOING notify_police(stolen_laptop_found) THEN 
+  SEND TO 127.0.0.1 5050;
 
-REMOTE TABLE get_time
+REMOTE TABLE get_time(int)
   FROM time AT 127.0.0.1 9091 
   TIMEOUT 1 seconds;
 

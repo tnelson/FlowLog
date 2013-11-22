@@ -58,19 +58,16 @@ let alloy_constants (out: out_channel) (p: flowlog_program): unit =
 (* Every program's declared notifications need a sig... *)
 (* ...and an extensional constraint *)
 
-let type_of_event_field (evname: string) (fldname: string): string =
-  "[FILL]";; (* TODO: inference or annotation in program *)
-
 let alloy_declares (out: out_channel) (p: flowlog_program): unit =
   let declare_event (decl: sdecl) =
-    match decl with 
+    match decl with
       | DeclEvent(evname, evfields) as ev ->  
         (* don't declare events we've already declared stock. *)
         if not (mem ev built_in_decls) then
         begin
           let ifislone = if length evfields > 0 then "" else "lone " in
             fprintf out "%ssig EV%s extends Event {\n%!" ifislone evname;
-            let flddecls = map (fun fldname -> (sprintf "    %s: one %s") fldname (type_of_event_field evname fldname)) evfields in 
+            let flddecls = map (fun (fldname,fldtype) -> (sprintf "    %s: one %s") fldname fldtype) evfields in 
               fprintf out "%s%!" (String.concat ",\n" flddecls);
               fprintf out "}\n\n%!";
         end;
@@ -78,13 +75,13 @@ let alloy_declares (out: out_channel) (p: flowlog_program): unit =
         if length evfields > 0 then 
         begin
           fprintf out "fact EV%sExtensional { all ev1, ev2: EV%s | \n%!" evname evname;        
-          let fieldequals = (map (fun fld -> sprintf "ev1.%s = ev2.%s" fld fld) evfields) in
+          let fieldequals = (map (fun (fld, _) -> sprintf "ev1.%s = ev2.%s" fld fld) evfields) in
           let fieldsequal = String.concat " && " fieldequals in 
             fprintf out "(%s) implies ev1 = ev2}\n\n%!" fieldsequal;
         end;
       | _ -> failwith "declare_event"
   in
-  	iter declare_event (filter (function | DeclEvent(_,_) -> true | _ -> false) p.decls);;
+  	iter declare_event (filter (function | DeclEvent(_,_) -> true | _ -> false) p.desugared_decls);;
 
 (**********************************************************)
 (* Tables in state sig, and extensional fact for states (incl. all tables) *)
@@ -104,23 +101,19 @@ let get_table_fieldtypes (tdecl: sdecl): string list =
     | _ -> failwith "get_table_fieldtypes";;
 
 let alloy_state (out: out_channel) (p: flowlog_program): unit =
-  let declare_state (decl: sdecl): string = 
-    match decl with 
-      | DeclTable(tblname, fieldtypes) 
-      | DeclRemoteTable(tblname, fieldtypes) -> 
-        let typesproduct = String.concat " -> " (map String.capitalize fieldtypes) in 
-          sprintf "    %s: set (%s)%!" tblname typesproduct
-      | _ -> failwith "declare_state"
+  let declare_state (decl: table_def): string = 
+    let typesproduct = String.concat " -> " (map String.capitalize decl.tablearity) in 
+        sprintf "    %s: set (%s)%!" decl.tablename typesproduct
   in
 
   let local_tables = get_local_tables p in 
-  let remote_tables = (map (fun (react, decl) -> decl) (get_remote_tables p)) in
+  let remote_tables = get_remote_tables p in
     fprintf out "sig State {\n%!";
     fprintf out "%s\n%!" (String.concat ",\n" (map declare_state (local_tables @ remote_tables)));
     fprintf out "}\n%!";
     fprintf out "fact StateExtensional { all st1, st2: State |\n%!";
-    let stateequals = (map (fun tblname -> sprintf "st1.%s = st2.%s" tblname tblname)
-                           (map get_tablename (local_tables @ remote_tables))) in
+    let stateequals = (map (fun tbl -> sprintf "st1.%s = st2.%s" tbl.tablename tbl.tablename)
+                           (local_tables @ remote_tables)) in
     let statesequal = String.concat " && " stateequals in 
             fprintf out "(%s) implies st1 = st2}\n\n%!" statesequal;;
 
@@ -200,10 +193,7 @@ let alloy_actions (out: out_channel) (p: flowlog_program): unit =
   in
 
   let event_alloysig_for (increl: string): string =
-    match get_input_defn_for_rel p increl with
-      | ReactInc(typeid, _) -> "EV"^typeid
-      | _ -> failwith "event_typeid_for" 
-  in
+    "EV"^increl in
 
   let alloy_of_pred_fragment (stateid: string) (pf : pred_fragment): string =
   (* substitute var names: don't get stuck on rules with different args or in var name! *)      
@@ -264,37 +254,33 @@ let do_rule_exists (p: flowlog_program) (tblname: string): bool =
 (* transition: st x ev x st 
    (note this is a slight deviation from the language: packet-in becomes an event) *)
 let alloy_transition (out: out_channel) (p: flowlog_program): unit =
-  let build_table_transition (tdecl : sdecl): string = 
-    let tablename = get_tablename tdecl in    
-    let tupdvec = (String.concat "," (mapi  (fun i typ -> sprintf "tup%d: %s" i (String.capitalize typ)) (get_table_fieldtypes tdecl))) in   
-    let tupavec = (String.concat "," (init (length (get_table_fieldtypes tdecl)) (fun i -> sprintf "tup%d" i))) in   
+  let build_table_transition (tbl : table_def): string =       
+    let tupdvec = (String.concat "," (mapi  (fun i typ -> sprintf "tup%d: %s" i (String.capitalize typ)) tbl.tablearity)) in   
+    let tupavec = (String.concat "," (init (length tbl.tablearity) (fun i -> sprintf "tup%d" i))) in   
 
     (* - { sw: Switch, sw2: Switch | minus_ucTC[st, ev, sw, sw2] } *)
-    let minus_expr = if minus_rule_exists p tablename then sprintf "- { %s | %s_%s[st1, ev, %s]}" tupdvec minus_prefix tablename tupavec 
+    let minus_expr = if minus_rule_exists p tbl.tablename then sprintf "- { %s | %s_%s[st1, ev, %s]}" tupdvec minus_prefix tbl.tablename tupavec 
                      else "" in 
-    let plus_expr =  if plus_rule_exists p tablename then sprintf "+ { %s | %s_%s[st1, ev, %s]}" tupdvec plus_prefix tablename tupavec 
+    let plus_expr =  if plus_rule_exists p tbl.tablename then sprintf "+ { %s | %s_%s[st1, ev, %s]}" tupdvec plus_prefix tbl.tablename tupavec 
                      else "" in
       sprintf "  st2.%s = (st1.%s\n            %s)\n            %s" 
-              tablename tablename minus_expr plus_expr
+              tbl.tablename tbl.tablename minus_expr plus_expr
   in
 
   let local_tables = get_local_tables p in 
-  let remote_tables = (map (fun (react, decl) -> decl) (get_remote_tables p)) in
+  let remote_tables = get_remote_tables p in
     fprintf out "pred transition[st1: State, ev: Event, st2: State] { \n%!";
     fprintf out "%s\n%!" (String.concat " &&\n\n" (map build_table_transition (local_tables @ remote_tables)));
     fprintf out "}\n\n%!";;
 
 let alloy_outpolicy (out: out_channel) (p: flowlog_program): unit =
-  let alloy_out_difference (d: sreactive): string =
-    match d with 
-    | ReactOut(relname, arglist, outtype, assigns, spec) -> 
-      if do_rule_exists p relname then
-        sprintf "  %s[st1, ev, ev2]" relname              
-      else "false[]"
-    | _ -> failwith "alloy_out_difference" 
+  let alloy_out_difference (d: outgoing_def): string =
+    if do_rule_exists p d.outname then
+      sprintf "  %s[st1, ev, ev2]" d.outname              
+    else "false[]" 
   in
     fprintf out "pred outpolicy[st1: State, ev: Event, ev2: Event] { \n%!";
-    fprintf out "%s" (String.concat " ||\n" (map alloy_out_difference (get_output_defns p))); 
+    fprintf out "%s" (String.concat " ||\n" (map alloy_out_difference p.outgoings)); 
     fprintf out "}\n%!";;
 
 (**********************************************************)

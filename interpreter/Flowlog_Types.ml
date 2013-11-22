@@ -40,7 +40,13 @@ type typeid = string;;
       | RefreshPure
       | RefreshEvery;;
 
-  type assignment = {afield: string; atupvar: string};;      
+  (*type assignment = {afield: string; atupvar: string};;      *)
+
+  (* SameAsOnFields: Unary relation. Type of argument is same type from the ON trigger.
+                     Used by "forward".
+     AnyFields: Any arity, any types. Used for behavior like "print"ing. 
+     Fixedfield: single event type  *)
+  type outgoing_fields = | SameAsOnFields | AnyFields | FixedEvent of typeid;;
 
   type spec_out = 
       | OutForward
@@ -51,17 +57,17 @@ type typeid = string;;
 
   type sreactive = 
         (* table name, query name, ip, port, refresh settings *)
-      | ReactRemote of string * string * string * string * refresh
-        (* out relation name, args, event type name, assignments, spec*)
-      | ReactOut of string * string list * string * assignment list * spec_out
+      | ReactRemote of string * typeid list * string * string * string * refresh
+        (* out relation name, outgoing type, spec*)
+      | ReactOut of string * outgoing_fields * spec_out
         (* incoming event type, trigger relation name*)
-      | ReactInc of string * string;;
+      | ReactInc of typeid * string;;
 
   type sdecl = 
       | DeclTable of string * typeid list    
       | DeclRemoteTable of string * typeid list    
       | DeclInc of string * string   
-      | DeclOut of string * typeid list    
+      | DeclOut of string * outgoing_fields   
       | DeclEvent of string * (string * typeid) list;;
 
   type srule = {onrel: string; onvar: string; action: action};;
@@ -91,18 +97,9 @@ type typeid = string;;
   (* partial-evaluation needs to know what variable is being used for the old packet in a clause *)
   type triggered_clause = {clause: clause; oldpkt: string};;
 
-
-  (* SameAsOnFields: Unary relation. Type of argument is same type from the ON trigger.
-                     Used by "forward".
-     AnyFields: Any arity, any types. Used for behavior like "print"ing. 
-     Fixedfields: Fixed arity with fixed types in each position. For events, etc. 
-     An outgoing is "CONDENSED" if it has SameAsOnFields or Fixedfields has an *event* typeid. *)
-  type outgoing_fields = | SameAsOnFields | AnyFields | FixedFields of typeid list;;
-
   type outgoing_def = { outname: string;
                         outarity: outgoing_fields;
-                        react: spec_out;
-                        assignments: assignment list };;
+                        react: spec_out};;
 
   type queryid = string;;
   type agent = string * string;;                       
@@ -123,7 +120,10 @@ type typeid = string;;
                         outgoingmap: (string, outgoing_def) Hashtbl.t;
                        };;
 
-  type flowlog_program = {  (* for state tables only (local or remote)*)
+  type flowlog_program = {  desugared_decls: sdecl list; (* for use in errors, alloy conversion, etc. *)
+                            desugared_reacts: sreactive list; (* for use in errors, alloy conversion, etc. *)
+
+                            (* for state tables only (local or remote)*)
                             tables: table_def list;
                             
                             (* events and outgoings will require some built_ins *)    
@@ -209,12 +209,18 @@ type typeid = string;;
   let string_of_field_decl (d : (string * typeid)): string = 
     let s1, s2 = d in s1^s2;;
 
+  let string_of_outgoing_fields (ofld: outgoing_fields): string = 
+    match ofld with
+      | SameAsOnFields -> " (same as on)"
+      | AnyFields -> " (any)"
+      | FixedEvent(tname) -> " (:"^tname^")";;
+
   let string_of_declaration (d: sdecl): string =
     match d with 
       | DeclTable(tname, argtypes) -> "TABLE "^tname^" "^(String.concat "," argtypes);
       | DeclRemoteTable(tname, argtypes) -> "REMOTE TABLE "^tname^" "^(String.concat "," argtypes);
       | DeclInc(tname, argtype) -> "INCOMING "^tname^" "^argtype;
-      | DeclOut(tname, argtypes) -> "OUTGOING "^tname^" "^(String.concat "," argtypes);
+      | DeclOut(tname, arg) -> "OUTGOING "^tname^" "^(string_of_outgoing_fields arg);
       | DeclEvent(evname, argdecls) -> "EVENT "^evname^" "^(String.concat "," (map string_of_field_decl argdecls));;
 
   let string_of_outspec (spec: spec_out) =
@@ -227,10 +233,10 @@ type typeid = string;;
 
   let string_of_reactive (r: sreactive): string =
     match r with       
-      | ReactRemote(tblname, qname, ip, port, refresh) ->
-        tblname^" (remote) = "^qname^" @ "^ip^" "^port;
-      | ReactOut(outrel, args, evtype, assignments, spec) ->
-        outrel^"("^(String.concat "," args)^") (output rel) = "^evtype^" @ "^(string_of_outspec spec);
+      | ReactRemote(tblname, argtypes, qname, ip, port, refresh) ->
+        tblname^"TABLE (remote) = "^qname^"("^(String.concat "," argtypes)^") @ "^ip^" "^port;
+      | ReactOut(outrel, outf, spec) ->
+        outrel^"("^(string_of_outgoing_fields outf)^") (output rel) =  @ "^(string_of_outspec spec);
       | ReactInc(evtype, relname) -> 
         relname^" (input rel) "^evtype;;
   

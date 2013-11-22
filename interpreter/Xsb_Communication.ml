@@ -248,7 +248,7 @@ module Communication = struct
         			| SameAsOnFields -> (match context_on with 
         				| Some(e) -> Some (map (fun (n,_) -> n) e.evfields) 
         				| None -> failwith "get_io_fields_for_index: no On context given")
-        			| FixedFields(flds) -> Some(get_fields_for_type prgm (nth flds idx))
+        			| FixedEvent(evname) -> Some(get_fields_for_type prgm evname) (* (nth flds idx)*)
         		    | AnyFields -> failwith "get_io_fields_for_index: unsupported AnyFields")
         	else
         		None (* event type not allowed in this position*)          
