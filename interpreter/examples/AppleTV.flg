@@ -8,6 +8,8 @@
  *  - We should delete entries in atv_cxns if either side moves -- this would
  *    represent a laptop leaving a given conference room, for example.
  *  - Also remove pairings by listening to client-initated IGMP departures
+ *
+ *  - Might not actually need IGMP messages. Also, might only need 1 mDNS msg
  */
 
 /*******************************************************************************
@@ -17,6 +19,7 @@
  ******************************************************************************/
 
 EVENT atv_connect { atv_mac, client_mac };
+EVENT atv_announce { atv_mac, client_mac };
 EVENT atv_disconnect { mac };
 
 TABLE atv_cxns(macaddr, macaddr);
@@ -31,12 +34,14 @@ ON atv_connect(evt): // XXX: can't be named "event" btw (conflict with keyword)
   INSERT (evt.atv_mac, evt.client_mac) INTO atv_cxns;
   INSERT (evt.client_mac, evt.atv_mac) INTO atv_cxns;
 
+ON atv_announce(evt):
   DO emit_igmp(new) WHERE
     new.dlDst = evt.client_mac and
     new.dlSrc = evt.atv_mac and
     new.nwSrc = 0x0A0A006A and // TODO(adf): do we need correct IP addrs?
     new.nwDst = 0xE0000016 and // 224.0.0.22 (IGMP)
-    new.igmp_ver_and_typ = 0x16 and // 0x22
+    //new.nwTtl = 1 and
+    new.igmp_ver_and_typ = 0x22 and
     new.igmp_v3typ = 0x4 and
     new.igmp_addr = 0xE00000FB and // 224.0.0.251 (mDNS)
     new.locSw = 1 and // DPID of switch controller is connected to
@@ -48,7 +53,8 @@ ON atv_connect(evt): // XXX: can't be named "event" btw (conflict with keyword)
     // TODO(adf): any way to re-use the code above without copy and paste?
     new.nwSrc = 0x0A0A0064 and // TODO(adf): do we need correct IP addrs?
     new.nwDst = 0xE0000016 and // 224.0.0.22 (IGMP)
-    new.igmp_ver_and_typ = 0x16 and // 0x22
+   // new.nwTtl = 1 and
+    new.igmp_ver_and_typ = 0x22 and
     new.igmp_v3typ = 0x4 and
     new.igmp_addr = 0xE00000FB and // 224.0.0.251 (mDNS)
     new.locSw = 1 and // DPID of switch controller is connected to (0x1b219cfe57)
@@ -57,12 +63,34 @@ ON atv_connect(evt): // XXX: can't be named "event" btw (conflict with keyword)
   DO emit_mdns(new) WHERE
     new.dlDst = evt.atv_mac and
     new.dlSrc = evt.client_mac and
-    new.nwSrc = 0x0A0A0001 and
-    new.nwDst = 0xE0000016 and // 224.0.0.22 (IGMP)
+    new.nwSrc = 0x0A0A0001 and // 10.10.0.0.1 (controller)
+    new.nwDst = 0xE00000FB and // 224.0.0.251 (mDNS)
     new.tpSrc = 5353 and
     new.tpDst = 5353 and
     new.mdns_question = "_airplay._tcp.local" and
-    new.locSw = 1 and // DPID of switch controller is connected to
+    new.locSw = 1 and // DPID of switch controller is connected to (0x1b219cfe57)
+    new.locPt = 0xfff9; // OFPP_TABLE
+
+  DO emit_mdns(new) WHERE
+    new.dlDst = evt.atv_mac and
+    new.dlSrc = evt.client_mac and
+    new.nwSrc = 0x0A0A0001 and // 10.10.0.0.1 (controller)
+    new.nwDst = 0xE00000FB and // 224.0.0.251 (IGMP)
+    new.tpSrc = 5353 and
+    new.tpDst = 5353 and
+    new.mdns_question = "_appletv._tcp.local" and
+    new.locSw = 1 and // DPID of switch controller is connected to (0x1b219cfe57)
+    new.locPt = 0xfff9; // OFPP_TABLE
+
+  DO emit_mdns(new) WHERE
+    new.dlDst = evt.atv_mac and
+    new.dlSrc = evt.client_mac and
+    new.nwSrc = 0x0A0A0001 and // 10.10.0.0.1 (controller)
+    new.nwDst = 0xE00000FB and // 224.0.0.251 (IGMP)
+    new.tpSrc = 5353 and
+    new.tpDst = 5353 and
+    new.mdns_question = "_raop._tcp.local" and
+    new.locSw = 1 and // DPID of switch controller is connected to (0x1b219cfe57)
     new.locPt = 0xfff9; // OFPP_TABLE
 
 
