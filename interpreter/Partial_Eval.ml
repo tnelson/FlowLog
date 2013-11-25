@@ -524,9 +524,11 @@ let send_event (p: flowlog_program) (ev: event) (ip: string) (pt: string): unit 
   write_log (sprintf "sending: %s\n%!" (string_of_event p ev));
   doBBnotify ev ip pt;;
 
-let event_with_field (p: flowlog_program) (ev_so_far : event) (fieldn: string) (avalue: term) : event =  
+let event_with_field (p: flowlog_program) (ev_so_far : event) (fieldn: string) (avalue: term) : event =    
   match avalue with 
     | TConst(x) -> {ev_so_far with values=(StringMap.add fieldn x ev_so_far.values)}
+    (* If returned a TVar, then need to flag to use the default value *)
+    | TVar(x) -> {ev_so_far with values=(StringMap.add fieldn "" ev_so_far.values)}
     | _ -> failwith ("event_with_field:"^(string_of_term avalue));;
 
 let prepare_output (p: flowlog_program) (incoming_event: event) (defn: outgoing_def): (event * spec_out) list =  

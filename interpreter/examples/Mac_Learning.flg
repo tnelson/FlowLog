@@ -4,7 +4,7 @@ TABLE switch_has_port(switchid, portid);
 
 // all the events used here are built-in
 
-ON packet_in(pkt):
+ON packet(pkt):
   
   // ***TODO*** Add these restrictions (which only exist for limiting to-controller traffic) 
   // automatically. But not always easy! Naive learned/notlearned have some issues
@@ -41,7 +41,7 @@ ON packet_in(pkt):
     );
     
 
-ON switch_port_in(swpt):
+ON switch_port(swpt):
   INSERT (swpt.sw, swpt.pt) INTO switch_has_port;
 
 ON switch_down(swd):

@@ -38,7 +38,7 @@ TABLE queued(ipaddr, macaddr, ipaddr, switchid, portid);
  *
  ******************************************************************************/
 
-ON arp_packet_in(request) WHERE request.dlSrc = 0xCAFECAFE: // Controller MAC
+ON arp_packet(request) WHERE request.dlSrc = 0xCAFECAFE: // Controller MAC
    DO forward(new) WHERE
      new.locPt != request.locPt;
 
@@ -48,7 +48,7 @@ ON arp_packet_in(request) WHERE request.dlSrc = 0xCAFECAFE: // Controller MAC
  *
  ******************************************************************************/
 
-ON arp_packet_in(request) WHERE request.arp_op = 1 AND
+ON arp_packet(request) WHERE request.arp_op = 1 AND
                                 request.dlSrc != 0xCAFECAFE: // Controller MAC
 
   //
@@ -156,7 +156,7 @@ check cachedImmediateReply for 2 but 1 Event, 2 State
  *
  ******************************************************************************/
 
-ON arp_packet_in(reply) WHERE reply.arp_op = 2 AND
+ON arp_packet(reply) WHERE reply.arp_op = 2 AND
                               reply.dlSrc != 0xCAFECAFE:
 
   //

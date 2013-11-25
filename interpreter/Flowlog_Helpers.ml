@@ -281,8 +281,12 @@ let rec disj_to_top ?(ignore_negation: bool = false) (f: formula): formula =
 
   let get_fields_for_type (prgm: flowlog_program) (etype: string): string list =      
     map (fun (n,_) -> n) (get_event prgm etype).evfields;;
-  let get_types_for_type (prgm: flowlog_program) (etype: string): string list =      
-    map (fun (_,t) -> t) (get_event prgm etype).evfields;;
+  let get_type_for_field (prgm: flowlog_program) (notif: event) (k: string): typeid =      
+    try
+      let _, typ = find (fun (n,_) -> n = k) 
+                        (get_event prgm notif.typeid).evfields in
+        typ
+    with | Not_found -> failwith ("get_type_for_field: "^notif.typeid^" "^k);;
 
   let get_valid_fields_for_input_rel (p: flowlog_program) (rname: string): (string list) = 
     try
@@ -293,15 +297,17 @@ let rec disj_to_top ?(ignore_negation: bool = false) (f: formula): formula =
 
 
 (*************************************************************)
- (* improve this when we have more than strings running around *)
- let pretty_print_value (typename: string) (strval: string): string =    
-   match typename with
+ (* improve this when we have more than strings running around 
+    We should also use option rather than empty string to indicate "use the default" *)
+ let pretty_print_value (typename: string) (strval: string): string =   
+  if strval = "" then "<DEFAULT>" 
+  else (match typename with
       | "ipaddr" -> Packet.string_of_ip (Int32.of_string strval)
       | "macaddr" -> Packet.string_of_mac (Int64.of_string strval) 
       | "portid" -> strval
       | "switchid" -> strval
       | "ethtyp" -> Packet.string_of_dlTyp (int_of_string strval)          
-      | _ -> strval;;
+      | _ -> strval);;
 
  let pretty_print_constant (typename: string) (c: term): string =    
       pretty_print_value typename 
@@ -311,11 +317,10 @@ let rec disj_to_top ?(ignore_negation: bool = false) (f: formula): formula =
   (* This function needs to know the program context, because that is where the type of each field is stored.
      Even if we stored values as ints, etc. that might not be enough either, since there is a 
      difference between how we'd display an "int" and how we'd display an "ipaddr". *)
-  let string_of_event (p: flowlog_program) (notif: event): string =
-    let typenames = (get_types_for_type p notif.typeid) in
-      notif.typeid^": ["^(String.concat ";" 
-        (mapi (fun i (k, v) -> k^":"^(pretty_print_value (nth typenames i) v)) 
-              (StringMap.bindings notif.values)))^"]";;  
+  let string_of_event (p: flowlog_program) (notif: event): string =    
+    notif.typeid^": ["^(String.concat ";" 
+      (map (fun (k, v) -> k^":"^(pretty_print_value (get_type_for_field p notif k) v)) 
+           (StringMap.bindings notif.values)))^"]";;  
 
 
 
