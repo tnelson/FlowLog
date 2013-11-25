@@ -90,7 +90,7 @@ type typeid = string;;
                   };;
 
   (* Every event has a name and a string of fieldnames, each with a type. *)  
-  type event_def = { eventname: string;
+  type event_def = { eventname: string;              
                      evfields: (string * typeid) list };;
 
 
@@ -149,10 +149,6 @@ type typeid = string;;
 
 (*************************************************************)
   let allportsatom = SwitchAction({id with outPort = NetCore_Pattern.All});;
-
-(*************************************************************)
-  let string_of_event (notif: event): string =
-    notif.typeid^": ["^(String.concat ";" (map (fun (k, v) -> k^":"^v) (StringMap.bindings notif.values)))^"]";;  
 
   type printmode = Xsb | Verbose | Brief | XsbForcePositive | XsbAddUnderscoreVars;;
 

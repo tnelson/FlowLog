@@ -500,18 +500,18 @@ let program_to_netcore (p: flowlog_program) (callback: get_packet_handler): (pol
       p.weakened_cannot_compile_pt_clauses
      (Some callback));;
   
-let forward_packet (ev: event): unit =
-  printf "forwarding: %s\n%!" (string_of_event ev);
-  write_log (sprintf ">>> forwarding: %s\n%!" (string_of_event ev));
+let forward_packet (p: flowlog_program) (ev: event): unit =
+  printf "forwarding: %s\n%!" (string_of_event p ev);
+  write_log (sprintf ">>> forwarding: %s\n%!" (string_of_event p ev));
   (* TODO use allpackets here. compilation uses it, but XSB returns every port individually. *)
   printf "WARNING: field modifications not yet supported in netcore.\n%!";  
   fwd_actions := 
     SwitchAction({id with outPort = Physical(Int32.of_string (get_field ev "locpt" None))})
     :: !fwd_actions;;
 
-let emit_packet (ev: event): unit =  
-  printf "emitting: %s\n%!" (string_of_event ev);
-  write_log (sprintf ">>> emitting: %s\n%!" (string_of_event ev));
+let emit_packet (p: flowlog_program) (ev: event): unit =  
+  printf "emitting: %s\n%!" (string_of_event p ev);
+  write_log (sprintf ">>> emitting: %s\n%!" (string_of_event p ev));
   let swid = (Int64.of_string (get_field ev "locsw" None)) in
   let pt = (Int32.of_string (get_field ev "locpt" None)) in
   
@@ -519,9 +519,9 @@ let emit_packet (ev: event): unit =
      At the moment, someone can emit_arp with dlTyp = 0x000 or something dumb like that. *)
   guarded_emit_push swid pt (marshal_packet ev);;  
 
-let send_event (ev: event) (ip: string) (pt: string): unit =
-  printf ">>> sending: %s\n%!" (string_of_event ev);  
-  write_log (sprintf "sending: %s\n%!" (string_of_event ev));
+let send_event (p: flowlog_program) (ev: event) (ip: string) (pt: string): unit =
+  printf ">>> sending: %s\n%!" (string_of_event p ev);  
+  write_log (sprintf "sending: %s\n%!" (string_of_event p ev));
   doBBnotify ev ip pt;;
 
 let event_with_field (p: flowlog_program) (ev_so_far : event) (fieldn: string) (avalue: term) : event =  
@@ -553,13 +553,13 @@ let prepare_output (p: flowlog_program) (incoming_event: event) (defn: outgoing_
       (* return the results to be executed later *)
       map prepare_tuple xsb_results;;
 
-let execute_output ((ev, spec): event * spec_out) : unit =
+let execute_output (p: flowlog_program) ((ev, spec): event * spec_out) : unit =
   match spec with 
-   | OutForward -> forward_packet ev
-   | OutEmit(_) -> emit_packet ev
-   | OutPrint -> printf "PRINT RULE FIRED: %s\n%!" (string_of_event ev)
+   | OutForward -> forward_packet p ev
+   | OutEmit(_) -> emit_packet p ev
+   | OutPrint -> printf "PRINT RULE FIRED: %s\n%!" (string_of_event p ev)
    | OutLoopback -> failwith "loopback unsupported currently"
-   | OutSend(_, ip, pt) -> send_event ev ip pt;;
+   | OutSend(_, ip, pt) -> send_event p ev ip pt;;
 
 (* XSB query on plus or minus for table *)
 let change_table_how (p: flowlog_program) (toadd: bool) (tbldecl: table_def): formula list =
@@ -636,7 +636,7 @@ let respond_to_notification (p: flowlog_program) (notif: event): string list =
       Mutex.lock xsbmutex;
       counter_inc_all := !counter_inc_all + 1;
 
-      write_log (sprintf "<<< incoming: %s" (string_of_event notif));
+      write_log (sprintf "<<< incoming: %s" (string_of_event p notif));
 
   (*printf "~~~~ RESPONDING TO NOTIFICATION ABOVE ~~~~~~~~~~~~~~~~~~~\n%!";*)
 
@@ -712,7 +712,7 @@ let respond_to_notification (p: flowlog_program) (notif: event): string list =
 
    (**********************************************************)
    (* Finally actually send output *)
-    iter execute_output prepared_output;
+    iter (execute_output p) prepared_output;
    (**********************************************************) 
 
     printf "~~~~~~~~~~~~~~~~~~~FINISHED EVENT (%d total, %d packets) ~~~~~~~~~~~~~~~\n%!"
@@ -755,13 +755,13 @@ let make_policy_stream (p: flowlog_program)
                                           ("pt", (Int32.to_string portid))]}
             else None)
             feats.ports in
-        printf "SWITCH %Ld connected. Flowlog events triggered: %s\n%!" sw (String.concat ", " (map string_of_event notifs));
+        printf "SWITCH %Ld connected. Flowlog events triggered: %s\n%!" sw (String.concat ", " (map (string_of_event p) notifs));
         List.iter (fun notif -> ignore (respond_to_notification p notif)) notifs;        
 
       | SwitchDown(swid) -> 
         let sw_string = Int64.to_string swid in        
         let notif = {typeid="switch_down"; values=construct_map [("sw", sw_string)]} in          
-          printf "SWITCH %Ld went down. Triggered: %s\n%!" swid (string_of_event notif);
+          printf "SWITCH %Ld went down. Triggered: %s\n%!" swid (string_of_event p notif);
           ignore(respond_to_notification p notif);                
     and
 
@@ -825,7 +825,7 @@ let make_policy_stream (p: flowlog_program)
 
       (* Parse the packet and send it to XSB. Deal with the results *)
       let notif = (pkt_to_event sw pt pkt) in           
-        printf "~~~ Incoming Notif:\n %s\n%!" (string_of_event notif);
+        printf "~~~ Incoming Notif:\n %s\n%!" (string_of_event p notif);
         ignore (respond_to_notification p notif);
 
         if !global_verbose >= 1 then

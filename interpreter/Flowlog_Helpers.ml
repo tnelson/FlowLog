@@ -265,7 +265,7 @@ let rec disj_to_top ?(ignore_negation: bool = false) (f: formula): formula =
     try ignore (get_event prgm relname); true with | Not_found -> false;;  
   let is_outgoing_table (prgm: flowlog_program) (relname: string): bool =
     try ignore (get_outgoing prgm relname); true with | Not_found -> false;;  
-    
+
   let is_io_rel (prgm: flowlog_program) (relname: string): bool =
     is_incoming_table prgm relname or is_outgoing_table prgm relname;;
 
@@ -281,12 +281,46 @@ let rec disj_to_top ?(ignore_negation: bool = false) (f: formula): formula =
 
   let get_fields_for_type (prgm: flowlog_program) (etype: string): string list =      
     map (fun (n,_) -> n) (get_event prgm etype).evfields;;
+  let get_types_for_type (prgm: flowlog_program) (etype: string): string list =      
+    map (fun (_,t) -> t) (get_event prgm etype).evfields;;
 
   let get_valid_fields_for_input_rel (p: flowlog_program) (rname: string): (string list) = 
     try
       map (fun (fname, _) -> fname) (get_event p rname).evfields
     with | Not_found -> raise (UndeclaredIncomingRelation rname);;
   
+
+
+
+(*************************************************************)
+ (* improve this when we have more than strings running around *)
+ let pretty_print_value (typename: string) (strval: string): string =    
+   match typename with
+      | "ipaddr" -> Packet.string_of_ip (Int32.of_string strval)
+      | "macaddr" -> Packet.string_of_mac (Int64.of_string strval) 
+      | "portid" -> strval
+      | "switchid" -> strval
+      | "ethtyp" -> Packet.string_of_dlTyp (int_of_string strval)          
+      | _ -> strval;;
+
+ let pretty_print_constant (typename: string) (c: term): string =    
+      pretty_print_value typename 
+                         (match c with | TConst(s) -> s 
+                                       | _ -> failwith ("pretty_print_constant: non constant"));;
+
+  (* This function needs to know the program context, because that is where the type of each field is stored.
+     Even if we stored values as ints, etc. that might not be enough either, since there is a 
+     difference between how we'd display an "int" and how we'd display an "ipaddr". *)
+  let string_of_event (p: flowlog_program) (notif: event): string =
+    let typenames = (get_types_for_type p notif.typeid) in
+      notif.typeid^": ["^(String.concat ";" 
+        (mapi (fun i (k, v) -> k^":"^(pretty_print_value (nth typenames i) v)) 
+              (StringMap.bindings notif.values)))^"]";;  
+
+
+
+
+
 
 let atom_to_relname (f: formula): string =
   match f with

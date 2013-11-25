@@ -9,7 +9,7 @@ EVENT stolen_laptop_report {mac: macaddr};
 EVENT stolen_laptop_cancel {mac: macaddr};
 EVENT stolen_laptop_found {mac: macaddr, swid: switchid, time: int};
 
-TABLE stolen(int48); 
+TABLE stolen(macaddr); 
 
 //////////
 // Reactive

@@ -46,7 +46,7 @@ let packet_flavors = [
    (* base type (Ethernet) *)
    {label = "packet"; superflavor = None;
     build_condition = (fun vname -> FTrue);
-    fields = [("locsw", "switchid"); ("locpt", "portid"); ("dlsrc", "macaddr"); ("dldst", "macaddr"); ("dltyp", "macaddr")]};
+    fields = [("locsw", "switchid"); ("locpt", "portid"); ("dlsrc", "macaddr"); ("dldst", "macaddr"); ("dltyp", "ethtyp")]};
 
    {label = "arp"; superflavor = Some "packet";
     build_condition = (fun vname -> FEquals(TField(vname, "dltyp"), TConst("0x0806")));
