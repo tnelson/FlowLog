@@ -252,13 +252,20 @@ let rec disj_to_top ?(ignore_negation: bool = false) (f: formula): formula =
     Hashtbl.find prgm.memos.outgoingmap goalrel;;    
 
   let is_local_table (prgm: flowlog_program) (relname: string): bool = 
-     match (get_table prgm relname).source with | LocalTable -> true | RemoteTable(_,_,_) -> false;;
+    try
+      match (get_table prgm relname).source with | LocalTable -> true | RemoteTable(_,_,_) -> false
+    with | Not_found -> false;;
+  
   let is_remote_table (prgm: flowlog_program) (relname: string): bool = 
-     match (get_table prgm relname).source with | LocalTable -> false | RemoteTable(_,_,_) -> true;;
-  let is_incoming_table (prgm: flowlog_program) (relname: string): bool =
+     try 
+       match (get_table prgm relname).source with | LocalTable -> false | RemoteTable(_,_,_) -> true
+     with | Not_found -> false;;
+
+  let is_incoming_table (prgm: flowlog_program) (relname: string): bool =    
     try ignore (get_event prgm relname); true with | Not_found -> false;;  
   let is_outgoing_table (prgm: flowlog_program) (relname: string): bool =
     try ignore (get_outgoing prgm relname); true with | Not_found -> false;;  
+    
   let is_io_rel (prgm: flowlog_program) (relname: string): bool =
     is_incoming_table prgm relname or is_outgoing_table prgm relname;;
 

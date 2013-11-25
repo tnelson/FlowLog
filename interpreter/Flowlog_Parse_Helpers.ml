@@ -72,10 +72,9 @@ let field_var_or_var (t: term): string =
     | TConst(_) -> ""
     | TField(vname, _) -> vname;;
 
-let field_vars_in (condensed: bool) (tl: term list): string list =   
+let field_vars_in (tl: term list): string list =   
   filter_map (function 
-    | TVar(vname) when condensed -> Some vname
-    | TVar(vname) -> None
+    | TVar(vname) -> Some vname    
     | TConst(_) -> None
     | TField(vname, _) -> Some vname) tl
 
@@ -83,17 +82,11 @@ let well_formed_rule (p: flowlog_program) (r: srule): unit =
 
     (* This may be called for a term in the head OR in the body.*)
     let well_formed_term (headrelname: string) (headterms: term list) (inrelname: string) (inargname: string) (t: term): unit = 
-      (* Predefined in Flowlog_Types -- "forward" and "emit" have condensed args.
-         All other output relations or tables have base types for args. *)
-      let condensed = (mem headrelname built_in_condensed_outrels) in    
-
-(* @@@ TODO: needs accounting for fact that DOs are always unary now... *)
-
       match t with 
       | TConst(cval) -> () (* constant is always OK *)
 
-      | TVar(vname) -> 
-        if not condensed && (vname = inargname || mem vname (field_vars_in condensed headterms)) then
+      | TVar(vname) ->         
+        if vname = inargname then
           raise (NonCondensedNoField(vname))      
 
         (* variable name in input relation *)
@@ -110,7 +103,7 @@ let well_formed_rule (p: flowlog_program) (r: srule): unit =
         (* the variable here is in the clause head. e.g. "newpkt"
            if this is a DO rule and the term is a field var... deal with similar to above. 
            if this is an insert/delete rule, disallow non = inargname fields.  *)        
-      | TField(vname, fname) when mem vname (field_vars_in condensed headterms) ->              
+      | TField(vname, fname) when mem vname (field_vars_in headterms) ->              
         (match r.action with 
           | ADo(_, outrelterms, where) -> 
             (try              

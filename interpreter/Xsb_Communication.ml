@@ -227,7 +227,7 @@ module Communication = struct
   (* raises Not_found if nothing to do for this event *)
   let inc_event_to_formulas (p: flowlog_program) (notif: event): formula list =
     (* event contains k=v mappings and a type. convert to a formula via defns in program*)
-    (*printf "Converting event to formula: %s\n%!" (string_of_event notif);*)
+    (*printf "Converting event to formula: %s. Supertypes: %s\n%!" (string_of_event notif) (String.concat "%s\n%!" (built_in_supertypes notif.typeid));*)
     map (fun typename ->         
           FAtom("", typename, map 
           	         (fun fld -> try TConst(StringMap.find fld notif.values) with | Not_found -> failwith ("inc_event_to_formulas: "^fld))
@@ -241,17 +241,13 @@ module Communication = struct
   		Some (get_fields_for_type prgm relname)
   	with
   	| Not_found -> 
-  	  	let out = get_outgoing prgm relname in 
-            (* treat condensed output rels (forward, emit, ...) differently *)
-        	if mem relname built_in_condensed_outrels then
+  	  	let out = get_outgoing prgm relname in                     	
         		(match out.outarity with 
         			| SameAsOnFields -> (match context_on with 
         				| Some(e) -> Some (map (fun (n,_) -> n) e.evfields) 
         				| None -> failwith "get_io_fields_for_index: no On context given")
         			| FixedEvent(evname) -> Some(get_fields_for_type prgm evname) (* (nth flds idx)*)
         		    | AnyFields -> failwith "get_io_fields_for_index: unsupported AnyFields")
-        	else
-        		None (* event type not allowed in this position*)          
         | _ -> failwith "get_io_fields_for_index";;
 
    (* in modname.relname, the ith element has which fields? *)
@@ -270,7 +266,7 @@ module Communication = struct
 	    (* Begin by flushing the error buffer.
 	       XSB will send newlines in stderr for (seemingly) no reason...*)
 		Xsb.print_or_flush_errors true;
-		if debug then (printf "send_message: %s (expected: %d)\n%!" message num_ans);
+		if !global_verbose >= 10 then (printf "send_message: %s (expected: %d)\n%!" message num_ans);
 		if num_ans > 0 then
 		    let strresults = Xsb.send_query message num_ans in
 		      map (fun tuplestr -> map reassemble_xsb_term tuplestr) strresults
@@ -297,7 +293,7 @@ module Communication = struct
             Hashtbl.add statehash tdef (map (fun args -> FAtom("", tdef.tablename, args))
                                             (get_state_helper tdef.tablename (length tdef.tablearity))) in
 		
-		iter add_to_hash_for_table (get_local_tables p);
+		iter add_to_hash_for_table p.tables;
 		statehash;;
 
   (**************)
@@ -323,7 +319,7 @@ module Communication = struct
         let fmlasfortbl = flatten (Hashtbl.find_all currstate tbl) in
           sprintf "%s:\n%s" tbl.tablename (String.concat "\n" (map (pretty_print_fact tbl) fmlasfortbl)) in
 
-    printf "-------\n|STATE|\n-------\n%s\n%!" (String.concat "\n" (map get_tblstrs (get_local_tables p)));;
+    printf "-------\n|STATE|\n-------\n%s\n%!" (String.concat "\n" (map get_tblstrs p.tables));;
     (**************)
 
 	let clause_to_xsb ?(forcepositive = false) (cls: clause): string =	  
