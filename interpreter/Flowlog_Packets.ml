@@ -446,10 +446,6 @@ let built_in_reacts = [ ReactInc("switch_port", switch_reg_relname);
                         ReactOut("forward", SameAsOnFields, OutForward);
                       ] @ flatten (map build_flavor_reacts packet_flavors);;
 
-(* These output relations have a "condensed" argument. That is, they are unary,
-   with a packet as the argument. Should only be done for certain built-ins. *)
-let built_in_condensed_outrels = ["forward"] @ map (fun flav -> flavor_to_emitrelname flav) packet_flavors;;
-
 (* All packet types must go here;
    these are the tables that flag a rule as being "packet-triggered".*)
 let built_in_packet_input_tables = map (fun flav -> flavor_to_inrelname flav) packet_flavors;;

@@ -84,10 +84,11 @@ let rec get_state_maybe_remote (p: flowlog_program) (f: formula): term list list
 
 (* get_state_maybe_remote calls out to BB and updates the cache IF UNCACHED. *)
 let pre_load_all_remote_queries (p: flowlog_program): unit =
+  (*printf ">>> %s\n%!" (String.concat "," (map string_of_formula (get_atoms_used_in_bodies p)));*)
   let remote_fmlas = 
     filter (function | FAtom(modname, relname, args) when (is_remote_table p relname) -> true
                      | _-> false)
-           (get_atoms_used_in_bodies p) in
+           (get_atoms_used_in_bodies p) in           
     iter (fun f -> ignore (get_state_maybe_remote p f)) remote_fmlas;;    
 
 
@@ -528,17 +529,18 @@ let event_with_field (p: flowlog_program) (ev_so_far : event) (fieldn: string) (
     | TConst(x) -> {ev_so_far with values=(StringMap.add fieldn x ev_so_far.values)}
     | _ -> failwith ("event_with_field:"^(string_of_term avalue));;
 
-let prepare_output (p: flowlog_program) (defn: outgoing_def): (event * spec_out) list =  
+let prepare_output (p: flowlog_program) (incoming_event: event) (defn: outgoing_def): (event * spec_out) list =  
     let fieldnames = (match defn.outarity,defn.react with
                           | FixedEvent(evname),_ -> get_fields_for_type p evname
                           (*| AnyFields,OutPrint -> init (length tup) (fun i -> "x"^(string_of_int i))  *)
-                          | SameAsOnFields,OutForward -> get_valid_fields_for_input_rel p "forward"
+                          | SameAsOnFields,OutForward -> get_valid_fields_for_input_rel p incoming_event.typeid
                           | _ -> failwith "prepare_tuple") in
+
     let prepare_tuple (tup: term list): (event * spec_out) =
       (*printf "PREPARING OUTPUT... tuple: %s\n%!" (String.concat ";" (map string_of_term tup));*)
       (* arglist orders the xsb results. assigns says how to use them, spec how to send them. *)
       let initev = (match defn.react with 
-                | OutForward -> {typeid = "packet"; values=StringMap.empty}      
+                | OutForward -> {typeid = incoming_event.typeid; values=StringMap.empty}      
                 | OutEmit(typ) -> {typeid = typ; values=StringMap.empty}      
                 | OutLoopback -> failwith "loopback unsupported currently"
                 | OutPrint -> failwith "print unsupported currently"
@@ -571,7 +573,7 @@ let expire_remote_state_in_xsb (p: flowlog_program) : unit =
 
   (* The cache is keyed by rel/tuple. So R(X, 1) is a DIFFERENT entry from R(1, X). *)
   let expire_remote_if_time (p:flowlog_program) (keyfmla: formula) (values: ((term list) list * float)): unit =  
-    printf "expire_remote_if_time %s\n%!" (string_of_formula keyfmla);
+    if !global_verbose > 1 then printf "expire_remote_if_time %s\n%!" (string_of_formula keyfmla);
     let (xsb_results, timestamp) = values in   
     match keyfmla with
       | FAtom(modname, relname, args) -> 
@@ -584,12 +586,12 @@ let expire_remote_state_in_xsb (p: flowlog_program) : unit =
               | RefreshTimeout(num, units) when units = "seconds" -> 
                 (* expire every num units. TODO: suppt more than seconds *)
                 if Unix.time() > ((float_of_int num) +. timestamp) then begin
-                  printf "REMOTE STATE --- Expiring remote for formula (duration expired): %s\n%!" 
+                  if !global_verbose > 1 then printf "REMOTE STATE --- Expiring remote for formula (duration expired): %s\n%!" 
                         (string_of_formula keyfmla);
                   remote_cache := FmlaMap.remove keyfmla !remote_cache;
                   iter (fun tup -> Communication.retract_formula (FAtom(modname, relname, tup))) xsb_results
                 end else 
-                  printf "REMOTE STATE --- Allowing relation to remain: %s %s %s\n%!" 
+                  if !global_verbose > 1 then printf "REMOTE STATE --- Allowing relation to remain: %s %s %s\n%!" 
                     (string_of_formula keyfmla) (string_of_int num) (string_of_float timestamp);
                   ();
               | RefreshPure -> 
@@ -597,7 +599,7 @@ let expire_remote_state_in_xsb (p: flowlog_program) : unit =
                 (); 
               | RefreshEvery -> 
                 (* expire everything under this table, every evaluation cycle *)
-                printf "REMOTE STATE --- Expiring remote for formula: %s\n%!" (string_of_formula keyfmla);
+                if !global_verbose > 1 then printf "REMOTE STATE --- Expiring remote for formula: %s\n%!" (string_of_formula keyfmla);
                 remote_cache := FmlaMap.remove keyfmla !remote_cache;
                 iter (fun tup -> Communication.retract_formula (FAtom(modname, relname, tup))) xsb_results;
               | RefreshTimeout(_,_) -> failwith "expire_remote_state_in_xsb: bad timeout" 
@@ -607,7 +609,7 @@ let expire_remote_state_in_xsb (p: flowlog_program) : unit =
       | _ -> failwith "expire_remote_state_in_xsb: bad key formula" in 
 
     FmlaMap.iter (expire_remote_if_time p) !remote_cache;;
-    
+
   (* ASSUMPTION: event ids all same as their incoming relation name*)
 let inc_event_to_relnames (p: flowlog_program) (notif: event): string list =
   (built_in_supertypes notif.typeid);;
@@ -641,6 +643,7 @@ let respond_to_notification (p: flowlog_program) (notif: event): string list =
   (* populate the EDB with event *) 
     Communication.assert_event_and_subevents p notif;
 
+
     (* Expire remote state if needed*)
     expire_remote_state_in_xsb p;    
 
@@ -661,6 +664,8 @@ let respond_to_notification (p: flowlog_program) (notif: event): string list =
     end;
     write_log (sprintf "  *** WILL ADD: %s\n%!" (String.concat " ; " (map string_of_formula to_assert)));
     write_log (sprintf "  *** WILL DELETE: %s\n%!" (String.concat " ; " (map string_of_formula to_retract)));
+
+
     
    (**********************************************************)
    (* Prepare packets/events to be sent. *)
@@ -668,7 +673,7 @@ let respond_to_notification (p: flowlog_program) (notif: event): string list =
       be computed from same EDB, and BEFORE we retract the event *)
    (* for all declared outgoing events ...*)
     let outgoing_defns = (get_output_defns_triggered p notif) in
-    let prepared_output = flatten (map (prepare_output p) outgoing_defns) in
+    let prepared_output = flatten (map (prepare_output p notif) outgoing_defns) in
    (**********************************************************)
 
 
@@ -715,7 +720,10 @@ let respond_to_notification (p: flowlog_program) (notif: event): string list =
     modifications (* return tables that may have changed *)
 
   with
-   | Not_found -> Mutex.unlock xsbmutex; printf "Nothing to do for this event.\n%!"; [];
+   | Not_found -> 
+       Communication.retract_event_and_subevents p notif;   
+       Mutex.unlock xsbmutex;
+       if !global_verbose > 0 then printf "Nothing to do for this event.\n%!"; [];
    | exn -> 
       begin  
       Format.printf "Unexpected exception on event: %s\n----------\n%s\n%!"
