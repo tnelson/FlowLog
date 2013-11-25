@@ -297,15 +297,6 @@ module Communication = struct
 		statehash;;
 
   (**************)
-  (* improve this when we have more than strings running around *)
-    let pretty_print_constant (typename: string) (c: term): string =    
-      let strval = (match c with | TConst(s) -> s | _ -> failwith ("pretty_print_constant: non constant")) in
-      match typename with
-      | "ipaddr" -> Packet.string_of_ip (Int32.of_string strval)
-      | "macaddr" -> Packet.string_of_mac (Int64.of_string strval) 
-      | "portid" -> strval
-      | "switchid" -> strval
-      | _ -> strval;;
 
   let pretty_print_fact (tdecl: table_def) (f: formula): string =
     match f with
