@@ -14,9 +14,6 @@ open Partial_Eval_Validation
 
 let policy_recreation_thunk: (unit -> unit) option ref = ref None;;
 
-(* XSB is shared state. We also have the remember_for_forwarding and packet_queue business *)
-let xsbmutex = Mutex.create();;
-
 (* Map query formula to results and time obtained (floating pt in seconds) *)
 let remote_cache: (term list list* float) FmlaMap.t ref = ref FmlaMap.empty;;
 
@@ -105,11 +102,11 @@ let rec partial_evaluation (p: flowlog_program) (incpkt: string) (f: formula): f
         (match peresult with | FTrue -> FFalse | FFalse -> FTrue | _ -> FNot(peresult))
     | FOr(f1, f2) -> failwith "partial_evaluation: OR"              
     | FAtom(modname, relname, tlargs) ->  
-      (*printf ">> partial_evaluation on atomic %s\n%!" (string_of_formula f);*)
-      Mutex.lock xsbmutex;
+      (*printf ">> partial_evaluation on atomic %s\n%!" (string_of_formula f);*)      
+
+      (* No longer need to lock the mutex here, because called from respond_to_notification *)
       let xsbresults: (term list list) = get_state_maybe_remote p f in
-      (*printf "DISJUNCTS FROM ATOM: %d\n%!" (length xsbresults);       *)
-        Mutex.unlock xsbmutex;         
+      (*printf "DISJUNCTS FROM ATOM: %d\n%!" (length xsbresults);       *)        
         let disjuncts = map 
           (fun tl -> build_and (reassemble_xsb_equality incpkt tlargs tl)) 
           xsbresults in
@@ -520,8 +517,8 @@ let emit_packet (p: flowlog_program) (ev: event): unit =
   guarded_emit_push swid pt (marshal_packet ev);;  
 
 let send_event (p: flowlog_program) (ev: event) (ip: string) (pt: string): unit =
-  printf ">>> sending: %s\n%!" (string_of_event p ev);  
-  write_log (sprintf "sending: %s\n%!" (string_of_event p ev));
+  printf "sending: %s\n%!" (string_of_event p ev);  
+  write_log (sprintf ">>> sending: %s\n%!" (string_of_event p ev));
   doBBnotify ev ip pt;;
 
 let event_with_field (p: flowlog_program) (ev_so_far : event) (fieldn: string) (avalue: term) : event =    
@@ -634,11 +631,13 @@ let get_local_tables_triggered (p: flowlog_program) (sign: bool) (notif: event):
 
 (* Returns list of names of tables that have been modified *)
 let respond_to_notification (p: flowlog_program) (notif: event): string list =
-  try
+  try      
       Mutex.lock xsbmutex;
-      counter_inc_all := !counter_inc_all + 1;
+      ignore (Lwt_mutex.lock lwt_xsbmutex); (* may not be safe to ignore *)
 
+      write_log "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<";
       write_log (sprintf "<<< incoming: %s" (string_of_event p notif));
+      counter_inc_all := !counter_inc_all + 1;      
 
   (*printf "~~~~ RESPONDING TO NOTIFICATION ABOVE ~~~~~~~~~~~~~~~~~~~\n%!";*)
 
@@ -680,8 +679,7 @@ let respond_to_notification (p: flowlog_program) (notif: event): string list =
 
 
     (* depopulate event EDB *)
-    Communication.retract_event_and_subevents p notif;  
-    Mutex.unlock xsbmutex;  
+    Communication.retract_event_and_subevents p notif;      
 
     (* Return the tables that have actually being modified.
        TODO: not as smart as it could be: we aren't checking whether this stuff actually *changes the state*,
@@ -698,7 +696,7 @@ let respond_to_notification (p: flowlog_program) (notif: event): string list =
     iter Communication.assert_formula to_assert;
     if !global_verbose >= 2 then
     begin      
-      (*Xsb.debug_print_listings();*)
+      Xsb.debug_print_listings();
       Communication.get_and_print_xsb_state p;
     end;    
    (**********************************************************)   
@@ -712,6 +710,10 @@ let respond_to_notification (p: flowlog_program) (notif: event): string list =
       | None -> ());    
    (**********************************************************)
 
+   (* Unlock the mutex. Make sure nothing uses XSB outside of this.*)
+   Lwt_mutex.unlock lwt_xsbmutex;
+   Mutex.unlock xsbmutex;  
+
    (**********************************************************)
    (* Finally actually send output *)
     iter (execute_output p) prepared_output;
@@ -723,16 +725,20 @@ let respond_to_notification (p: flowlog_program) (notif: event): string list =
 
   with
    | Not_found -> 
-       Communication.retract_event_and_subevents p notif;   
+       Communication.retract_event_and_subevents p notif;  
+       Lwt_mutex.unlock lwt_xsbmutex; 
        Mutex.unlock xsbmutex;
        if !global_verbose > 0 then printf "Nothing to do for this event.\n%!"; [];
    | exn -> 
       begin  
-      Format.printf "Unexpected exception on event: %s\n----------\n%s\n%!"
-        (Printexc.to_string exn)
-        (Printexc.get_backtrace ());  
+        Format.printf "Unexpected exception on event. Event was: %s\n Exception: %s\n----------\n%s\n%!"
+          (string_of_event p notif)
+          (Printexc.to_string exn)
+          (Printexc.get_backtrace ());  
         Xsb.halt_xsb();    
-        exit(101);
+        Lwt_mutex.unlock lwt_xsbmutex;
+        Mutex.unlock xsbmutex;        
+        exit(101);        
       end;;
 
 (* Frenetic reports every switch has a port 65534. *)
@@ -782,6 +788,7 @@ let make_policy_stream (p: flowlog_program)
     and 
     (* the thunk needs to know the pkt callback, the pkt callback invokes the thunk. so need "and" *)
     trigger_policy_recreation_thunk (): unit = 
+      write_log (sprintf "** policy recreation thunk triggered. lock = %b\n" (test_mutex_lock()));
       if not notables then
       begin
         (* Update the policy *)

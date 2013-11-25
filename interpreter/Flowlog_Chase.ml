@@ -67,6 +67,7 @@ let test_rule_containment (prgm: flowlog_program) (cl: clause): pmodel option =
   else Some db;;
 
 let build_chase_containment (prgm1: flowlog_program) (prgm2: flowlog_program): pmodel list =
+  Mutex.lock xsbmutex;
   (* reset XSB *)  
   Xsb.halt_xsb();
   (* Hand XSB the clauses of the program we're leaving intact *)
@@ -75,11 +76,13 @@ let build_chase_containment (prgm1: flowlog_program) (prgm2: flowlog_program): p
   (* Hand XSB "xor" axioms for relations *)
 
   (* test each rule of the program we're breaking up *)
-  fold_left (fun (acc: pmodel list) (cl: clause) -> 
+  let result = fold_left (fun (acc: pmodel list) (cl: clause) -> 
       match test_rule_containment prgm1 cl with
         | Some missed -> missed::acc
         | None -> acc)
-    [] prgm1.clauses;;
+    [] prgm1.clauses in 
+    Mutex.unlock xsbmutex;
+    result;;
 
 let build_chase_equivalence (prgm1: flowlog_program) (prgm2: flowlog_program): pmodel list =
   build_chase_containment prgm1 prgm2 @ 

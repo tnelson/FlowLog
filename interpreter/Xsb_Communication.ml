@@ -13,8 +13,18 @@ open Flowlog_Thrift_Out
 open Str
 open ExtList.List
 
+(* XSB is shared state. We also have the remember_for_forwarding and packet_queue business *)
+let xsbmutex = Mutex.create();;
+let lwt_xsbmutex = Lwt_mutex.create();;
+let test_mutex_lock (): bool = 
+	printf "lwtxsb locked: %b. empty: %b.\n%!" (Lwt_mutex.is_locked lwt_xsbmutex) (Lwt_mutex.is_empty lwt_xsbmutex);
+	let result = Mutex.try_lock xsbmutex in
+		(* If try_lock returns true, then the mutex was UNLOCKED and we just locked it here.*)
+		if result then Mutex.unlock xsbmutex;
+		result;;
+
 (* Enable insanely verbose debugging info *)
-let debug = false;;
+let debug = true;;
 
 let count_assert_formula = ref 0;;
 let count_retract_formula = ref 0;;
@@ -53,7 +63,8 @@ module Xsb = struct
 		(* to enable restart *)
 	    ref_out_ch := None;
 	    ref_in_ch := None;
-	    ref_err_ch := None;;
+	    ref_err_ch := None;
+	    printf "HALTED XSB.\n%!";;
 
 	(* Flush out the error buffer. *)
 	let print_or_flush_errors (print_too: bool) : unit =
@@ -118,7 +129,7 @@ module Xsb = struct
 		  (* to turn on error printing, pass true. 
 		     we flush the error stream every notification to prevent it from filling up,
 		     which would cause XSB to block. *)
-		  print_or_flush_errors false;;		  
+		  print_or_flush_errors false;;		      
 
 	let print_statistics(): unit =
 	    Printf.printf "---------------- STATISTICS ----------------\n%!";
@@ -133,7 +144,7 @@ module Xsb = struct
 	(* This takes in a string command (not query, this doesn't deal with the semicolons).
 	It writes the command to xsb and returns the resulting text. *)
 	let send_assert (str : string) : string =
-	    if debug then Printf.printf "send_assert: %s\n%!" str;
+	    if debug then Printf.printf "send_assert: %s (mutex: %b)\n%!" str (test_mutex_lock());
 		let out_ch, in_ch = get_ch () in
 
 
@@ -195,25 +206,31 @@ module Xsb = struct
 	 and the number of variables involved.
 	 It writes the query to xsb and returns the results as a list of tuples. *)
 	let send_query (str : string) (num_vars : int) : (string list) list =
-	    if debug then Printf.printf "send_query: %s (#vars: %d)\n%!" str num_vars;
-		let out_ch, in_ch = get_ch () in
+	    if debug then Printf.printf "send_query: %s (#vars: %d) (mutex: %b)\n%!" str num_vars (test_mutex_lock());
+	    
+	    let answer = ref [] in
+		let next_str = ref "" in        								
+		(try					
+			let out_ch, in_ch = get_ch () in		       		
+			(* Send the query *)
+			output_string out_ch (str ^ "\n");		
+			flush out_ch;		
+				
+			while not (ends_with !next_str "no") && not (ends_with !next_str "yes") do				
+	            next_str := get_line_gingerly in_ch ~printerror:true;		  		
+	            printf "got: %s\n%!" !next_str;		
+				next_str := String.trim (Str.global_replace (Str.regexp "| \\?-") "" !next_str);
+                printf "rewrote as: %s\n%!" !next_str;										
 
-		(* Send the query *)
-		output_string out_ch (str ^ "\n");
-		flush out_ch;
-		
-		let answer = ref [] in
-		let next_str = ref "" in        				
-		while not (ends_with !next_str "no") && not (ends_with !next_str "yes") do			
-            next_str := get_line_gingerly in_ch ~printerror:true;		  		
-			next_str := String.trim (Str.global_replace (Str.regexp "| \\?-") "" !next_str);
-						
-			(* may get a blank line. if so, ignore it. terminate only on "no" *)
-			if (String.length !next_str > 0) && !next_str <> "no" then 			
-				answer := (remove_from_end !next_str "no") :: !answer				
-		done;
+				(* may get a blank line. if so, ignore it. terminate only on "no" *)
+				if (String.length !next_str > 0) && (!next_str <> "no") && (!next_str <> "yes") then 			
+					answer := (remove_from_end (remove_from_end !next_str "no") "yes") :: !answer;				
+			done
+		with exn ->	printf "send_query encountered an error. Terminating.\n%!";
+		           	printf "%s\n%!" (Printexc.to_string exn);
+		           	exit(100));
 
-		if debug then Printf.printf "send_query finished. answers: [%s]\n%!" (String.concat ", " !answer);	
+		if debug then Printf.printf "send_query finished. answers: [%s]\n\n%!" (String.concat ", " !answer);	
 		if !global_verbose >= 1 then count_send_query := !count_send_query + 1;	
 		(* separate the list into a list of lists *)
 		List.map (fun (l : string list) -> List.map after_equals l) (group (List.rev !answer) num_vars);;
@@ -302,7 +319,7 @@ module Communication = struct
     match f with
       | FAtom(_, rname, rargs) when (length rargs) = (length tdecl.tablearity) -> 
         sprintf "%s(%s)." rname (String.concat ", " (map2 pretty_print_constant tdecl.tablearity rargs))
-      | _ -> failwith "pretty_print_fact";;
+      | _ -> failwith ("pretty_print_fact: "^(string_of_formula f));;
 
   let get_and_print_xsb_state (p: flowlog_program): unit = 
     let currstate = get_full_state_for_program p in       
