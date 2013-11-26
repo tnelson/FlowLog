@@ -710,10 +710,6 @@ let respond_to_notification (p: flowlog_program) (notif: event): string list =
       | None -> ());    
    (**********************************************************)
 
-   (* Unlock the mutex. Make sure nothing uses XSB outside of this.*)
-   Lwt_mutex.unlock lwt_xsbmutex;
-   Mutex.unlock xsbmutex;  
-
    (**********************************************************)
    (* Finally actually send output *)
     iter (execute_output p) prepared_output;
@@ -721,6 +717,11 @@ let respond_to_notification (p: flowlog_program) (notif: event): string list =
 
     printf "~~~~~~~~~~~~~~~~~~~FINISHED EVENT (%d total, %d packets) ~~~~~~~~~~~~~~~\n%!"
           !counter_inc_all !counter_inc_pkt;
+
+   (* Unlock the mutex. Make sure nothing uses XSB outside of this.*)
+   Lwt_mutex.unlock lwt_xsbmutex;
+   Mutex.unlock xsbmutex;  
+
     modifications (* return tables that may have changed *)
 
   with
@@ -788,7 +789,7 @@ let make_policy_stream (p: flowlog_program)
     and 
     (* the thunk needs to know the pkt callback, the pkt callback invokes the thunk. so need "and" *)
     trigger_policy_recreation_thunk (): unit = 
-      write_log (sprintf "** policy recreation thunk triggered. lock = %b\n" (test_mutex_lock()));
+      write_log (sprintf "** policy recreation thunk triggered.\n");
       if not notables then
       begin
         (* Update the policy *)

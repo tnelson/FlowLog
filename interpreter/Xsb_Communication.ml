@@ -144,7 +144,7 @@ module Xsb = struct
 	(* This takes in a string command (not query, this doesn't deal with the semicolons).
 	It writes the command to xsb and returns the resulting text. *)
 	let send_assert (str : string) : string =
-	    if debug then Printf.printf "send_assert: %s (mutex: %b)\n%!" str (test_mutex_lock());
+	    if debug then Printf.printf "send_assert: %s\n%!" str;
 		let out_ch, in_ch = get_ch () in
 
 
@@ -206,7 +206,7 @@ module Xsb = struct
 	 and the number of variables involved.
 	 It writes the query to xsb and returns the results as a list of tuples. *)
 	let send_query (str : string) (num_vars : int) : (string list) list =
-	    if debug then Printf.printf "send_query: %s (#vars: %d) (mutex: %b)\n%!" str num_vars (test_mutex_lock());
+	    if debug then Printf.printf "send_query: %s (#vars: %d)\n%!" str num_vars;
 	    
 	    let answer = ref [] in
 		let next_str = ref "" in        								
