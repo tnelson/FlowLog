@@ -279,7 +279,7 @@ module Communication = struct
 		if num_ans > 0 then
 		    let strresults = Xsb.send_query message num_ans in
 		    let tupresults = map (fun tuplestr -> map reassemble_xsb_term tuplestr) strresults in
-		      if debug then printf "term results: %s\n%!" (String.concat " " (map (fun l -> "["^(String.concat "," (map string_of_term l))^"]") tupresults));
+		      if !global_verbose >= 10 then printf "term results: %s\n%!" (String.concat " " (map (fun l -> "["^(String.concat "," (map string_of_term l))^"]") tupresults));
 		      tupresults
 	    else 
 	        let yn = Xsb.send_assert message in

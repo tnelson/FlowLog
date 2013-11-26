@@ -520,15 +520,19 @@ let event_with_field (p: flowlog_program) (ev_so_far : event) (fieldn: string) (
     | _ -> failwith ("event_with_field:"^(string_of_term avalue));;
 
 let prepare_output (p: flowlog_program) (incoming_event: event) (defn: outgoing_def): (event * spec_out) list =  
-    let fieldnames = (match defn.outarity,defn.react with
-                          | FixedEvent(evname),_ -> get_fields_for_type p evname
+    let arities = (match defn.outarity,defn.react with
+                          | FixedEvent(evname),_ -> [get_fields_for_type p evname]
                           (*| AnyFields,OutPrint -> init (length tup) (fun i -> "x"^(string_of_int i))  *)
-                          | SameAsOnFields,OutForward -> get_valid_fields_for_input_rel p incoming_event.typeid
+                         
+                          (* Not necessarily only ONE arity! Get them all.
+                             automatic dlTyp/nwProto checks should prevent overlaps. *)
+                          | SameAsOnFields,OutForward -> (map (get_valid_fields_for_input_rel p) (built_in_supertypes incoming_event.typeid))
+
                           | _ -> failwith "prepare_tuple") in
 
-    let prepare_tuple (tup: term list): (event * spec_out) =
+    let prepare_tuple (fieldnames: string list) (tup: term list): (event * spec_out) =
       (*printf "PREPARING OUTPUT... tuple: %s\n%!" (String.concat ";" (map string_of_term tup));*)
-      (* arglist orders the xsb results. assigns says how to use them, spec how to send them. *)
+      (* arglist orders the xsb results. assigns says how to use them, spec how to send them. *)      
       let initev = (match defn.react with 
                 | OutForward -> {typeid = incoming_event.typeid; values=StringMap.empty}      
                 | OutEmit(typ) -> {typeid = typ; values=StringMap.empty}      
@@ -538,10 +542,19 @@ let prepare_output (p: flowlog_program) (incoming_event: event) (defn: outgoing_
       let ev = fold_left2 (event_with_field p) initev fieldnames tup in          
         (ev, defn.react) in
       
-      (* query xsb for this output relation *)        
-      let xsb_results = (Communication.get_state (FAtom("", defn.outname, map (fun s -> TVar(s)) fieldnames))) in                    
+      let prepare_tuples (tupswithfields: string list * term list list): (event * spec_out) list = 
+        let fieldnames, tups = tupswithfields in 
+          fold_left (fun acc tup -> (prepare_tuple fieldnames tup) :: acc) [] tups in 
+
+      (* query xsb for this output relation *)  
+      (* May have multiple queries to make in the case of forward: Suppose an IP packet arrives, but the program
+         has rules for ON packet(p) and ON ip_packet(p). These have different arities. We must reduce the event and 
+         query for each subtype. *)      
+      let xsb_results_with_fieldnames = 
+        fold_left (fun acc fieldnames -> 
+                    (fieldnames, Communication.get_state (FAtom("", defn.outname, map (fun s -> TVar(s)) fieldnames))) :: acc) [] arities in                    
       (* return the results to be executed later *)
-      map prepare_tuple xsb_results;;
+      fold_left (fun acc tupswf -> (prepare_tuples tupswf) @ acc) [] xsb_results_with_fieldnames;;
 
 let execute_output (p: flowlog_program) ((ev, spec): event * spec_out) : unit =
   match spec with 
@@ -604,6 +617,7 @@ let expire_remote_state_in_xsb (p: flowlog_program) : unit =
 let inc_event_to_relnames (p: flowlog_program) (notif: event): string list =
   (built_in_supertypes notif.typeid);;
 
+(* Which definitions need triggering by this notification? *)
 let get_output_defns_triggered (p: flowlog_program) (notif: event): outgoing_def list =    
   let inrelnames = inc_event_to_relnames p notif in
   let outrelnames = fold_left (fun acc inrel -> (Hashtbl.find_all p.memos.out_triggers inrel ) @ acc) [] inrelnames in
@@ -662,11 +676,10 @@ let respond_to_notification (p: flowlog_program) (notif: event): string list =
    (* Prepare packets/events to be sent. *)
    (* This must be done BEFORE xsb is updated (output + updates must
       be computed from same EDB, and BEFORE we retract the event *)
-   (* for all declared outgoing events ...*)
+   (* for all potentially-triggered outgoing events ...*)
     let outgoing_defns = (get_output_defns_triggered p notif) in
     let prepared_output = flatten (map (prepare_output p notif) outgoing_defns) in
    (**********************************************************)
-
 
     (* depopulate event EDB *)
     Communication.retract_event_and_subevents p notif;      

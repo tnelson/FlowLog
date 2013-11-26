@@ -398,7 +398,7 @@ let rec built_in_supertypes (typename: string): string list =
 let flavor_to_field_decls (flav: packet_flavor): (string * typeid) list =
   let typename = flavor_to_typename flav in
   let supertypes = built_in_supertypes typename in
-  let fieldslist = (fold_left (fun acc supertype -> acc @ (StringMap.find supertype map_from_typename_to_flavor).fields) [] supertypes) in
+  let fieldslist = (fold_left (fun acc supertype -> (StringMap.find supertype map_from_typename_to_flavor).fields @ acc) [] supertypes) in
   let check_for_dupes = unique fieldslist in
   if (length fieldslist) <> (length check_for_dupes) then
     failwith ("Packet flavor "^flav.label^" had duplicate fieldnames when parent flavor fields were added.")
