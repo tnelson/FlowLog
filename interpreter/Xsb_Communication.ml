@@ -193,7 +193,8 @@ module Xsb = struct
 		let varoutfrags = map (fun varstr -> sprintf "write('%s='), writeln(_%s)" varstr varstr) varstrs in 
 		let fstr = (string_of_formula ~verbose:XsbAddUnderscoreVars f) in		
 		    (* printf "%s\n(%s, %s, fail).\n%!" (string_of_formula f) fstr (String.concat "," varoutfrags);*)
-			sprintf "(%s, %s, fail)." fstr (String.concat "," varoutfrags);;
+		    (* The setof construct wrapped around the formula prevents duplicate results *)
+			sprintf "(setof(t, %s, _), %s, fail)." fstr (String.concat "," varoutfrags);;
 
 	(* Takes a string query (thing with semicolon answers), 
 	 and the number of variables involved.
