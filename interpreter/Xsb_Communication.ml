@@ -328,14 +328,15 @@ module Communication = struct
 	  let fpflag = if forcepositive then XsbForcePositive else XsbAddUnderscoreVars in
 		(string_of_formula ~verbose:fpflag cls.head)^" :- "^(string_of_formula ~verbose:fpflag cls.body);;
 
-	(* Substitute notif vars for their fields and produce a string for XSB to consume *)	
+	(* Substitute notif vars for their fields and produce a string for XSB to consume *)
+	(* We need to have a (possible) ON context for dealing with the forward relation *)	
 	let rec subs_xsb_formula (prgm: flowlog_program) ?(context_on: event_def option = None) (f: formula): formula =
 		match f with
 		| FTrue -> FTrue
 		| FFalse -> FFalse
-		| FNot(innerf) -> FNot(subs_xsb_formula prgm innerf)
-		| FAnd(f1, f2) -> FAnd(subs_xsb_formula prgm f1, subs_xsb_formula prgm f2)
-		| FOr(f1, f2) -> FOr(subs_xsb_formula prgm f1, subs_xsb_formula prgm f2)
+		| FNot(innerf) -> FNot(subs_xsb_formula prgm ~context_on:context_on innerf)
+		| FAnd(f1, f2) -> FAnd(subs_xsb_formula prgm ~context_on:context_on f1, subs_xsb_formula prgm ~context_on:context_on f2)
+		| FOr(f1, f2) -> FOr(subs_xsb_formula prgm ~context_on:context_on f1, subs_xsb_formula prgm ~context_on:context_on f2)
 		| FEquals(_, _) -> f
 		| FAtom(modname, relname, tlargs) ->
 			let subsarglists = mapi (decls_expand_fields prgm modname relname context_on) tlargs in
@@ -358,11 +359,16 @@ module Communication = struct
 	let retract_event_and_subevents (p: flowlog_program) (notif: event): unit = 
 			iter retract_formula (inc_event_to_formulas p notif);;
 
+	let get_on_context (p: flowlog_program) (c: clause): event_def option =
+	  Some (get_event p c.orig_rule.onrel);;
+		
+
 	let start_clause (prgm: flowlog_program) ?(forcepositive = false) (cls : clause) : unit =
 		(*if debug then print_endline ("start_clause: assert((" ^ (Type_Helpers.clause_to_string cls) ^ ")).");
 		if debug then (List.iter (fun t -> (Printf.printf "var: %s\n%!" (Type_Helpers.term_to_string t))) (get_vars cls));*)
-		let new_head = subs_xsb_formula prgm cls.head in
-		let new_body = subs_xsb_formula prgm cls.body in		
+		let on_context = get_on_context prgm cls in
+		let new_head = subs_xsb_formula prgm ~context_on:on_context cls.head in
+		let new_body = subs_xsb_formula prgm ~context_on:on_context cls.body in		
 		printf "start_clause substituted: %s :- %s" (string_of_formula ~verbose:Xsb new_head) (string_of_formula ~verbose:Xsb new_body);
 		let subs_cls = {head = new_head; 
 		                body = new_body;

@@ -18,9 +18,9 @@
  *
  ******************************************************************************/
 
-EVENT atv_connect { atv_mac, client_mac };
-EVENT atv_announce { atv_mac, client_mac };
-EVENT atv_disconnect { mac };
+EVENT atv_connect { atv_mac: macaddr, client_mac: macaddr };
+EVENT atv_announce { atv_mac: macaddr, client_mac: macaddr };
+EVENT atv_disconnect { mac: macaddr };
 
 TABLE atv_cxns(macaddr, macaddr);
 
@@ -106,9 +106,9 @@ ON atv_disconnect(evt):
  *
  ******************************************************************************/
 
-ON udp_packet_in(pkt) WHERE pkt.dlDst = 0x01005e0000fb and // mDNS IPv4 ethernet address
-                            pkt.nwDst = 0xE00000FB and // 224.0.0.251 (mDNS group)
-                            pkt.tpDst = 5353: // (mDns port)
+ON udp_packet(pkt) WHERE pkt.dlDst = 0x01005e0000fb and // mDNS IPv4 ethernet address
+                         pkt.nwDst = 0xE00000FB and // 224.0.0.251 (mDNS group)
+                         pkt.tpDst = 5353: // (mDns port)
 
   DO forward(new) WHERE
     atv_cxns(pkt.dlSrc, new.dlDst) and
