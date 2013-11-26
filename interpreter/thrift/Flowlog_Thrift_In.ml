@@ -60,12 +60,11 @@ object (self)
          [] fieldlist in
 
         let ev: event = {typeid = ntypestr; values = construct_map vals} in
-          ignore (respond_to_notification the_program ev);      
-          guarded_refresh_policy();
+          ignore (respond_to_notification the_program ev);                
 
     with 
       | Not_found -> (Printf.printf "   *** Nothing to be done with this notification.\n%!")     
-      | Failure(msg) -> (Printf.printf "   *** ERROR! Ignoring notification for reason: %s\n%!" msg)
+      | Failure(msg) -> (Printf.printf "   *** ERROR! Ignoring notification (type=%s) for reason: %s\n%!" ntypestr msg)
 
 end
 

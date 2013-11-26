@@ -53,8 +53,7 @@ let run_flowlog (p: flowlog_program): unit Lwt.t =
   (* Start the policy stream *)
   (* >> is from Lwt's Pa_lwt. But you MUST have -syntax camlp4o or it won't be recoginized. *)   
   OpenFlow0x01_Platform.init_with_port !listenPort >>
-    let (trigger_re_policy_func, (gen_stream, stream)) = (make_policy_stream p !notables !reportall) in
-    refresh_policy := Some trigger_re_policy_func;
+    let (trigger_re_policy_func, (gen_stream, stream)) = (make_policy_stream p !notables !reportall) in    
 
     (* streams for incoming/exiting packets *)
     let (pkt_stream, push_pkt) = Lwt_stream.create () in        

@@ -15,16 +15,9 @@ open ExtList.List
 
 (* XSB is shared state. We also have the remember_for_forwarding and packet_queue business *)
 let xsbmutex = Mutex.create();;
-let lwt_xsbmutex = Lwt_mutex.create();;
-let test_mutex_lock (): bool = 
-	printf "lwtxsb locked: %b. empty: %b.\n%!" (Lwt_mutex.is_locked lwt_xsbmutex) (Lwt_mutex.is_empty lwt_xsbmutex);
-	let result = Mutex.try_lock xsbmutex in
-		(* If try_lock returns true, then the mutex was UNLOCKED and we just locked it here.*)
-		if result then Mutex.unlock xsbmutex;
-		result;;
 
 (* Enable insanely verbose debugging info *)
-let debug = true;;
+let debug = false;;
 
 let count_assert_formula = ref 0;;
 let count_retract_formula = ref 0;;
@@ -217,10 +210,8 @@ module Xsb = struct
 			flush out_ch;		
 				
 			while not (ends_with !next_str "no") && not (ends_with !next_str "yes") do				
-	            next_str := get_line_gingerly in_ch ~printerror:true;		  		
-	            printf "got: %s\n%!" !next_str;		
-				next_str := String.trim (Str.global_replace (Str.regexp "| \\?-") "" !next_str);
-                printf "rewrote as: %s\n%!" !next_str;										
+	            next_str := get_line_gingerly in_ch ~printerror:true;		  			            
+				next_str := String.trim (Str.global_replace (Str.regexp "| \\?-") "" !next_str);                
 
 				(* may get a blank line. if so, ignore it. terminate only on "no" *)
 				if (String.length !next_str > 0) && (!next_str <> "no") && (!next_str <> "yes") then 			
@@ -286,7 +277,9 @@ module Communication = struct
 		if !global_verbose >= 10 then (printf "send_message: %s (expected: %d)\n%!" message num_ans);
 		if num_ans > 0 then
 		    let strresults = Xsb.send_query message num_ans in
-		      map (fun tuplestr -> map reassemble_xsb_term tuplestr) strresults
+		    let tupresults = map (fun tuplestr -> map reassemble_xsb_term tuplestr) strresults in
+		      if debug then printf "term results: %s\n%!" (String.concat " " (map (fun l -> "["^(String.concat "," (map string_of_term l))^"]") tupresults));
+		      tupresults
 	    else 
 	        let yn = Xsb.send_assert message in
 		        if (ends_with yn "yes") then [[]]

@@ -17,21 +17,12 @@ let policy_recreation_thunk: (unit -> unit) option ref = ref None;;
 (* Map query formula to results and time obtained (floating pt in seconds) *)
 let remote_cache: (term list list* float) FmlaMap.t ref = ref FmlaMap.empty;;
 
-(* (unit->unit) option *)
-(* Trigger thunk to refresh policy in stream. *)
-let refresh_policy = ref None;;
-
 (* action_atom list = atom *)
 let fwd_actions = ref [];;
 
 (* Push function for packet stream. Used to emit rather than forward. *)
 (* Not sure why the input can be option. *)
 let emit_push: ((NetCore_Types.switchId * NetCore_Types.portId * Packet.bytes) option -> unit) option ref = ref None;;
-
-let guarded_refresh_policy () : unit = 
-  match !refresh_policy with
-    | None -> printf "Policy has not been created yet. Error!\n%!"
-    | Some f -> f();;
 
 let guarded_emit_push (swid: switchId) (pt: portId) (bytes: Packet.bytes): unit = 
   match !emit_push with
@@ -633,7 +624,6 @@ let get_local_tables_triggered (p: flowlog_program) (sign: bool) (notif: event):
 let respond_to_notification (p: flowlog_program) (notif: event): string list =
   try      
       Mutex.lock xsbmutex;
-      ignore (Lwt_mutex.lock lwt_xsbmutex); (* may not be safe to ignore *)
 
       write_log "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<";
       write_log (sprintf "<<< incoming: %s" (string_of_event p notif));
@@ -696,7 +686,7 @@ let respond_to_notification (p: flowlog_program) (notif: event): string list =
     iter Communication.assert_formula to_assert;
     if !global_verbose >= 2 then
     begin      
-      Xsb.debug_print_listings();
+      (*Xsb.debug_print_listings();*)
       Communication.get_and_print_xsb_state p;
     end;    
    (**********************************************************)   
@@ -718,16 +708,13 @@ let respond_to_notification (p: flowlog_program) (notif: event): string list =
     printf "~~~~~~~~~~~~~~~~~~~FINISHED EVENT (%d total, %d packets) ~~~~~~~~~~~~~~~\n%!"
           !counter_inc_all !counter_inc_pkt;
 
-   (* Unlock the mutex. Make sure nothing uses XSB outside of this.*)
-   Lwt_mutex.unlock lwt_xsbmutex;
-   Mutex.unlock xsbmutex;  
-
+    (* Unlock the mutex. Make sure nothing uses XSB outside of this.*)   
+    Mutex.unlock xsbmutex;  
     modifications (* return tables that may have changed *)
 
   with
    | Not_found -> 
        Communication.retract_event_and_subevents p notif;  
-       Lwt_mutex.unlock lwt_xsbmutex; 
        Mutex.unlock xsbmutex;
        if !global_verbose > 0 then printf "Nothing to do for this event.\n%!"; [];
    | exn -> 
@@ -737,7 +724,6 @@ let respond_to_notification (p: flowlog_program) (notif: event): string list =
           (Printexc.to_string exn)
           (Printexc.get_backtrace ());  
         Xsb.halt_xsb();    
-        Lwt_mutex.unlock lwt_xsbmutex;
         Mutex.unlock xsbmutex;        
         exit(101);        
       end;;
