@@ -379,6 +379,13 @@ let map_from_relname_to_flavor: packet_flavor StringMap.t =
                                            (StringMap.add (flavor_to_inrelname flav) flav acc))
             StringMap.empty packet_flavors;;
 
+let get_superflavor_typename (typename: string): typeid option = 
+  try 
+    match (StringMap.find typename map_from_typename_to_flavor).superflavor with
+      | Some(l) -> Some(flavor_to_typename (StringMap.find l map_from_label_to_flavor))
+      | None -> None
+  with Not_found -> None;;
+
 (*************************************************************)
 
 (* If adding a new packet type, make sure to include self and all supertypes here. *)

@@ -50,7 +50,7 @@ type typeid = string;;
 
   type spec_out = 
       | OutForward
-      | OutEmit of string
+      | OutEmit of typeid
       | OutLoopback
       | OutPrint 
       | OutSend of typeid * string * string;;

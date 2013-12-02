@@ -32,18 +32,37 @@ sig Ipaddr {}
 sig Ethtyp {}
 sig Portid {} 
 sig Nwprotocol {}
+// TODO: If a base type is unused, don't declare it. 
+sig UdpPort {}
+sig TcpPort {}
 
 sig FLString {} 
 sig FLInt{} 
+";;
 
-sig EVpacket extends Event
+(* These functions take the _relation name_, not the event name
+   (same for rule_uses, though) *)
+let plus_rule_exists (p: flowlog_program) (tblname: string): bool =
+  exists (fun cl -> match cl.orig_rule.action with 
+    | AInsert(rtbl, _, _) when tblname = rtbl -> true
+    | _ -> false) p.clauses;;
+let minus_rule_exists (p: flowlog_program) (tblname: string): bool =
+  exists (fun cl -> match cl.orig_rule.action with 
+    | ADelete(rtbl, _, _) when tblname = rtbl -> true
+    | _ -> false) p.clauses;;
+let do_rule_exists (p: flowlog_program) (tblname: string): bool =
+  exists (fun cl -> match cl.orig_rule.action with 
+    | ADo(rtbl, _, _) when tblname = rtbl -> true
+    | _ -> false) p.clauses;;
+let rule_uses (p: flowlog_program) (tblname: string): bool =
+  exists (fun cl -> cl.orig_rule.onrel = tblname) p.clauses;;
+
+
+(*sig EVpacket extends Event
            {locsw: Switchid, locpt: Portid,
             dlsrc: Macaddr, dldst: Macaddr, dltyp: Ethtyp,
             nwsrc: Ipaddr, nwdst: Ipaddr, nwproto: Nwprotocol }
-sig EVstartup extends Event {}
-sig EVswitch_port extends Event { sw: Switchid, pt: Portid}
-sig EVswitch_down extends Event { sw: Switchid }
-";;
+*)
 
 (**********************************************************)
 (* Identify the constants (like "0x1001") used and declare them. *)
@@ -58,19 +77,30 @@ let alloy_constants (out: out_channel) (p: flowlog_program): unit =
 (* Every program's declared notifications need a sig... *)
 (* ...and an extensional constraint *)
 
+let event_is_used (p: flowlog_program) (evname: string): bool = 
+  (* This event triggers a rule, or some outgoing_def triggered by a DO rule sends this event. *)
+  let outrels_for_event = (filter_map (fun outd -> (match outd.react with 
+      | OutSend(evn, _, _) when evn = evname -> Some(outd.outname)
+      | OutEmit(evn) when evn = evname -> Some(outd.outname)
+      | _ -> None)) p.outgoings) in
+  (rule_uses p evname) || (exists (fun outrel -> do_rule_exists p outrel) outrels_for_event);;
+
+let alloy_fieldtype (fldtype: string): string = 
+  match fldtype with 
+  | "string" -> "FLString"
+  | "int" -> "FLInt"
+  | _ -> String.capitalize fldtype;;
+
 let alloy_declares (out: out_channel) (p: flowlog_program): unit =
   let declare_event (decl: sdecl) =
     match decl with
-      | DeclEvent(evname, evfields) as ev ->  
-        (* don't declare events we've already declared stock. *)
-        if not (mem ev built_in_decls) then
-        begin
+      | DeclEvent(evname, evfields) when event_is_used p evname ->  
           let ifislone = if length evfields > 0 then "" else "lone " in
-            fprintf out "%ssig EV%s extends Event {\n%!" ifislone evname;
-            let flddecls = map (fun (fldname,fldtype) -> (sprintf "    %s: one %s") fldname fldtype) evfields in 
+          let supertypename = (match (get_superflavor_typename evname) with | Some(super) -> ("EV"^super) | None -> "Event") in
+            fprintf out "%ssig EV%s extends %s {\n%!" ifislone evname supertypename;
+            let flddecls = map (fun (fldname,fldtype) -> (sprintf "    %s: one %s") fldname (alloy_fieldtype fldtype)) evfields in 
               fprintf out "%s%!" (String.concat ",\n" flddecls);
               fprintf out "}\n\n%!";
-        end;
 
         if length evfields > 0 then 
         begin
@@ -78,8 +108,8 @@ let alloy_declares (out: out_channel) (p: flowlog_program): unit =
           let fieldequals = (map (fun (fld, _) -> sprintf "ev1.%s = ev2.%s" fld fld) evfields) in
           let fieldsequal = String.concat " && " fieldequals in 
             fprintf out "(%s) implies ev1 = ev2}\n\n%!" fieldsequal;
-        end;
-      | _ -> failwith "declare_event"
+        end;      
+      | _ -> ()
   in
   	iter declare_event (filter (function | DeclEvent(_,_) -> true | _ -> false) p.desugared_decls);;
 
@@ -236,20 +266,6 @@ let alloy_actions (out: out_channel) (p: flowlog_program): unit =
                    StringMap.empty in
   StringMap.iter (fun outrel predstr -> fprintf out "%s\n%!" predstr) rulestrs;;
 
-
-let plus_rule_exists (p: flowlog_program) (tblname: string): bool =
-  exists (fun cl -> match cl.orig_rule.action with 
-    | AInsert(rtbl, _, _) when tblname = rtbl -> true
-    | _ -> false) p.clauses;;
-let minus_rule_exists (p: flowlog_program) (tblname: string): bool =
-  exists (fun cl -> match cl.orig_rule.action with 
-    | ADelete(rtbl, _, _) when tblname = rtbl -> true
-    | _ -> false) p.clauses;;
-let do_rule_exists (p: flowlog_program) (tblname: string): bool =
-  exists (fun cl -> match cl.orig_rule.action with 
-    | ADo(rtbl, _, _) when tblname = rtbl -> true
-    | _ -> false) p.clauses;;
-
 (**********************************************************)
 (* transition: st x ev x st 
    (note this is a slight deviation from the language: packet-in becomes an event) *)
@@ -274,13 +290,13 @@ let alloy_transition (out: out_channel) (p: flowlog_program): unit =
     fprintf out "}\n\n%!";;
 
 let alloy_outpolicy (out: out_channel) (p: flowlog_program): unit =
-  let alloy_out_difference (d: outgoing_def): string =
+  let alloy_out_difference (d: outgoing_def): string option =
     if do_rule_exists p d.outname then
-      sprintf "  %s[st1, ev, ev2]" d.outname              
-    else "false[]" 
+      Some(sprintf "  %s[st1, ev, ev2]" d.outname)
+    else None
   in
     fprintf out "pred outpolicy[st1: State, ev: Event, ev2: Event] { \n%!";
-    fprintf out "%s" (String.concat " ||\n" (map alloy_out_difference p.outgoings)); 
+    fprintf out "%s" (String.concat " ||\n" (filter_map alloy_out_difference p.outgoings)); 
     fprintf out "}\n%!";;
 
 (**********************************************************)
