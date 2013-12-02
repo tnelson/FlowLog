@@ -86,14 +86,14 @@ let main () =
     printf "-----------\n%!";    
 
     if !alloy then 
-      write_as_alloy program (alloy_filename filename)
+      write_as_alloy None program (alloy_filename filename)
     else if !cimp then
     begin
       let filename2 = try hd (tl !args) with exn -> raise (Failure "Input a second .flg file name for use with change-impact.") in 
       let ast2 = read_ast filename2 in
       let program2 = (desugared_program_of_ast ast2 filename2) in
         write_as_alloy_change_impact program (alloy_filename filename) 
-                                     program2 (alloy_filename filename)
+                                     program2 (alloy_filename filename2)
     end
     else if !cimpuniform then    
     begin

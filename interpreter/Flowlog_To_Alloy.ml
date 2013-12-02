@@ -58,94 +58,11 @@ let rule_uses (p: flowlog_program) (tblname: string): bool =
   exists (fun cl -> cl.orig_rule.onrel = tblname) p.clauses;;
 
 
-(*sig EVpacket extends Event
-           {locsw: Switchid, locpt: Portid,
-            dlsrc: Macaddr, dldst: Macaddr, dltyp: Ethtyp,
-            nwsrc: Ipaddr, nwdst: Ipaddr, nwproto: Nwprotocol }
-*)
-
-(**********************************************************)
-(* Identify the constants (like "0x1001") used and declare them. *)
-let alloy_constants (out: out_channel) (p: flowlog_program): unit =
-  let constants = fold_left (fun acc cl -> unique ( acc @ (get_terms (function | TConst(_) -> true | _ -> false) cl.body)))
-                  []
-                  p.clauses in
-  iter (function | TConst(c) -> fprintf out "lone sig C_%s extends [FILL] {}\n" c | _ -> failwith "alloy_constants") constants;
-  fprintf out "\n%!";;
-
-(**********************************************************)
-(* Every program's declared notifications need a sig... *)
-(* ...and an extensional constraint *)
-
-let event_is_used (p: flowlog_program) (evname: string): bool = 
-  (* This event triggers a rule, or some outgoing_def triggered by a DO rule sends this event. *)
-  let outrels_for_event = (filter_map (fun outd -> (match outd.react with 
-      | OutSend(evn, _, _) when evn = evname -> Some(outd.outname)
-      | OutEmit(evn) when evn = evname -> Some(outd.outname)
-      | _ -> None)) p.outgoings) in
-  (rule_uses p evname) || (exists (fun outrel -> do_rule_exists p outrel) outrels_for_event);;
-
-let alloy_fieldtype (fldtype: string): string = 
-  match fldtype with 
-  | "string" -> "FLString"
-  | "int" -> "FLInt"
-  | _ -> String.capitalize fldtype;;
-
-let alloy_declares (out: out_channel) (p: flowlog_program): unit =
-  let declare_event (decl: sdecl) =
-    match decl with
-      | DeclEvent(evname, evfields) when event_is_used p evname ->  
-          let ifislone = if length evfields > 0 then "" else "lone " in
-          let supertypename = (match (get_superflavor_typename evname) with | Some(super) -> ("EV"^super) | None -> "Event") in
-            fprintf out "%ssig EV%s extends %s {\n%!" ifislone evname supertypename;
-            let flddecls = map (fun (fldname,fldtype) -> (sprintf "    %s: one %s") fldname (alloy_fieldtype fldtype)) evfields in 
-              fprintf out "%s%!" (String.concat ",\n" flddecls);
-              fprintf out "}\n\n%!";
-
-        if length evfields > 0 then 
-        begin
-          fprintf out "fact EV%sExtensional { all ev1, ev2: EV%s | \n%!" evname evname;        
-          let fieldequals = (map (fun (fld, _) -> sprintf "ev1.%s = ev2.%s" fld fld) evfields) in
-          let fieldsequal = String.concat " && " fieldequals in 
-            fprintf out "(%s) implies ev1 = ev2}\n\n%!" fieldsequal;
-        end;      
-      | _ -> ()
-  in
-  	iter declare_event (filter (function | DeclEvent(_,_) -> true | _ -> false) p.desugared_decls);;
-
-(**********************************************************)
-(* Tables in state sig, and extensional fact for states (incl. all tables) *)
-
-let get_tablename (tdecl: sdecl): string = 
-  match tdecl with
-    | DeclTable(tblname, fieldtypes) 
-    | DeclRemoteTable(tblname, fieldtypes) -> 
-      tblname
-    | _ -> failwith "get_tablename";;
-
-let get_table_fieldtypes (tdecl: sdecl): string list = 
-  match tdecl with
-    | DeclTable(tblname, fieldtypes) 
-    | DeclRemoteTable(tblname, fieldtypes) -> 
-      fieldtypes
-    | _ -> failwith "get_table_fieldtypes";;
-
-let alloy_state (out: out_channel) (p: flowlog_program): unit =
-  let declare_state (decl: table_def): string = 
-    let typesproduct = String.concat " -> " (map String.capitalize decl.tablearity) in 
-        sprintf "    %s: set (%s)%!" decl.tablename typesproduct
-  in
-
-  let local_tables = get_local_tables p in 
-  let remote_tables = get_remote_tables p in
-    fprintf out "sig State {\n%!";
-    fprintf out "%s\n%!" (String.concat ",\n" (map declare_state (local_tables @ remote_tables)));
-    fprintf out "}\n%!";
-    fprintf out "fact StateExtensional { all st1, st2: State |\n%!";
-    let stateequals = (map (fun tbl -> sprintf "st1.%s = st2.%s" tbl.tablename tbl.tablename)
-                           (local_tables @ remote_tables)) in
-    let statesequal = String.concat " && " stateequals in 
-            fprintf out "(%s) implies st1 = st2}\n\n%!" statesequal;;
+type alloy_ontology = {
+  constants: (string * typeid) list;
+  events_used: (string * event_def) list;
+  tables_used: (string * table_def) list;
+}
 
 (**********************************************************)
   let alloy_of_term (t: term): string = 
@@ -169,6 +86,125 @@ let alloy_state (out: out_channel) (p: flowlog_program): unit =
       | FOr(f1, f2) -> (alloy_of_formula stateid f1) ^ " || "^ (alloy_of_formula stateid f2)
   
 
+
+
+(**********************************************************)
+
+let event_is_used (p: flowlog_program) (ev_def: event_def): bool = 
+  (* This event triggers a rule, or some outgoing_def triggered by a DO rule sends this event. *)
+  let outrels_for_event = (filter_map (fun outd -> (match outd.react with 
+      | OutSend(evn, _, _) when evn = ev_def.eventname -> Some(outd.outname)
+      | OutEmit(evn) when evn = ev_def.eventname -> Some(outd.outname)
+      | _ -> None)) p.outgoings) in
+  (rule_uses p ev_def.eventname) || (exists (fun outrel -> do_rule_exists p outrel) outrels_for_event);;
+
+let alloy_fieldtype (fldtype: string): string = 
+  match fldtype with 
+  | "string" -> "FLString"
+  | "int" -> "FLInt"
+  | _ -> String.capitalize fldtype;;
+
+
+(* Actually print the ontology
+   TODO: cleanup *)
+let write_alloy_ontology (out: out_channel) (o: alloy_ontology): unit =  
+  
+  (****** Boilerplate ******************)  
+  alloy_boilerplate out;
+
+  (****** Events ******************)
+  (* Every program's declared notifications need a sig... *)
+  (* ...and an extensional constraint *)
+  let declare_event (_,ev: string*event_def) = 
+    let ifislone = if length ev.evfields > 0 then "" else "lone " in
+    let supertypename = (match (get_superflavor_typename ev.eventname) with | Some(super) -> ("EV"^super) | None -> "Event") in
+        fprintf out "%ssig EV%s extends %s {\n%!" ifislone ev.eventname supertypename;
+        let flddecls = map (fun (fldname,fldtype) -> (sprintf "    %s: one %s") fldname (alloy_fieldtype fldtype)) ev.evfields in 
+          fprintf out "%s%!" (String.concat ",\n" flddecls);
+          fprintf out "}\n\n%!";
+
+        if length ev.evfields > 0 then 
+        begin
+          fprintf out "fact EV%sExtensional { all ev1, ev2: EV%s | \n%!" ev.eventname ev.eventname;        
+          let fieldequals = (map (fun (fld, _) -> sprintf "ev1.%s = ev2.%s" fld fld) ev.evfields) in
+          let fieldsequal = String.concat " && " fieldequals in 
+            fprintf out "(%s) implies ev1 = ev2}\n\n%!" fieldsequal;
+        end in  
+    iter declare_event o.events_used;
+
+  (****** State ******************)
+  let declare_state (_,decl: string*table_def): string = 
+    let typesproduct = String.concat " -> " (map String.capitalize decl.tablearity) in 
+        sprintf "    %s: set (%s)%!" decl.tablename typesproduct in
+
+    fprintf out "sig State {\n%!";
+    fprintf out "%s\n%!" (String.concat ",\n" (map declare_state o.tables_used));
+    fprintf out "}\n%!";
+    fprintf out "fact StateExtensional { all st1, st2: State |\n%!";
+    let stateequals = (map (fun (_,tbl) -> sprintf "st1.%s = st2.%s" tbl.tablename tbl.tablename)
+                           o.tables_used) in
+    let statesequal = String.concat " && " stateequals in 
+            fprintf out "(%s) implies st1 = st2}\n\n%!" statesequal;
+
+  (****** Constants ******************)
+  iter (fun (c_n, c_t) -> fprintf out "lone sig C_%s extends %s {}\n" c_n c_t) o.constants;
+  fprintf out "\n%!";;
+
+(* Extract ontology; don't print it *)
+let program_to_ontology (p: flowlog_program): alloy_ontology =
+  (* Identify the constants (like "0x1001") used and declare them. *)
+  {constants= (map (fun c -> ((alloy_of_term c), "[FILL]")) 
+                (fold_left (fun acc cl -> (unique ( acc @ (get_terms (function | TConst(_) -> true | _ -> false) cl.body))))
+                           []
+                           p.clauses));
+   events_used=filter_map (fun ev -> if (event_is_used p ev) then Some((ev.eventname, ev)) else None) p.events;
+   tables_used=(map (fun tbl -> (tbl.tablename, tbl)) ((get_local_tables p) @ (get_remote_tables p)))};;
+
+(* TODO: support table-widening, etc. *)
+(* For now, require tables to have same arity/types. *)
+let resolve_tables (o1: alloy_ontology) (o2: alloy_ontology): (string * table_def) list =
+  fold_left (fun acc tbl ->    
+              let tbl_n, tbl_def = tbl in            
+              if mem_assoc tbl_n acc && (assoc tbl_n acc) <> tbl_def then
+                failwith (sprintf "The programs had different declared arities for table %s" tbl_n)
+              else if mem_assoc tbl_n acc then
+                acc
+              else
+                tbl :: acc)
+            [] (o1.tables_used @ o2.tables_used);;
+
+(* TODO: duplicate code in resolve funcs *)
+(* EVENTS need to have the same shape/fields *)
+let resolve_events (o1: alloy_ontology) (o2: alloy_ontology): (string * event_def) list =
+  fold_left (fun acc ev ->    
+              let ev_n, ev_def = ev in    
+              if mem_assoc ev_n acc && (assoc ev_n acc) <> ev_def then
+                failwith (sprintf "The programs had different notions of event %s" ev_n)
+              else if mem_assoc ev_n acc then
+                acc
+              else
+                ev :: acc)
+            [] (o1.events_used @ o2.events_used);;
+
+(* Better agree on types! o.constants is an association list. *)
+let resolve_constants (o1: alloy_ontology) (o2: alloy_ontology): (string * typeid) list =
+  fold_left (fun acc con ->
+              let con_n, con_t = con in  
+              if mem_assoc con_n acc && assoc con_n acc <> con_t then
+                failwith (sprintf "The programs had different inferred types for constant %s: %s vs. %s" con_n con_t (assoc con_n acc))
+              else if mem_assoc con_n acc then
+                acc
+              else
+                con :: acc)
+            [] (o1.constants @ o2.constants);;
+
+
+let programs_to_ontology (p1: flowlog_program) (p2: flowlog_program): alloy_ontology =
+  (* Detect conflicts + combine *)
+  let o1 = program_to_ontology p1 in
+  let o2 = program_to_ontology p2 in
+    {constants=resolve_constants o1 o2; events_used=resolve_events o1 o2; tables_used=resolve_tables o1 o2};;
+
 (**********************************************************)
 (* Every +, every -, every DO gets a predicate IFFing disj of appropriate rules *)
 
@@ -186,10 +222,6 @@ type pred_fragment = {outrel: string; increl: string; incvar: string;
                       outargs: term list; where: formula};;
 
 let alloy_actions (out: out_channel) (p: flowlog_program): unit =  
-  (*let do_assignment_subs (evid: string) (assns: assignment list) (tupvar: string): string = 
-    let foundassign = find (fun assn -> assn.atupvar = tupvar) assns in
-      sprintf "%s.%s" evid foundassign.afield
-  in*) 
 
   let make_rule (r: srule): pred_fragment =       
     match r.action with
@@ -310,15 +342,22 @@ pred testPred[] {
 }
 run testPred for 3 but 1 Event, 2 State\n%!";;
 
-let write_as_alloy (p: flowlog_program) (fn: string): unit =
+let write_as_alloy (ontology_fn: string option) (p: flowlog_program) (fn: string): unit =
   if not (ends_with fn ".als") then 
     failwith "Alloy filename must end with .als, so as not to accidently overwrite .flg files.";
 
     let out = open_out fn in 
-    	alloy_boilerplate out;    
+    	(*alloy_boilerplate out;    
       alloy_constants out p;  
     	alloy_declares out p;
-      alloy_state out p;
+      alloy_state out p;*)      
+      (match ontology_fn with
+        | None -> 
+          fprintf out "module %s\n" (Filename.chop_extension fn);
+          write_alloy_ontology out (program_to_ontology p)
+        | Some(ofn) -> 
+          fprintf out "module %s\n" (Filename.chop_extension fn);
+          fprintf out "open %s\n" ofn);
     	alloy_actions out p;
     	alloy_transition out p;    
       alloy_outpolicy out p;	
@@ -327,10 +366,27 @@ let write_as_alloy (p: flowlog_program) (fn: string): unit =
       printf "~~~ Finished compiling %s to Alloy. ~~~\n%!" fn;;
 
 (**********************************************************)
-let write_as_alloy_change_impact (p1: flowlog_program) (fn1: string) (p2: flowlog_program) (fn2: string): unit = 
 
-  write_as_alloy p1 fn1;
-  write_as_alloy p2 fn2;
+(**********************************************************)
+(* Produce a compatable ontology for these two programs. 
+   - constants
+   - state relations
+   - events used *)
+let write_shared_ontology (fn: string) (p1: flowlog_program) (p2: flowlog_program): unit =
+  let out = open_out fn in 
+    write_alloy_ontology out (programs_to_ontology p1 p2);
+    close_out out;;
+
+(* *)
+let write_as_alloy_change_impact (p1: flowlog_program) (fn1: string) (p2: flowlog_program) (fn2: string): unit = 
+  let modname1 = (Filename.chop_extension (Filename.basename fn1)) in
+  let modname2 = (Filename.chop_extension (Filename.basename fn2)) in
+  let ofn = ("ontology_"^modname1^"_vs_"^modname2) in
+  write_shared_ontology (ofn^".als") p1 p2;
+  
+  write_as_alloy (Some ofn) p1 fn1;
+  write_as_alloy (Some ofn) p2 fn2;
+  
   let out = open_out "change-impact.als" in 
       fprintf out "
 module cimp
@@ -348,10 +404,12 @@ pred changeImpact[] {
     some outev: Event | 
       (prog1/outpolicy[st, ev, outev] and not prog2/outpolicy[st, ev, outev]) ||
       (prog2/outpolicy[st, ev, outev] and not prog1/outpolicy[st, ev, outev])
-}\n%!" (Filename.chop_extension fn1) (Filename.chop_extension fn2);
+}\n%!"   
+  (Filename.chop_extension fn1) (Filename.chop_extension fn2);
+  
   (* 3 states since prestate, newstate1, newstate 2. *)
   (* 2 events since ev, outev *)
-      fprintf out "run changeImpact for 3 State, 2 Event";
+      fprintf out "run changeImpact for 5 but 3 State, 2 Event";
       close_out out;
       printf "WARNING: Make sure the two files have the same ontology, or the generated file may not run.\n%!";
       printf "~~~ Finished change-impact query file. ~~~\n%!";;
