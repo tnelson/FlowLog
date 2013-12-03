@@ -27,12 +27,12 @@ TABLE learned(switchid, portid, macaddr);
  *
  */
 
-ON packet_in(pkt) WHERE pkt.dlTyp != 0x0806 and // ARP
-                        pkt.dlDst != 0x01005e000016 and // IGMP ethernet multicast.
-                                                        // this should be an explicit drop in AppleTV.flg.
-                        pkt.dlDst != 0x3333000000fb and // mDNS IPv6 ethernet multicast
-                        pkt.dlDst != 0x01005e0000fb: // mDNS IPv4 ethernet multicast
-                                                     // TODO(adf): drop 802.1D bridge-local frames
+ON packet(pkt) WHERE pkt.dlTyp != 0x0806 and // ARP
+                     pkt.dlDst != 0x01005e000016 and // IGMP ethernet multicast.
+                                                     // this should be an explicit drop in AppleTV.flg.
+                     pkt.dlDst != 0x3333000000fb and // mDNS IPv6 ethernet multicast
+                     pkt.dlDst != 0x01005e0000fb: // mDNS IPv4 ethernet multicast
+                                                  // TODO(adf): drop 802.1D bridge-local frames
 
   // ***TODO*** Add these restrictions (which only exist for limiting to-controller traffic)
   // automatically. But not always easy! Naive learned/notlearned have some issues
