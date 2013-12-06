@@ -379,8 +379,8 @@ let write_shared_ontology (fn: string) (ontol: alloy_ontology): unit =
 
 let build_starting_state_trace (ontol: alloy_ontology): string =
   let tracestrs = map (fun (n,_ ) -> sprintf "no overall.trace.first.%s" n) ontol.tables_used in
-  String.concat "\n," tracestrs;;
-  
+  String.concat "\n" tracestrs;;
+
 (* *)
 let write_as_alloy_change_impact (p1: flowlog_program) (fn1: string) (p2: flowlog_program) (fn2: string) (reach: bool): unit = 
   let modname1 = (Filename.chop_extension (Filename.basename fn1)) in
@@ -435,18 +435,21 @@ one sig overall {
   trace: seq State 
 }
 
-// because pigeonhole (this fact gives us an order-of-magnitude solve speedup)
-fact noDuplicateStates {
-  all s: State | lone overall.trace.indsOf[s] 
+// Don't always have pigeonhole: could loop back to prior state.
+//fact noDuplicateStates {
+// instead, force all states to live in the trace
+fact allStatesInSeq {
+  State = overall.trace.elems
 }
 
 fact startingState { 
   %s 
 }
 
-fact allStatesInSeq {
-  State = overall.trace.elems
-}
+
+// TODO: concern that really we ought to NOT add the 2 extra states, but rather 
+// should just check for diffs in plus and minus relations (mod what's already there)
+// That would be faster, but give less useful info.
 
 // Can't say this naively: we may have branching in the last state, due to ch imp.
 fact orderRespectsTransitionsAndStops {
@@ -454,18 +457,28 @@ fact orderRespectsTransitionsAndStops {
     let s = overall.trace[i] | 
     let nexts = overall.trace[i+1] |
     let prevs = overall.trace[i-1] |
-    // If this state is immediately after a \"branching ch imp\" pre-state
+
+    // If this state is immediately after a 'branching ch imp' pre-state
     // the next state is the branch by prog2 and the LAST state
     // (This lets us avoid having two separate sequences)
-    (some chev: Event | changeStateTransition[prevs, chev])
-      => ((some ev: Event | prog2/transition[s, ev, nexts]) 
+    ((i > 0 && some chev: Event | changeStateTransition[prevs, chev])
+      // Need to say it's the SAME event that bridges from the chimp state to poststates
+      => (some nexts && (some ev: Event | prog2/transition[s, ev, nexts]
+                                                                   && prog1/transition[prevs, ev, s]) 
           && nexts = overall.trace.last) 
-      else (some ev: Event | prog1/transition[s, ev, nexts])
-    // If this state is a \"policy change chimp\" pre-state then
+      else (some ev: Event | prog1/transition[s, ev, nexts]))
+
+  // Make sure a change-impact scenario has a 'next'
+// TODO this fails. because this ALL doesn't hold for the last element.
+  and
+  ((some chev: Event | changeStateTransition[s, chev]) implies some nexts)
+
+    // If this state is a 'policy change chimp' pre-state then
     // the next state is the last state.
-    and
-    (some chev: Event | changePolicyOutput[s, chev]) implies 
-      nexts = overall.trace.last
+    and // don't forget parens here!
+    ((some chev: Event | changePolicyOutput[s, chev]) implies 
+      nexts = overall.trace.last)
+  // TODO check: what if we have a CST followed by a CPO? or vice versa?
 }
 
 // Make sense to divide the two types of change impact,
@@ -486,9 +499,10 @@ pred changeImpact[prestate: State, ev: Event] {
     || changePolicyOutput[prestate, ev]
 }
 
-// If go above 8 states, be sure to increase the size of int
+// If go above 8 (7?) states, be sure to increase the size of int
 // seq and State should always have the same bound
 run changeImpact for 6 but 4 State, 5 Event, 4 seq
+
 \n%!" 
   ofn
   (Filename.chop_extension fn1)
