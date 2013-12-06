@@ -1,0 +1,15 @@
+/* 
+  May not be executable Flowlog, but meant to test change-impact.
+*/ 
+
+EVENT trigger {unused: macaddr};
+
+TABLE tab(macaddr); 
+
+ON packet(p):
+  INSERT (p.dlSrc) INTO tab;
+  
+// Lacking the trigger from A
+// Triggers "atemporal" change impact
+// But the question remains: can that rule ever be satisfied in a reachable state?
+    

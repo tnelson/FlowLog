@@ -26,6 +26,7 @@ let usage = Printf.sprintf "Usage: %s
 let alloy = ref false;;
 let cimp = ref false;;
 let cimpuniform = ref false;;
+let cimpreach = ref false;;
 let notables = ref false;;
 let reportall = ref false;;
 let depend = ref false;;
@@ -36,6 +37,7 @@ let speclist = [
   ("-alloy", Arg.Unit (fun () -> alloy := true), ": convert to Alloy");
   ("-cimp", Arg.Unit (fun () -> cimp := true), ": convert two files to Alloy and compare their semantics");
   ("-cimpuniform", Arg.Unit (fun () -> cimpuniform := true), ": change impact via uniform containment");
+  ("-cimpreach", Arg.Unit (fun () -> cimpreach := true), ": change impact via Alloy, plus bounded reachability check");
   ("-depend", Arg.Unit (fun () -> depend := true), ": output a JSON dependency graph");  
   ("-reportall", Arg.Unit (fun () -> reportall := true), ": report all packets. WARNING: VERY SLOW!");
   (* Not calling this "reactive" because reactive still implies sending table entries. *)
@@ -94,7 +96,17 @@ let main () =
       let program2 = (desugared_program_of_ast ast2 filename2) in
         write_as_alloy_change_impact program (alloy_filename filename) 
                                      program2 (alloy_filename filename2)
+                                     false
     end
+    else if !cimpreach then
+    begin
+      let filename2 = try hd (tl !args) with exn -> raise (Failure "Input a second .flg file name for use with change-impact.") in 
+      let ast2 = read_ast filename2 in
+      let program2 = (desugared_program_of_ast ast2 filename2) in
+        write_as_alloy_change_impact program (alloy_filename filename) 
+                                     program2 (alloy_filename filename2)
+                                     true
+    end    
     else if !cimpuniform then    
     begin
       let filename2 = try hd (tl !args) with exn -> raise (Failure "Input a second .flg file name for use with change-impact.") in 
@@ -102,10 +114,10 @@ let main () =
       let program2 = (desugared_program_of_ast ast2 filename2) in
       let results = build_chase_equivalence program program2 in      
         printf "LACKING: %s\n%!" (String.concat ";\n " (map string_of_pmodel results));              
-    end;        
+    end        
 
     (* ACTUALLY RUN THE PROGRAM HERE *)
-    if (not !alloy) && (not !cimp) && (not !cimpuniform) then 
+    else
     begin
       (* Intercede when Ctrl-C is pressed to close XSB, etc. *)
       Sys.catch_break true;

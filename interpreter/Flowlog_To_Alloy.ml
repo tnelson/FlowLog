@@ -264,7 +264,7 @@ let alloy_actions (out: out_channel) (p: flowlog_program): unit =
     let to_substitute = [(TVar(pf.incvar), TVar(evrestrictedname))](* [(TVar(pf.incvar), TVar("ev"))]*)
                         @ (mapi (fun i outarg -> (outarg, TVar("out"^(string_of_int i)))) pf.outargs) in
     let substituted = (substitute_terms pf.where to_substitute) in   
-    printf "alloy of formula: %s\n%!" (string_of_formula substituted);
+    (*printf "alloy of formula: %s\n%!" (string_of_formula substituted);*)
     let quantified_vars = [TVar("ev")] @ (mapi (fun i _ -> TVar("out"^(string_of_int i))) pf.outargs) in
     let freevars_signed = get_terms_with_sign (function | TVar(x) as t -> not (mem t quantified_vars) | _ -> false) true substituted in  
     (* If the free var is an ANY, be careful how to bind it. If it is an ANY that appears within a negation, must be ALL not EXISTS *)
@@ -335,10 +335,10 @@ let alloy_outpolicy (out: out_channel) (p: flowlog_program): unit =
 let alloy_boilerplate_pred (out: out_channel): unit = 
   fprintf out "
 pred testPred[] {
-  some st1, st2: State, ev: Event |
-     transition[st1, ev, st2] &&
-     st1 != st2 and //no st1.learned &&
-     no st1.switch_has_port
+  //some st1, st2: State, ev: Event |
+  //   transition[st1, ev, st2] &&
+  //   st1 != st2 and //no st1.learned &&
+  //   no st1.switch_has_port
 }
 run testPred for 3 but 1 Event, 2 State\n%!";;
 
@@ -357,7 +357,7 @@ let write_as_alloy (ontology_fn: string option) (p: flowlog_program) (fn: string
           write_alloy_ontology out (program_to_ontology p)
         | Some(ofn) -> 
           fprintf out "module %s\n" (Filename.chop_extension fn);
-          fprintf out "open %s\n" ofn);
+          fprintf out "open %s as o\n" ofn);
     	alloy_actions out p;
     	alloy_transition out p;    
       alloy_outpolicy out p;	
@@ -372,25 +372,35 @@ let write_as_alloy (ontology_fn: string option) (p: flowlog_program) (fn: string
    - constants
    - state relations
    - events used *)
-let write_shared_ontology (fn: string) (p1: flowlog_program) (p2: flowlog_program): unit =
+let write_shared_ontology (fn: string) (ontol: alloy_ontology): unit =
   let out = open_out fn in 
-    write_alloy_ontology out (programs_to_ontology p1 p2);
+    write_alloy_ontology out ontol;
     close_out out;;
 
+let build_starting_state_trace (ontol: alloy_ontology): string =
+  let tracestrs = map (fun (n,_ ) -> sprintf "no overall.trace.first.%s" n) ontol.tables_used in
+  String.concat "\n," tracestrs;;
+  
 (* *)
-let write_as_alloy_change_impact (p1: flowlog_program) (fn1: string) (p2: flowlog_program) (fn2: string): unit = 
+let write_as_alloy_change_impact (p1: flowlog_program) (fn1: string) (p2: flowlog_program) (fn2: string) (reach: bool): unit = 
   let modname1 = (Filename.chop_extension (Filename.basename fn1)) in
   let modname2 = (Filename.chop_extension (Filename.basename fn2)) in
   let ofn = ("ontology_"^modname1^"_vs_"^modname2) in
-  write_shared_ontology (ofn^".als") p1 p2;
+  let ontol = programs_to_ontology p1 p2 in
+  write_shared_ontology (ofn^".als") ontol;
   
   write_as_alloy (Some ofn) p1 fn1;
   write_as_alloy (Some ofn) p2 fn2;
   
   let out = open_out "change-impact.als" in 
+  if not reach then
+  begin
+  (* 3 states since prestate, newstate1, newstate 2. *)
+  (* 2 events since ev, outev *)      
       fprintf out "
 module cimp
 
+open %s as o
 open %s as prog1
 open %s as prog2
 
@@ -404,12 +414,87 @@ pred changeImpact[] {
     some outev: Event | 
       (prog1/outpolicy[st, ev, outev] and not prog2/outpolicy[st, ev, outev]) ||
       (prog2/outpolicy[st, ev, outev] and not prog1/outpolicy[st, ev, outev])
-}\n%!"   
-  (Filename.chop_extension fn1) (Filename.chop_extension fn2);
-  
-  (* 3 states since prestate, newstate1, newstate 2. *)
-  (* 2 events since ev, outev *)
-      fprintf out "run changeImpact for 5 but 3 State, 2 Event";
+}
+run changeImpact for 5 but 3 State, 2 Event
+\n%!" 
+  ofn
+  (Filename.chop_extension fn1)
+  (Filename.chop_extension fn2);
+  end
+  else
+  begin
+    (* with reachability *)
+    fprintf out "
+module cimp
+
+open %s as o
+open %s as prog1
+open %s as prog2
+
+one sig overall { 
+  trace: seq State 
+}
+
+// because pigeonhole (this fact gives us an order-of-magnitude solve speedup)
+fact noDuplicateStates {
+  all s: State | lone overall.trace.indsOf[s] 
+}
+
+fact startingState { 
+  %s 
+}
+
+fact allStatesInSeq {
+  State = overall.trace.elems
+}
+
+// Can't say this naively: we may have branching in the last state, due to ch imp.
+fact orderRespectsTransitionsAndStops {
+  all i : overall.trace.inds - overall.trace.lastIdx |  
+    let s = overall.trace[i] | 
+    let nexts = overall.trace[i+1] |
+    let prevs = overall.trace[i-1] |
+    // If this state is immediately after a \"branching ch imp\" pre-state
+    // the next state is the branch by prog2 and the LAST state
+    // (This lets us avoid having two separate sequences)
+    (some chev: Event | changeStateTransition[prevs, chev])
+      => ((some ev: Event | prog2/transition[s, ev, nexts]) 
+          && nexts = overall.trace.last) 
+      else (some ev: Event | prog1/transition[s, ev, nexts])
+    // If this state is a \"policy change chimp\" pre-state then
+    // the next state is the last state.
+    and
+    (some chev: Event | changePolicyOutput[s, chev]) implies 
+      nexts = overall.trace.last
+}
+
+// Make sense to divide the two types of change impact,
+//  to avoid confusion with what the final state in a trace represents.
+pred changeStateTransition[prestate: State, ev: Event]
+{
+  some disj newst1, newst2: State |
+    (prog1/transition[prestate, ev, newst1] and 
+     prog2/transition[prestate, ev, newst2])
+}
+pred changePolicyOutput[prestate: State, ev: Event] { 
+    some outev: Event | 
+      (prog1/outpolicy[prestate, ev, outev] and not prog2/outpolicy[prestate, ev, outev]) ||
+      (prog2/outpolicy[prestate, ev, outev] and not prog1/outpolicy[prestate, ev, outev])
+}
+pred changeImpact[prestate: State, ev: Event] { 
+    changeStateTransition[prestate, ev]   
+    || changePolicyOutput[prestate, ev]
+}
+
+// If go above 8 states, be sure to increase the size of int
+// seq and State should always have the same bound
+run changeImpact for 6 but 4 State, 5 Event, 4 seq
+\n%!" 
+  ofn
+  (Filename.chop_extension fn1)
+  (Filename.chop_extension fn2)
+  (build_starting_state_trace ontol);
+  end;
       close_out out;
       printf "WARNING: Make sure the two files have the same ontology, or the generated file may not run.\n%!";
       printf "~~~ Finished change-impact query file. ~~~\n%!";;

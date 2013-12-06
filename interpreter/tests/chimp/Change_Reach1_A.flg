@@ -1,0 +1,16 @@
+/* 
+  May not be executable Flowlog, but meant to test change-impact.
+*/ 
+
+EVENT trigger {unused: macaddr};
+
+TABLE tab(macaddr); 
+
+ON packet(p):
+  INSERT (p.dlSrc) INTO tab;
+  
+ON trigger(e): 
+  DELETE (ANY) FROM tab WHERE
+    tab(x) and tab(y) and tab(z) and
+    x != y and y != z and x != z;
+    
