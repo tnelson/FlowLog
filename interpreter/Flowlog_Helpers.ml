@@ -296,13 +296,59 @@ let rec disj_to_top ?(ignore_negation: bool = false) (f: formula): formula =
 
 
 
+(* The "int_string" String Type
+ *
+ * An "int_string" is an integer string (eg, "0x0A000001" representing the IP
+ * address 10.0.0.1) and can be in hex, decimal, or any other OCaml-supported
+ * numeric base. This is distinct from what we might think of as "IP string"
+ * which is the canonical representation (10.0.0.1). Such strings can be handled 
+ * by ocaml-packet's ip_of_string and string_of_ip.
+ *
+ * int_string is currently the internal representation of IP and MAC addresses
+ * in XSB.
+ *)
+
+(* Replacement for Int32.of_string which understands wrap-around
+ *
+ * Unfortunately, OCaml only supports signed 32 bit ints, therefore we need this
+ * to handle IP addresses >= 128.0.0.0 (which will be received as >= 0x10000000)
+ *)
+let nwaddr_of_int_string (s: string): Int32.t =
+  let n = int_of_string s in
+  if n <= Int32.to_int Int32.max_int
+  then Int32.of_int n
+  else Int32.of_int (n - 0xFFFFFFFF - 1)
+
+(* Note: This will result in negative integers for IP addr >= 128.0.0.0 *)
+let nwaddr_to_int_string (n: Int32.t): string = Int32.to_string n
+
+(* Helper functions to also be explicit for 48-bit MAC addresses represented
+ * as integer strings.
+ *
+ * Canonical MAC addresses representations can be handled via ocaml-packet's
+ * mac_of_string and string_of_mac.
+ *)
+
+let macaddr_of_int_string (s: string): Int64.t = Int64.of_string s
+let macaddr_to_int_string (n: Int64.t): string = Int64.to_string n
+
+(* OpenFlow 1.0 Ports, by contrast, are only 16 bits, so we are safe from
+ * wrap-around. They are also canonically represented as int strings anyway.
+ *
+ * These are explicit function so that we can ban use of "Int32.of_string"
+ * outside this file.
+ *)
+let nwport_of_string (s: string): Int32.t = Int32.of_string s
+let nwport_to_string (n: Int32.t): string = Int32.to_string n
+
+
 (*************************************************************)
  (* improve this when we have more than strings running around 
     We should also use option rather than empty string to indicate "use the default" *)
  let pretty_print_value (typename: string) (strval: string): string =   
   if strval = "" then "<DEFAULT>" 
   else (match typename with
-      | "ipaddr" -> Packet.string_of_ip (Int32.of_string strval)
+      | "ipaddr" -> Packet.string_of_ip (nwaddr_of_int_string strval)
       | "macaddr" -> Packet.string_of_mac (Int64.of_string strval) 
       | "portid" -> strval
       | "switchid" -> strval

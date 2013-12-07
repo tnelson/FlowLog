@@ -135,36 +135,30 @@ let get_field (ev: event) (fldname: string) (default: string option): string =
  *
  ******************************************************************************)
 
-let nwaddr_of_string (s: string): Int32.t =
-  let n = int_of_string s in
-  if n <= Int32.to_int Int32.max_int
-  then Int32.of_int n
-  else Int32.of_int (n - 0xFFFFFFFF - 1)
-
 let make_eth (ev: event) (nw: Packet.nw): Packet.bytes =
-  let dlSrc = Int64.of_string (get_field ev "dlsrc" (Some "0")) in
-  let dlDst = Int64.of_string (get_field ev "dldst" (Some "0")) in
+  let dlSrc = macaddr_of_int_string (get_field ev "dlsrc" (Some "0")) in
+  let dlDst = macaddr_of_int_string (get_field ev "dldst" (Some "0")) in
     Packet.marshal {Packet.dlSrc = dlSrc; Packet.dlDst = dlDst;
                     Packet.dlVlan = None; Packet.dlVlanPcp = 0;
                     Packet.dlVlanDei = false; nw = nw };;
 
 let make_arp (ev: event): Packet.nw =
-  let arp_sha = Int64.of_string (get_field ev "arp_sha" None) in
-  let arp_spa = nwaddr_of_string (get_field ev "arp_spa" None) in
-  let arp_tpa = nwaddr_of_string (get_field ev "arp_tpa" None) in
+  let arp_sha = macaddr_of_int_string (get_field ev "arp_sha" None) in
+  let arp_spa = nwaddr_of_int_string (get_field ev "arp_spa" None) in
+  let arp_tpa = nwaddr_of_int_string (get_field ev "arp_tpa" None) in
   let arp_op = int_of_string (get_field ev "arp_op" None) in
     match arp_op with
     | 1 -> (* request *)
         Arp(Arp.Query(arp_sha, arp_spa, arp_tpa))
     | 2 -> (* query *)
-        let arp_tha = Int64.of_string (get_field ev "arp_tha" None) in
+        let arp_tha = macaddr_of_int_string (get_field ev "arp_tha" None) in
                 Arp(Arp.Reply(arp_sha, arp_spa, arp_tha, arp_tpa))
     | _ -> failwith "bad arp op";;
 
 (* TODO(adf): add support for IP flags, stored as booleans by ocaml-packet *)
 let make_ip (ev: event) (tp: Ip.tp): Packet.nw =
-  let nwSrc = nwaddr_of_string (get_field ev "nwsrc" None) in
-  let nwDst = nwaddr_of_string (get_field ev "nwdst" None) in
+  let nwSrc = nwaddr_of_int_string (get_field ev "nwsrc" None) in
+  let nwDst = nwaddr_of_int_string (get_field ev "nwdst" None) in
   let nwFrag = int_of_string (get_field ev "nwfrag" (Some "0")) in
   let nwTTL = int_of_string (get_field ev "nwttl" (Some "255")) in
   let nwTos = int_of_string (get_field ev "nwtos" (Some "0")) in
@@ -181,8 +175,8 @@ let make_ip (ev: event) (tp: Ip.tp): Packet.nw =
 let make_tcp (ev: event): Packet.Ip.tp =
   let tpSrc = int_of_string (get_field ev "tpsrc" None) in
   let tpDst = int_of_string (get_field ev "tpdst" None) in
-  let tpSeq = nwaddr_of_string (get_field ev "tpseq" None) in
-  let tpAck = nwaddr_of_string (get_field ev "tpack" (Some "0")) in
+  let tpSeq = nwaddr_of_int_string (get_field ev "tpseq" None) in
+  let tpAck = nwaddr_of_int_string (get_field ev "tpack" (Some "0")) in
   let tpOffset = int_of_string (get_field ev "tpoffset" (Some "0")) in
   let tpWindow = int_of_string (get_field ev "tpwindow" (Some "0")) in
   let tpUrgent = int_of_string (get_field ev "tpurgent" (Some "0")) in
@@ -204,12 +198,12 @@ let make_udp (ev: event) (payload : Cstruct.t option) : Packet.Ip.tp =
     Udp({Udp.src = tpSrc; dst = tpDst; chksum = 0; payload = payload});;
 
 let make_igmp2 (ev: event): Packet.Igmp.msg =
-  let addr = nwaddr_of_string (get_field ev "igmp_addr" None) in
+  let addr = nwaddr_of_int_string (get_field ev "igmp_addr" None) in
     Igmp.Igmp1and2({Igmp1and2.mrt = 0; chksum = 0; addr = addr})
 
 let make_igmp3 (ev: event): Packet.Igmp.msg =
   let v3typ = int_of_string (get_field ev "igmp_v3typ" None) in
-  let addr = nwaddr_of_string (get_field ev "igmp_addr" None) in
+  let addr = nwaddr_of_int_string (get_field ev "igmp_addr" None) in
     Igmp.Igmp3({Igmp3.chksum = 0; grs =
                   [{Igmp3.GroupRec.typ = v3typ;
                     addr = addr; sources = []}]})
@@ -264,24 +258,24 @@ let marshal_packet (ev: event): Packet.bytes =
 let get_arp (pkt: Packet.packet): (string*string) list =
   match pkt.nw with
     | Arp(Arp.Query(arp_sha, arp_spa, arp_tpa)) ->
-      [("arp_sha", Int64.to_string arp_sha);
-       ("arp_spa", Int32.to_string arp_spa);
+      [("arp_sha", macaddr_to_int_string arp_sha);
+       ("arp_spa", nwaddr_to_int_string arp_spa);
        ("arp_tha", "0");
-       ("arp_tpa", Int32.to_string arp_tpa);
+       ("arp_tpa", nwaddr_to_int_string arp_tpa);
        ("arp_op", "1")]
     | Arp(Arp.Reply(arp_sha, arp_spa, arp_tha, arp_tpa)) ->
-      [("arp_sha", Int64.to_string arp_sha);
-       ("arp_spa", Int32.to_string arp_spa);
-       ("arp_tha", Int64.to_string arp_tha);
-       ("arp_tpa", Int32.to_string arp_tpa);
+      [("arp_sha", macaddr_to_int_string arp_sha);
+       ("arp_spa", nwaddr_to_int_string arp_spa);
+       ("arp_tha", macaddr_to_int_string arp_tha);
+       ("arp_tpa", nwaddr_to_int_string arp_tpa);
        ("arp_op", "2")];
     | _ -> [];;
 
 let get_ip (pkt: Packet.packet): (string*string) list =
   match pkt.nw with
    | Ip(_) ->
-    [("nwsrc", Int32.to_string (Packet.nwSrc pkt));
-     ("nwdst", Int32.to_string (Packet.nwDst pkt));
+    [("nwsrc", nwaddr_to_int_string (Packet.nwSrc pkt));
+     ("nwdst", nwaddr_to_int_string (Packet.nwDst pkt));
      ("nwproto", string_of_int (Packet.nwProto pkt))]
    | _ -> [];;
 
@@ -306,10 +300,10 @@ let get_udp (pkt: Packet.packet): (string*string) list =
 let get_igmp_helper (igmp_pkt: Packet.Igmp.t): (string*string) list =
   match igmp_pkt.Igmp.msg with
     | Igmp.Igmp1and2(i12) ->
-      [("igmp_addr", Int32.to_string (i12.Igmp1and2.addr));
+      [("igmp_addr", nwaddr_to_int_string (i12.Igmp1and2.addr));
        ("igmp_v3typ", "0")]
     | Igmp.Igmp3(i3) -> (let gr = hd i3.Igmp3.grs in
-      [("igmp_addr", Int32.to_string (gr.Igmp3.GroupRec.addr));
+      [("igmp_addr", nwaddr_to_int_string (gr.Igmp3.GroupRec.addr));
        ("igmp_v3typ",(string_of_int (gr.Igmp3.GroupRec.typ)))])
     | _ -> []
 
@@ -326,8 +320,8 @@ let pkt_to_event (sw : switchId) (pt: port) (pkt : Packet.packet) : event =
    let values = [
     ("locsw", Int64.to_string sw);
     ("locpt", NetCore_Pretty.string_of_port pt);
-    ("dlsrc", Int64.to_string pkt.Packet.dlSrc);
-    ("dldst", Int64.to_string pkt.Packet.dlDst);
+    ("dlsrc", macaddr_to_int_string pkt.Packet.dlSrc);
+    ("dldst", macaddr_to_int_string pkt.Packet.dlDst);
     ("dltyp", string_of_int (Packet.dlTyp pkt))]
     @ (get_arp pkt)
     @ (get_ip pkt)

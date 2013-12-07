@@ -115,12 +115,12 @@ let rec build_unsafe_switch_actions (oldpkt: string) (body: formula): action =
         (function 
           (* Don't just check for <> pts. Prevent adding repetitions of same action.
              I.e., once you have a physical port, you never get another one. *)
-          (* NetCore_Pattern.Physical(Int32.of_string aval)*)
+          (* NetCore_Pattern.Physical(nwport_of_string aval)*)
           | SwitchAction(pat) ->
             (match pat.outPort with
               | NetCore_Pattern.Physical(aval2) ->                 
-                if pat.outPort <> NetCore_Pattern.Physical(Int32.of_string aval) then
-                  raise (ContradictoryActions(aval, Int32.to_string aval2))
+                if pat.outPort <> NetCore_Pattern.Physical(nwport_of_string aval) then
+                  raise (ContradictoryActions(aval, nwport_to_string aval2))
                 else 
                   false (* repetition, don't repeat! *)
               | _ -> true)
@@ -149,7 +149,7 @@ let rec build_unsafe_switch_actions (oldpkt: string) (body: formula): action =
     | FEquals(TConst(aval), TField(avar, afld)) -> 
       (* CHECK FOR CONTRADICTION WITH PRIOR ACTIONS! *)        
       if avar <> oldpkt && afld = "locpt" && (no_contradiction_or_repetition aval) then                  
-        [SwitchAction({id with outPort = NetCore_Pattern.Physical(Int32.of_string aval)})]
+        [SwitchAction({id with outPort = NetCore_Pattern.Physical(nwport_of_string aval)})]
         @ actlist      
       else       
         actlist
@@ -178,11 +178,11 @@ let rec build_unsafe_switch_actions (oldpkt: string) (body: formula): action =
     | SwitchAction(oldout) ->
       (match afld with 
         | "locpt" -> anact
-        | "dlsrc" -> SwitchAction({oldout with outDlSrc = Some (None, Int64.of_string aval) })
-        | "dldst" -> SwitchAction({oldout with outDlDst = Some (None, Int64.of_string aval) })
+        | "dlsrc" -> SwitchAction({oldout with outDlSrc = Some (None, macaddr_of_int_string aval) })
+        | "dldst" -> SwitchAction({oldout with outDlDst = Some (None, macaddr_of_int_string aval) })
         | "dltyp" -> failwith ("OpenFlow 1.0 does not allow this field to be updated")
-        | "nwsrc" -> SwitchAction({oldout with outNwSrc = Some (None, (Int32.of_string aval)) })
-        | "nwdst" -> SwitchAction({oldout with outNwDst = Some (None, (Int32.of_string aval)) })
+        | "nwsrc" -> SwitchAction({oldout with outNwSrc = Some (None, (nwaddr_of_int_string aval)) })
+        | "nwdst" -> SwitchAction({oldout with outNwDst = Some (None, (nwaddr_of_int_string aval)) })
         | "nwproto" -> failwith ("OpenFlow 1.0 does not allow this field to be updated")
         | _ -> failwith ("enhance_action_atom unknown afld: "^afld^" -> "^aval))
     | _ -> failwith ("enhance_action_atom non SwitchAction: "^afld^" -> "^aval) in
@@ -225,12 +225,12 @@ open NetCore_Wildcard
 let build_unsafe_switch_pred (oldpkt: string) (body: formula): pred =    
 let field_to_pattern (fld: string) (aval:string): NetCore_Pattern.t =         
   match fld with (* switch handled via different pred type *)
-    | "locpt" -> {all with ptrnInPort = WildcardExact (Physical(Int32.of_string aval)) }
-    | "dlsrc" -> {all with ptrnDlSrc = WildcardExact (Int64.of_string aval) }
-    | "dldst" -> {all with ptrnDlDst = WildcardExact (Int64.of_string aval) }
+    | "locpt" -> {all with ptrnInPort = WildcardExact (Physical(nwport_of_string aval)) }
+    | "dlsrc" -> {all with ptrnDlSrc = WildcardExact (macaddr_of_int_string aval) }
+    | "dldst" -> {all with ptrnDlDst = WildcardExact (macaddr_of_int_string aval) }
     | "dltyp" -> {all with ptrnDlTyp = WildcardExact (int_of_string aval) }
-    | "nwsrc" -> {all with ptrnNwSrc = WildcardExact (Int32.of_string aval) }
-    | "nwdst" ->  {all with ptrnNwDst = WildcardExact (Int32.of_string aval) }
+    | "nwsrc" -> {all with ptrnNwSrc = WildcardExact (nwaddr_of_int_string aval) }
+    | "nwdst" ->  {all with ptrnNwDst = WildcardExact (nwaddr_of_int_string aval) }
     | "nwproto" -> {all with ptrnNwProto = WildcardExact (int_of_string aval) }
     | "tpsrc" -> {all with ptrnTpSrc = WildcardExact (int_of_string aval) }
     | "tpdst" ->  {all with ptrnTpDst = WildcardExact (int_of_string aval) }
@@ -494,14 +494,14 @@ let forward_packet (p: flowlog_program) (ev: event): unit =
   (* TODO use allpackets here. compilation uses it, but XSB returns every port individually. *)
   printf "WARNING: field modifications not yet supported in netcore.\n%!";  
   fwd_actions := 
-    SwitchAction({id with outPort = Physical(Int32.of_string (get_field ev "locpt" None))})
+    SwitchAction({id with outPort = Physical(nwport_of_string (get_field ev "locpt" None))})
     :: !fwd_actions;;
 
 let emit_packet (p: flowlog_program) (ev: event): unit =  
   printf "emitting: %s\n%!" (string_of_event p ev);
   write_log (sprintf ">>> emitting: %s\n%!" (string_of_event p ev));
   let swid = (Int64.of_string (get_field ev "locsw" None)) in
-  let pt = (Int32.of_string (get_field ev "locpt" None)) in
+  let pt = (nwport_of_string (get_field ev "locpt" None)) in
   
   (* TODO: confirm dltyp/nwProto etc. are consistent with whatever type of packet we're producing 
      At the moment, someone can emit_arp with dlTyp = 0x000 or something dumb like that. *)
@@ -742,7 +742,7 @@ let respond_to_notification (p: flowlog_program) (notif: event): string list =
       end;;
 
 (* Frenetic reports every switch has a port 65534. *)
-let lies_port = Int32.of_string "65534";;
+let lies_port = nwport_of_string "65534";;
 
 (* If notables is true, send everything to controller *)
 let make_policy_stream (p: flowlog_program) 
@@ -760,7 +760,7 @@ let make_policy_stream (p: flowlog_program)
             if portid <> lies_port then 
               Some {typeid="switch_port"; 
                     values=construct_map [("sw", sw_string);
-                                          ("pt", (Int32.to_string portid))]}
+                                          ("pt", (nwport_to_string portid))]}
             else None)
             feats.ports in
         printf "SWITCH %Ld connected. Flowlog events triggered: %s\n%!" sw (String.concat ", " (map (string_of_event p) notifs));

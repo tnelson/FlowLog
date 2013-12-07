@@ -45,7 +45,7 @@ let make_policy () =
       | SwitchUp(sw, feats) ->                 
         printf "SWITCH %Ld connected. Ports: %s. Buffers: %d. Tables: %d\n%!" 
           sw
-          (String.concat ";" (map Int32.to_string feats.ports))
+          (String.concat ";" (map nwport_to_string feats.ports))
           feats.num_buffers
           feats.num_tables;        
         
