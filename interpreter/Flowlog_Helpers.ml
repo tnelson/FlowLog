@@ -349,7 +349,7 @@ let nwport_to_string (n: Int32.t): string = Int32.to_string n
   if strval = "" then "<DEFAULT>" 
   else (match typename with
       | "ipaddr" -> Packet.string_of_ip (nwaddr_of_int_string strval)
-      | "macaddr" -> Packet.string_of_mac (Int64.of_string strval) 
+      | "macaddr" -> Packet.string_of_mac (macaddr_of_int_string strval)
       | "portid" -> strval
       | "switchid" -> strval
       | "ethtyp" -> Packet.string_of_dlTyp (int_of_string strval)          
