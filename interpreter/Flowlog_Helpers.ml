@@ -311,7 +311,7 @@ let rec disj_to_top ?(ignore_negation: bool = false) (f: formula): formula =
 (* Replacement for Int32.of_string which understands wrap-around
  *
  * Unfortunately, OCaml only supports signed 32 bit ints, therefore we need this
- * to handle IP addresses >= 128.0.0.0 (which will be received as >= 0x10000000)
+ * to handle IP addresses >= 128.0.0.0 (which will be received as >= 0x80000000)
  *)
 let nwaddr_of_int_string (s: string): Int32.t =
   let n = int_of_string s in
