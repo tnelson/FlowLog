@@ -218,7 +218,7 @@ pred <outrel>[st: State, <incvar>: <reactive of increl>, <outarg0> :univ, <outar
 }
 *)
 
-type pred_fragment = {outrel: string; increl: string; incvar: string; 
+type pred_fragment = {fortable: bool; outrel: string; increl: string; incvar: string; 
                       outargs: term list; where: formula};;
 
 let alloy_actions (out: out_channel) (p: flowlog_program): unit =  
@@ -226,11 +226,11 @@ let alloy_actions (out: out_channel) (p: flowlog_program): unit =
   let make_rule (r: srule): pred_fragment =       
     match r.action with
       | ADelete(outrel, outargs, where) ->
-        {outrel = (minus_prefix^"_"^outrel); outargs = outargs; where = where; increl = r.onrel; incvar = r.onvar}
+        {fortable=true;  outrel = (minus_prefix^"_"^outrel); outargs = outargs; where = where; increl = r.onrel; incvar = r.onvar}
       | AInsert(outrel, outargs, where) -> 
-        {outrel = (plus_prefix^"_"^outrel);  outargs = outargs; where = where; increl = r.onrel; incvar = r.onvar}
+        {fortable=true;  outrel = (plus_prefix^"_"^outrel);  outargs = outargs; where = where; increl = r.onrel; incvar = r.onvar}
       | ADo(outrel, outargs, where) -> 
-        {outrel = outrel;                    outargs = outargs; where = where; increl = r.onrel; incvar = r.onvar}
+        {fortable=false; outrel = outrel;                    outargs = outargs; where = where; increl = r.onrel; incvar = r.onvar}
   in
   
   let outarg_to_poss_equality (evrestricted: string) (i: int) (outarg: term): string =
@@ -257,6 +257,38 @@ let alloy_actions (out: out_channel) (p: flowlog_program): unit =
   let event_alloysig_for (increl: string): string =
     "EV"^increl in
 
+  let build_emit_defaults (pf: pred_fragment) (tid: string): string = 
+    let ev_def = get_event p tid in
+    (*let outv = string_of_term (first pf.outargs) in*)
+    let outv = "out0" in 
+    let constrs = filter_map (fun (fname, _) -> 
+                  try 
+                    let v = assoc (tid, fname) Flowlog_Packets.defaults_table in
+                      Some (outv^"."^fname^" = "^v)
+                  with Not_found -> None) ev_def.evfields in
+      String.concat " && " constrs in
+
+let build_forward_defaults (pf: pred_fragment): string = 
+    let ev_def = get_event p pf.increl in (* use type from "ON" rather than base packet *)
+    (*let outv = string_of_term (first pf.outargs) in*)
+    let outv = "out0" in 
+    let terms_used = get_terms (fun _ -> true) pf.where in 
+    let constrs = filter_map (fun (fname, _) -> 
+                  let target = TField(outv, fname) in
+                  if not (mem target terms_used) then
+                    Some (outv^"."^fname^" = "^"ev."^fname)
+                  else None) ev_def.evfields in
+      String.concat " && " constrs in
+
+
+  let build_defaults (pf: pred_fragment): string = 
+    if pf.fortable then ""
+    else let out_def = get_outgoing p pf.outrel in
+      match out_def.react with 
+        | OutForward -> " && "^(build_forward_defaults pf)
+        | OutEmit(tid) -> " && "^(build_emit_defaults pf tid)
+        | _ -> "" in
+
   let alloy_of_pred_fragment (stateid: string) (pf : pred_fragment): string =
   (* substitute var names: don't get stuck on rules with different args or in var name! *)      
     let evtypename = (event_alloysig_for pf.increl) in
@@ -271,7 +303,10 @@ let alloy_actions (out: out_channel) (p: flowlog_program): unit =
     (* explicitly quantify rule-scope existentials *)
     let freevarstr = (String.concat " " (make_quantified_decl freevars_signed)) in
 
-      "\n  (ev in "^evtypename^" && ("^freevarstr^" "^(alloy_of_formula stateid substituted)^")\n"^
+    (* Finally, should any defaults be added on? *)
+    let defaultsstr = build_defaults pf in
+
+      "\n  (ev in "^evtypename^defaultsstr^" && ("^freevarstr^" "^(alloy_of_formula stateid substituted)^")\n"^
 
       (* If field of invar in outargs, need to add an equality, otherwise connection is lost by alpha renaming. *)
       "      && "^(String.concat " && " (mapi (outarg_to_poss_equality evrestrictedname) pf.outargs))^")"
@@ -290,7 +325,7 @@ let alloy_actions (out: out_channel) (p: flowlog_program): unit =
   let rulestrs = 
     StringMap.fold (fun outrel pfl acc -> 
                    let thispred = sprintf "pred %s[st: State, ev: Event, %s] {\n%s\n}\n" 
-                                    outrel 
+                                    outrel                                 
                                     (String.concat ", " (mapi (fun i t -> sprintf "out%d : univ" i) (hd pfl).outargs))
                                     (String.concat " ||\n" (map (alloy_of_pred_fragment "st") pfl)) in
                    StringMap.add outrel thispred acc)

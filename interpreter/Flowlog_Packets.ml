@@ -14,6 +14,7 @@ open Printf
 
 (* TO ADD A NEW PACKET FLAVOR, ADD TO:
   (1) packet_flavors list
+  (1A) header field defaults (if any)
   (2) marshal_packet
   (3) pkt_to_event *)
 
@@ -111,10 +112,29 @@ let get_field_helper (ev: event) (fldname: string): string  =
 let field_is_defined (ev: event) (fldname: string): bool =
   (get_field_helper ev fldname) <> "";;
 
-let get_field (ev: event) (fldname: string) (default: string option): string =  
-  let get_default() = match default with
-        | Some d -> d
-        | None -> failwith ("get_field. no default specified for: "^fldname^" of "^ev.typeid) in
+
+(* (1A) Field defaults (if any)
+   Just an association list from (type,field) -> value.
+   Single place for defaults so that marshalling functions and verification can 
+   use a single source. *)
+let defaults_table = [
+  (("packet", "dlsrc"), "0");
+  (("packet", "dldst"), "0");
+  (("ip_packet", "nwfrag"), "0");
+  (("ip_packet", "nwttl"), "255");
+  (("ip_packet", "nwtos"), "0");
+  (("ip_packet", "nwchksum"), "0");
+  (("ip_packet", "nwident"), "0");
+  (("tcp_packet", "tpack"), "0");
+  (("tcp_packet", "tpoffset"), "0");
+  (("tcp_packet", "tpwindow"), "0");
+  (("tcp_packet", "tpurgent"), "0");    
+];;
+
+let get_field (ev: event) (fldname: string): string =  
+  let get_default() = try
+          assoc (ev.typeid, fldname) defaults_table
+        with Not_found -> failwith ("get_field. no default specified for: "^fldname^" of "^ev.typeid) in
   try
     let evval = get_field_helper ev fldname in
       if field_is_defined ev fldname then evval
@@ -136,34 +156,34 @@ let get_field (ev: event) (fldname: string) (default: string option): string =
  ******************************************************************************)
 
 let make_eth (ev: event) (nw: Packet.nw): Packet.bytes =
-  let dlSrc = macaddr_of_int_string (get_field ev "dlsrc" (Some "0")) in
-  let dlDst = macaddr_of_int_string (get_field ev "dldst" (Some "0")) in
+  let dlSrc = macaddr_of_int_string (get_field ev "dlsrc") in
+  let dlDst = macaddr_of_int_string (get_field ev "dldst") in
     Packet.marshal {Packet.dlSrc = dlSrc; Packet.dlDst = dlDst;
                     Packet.dlVlan = None; Packet.dlVlanPcp = 0;
                     Packet.dlVlanDei = false; nw = nw };;
 
 let make_arp (ev: event): Packet.nw =
-  let arp_sha = macaddr_of_int_string (get_field ev "arp_sha" None) in
-  let arp_spa = nwaddr_of_int_string (get_field ev "arp_spa" None) in
-  let arp_tpa = nwaddr_of_int_string (get_field ev "arp_tpa" None) in
-  let arp_op = int_of_string (get_field ev "arp_op" None) in
+  let arp_sha = macaddr_of_int_string (get_field ev "arp_sha") in
+  let arp_spa = nwaddr_of_int_string (get_field ev "arp_spa") in
+  let arp_tpa = nwaddr_of_int_string (get_field ev "arp_tpa") in
+  let arp_op = int_of_string (get_field ev "arp_op") in
     match arp_op with
     | 1 -> (* request *)
         Arp(Arp.Query(arp_sha, arp_spa, arp_tpa))
     | 2 -> (* query *)
-        let arp_tha = macaddr_of_int_string (get_field ev "arp_tha" None) in
+        let arp_tha = macaddr_of_int_string (get_field ev "arp_tha") in
                 Arp(Arp.Reply(arp_sha, arp_spa, arp_tha, arp_tpa))
     | _ -> failwith "bad arp op";;
 
 (* TODO(adf): add support for IP flags, stored as booleans by ocaml-packet *)
 let make_ip (ev: event) (tp: Ip.tp): Packet.nw =
-  let nwSrc = nwaddr_of_int_string (get_field ev "nwsrc" None) in
-  let nwDst = nwaddr_of_int_string (get_field ev "nwdst" None) in
-  let nwFrag = int_of_string (get_field ev "nwfrag" (Some "0")) in
-  let nwTTL = int_of_string (get_field ev "nwttl" (Some "255")) in
-  let nwTos = int_of_string (get_field ev "nwtos" (Some "0")) in
-  let nwChksum = int_of_string (get_field ev "nwchksum" (Some "0")) in
-  let nwIdent = int_of_string (get_field ev "nwident" (Some "0")) in
+  let nwSrc = nwaddr_of_int_string (get_field ev "nwsrc") in
+  let nwDst = nwaddr_of_int_string (get_field ev "nwdst") in
+  let nwFrag = int_of_string (get_field ev "nwfrag") in
+  let nwTTL = int_of_string (get_field ev "nwttl") in
+  let nwTos = int_of_string (get_field ev "nwtos") in
+  let nwChksum = int_of_string (get_field ev "nwchksum") in
+  let nwIdent = int_of_string (get_field ev "nwident") in
   let nwOptions = Cstruct.create 0 in
   let nwFlags = { Packet.Ip.Flags.df = false;
                   Packet.Ip.Flags.mf = false} in
@@ -173,13 +193,13 @@ let make_ip (ev: event) (tp: Ip.tp): Packet.nw =
 
 (* TODO(adf): add support for TCP flags, stored as booleans by ocaml-packet *)
 let make_tcp (ev: event): Packet.Ip.tp =
-  let tpSrc = int_of_string (get_field ev "tpsrc" None) in
-  let tpDst = int_of_string (get_field ev "tpdst" None) in
-  let tpSeq = nwaddr_of_int_string (get_field ev "tpseq" None) in
-  let tpAck = nwaddr_of_int_string (get_field ev "tpack" (Some "0")) in
-  let tpOffset = int_of_string (get_field ev "tpoffset" (Some "0")) in
-  let tpWindow = int_of_string (get_field ev "tpwindow" (Some "0")) in
-  let tpUrgent = int_of_string (get_field ev "tpurgent" (Some "0")) in
+  let tpSrc = int_of_string (get_field ev "tpsrc") in
+  let tpDst = int_of_string (get_field ev "tpdst") in
+  let tpSeq = nwaddr_of_int_string (get_field ev "tpseq") in
+  let tpAck = nwaddr_of_int_string (get_field ev "tpack") in
+  let tpOffset = int_of_string (get_field ev "tpoffset") in
+  let tpWindow = int_of_string (get_field ev "tpwindow") in
+  let tpUrgent = int_of_string (get_field ev "tpurgent") in
   let tpFlags =  { Tcp.Flags.ns = false; cwr = false; ece = false;
                    urg = false; ack = false; psh = false; rst = false;
                    syn = false; fin = false} in
@@ -190,31 +210,31 @@ let make_tcp (ev: event): Packet.Ip.tp =
          payload = Cstruct.create 0});;
 
 let make_udp (ev: event) (payload : Cstruct.t option) : Packet.Ip.tp =
-  let tpSrc = int_of_string (get_field ev "tpsrc" None) in
-  let tpDst = int_of_string (get_field ev "tpdst" None) in
+  let tpSrc = int_of_string (get_field ev "tpsrc") in
+  let tpDst = int_of_string (get_field ev "tpdst") in
   let payload = match payload with
                  |None -> Cstruct.create 0 (* empty payload *)
                  |Some payload -> payload in
     Udp({Udp.src = tpSrc; dst = tpDst; chksum = 0; payload = payload});;
 
 let make_igmp2 (ev: event): Packet.Igmp.msg =
-  let addr = nwaddr_of_int_string (get_field ev "igmp_addr" None) in
+  let addr = nwaddr_of_int_string (get_field ev "igmp_addr") in
     Igmp.Igmp1and2({Igmp1and2.mrt = 0; chksum = 0; addr = addr})
 
 let make_igmp3 (ev: event): Packet.Igmp.msg =
-  let v3typ = int_of_string (get_field ev "igmp_v3typ" None) in
-  let addr = nwaddr_of_int_string (get_field ev "igmp_addr" None) in
+  let v3typ = int_of_string (get_field ev "igmp_v3typ") in
+  let addr = nwaddr_of_int_string (get_field ev "igmp_addr") in
     Igmp.Igmp3({Igmp3.chksum = 0; grs =
                   [{Igmp3.GroupRec.typ = v3typ;
                     addr = addr; sources = []}]})
 
 let make_igmp (ev: event): Packet.Ip.tp =
-  let ver_and_typ = int_of_string (get_field ev "igmp_ver_and_typ" None) in
+  let ver_and_typ = int_of_string (get_field ev "igmp_ver_and_typ") in
   let msg = if ver_and_typ = 0x22 then make_igmp3 ev else make_igmp2 ev in
     Igmp({Igmp.ver_and_typ = ver_and_typ; msg = msg})
 
 let make_mdns (ev: event): Packet.Dns.t =
-  let qname = get_field ev "mdns_question" None in
+  let qname = get_field ev "mdns_question" in
     {Dns.id = 0; flags = 0;
      questions = [{Dns.Qd.name = qname; typ = 0x000c; class_ = 0x0001}];
      answers = []; authority = []; additional = [] }
@@ -225,11 +245,11 @@ let make_mdns (ev: event): Packet.Dns.t =
   Probably a better way to do this. Kludging for now. *)
 
 let generic_eth_body (ev: event): Packet.nw =
-  let dlTyp = int_of_string (get_field ev "dltyp" None) in
+  let dlTyp = int_of_string (get_field ev "dltyp") in
     Packet.Unparsable(dlTyp, Cstruct.create(0));;
 
 let generic_ip_body (ev: event): Packet.Ip.tp =
-  let nwProto = int_of_string (get_field ev "nwproto" None) in
+  let nwProto = int_of_string (get_field ev "nwproto") in
     Packet.Ip.Unparsable(nwProto, Cstruct.create(0));;
 
 let marshal_packet (ev: event): Packet.bytes =
