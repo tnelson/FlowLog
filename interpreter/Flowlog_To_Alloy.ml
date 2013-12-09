@@ -270,13 +270,12 @@ let alloy_actions (out: out_channel) (p: flowlog_program): unit =
 
 let build_forward_defaults (pf: pred_fragment): string = 
     let ev_def = get_event p pf.increl in (* use type from "ON" rather than base packet *)
-    (*let outv = string_of_term (first pf.outargs) in*)
-    let outv = "out0" in 
-    let terms_used = get_terms (fun _ -> true) pf.where in 
+    let outv = String.lowercase (string_of_term (first pf.outargs)) in    
+    let terms_used = get_terms (fun _ -> true) pf.where in     
     let constrs = filter_map (fun (fname, _) -> 
-                  let target = TField(outv, fname) in
+                  let target = TField(outv, fname) in (* using correct outv var*)                  
                   if not (mem target terms_used) then
-                    Some (outv^"."^fname^" = "^"ev."^fname)
+                    Some ("out0."^fname^" = "^"ev."^fname)
                   else None) ev_def.evfields in
       String.concat " && " constrs in
 
@@ -439,18 +438,24 @@ open %s as o
 open %s as prog1
 open %s as prog2
 
-pred changeImpact[] { 
-  some ev: Event, st: State |
-  some newst1, newst2: State |
-    (prog1/transition[st, ev, newst1] and 
-     prog2/transition[st, ev, newst2] and 
-     newst1 != newst2)
-    || 
-    some outev: Event | 
-      (prog1/outpolicy[st, ev, outev] and not prog2/outpolicy[st, ev, outev]) ||
-      (prog2/outpolicy[st, ev, outev] and not prog1/outpolicy[st, ev, outev])
+pred changeStateTransition[prestate: State, ev: Event]
+{
+  some disj newst1, newst2: State |
+    (prog1/transition[prestate, ev, newst1] and 
+     prog2/transition[prestate, ev, newst2])
 }
-run changeImpact for 5 but 3 State, 2 Event
+pred changePolicyOutput[prestate: State, ev: Event] { 
+    some outev: Event | 
+      (prog1/outpolicy[prestate, ev, outev] and not prog2/outpolicy[prestate, ev, outev]) ||
+      (prog2/outpolicy[prestate, ev, outev] and not prog1/outpolicy[prestate, ev, outev])
+}
+pred changeImpact[prestate: State, ev: Event] { 
+    changeStateTransition[prestate, ev]   
+    || changePolicyOutput[prestate, ev]
+}
+
+run changeStateTransition for 4 but 3 State, 1 Event
+run changePolicyOutput for 4 but 2 State, 2 Event
 \n%!" 
   ofn
   (Filename.chop_extension fn1)
