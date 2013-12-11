@@ -50,6 +50,10 @@ let minus_rule_exists (p: flowlog_program) (tblname: string): bool =
   exists (fun cl -> match cl.orig_rule.action with 
     | ADelete(rtbl, _, _) when tblname = rtbl -> true
     | _ -> false) p.clauses;;
+let mod_rule_exists (p: flowlog_program) (tblname: string) (sign: bool): bool =
+  if sign then plus_rule_exists p tblname
+  else minus_rule_exists p tblname;;
+
 let do_rule_exists (p: flowlog_program) (tblname: string): bool =
   exists (fun cl -> match cl.orig_rule.action with 
     | ADo(rtbl, _, _) when tblname = rtbl -> true
@@ -335,8 +339,9 @@ let build_forward_defaults (pf: pred_fragment): string =
 (**********************************************************)
 (* transition: st x ev x st 
    (note this is a slight deviation from the language: packet-in becomes an event) *)
-let alloy_transition (out: out_channel) (p: flowlog_program): unit =
-  let build_table_transition (tbl : table_def): string =       
+
+(* construct transition string for a particular table (including plus and minus rules) *)
+let build_table_transition (p: flowlog_program) (tbl : table_def): string =       
     let tupdvec = (String.concat "," (mapi  (fun i typ -> sprintf "tup%d: %s" i (String.capitalize typ)) tbl.tablearity)) in   
     let tupavec = (String.concat "," (init (length tbl.tablearity) (fun i -> sprintf "tup%d" i))) in   
 
@@ -346,13 +351,45 @@ let alloy_transition (out: out_channel) (p: flowlog_program): unit =
     let plus_expr =  if plus_rule_exists p tbl.tablename then sprintf "+ { %s | %s_%s[st1, ev, %s]}" tupdvec plus_prefix tbl.tablename tupavec 
                      else "" in
       sprintf "  st2.%s = (st1.%s\n            %s)\n            %s" 
-              tbl.tablename tbl.tablename minus_expr plus_expr
-  in
+              tbl.tablename tbl.tablename minus_expr plus_expr;;
 
+(* same as build_table_transition, but constructs change-impact strings *)
+let build_prestate_table_compare (p1: flowlog_program) (p2: flowlog_program) (_,tbl : string * table_def): string =       
+    let tupdvec = (String.concat "," (mapi (fun i typ -> sprintf "tup%d: %s" i (String.capitalize typ)) tbl.tablearity)) in   
+    let tupavec = (String.concat "," (init (length tbl.tablearity) (fun i -> sprintf "tup%d" i))) in   
+    let tupproduct = (String.concat "->" (init (length tbl.tablearity) (fun i -> sprintf "tup%d" i))) in     
+
+    let construct_compare_frag p1 p2 tbl (modsign: bool): string = 
+      let modstr = if modsign then "plus" else "minus" in
+      let memstr = if modsign then "not in" else "in" in
+
+    if (mod_rule_exists p1 tbl.tablename modsign) &&
+       (mod_rule_exists p2 tbl.tablename modsign)
+    then
+      sprintf "
+{ %s | %s %s prestate.%s && prog1/%s_%s[prestate, ev, %s]} !=
+{ %s | %s %s prestate.%s && prog2/%s_%s[prestate, ev, %s]}"
+        tupdvec tupproduct memstr tbl.tablename modstr tbl.tablename tupavec
+        tupdvec tupproduct memstr tbl.tablename modstr tbl.tablename tupavec
+
+    else if (mod_rule_exists p2 tbl.tablename modsign) then
+      sprintf "some { %s | %s %s prestate.%s && prog2/%s_%s[prestate, ev, %s]}"
+        tupdvec tupproduct memstr tbl.tablename modstr tbl.tablename tupavec
+    else if (mod_rule_exists p1 tbl.tablename modsign) then
+      sprintf "some { %s | %s %s prestate.%s && prog1/%s_%s[prestate, ev, %s]}"
+        tupdvec tupproduct memstr tbl.tablename modstr tbl.tablename tupavec
+    else "" in      
+    
+    let minus_expr = construct_compare_frag p1 p2 tbl false in
+    let plus_expr = construct_compare_frag p1 p2 tbl true in
+      (minus_expr ^ "\n||\n" ^ plus_expr);;
+
+
+let alloy_transition (out: out_channel) (p: flowlog_program): unit =  
   let local_tables = get_local_tables p in 
   let remote_tables = get_remote_tables p in
     fprintf out "pred transition[st1: State, ev: Event, st2: State] { \n%!";
-    fprintf out "%s\n%!" (String.concat " &&\n\n" (map build_table_transition (local_tables @ remote_tables)));
+    fprintf out "%s\n%!" (String.concat " &&\n\n" (map (build_table_transition p) (local_tables @ remote_tables)));
     fprintf out "}\n\n%!";;
 
 let alloy_outpolicy (out: out_channel) (p: flowlog_program): unit =
@@ -475,79 +512,61 @@ one sig overall {
   trace: seq State 
 }
 
-// Don't always have pigeonhole: could loop back to prior state.
-//fact noDuplicateStates {
-// instead, force all states to live in the trace
-fact allStatesInSeq {
-  State = overall.trace.elems
+// Since we are looking for a path to the prestate, and not seeking, 
+// post-states, we can disregard the possibility of state repeats:
+fact noDuplicateStates {
+  all s: State | one overall.trace.indsOf[s]
 }
+// 'one' above covers this
+//fact allStatesInSeq {
+//  State = overall.trace.elems
+//}
 
 fact startingState { 
   %s 
 }
 
 
-// TODO: concern that really we ought to NOT add the 2 extra states, but rather 
-// should just check for diffs in plus and minus relations (mod what's already there)
-// That would be faster, but give less useful info.
-
-// Can't say this naively: we may have branching in the last state, due to ch imp.
 fact orderRespectsTransitionsAndStops {
   all i : overall.trace.inds - overall.trace.lastIdx |  
-    let s = overall.trace[i] | 
-    let nexts = overall.trace[i+1] |
-    let prevs = overall.trace[i-1] |
-
-    // If this state is immediately after a 'branching ch imp' pre-state
-    // the next state is the branch by prog2 and the LAST state
-    // (This lets us avoid having two separate sequences)
-    ((i > 0 && some chev: Event | changeStateTransition[prevs, chev])
-      // Need to say it's the SAME event that bridges from the chimp state to poststates
-      => (some nexts && (some ev: Event | prog2/transition[s, ev, nexts]
-                                                                   && prog1/transition[prevs, ev, s]) 
-          && nexts = overall.trace.last) 
-      else (some ev: Event | prog1/transition[s, ev, nexts]))
-
-  // Make sure a change-impact scenario has a 'next'
-// TODO this fails. because this ALL doesn't hold for the last element.
-  and
-  ((some chev: Event | changeStateTransition[s, chev]) implies some nexts)
-
-    // If this state is a 'policy change chimp' pre-state then
-    // the next state is the last state.
-    and // don't forget parens here!
-    ((some chev: Event | changePolicyOutput[s, chev]) implies 
-      nexts = overall.trace.last)
-  // TODO check: what if we have a CST followed by a CPO? or vice versa?
+    (some ev: Event | prog1/transition[overall.trace[i], ev, overall.trace[i+1]])
 }
 
-// Make sense to divide the two types of change impact,
-//  to avoid confusion with what the final state in a trace represents.
-pred changeStateTransition[prestate: State, ev: Event]
-{
-  some disj newst1, newst2: State |
-    (prog1/transition[prestate, ev, newst1] and 
-     prog2/transition[prestate, ev, newst2])
-}
+
+////////////////////////////////////////
+// Different from atemporal/instantaneous/static change impact:
+// Don't want to waste a state or two on the post-states. So re-frame
+// changeStateTransition to use plus/minus preds instead.
+
 pred changePolicyOutput[prestate: State, ev: Event] { 
     some outev: Event | 
       (prog1/outpolicy[prestate, ev, outev] and not prog2/outpolicy[prestate, ev, outev]) ||
       (prog2/outpolicy[prestate, ev, outev] and not prog1/outpolicy[prestate, ev, outev])
 }
-pred changeImpact[prestate: State, ev: Event] { 
-    changeStateTransition[prestate, ev]   
-    || changePolicyOutput[prestate, ev]
+
+pred changeImpactLast[ev: Event] { 
+    changeStateTransition[overall.trace.last, ev]   
+    || changePolicyOutput[overall.trace.last, ev]
+}
+
+pred changeStateTransition[prestate: State, ev: Event]
+{
+  %s  
 }
 
 // If go above 8 (7?) states, be sure to increase the size of int
 // seq and State should always have the same bound
-run changeImpact for 6 but 4 State, 5 Event, 4 seq
+run changeImpactLast for 6 but 4 State, 5 Event, 4 seq
+
+/// ^^ This doesn't reflect OSEPL guarantees: need 2x mac per packet, for instance
+// do NOT need one per state though. TODO: revise.
 
 \n%!" 
   ofn
   (Filename.chop_extension fn1)
   (Filename.chop_extension fn2)
-  (build_starting_state_trace ontol);
+  (build_starting_state_trace ontol)
+  (String.concat "||\n" (map (build_prestate_table_compare p1 p2) ontol.tables_used));
   end;
       close_out out;
       printf "WARNING: Make sure the two files have the same ontology, or the generated file may not run.\n%!";
