@@ -28,6 +28,7 @@
   %token FROM
   %token NOT
   %token IMPLIES
+  %token XOR
   %token TRUE
   %token FALSE
   %token IFF
@@ -85,9 +86,6 @@
             | INCOMING NAME LPAREN NAME RPAREN SEMICOLON {DeclInc($2, $4)}
             | OUTGOING NAME LPAREN NAME RPAREN SEMICOLON {DeclOut($2, FixedEvent($4))};
 
-// OUTGOING notify-police(mac, swid, t) THEN 
-// SEND EVENT stolen-laptop-found {mac:=mac, swid:=swid, time:=t} TO 127.0.0.1 5050;
-
   optional_colon: 
             | COLON {()} | {()};
 
@@ -99,9 +97,7 @@
               SEND TO DOTTED_IP optional_colon NUMBER SEMICOLON 
               {ReactOut($2, FixedEvent($4), OutSend($4, $9, $11))}   
             | INCOMING NAME THEN INSERT INTO NAME SEMICOLON 
-              {ReactInc($2, $6)};
-  
-  //assign: NAME COLON_EQUALS NAME {{afield=$1; atupvar=$3}};
+              {ReactInc($2, $6)};  
 
   refresh_clause:
             | TIMEOUT NUMBER NAME {RefreshTimeout(int_of_string($2), $3)} 
@@ -134,7 +130,9 @@
             | formula AND formula {FAnd($1, $3)}             
             | formula OR formula {FOr($1, $3)} 
             | LPAREN formula RPAREN {$2} 
-            | formula IMPLIES formula {FOr(FNot($1), $3)} 
+            // XOR, IFF, and IMPLIES supported as sugar in parser
+            | formula IMPLIES formula {FOr(FNot($1), $3)}             
+            | formula XOR formula {FAnd(FOr($1, $3), FNot(FAnd($1, $3)))}            
             | formula IFF formula {FOr(FAnd($1, $3), FAnd(FNot($1), FNot($3)))};
   term: 
             | NAME {TVar($1)} 
@@ -159,12 +157,7 @@
   action_clause_list: 
             | action_clause {[$1]}  
             | action_clause action_clause_list {$1 :: $2};
-
-  //possempty_assign_list:          
-  //          | assign {[$1]} 
-  //          | assign COMMA possempty_assign_list {$1 :: $3}
-  //          | {[]};
-
+  
   stmt_list: 
             | stmt {$1} 
             | stmt stmt_list {$1 @ $2};

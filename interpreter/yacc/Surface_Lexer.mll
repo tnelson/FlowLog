@@ -41,6 +41,7 @@ rule token = parse
 
   | "not" { NOT }
   | "or" { OR }
+  | "xor" { XOR }
   | "and" { AND }
   | "implies" { IMPLIES }
   | "iff" { IFF }
