@@ -88,7 +88,8 @@ class FlowlogDemo(object):
 
         network = Mininet(topo, controller=controller, link=TCLink, 
                           # host=CPULimitedHost, # seems better without this
-                          switch=switch, ipBase='10.0.0.0/24')
+                          switch=switch, ipBase='10.0.0.0/24',
+                          autoSetMacs=True)
 
         self.launchNetwork(network, host_cmd, host_cmd_opts)
         self.demo(network)

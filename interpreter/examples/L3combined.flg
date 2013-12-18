@@ -1,0 +1,36 @@
+
+
+INCLUDE "examples/Arp_Cache.flg";
+
+// L3 routing
+
+ON ip_packet(pkt):
+
+  DO forward(new) WHERE
+    pkt.nwDst = 10.0.2.2 and // IN 10.0.2.0/24
+    new.dlSrc = ca:fe:ca:fe:00:02 and // gw mac
+    new.dlDst = 00:00:00:00:00:02 and
+    new.locPt = 2; // where attached
+
+  DO forward(new) WHERE
+    pkt.nwDst = 10.0.1.2 and
+    new.dlSrc = ca:fe:ca:fe:00:01 and // gw mac
+    new.dlDst = 00:00:00:00:00:01 and
+    new.locPt = 1;
+
+
+// AND translate for outbound
+
+ON ip_packet(pkt) WHERE pkt.nwDst = 10.0.1.2:
+  DO forward(new) WHERE
+    new.dlDst = 00:00:00:00:00:01;
+
+ON ip_packet(pkt) WHERE pkt.nwDst = 10.0.2.2:
+  DO forward(new) WHERE
+    new.dlDst = 00:00:00:00:00:02;
+
+// config
+
+ON startup(ev):
+  INSERT (10.0.1.1, ca:fe:ca:fe:00:01) INTO cached; // 10.0.1.1/24 gw mac addr
+  INSERT (10.0.2.1, ca:fe:ca:fe:00:02) INTO cached; // 10.0.2.1/24 gw mac addr
