@@ -46,7 +46,6 @@
   %token RPAREN
   %token <string> QUOTED_IDENTIFIER
   %token <bool> BOOLEAN
-  %token <string> DOTTED_IP
   %token <string> NUMBER
   %token <string> NAME
   
@@ -58,6 +57,7 @@
   %left IFF
   %left IMPLIES
   %left OR
+  %nonassoc XOR
   %left AND  
   %nonassoc NOT
   %right EQUALS NOTEQUALS
@@ -91,10 +91,10 @@
 
   reactive_stmt:      
             | REMOTE TABLE NAME LPAREN name_list RPAREN FROM NAME AT 
-              DOTTED_IP optional_colon NUMBER refresh_clause SEMICOLON 
+              NUMBER optional_colon NUMBER refresh_clause SEMICOLON 
               {ReactRemote($3, $5, $8, $10, $12, $13)}   
             | OUTGOING NAME LPAREN NAME RPAREN THEN 
-              SEND TO DOTTED_IP optional_colon NUMBER SEMICOLON 
+              SEND TO NUMBER optional_colon NUMBER SEMICOLON 
               {ReactOut($2, FixedEvent($4), OutSend($4, $9, $11))}   
             | INCOMING NAME THEN INSERT INTO NAME SEMICOLON 
               {ReactInc($2, $6)};  

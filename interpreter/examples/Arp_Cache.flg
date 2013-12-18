@@ -126,15 +126,15 @@ check cachedImmediateReply for 2 but 1 Event, 2 State
     not request.arp_tpa = request.arp_spa and // skip self-requests
     new.locSw = request.locSw and
     new.dlDst = request.dlDst and
-    new.dlSrc = 0xCAFECAFE and
+    new.dlSrc = 00:00:ca:fe:ca:fe and
 
     // Make it an ARP request
     new.arp_op = 1 and
 
     // Constrain other ARP fields based on original request
     new.arp_tpa = request.arp_tpa and
-    new.arp_sha = 0xCAFECAFE and // Controller MAC
-    new.arp_spa = 0x0A0A0A01 and // Controller IP addr (10.10.10.1)
+    new.arp_sha = 00:00:CA:FE:CA:FE and //0xCAFECAFE and // Controller MAC
+    new.arp_spa = 10.10.10.1 and // Controller IP addr (10.10.10.1)
 
     switch_has_port(new.locSw, new.locPt); // REQUIRED: this rule is not compiled
 

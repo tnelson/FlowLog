@@ -1,6 +1,6 @@
 {
-open Surface_Parser;;       (* The tokens are defined in this mli *)
-
+open Surface_Parser       (* The tokens are defined in this mli *)
+open Flowlog_Helpers
 (* NOTE: To get case-insensitivity, make sure to lowercase the stream before passing in. *)
 
 (* TODO: We've likely hit the point where the table is blowing up because we have a lot of keywords. 
@@ -63,13 +63,22 @@ rule token = parse
 
   | "any" { any_counter := !any_counter+1; NAME("any"^(string_of_int !any_counter)) }
 
-  | ['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9'] as dotted_ip { DOTTED_IP(dotted_ip)}
-  | ['0'-'9']+ | '0''x'(['0'-'9''a'-'f']+) as number { NUMBER(number) }
+  | ['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9'] as dotted_ip 
+    { NUMBER(nwaddr_to_int_string (Packet.ip_of_string dotted_ip))}
+  | ['0'-'9''a'-'f']?['0'-'9''a'-'f']":"['0'-'9''a'-'f']?['0'-'9''a'-'f']":"['0'-'9''a'-'f']?['0'-'9''a'-'f']":"
+    ['0'-'9''a'-'f']?['0'-'9''a'-'f']":"['0'-'9''a'-'f']?['0'-'9''a'-'f']":"['0'-'9''a'-'f']?['0'-'9''a'-'f'] as mac
+    { NUMBER(macaddr_to_int_string (Packet.mac_of_string mac))}
+  | ['0'-'9']+ | '0''x'(['0'-'9''a'-'f']+) as number 
+    { NUMBER(number) }  
+
   | ['a'-'z''A'-'Z''_''0'-'9']+ as name { NAME(name) }
+  
   | ['a'-'z''A'-'Z''_''0'-'9''-']+ as name 
     { Printf.printf "Bad identifier: %s. Cannot use dashes. Use underscore instead.\n%!" name; 
       token lexbuf; }    
+
   | '"'['.''/''\\''a'-'z''A'-'Z''_''0'-'9''-']+'"' as id { QUOTED_IDENTIFIER(id) }
+
   | _ as c { Printf.printf "Unknown character: %c\n" c; token lexbuf;}
 and commenting = parse 
   | "*/" { token lexbuf }

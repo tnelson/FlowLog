@@ -55,7 +55,7 @@ ON atv_announce(evt):
   DO emit_mdns(new) WHERE
     new.dlDst = evt.atv_mac and
     new.dlSrc = evt.client_mac and
-    new.nwSrc = 0x0A0A0001 and // 10.10.0.0.1 (controller)
+    new.nwSrc = 10.10.0.1 and //0x0A0A0001 and // 10.10.0.0.1 (controller)
     new.nwDst = 0xE00000FB and // 224.0.0.251 (IGMP)
     new.tpSrc = 5353 and
     new.tpDst = 5353 and
