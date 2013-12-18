@@ -1,0 +1,26 @@
+interface fe0
+ip address 10.1.1.1 255.255.255.254
+ip access-group 101 in
+!
+interface vlan1
+ip address 192.128.5.1 255.255.255.0
+ip access-group 102 in
+!
+access-list 101 deny ip host 10.1.1.2 any
+access-list 101 permit tcp any host 192.168.5.10 eq 80
+access-list 101 permit tcp any host 192.168.5.11 eq 25
+!
+! added this rule to test multi-level ip address types
+! should produce:
+! (IP-192.168.5.0/255.255.255.0 > IP-192.168.5.11 IP-192.168.5.10)
+access-list 101 deny ip 192.168.5.10 0.0.0.255 any
+!
+! NOT THIS: access-list 101 deny ip 192.168.5.10 255.255.255.0 any
+! Which produces a garbage IP range because Cisco IOS access-lists flip the bits of the mask
+!
+access-list 101 deny any
+!
+access-list 102 permit any
+!
+! // need to give the end command
+end
