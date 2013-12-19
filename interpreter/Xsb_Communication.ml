@@ -338,6 +338,7 @@ module Communication = struct
 		| FAnd(f1, f2) -> FAnd(subs_xsb_formula prgm ~context_on:context_on f1, subs_xsb_formula prgm ~context_on:context_on f2)
 		| FOr(f1, f2) -> FOr(subs_xsb_formula prgm ~context_on:context_on f1, subs_xsb_formula prgm ~context_on:context_on f2)
 		| FEquals(_, _) -> f
+		| FIn(_,_,_) -> f
 		| FAtom(modname, relname, tlargs) ->
 			let subsarglists = mapi (decls_expand_fields prgm modname relname context_on) tlargs in
 			let subargs = fold_left (fun acc lst -> acc @ lst) [] subsarglists in

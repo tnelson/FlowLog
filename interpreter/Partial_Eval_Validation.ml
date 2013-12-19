@@ -72,15 +72,21 @@ let rec forbidden_assignment_check (newpkt: string) (f: formula) (innot: bool): 
 
 	match f with
 		| FTrue -> ()
-    	| FFalse -> ()
-    	| FAnd(f1, f2) ->
+    | FFalse -> ()    
+
+    | FAnd(f1, f2) ->
       		 forbidden_assignment_check newpkt f1 innot;
       		 forbidden_assignment_check newpkt f2 innot;
-      	| FOr(f1, f2) -> 
+    | FOr(f1, f2) -> 
       		 forbidden_assignment_check newpkt f1 innot;
       		 forbidden_assignment_check newpkt f2 innot;
-      	| FNot(f) -> forbidden_assignment_check newpkt f (not innot);
-    	| FEquals(t1, t2) -> 
+    | FNot(f) -> forbidden_assignment_check newpkt f (not innot);      
+
+    | FIn(t,_,_) -> 
+      check_legal_negation t t;
+      check_legal_pkt_fields t;
+
+    | FEquals(t1, t2) -> 
         (* ALLOWED: 
         (1) equality: between new and old, same field. NOT negated
         (2) equality: special case NOT(newpkt.locPt = pkt.locPt)
@@ -92,7 +98,7 @@ let rec forbidden_assignment_check (newpkt: string) (f: formula) (innot: bool): 
     		check_same_field_if_newpkt t1 t2; (* can't swap fields, etc. w/o controller *)
         check_not_same_pkt t1 t2;
 
-      	| FAtom(modname, relname, tlargs) ->       		
+    | FAtom(modname, relname, tlargs) ->       		
       		(* new field must be legal for modification by openflow *)
       		iter check_legal_pkt_fields tlargs;
       		(* if involves a newpkt, must be positive *)    
@@ -125,6 +131,9 @@ let rec common_existential_check (newpkt: string) (sofar: string list) (f: formu
    	| FEquals(t1, t2) -> 
    		(* equals formulas don't represent a join. do nothing *)
    		sofar
+    | FIn(_,_,_) ->
+      sofar
+
    	| FAtom(modname, relname, tlargs) ->  
     		unique (flatten (map ext_helper tlargs));;	
 

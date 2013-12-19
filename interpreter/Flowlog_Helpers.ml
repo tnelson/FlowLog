@@ -43,6 +43,7 @@ let rec get_terms (pred: term -> bool) (f: formula) : term list =
 			filter pred tlargs
 		| FEquals(t1, t2) ->
 			filter pred [t1; t2]
+    | FIn(t,_,_) -> [t]
 		| FAnd(f1, f2) ->
 			(unique (get_terms pred f1) @ (get_terms pred f2))
     | FOr(f1, f2) ->
@@ -58,6 +59,7 @@ let rec get_terms_with_sign (pred: term -> bool) (startsign : bool) (f: formula)
       filter_map (fun t -> if pred t then Some (t, startsign) else None) tlargs
     | FEquals(t1, t2) ->
       filter_map (fun t -> if pred t then Some (t, startsign) else None) [t1; t2]
+    | FIn(t,_,_) -> [(t, startsign)]
     | FAnd(f1, f2) ->
       (unique (get_terms_with_sign pred startsign f1) @ (get_terms_with_sign pred startsign f2))
     | FOr(f1, f2) ->
@@ -155,6 +157,7 @@ let rec uses_relation (goal_modname: string) (goal_relname: string) (f: formula)
 		| FTrue -> false
 		| FFalse -> false
 		| FEquals(t1, t2) -> false		
+    | FIn(t,_,_) -> false
 		| FAnd(f1, f2) -> (uses_relation goal_modname goal_relname f1) || (uses_relation goal_modname goal_relname f2)			
 		| FOr(f1, f2) -> (uses_relation goal_modname goal_relname f1) || (uses_relation goal_modname goal_relname f2)			
 		| FNot(innerf) -> uses_relation goal_modname goal_relname innerf			
@@ -180,13 +183,15 @@ let rec nnf (f: formula): formula =
         | FFalse -> f
         | FEquals(_, _) -> f
         | FAtom(_,_,_) -> f
+        | FIn(_,_,_) -> f
         | FOr(f1, f2) -> FOr(nnf f1, nnf f2)
         | FAnd(f1, f2) -> FAnd(nnf f1, nnf f2)
         | FNot(f2) -> 
           match f2 with
             | FTrue -> FFalse
             | FFalse -> FTrue
-            | FEquals(_, _) -> f
+            | FEquals(_, _) -> f (* f, not f2. want to keep the negation. *)
+            | FIn(_,_,_) -> f
             | FAtom(_,_,_) -> f
             | FNot(f3) -> nnf f3  
             | FOr(f1, f2) -> FAnd(nnf (FNot f1), nnf (FNot f2))
@@ -199,6 +204,7 @@ let rec disj_to_top ?(ignore_negation: bool = false) (f: formula): formula =
         | FFalse -> f;
         | FEquals(_, _) -> f;
         | FAtom(_, _, _) -> f;
+        | FIn(_,_,_) -> f
         | FOr(f1, f2) -> 
           FOr(disj_to_top ~ignore_negation:ignore_negation f1, disj_to_top ~ignore_negation:ignore_negation f2);
         | FNot(f2) when (not ignore_negation) ->
@@ -382,6 +388,7 @@ let rec get_atoms (f: formula): formula list =
 	match f with
 		| FTrue -> []
 		| FFalse -> []
+    | FIn(_,_,_) -> []
 		| FAtom(modname, relname, tlargs) -> [f]
 		| FEquals(t1, t2) -> []			
 		| FAnd(f1, f2) ->
@@ -396,7 +403,8 @@ let rec get_equalities ?(sign: bool = true) (f: formula): (bool * formula) list 
     | FTrue -> []
     | FFalse -> []
     | FAtom(modname, relname, tlargs) -> []
-    | FEquals(t1, t2) -> [(sign, f)]     
+    | FEquals(t1, t2) -> [(sign, f)]   
+    | FIn(_,_,_) -> []  
     | FAnd(f1, f2) ->
       (unique (get_equalities ~sign:sign f1) @ (get_equalities ~sign:sign f2))
     | FOr(f1, f2) ->

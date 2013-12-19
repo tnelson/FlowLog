@@ -18,7 +18,9 @@ open NetCore_Types
               | FTrue 
               | FFalse 
               | FEquals of term * term
-              | FNot of formula 
+              (* pkt.nwsrc in 10.0.1.1/24 *)
+              | FIn of term * string * string
+              | FNot of formula               
                 (* module, relname, args*)
               | FAtom of string * string * term list 
               | FAnd of formula * formula 
@@ -178,6 +180,11 @@ type typeid = string;;
       | FTrue -> "true"
       | FFalse -> "false"
       | FEquals(t1, t2) -> (string_of_term ~verbose:verbose t1) ^ " = "^ (string_of_term ~verbose:verbose t2)
+      | FIn(t, addr, mask) ->
+        if verbose = Verbose || verbose = Brief then 
+          (string_of_term ~verbose:verbose t) ^ " IN "^ addr ^ "/" ^ mask
+        else
+          "range"^addr^"_"^mask^"("^(string_of_term ~verbose:verbose t)^")"
       | FNot(f) ->  
         (match verbose with 
           | XsbForcePositive -> "not_"^(string_of_formula ~verbose:verbose f)
@@ -272,6 +279,7 @@ let rec gather_nonneg_equalities_involving_vars
           when (not neg) && (not (thevar = t)) && (not (mem thevar exempt)) -> 
             [(thevar, t)]
         | FEquals(_, _) -> []
+        | FIn(_,_,_) -> []
         | FAtom(modstr, relstr, argterms) -> []
         | FOr(f1, f2) -> 
             unique ((gather_nonneg_equalities_involving_vars ~exempt:exempt f1 neg) @ 
@@ -308,7 +316,9 @@ let rec substitute_term (f: formula) (v: term) (t: term): formula =
           let st2 = substitute_term_result t2 in
           (* Remove fmlas which will be "x=x"; avoids inf. loop. *)
           if st1 = st2 then FTrue
-          else equals_if_consistent st1 st2           
+          else equals_if_consistent st1 st2     
+        | FIn(t, addr, mask) ->          
+            FIn(substitute_term_result t, addr, mask)      
         | FAtom(modstr, relstr, argterms) -> 
           let newargterms = map (fun arg -> substitute_term_result arg) argterms in
             FAtom(modstr, relstr, newargterms)

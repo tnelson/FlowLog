@@ -87,6 +87,7 @@ let rec partial_evaluation (p: flowlog_program) (incpkt: string) (f: formula): f
     | FTrue -> f
     | FFalse -> f
     | FEquals(t1, t2) -> f
+    | FIn(_,_,_) -> f
     | FAnd(f1, f2) -> FAnd(partial_evaluation p incpkt f1, partial_evaluation p incpkt f2)
     | FNot(innerf) -> 
         let peresult = partial_evaluation p incpkt innerf in
@@ -154,6 +155,9 @@ let rec build_unsafe_switch_actions (oldpkt: string) (body: formula): action =
       else       
         actlist
 
+    (* IP range forbidden for new packet *)
+    | FIn(_,_,_) -> actlist
+
     (* If PE has left a disjunction or negated disjunction (or a standalone negated tuple),
         then it doesn't involve newpkt so ignore this conjunct. *)
     | FOr(_, _) -> actlist
@@ -192,6 +196,8 @@ let rec build_unsafe_switch_actions (oldpkt: string) (body: formula): action =
     | FFalse -> actlist
     | FTrue -> actlist
     | FNot(_) -> actlist
+    | FIn(_, _, _) -> actlist
+
     | FEquals(TField(var1, fld1), TField(var2, fld2)) ->
       failwith ("create_mod_actions: invalid equality "^(string_of_formula body))
 
@@ -257,6 +263,9 @@ let field_to_pattern (fld: string) (aval:string): NetCore_Pattern.t =
 
       | FTrue -> Some(Everything)
       | FFalse -> Some(Nothing)   
+
+      | FIn(t, addr, mask) -> 
+        failwith "unsupported: IN formula that needed conversion to NetCore predicate"
 
       (* PE may leave a disjunction or negated disjunction if it doesn't involve newpkt
          (meaning it needs processing here) and inside the disj are conjunctions over tuples!
