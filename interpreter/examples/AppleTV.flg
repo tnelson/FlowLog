@@ -44,19 +44,19 @@ ON atv_announce(evt):
       new.dlSrc = evt.client_mac and
       new.nwSrc = 0x0A0A0064 // TODO(adf): do we need correct IP addrs?
     )) and
-    new.nwDst = 0xE0000016 and // 224.0.0.22 (IGMP)
+    new.nwDst = 224.0.0.22 and // 224.0.0.22 (IGMP)
     //new.nwTtl = 1 and
     new.igmp_ver_and_typ = 0x22 and
     new.igmp_v3typ = 0x4 and
-    new.igmp_addr = 0xE00000FB and // 224.0.0.251 (mDNS)
+    new.igmp_addr = 224.0.0.251 and // 224.0.0.251 (mDNS)
     new.locSw = 1 and // DPID of switch controller is connected to
     new.locPt = 0xfff9; // OFPP_TABLE
 
   DO emit_mdns(new) WHERE
     new.dlDst = evt.atv_mac and
     new.dlSrc = evt.client_mac and
-    new.nwSrc = 10.10.0.1 and //0x0A0A0001 and // 10.10.0.0.1 (controller)
-    new.nwDst = 0xE00000FB and // 224.0.0.251 (IGMP)
+    new.nwSrc = 10.10.0.1 and // 10.10.0.0.1 (controller)
+    new.nwDst = 224.0.0.251 and // 224.0.0.251 (IGMP)
     new.tpSrc = 5353 and
     new.tpDst = 5353 and
     (new.mdns_question = "_airplay._tcp.local" OR
@@ -78,8 +78,8 @@ ON atv_disconnect(evt):
  *
  ******************************************************************************/
 
-ON udp_packet(pkt) WHERE pkt.dlDst = 0x01005e0000fb and // mDNS IPv4 ethernet address
-                         pkt.nwDst = 0xE00000FB and // 224.0.0.251 (mDNS group)
+ON udp_packet(pkt) WHERE pkt.dlDst = 01:00:5e:00:00:fb and // mDNS IPv4 ethernet address
+                         pkt.nwDst = 224.0.0.251 and // 224.0.0.251 (mDNS group)
                          pkt.tpDst = 5353: // (mDns port)
 
   DO forward(new) WHERE

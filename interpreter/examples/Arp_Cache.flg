@@ -38,7 +38,7 @@ TABLE queued(ipaddr, macaddr, ipaddr, switchid, portid);
  *
  ******************************************************************************/
 
-ON arp_packet(request) WHERE request.dlSrc = 0xCAFECAFE: // Controller MAC
+ON arp_packet(request) WHERE request.dlSrc = 00:00:ca:fe:ca:fe: // Controller MAC
    DO forward(new) WHERE
      new.locPt != request.locPt;
 
@@ -49,7 +49,7 @@ ON arp_packet(request) WHERE request.dlSrc = 0xCAFECAFE: // Controller MAC
  ******************************************************************************/
 
 ON arp_packet(request) WHERE request.arp_op = 1 AND
-                                request.dlSrc != 0xCAFECAFE: // Controller MAC
+                                request.dlSrc != 00:00:ca:fe:ca:fe: // Controller MAC
 
   //
   // If we have a hardware addr cached for the target protocol addr,
@@ -133,7 +133,7 @@ check cachedImmediateReply for 2 but 1 Event, 2 State
 
     // Constrain other ARP fields based on original request
     new.arp_tpa = request.arp_tpa and
-    new.arp_sha = 00:00:CA:FE:CA:FE and //0xCAFECAFE and // Controller MAC
+    new.arp_sha = 00:00:CA:FE:CA:FE and // Controller MAC
     new.arp_spa = 10.10.10.1 and // Controller IP addr (10.10.10.1)
 
     switch_has_port(new.locSw, new.locPt); // REQUIRED: this rule is not compiled
@@ -156,7 +156,7 @@ check cachedImmediateReply for 2 but 1 Event, 2 State
  ******************************************************************************/
 
 ON arp_packet(reply) WHERE reply.arp_op = 2 AND
-                              reply.dlSrc != 0xCAFECAFE:
+                              reply.dlSrc != 00:00:ca:fe:ca:fe:
 
   //
   // Learn from replies
