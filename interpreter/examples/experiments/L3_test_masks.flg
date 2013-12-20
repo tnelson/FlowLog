@@ -1,0 +1,49 @@
+// TEST for mask syntax and compilation
+
+// TODO: path resolution is bad here if we try to run from examples/experiments. Will fail to resolve NIB (which ARP uses)
+
+INCLUDE "examples/Arp_Cache.flg";
+
+// subnets(subnet addr, subnet mask, gw ip, gw mac, locSw, locpt)
+
+TABLE subnets(ipaddr, int, ipaddr, macaddr, switchid, portid);
+
+
+ON ip_packet(pkt):
+  DO forward(new) WHERE
+    subnets(addr, mask, new.dldst, gwip, pkt.locSw, new.locPt)
+    and pkt.nwdst IN addr/mask; // gwip unused?
+
+/*ON ip_packet(pkt):
+
+  DO forward(new) WHERE
+    pkt.nwDst IN 10.0.2.0/24 and
+    new.dlSrc = ca:fe:ca:fe:00:02 and // gw mac
+    new.dlDst = 00:00:00:00:00:02 and // TODO(adf): should ONLY apply to 10.0.2.2
+    new.locPt = 2; // where attached
+
+  DO forward(new) WHERE
+    pkt.nwDst IN 10.0.1.0/24 and
+    new.dlSrc = ca:fe:ca:fe:00:01 and // gw mac
+    new.dlDst = 00:00:00:00:00:01 and // TODO(adf): should ONLY apply to 10.0.2.2
+    new.locPt = 1;
+*/
+
+// AND translate for outbound (should be sequentially composed with above)
+
+//ON ip_packet(pkt) WHERE pkt.nwDst = 10.0.1.2:
+//  DO forward(new) WHERE
+//    new.dlDst = 00:00:00:00:00:01;
+
+//ON ip_packet(pkt) WHERE pkt.nwDst = 10.0.2.2:
+//  DO forward(new) WHERE
+//    new.dlDst = 00:00:00:00:00:02;
+
+// config
+
+ON startup(ev):
+  INSERT (10.0.1.1, ca:fe:ca:fe:00:01) INTO cached; // 10.0.1.1/24 gw mac addr
+  INSERT (10.0.2.1, ca:fe:ca:fe:00:02) INTO cached; // 10.0.2.1/24 gw mac addr
+  INSERT (10.0.1.0, 24, 10.0.1.2, ca:fe:ca:fe:00:01, 1, 1) INTO subnets;
+  INSERT (10.0.2.0, 24, 10.0.2.2, ca:fe:ca:fe:00:02, 1, 2) INTO subnets;
+  

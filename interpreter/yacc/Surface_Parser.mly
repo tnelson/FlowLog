@@ -35,6 +35,7 @@
   %token OR
   %token AND  
   %token IN
+  %token SLASH
   %token PERIOD
   %token COLON
   %token SEMICOLON
@@ -49,7 +50,6 @@
   %token <bool> BOOLEAN
   %token <string> NUMBER
   %token <string> NAME
-  %token <string * string> IPMASK
   
   %start main
 
@@ -132,7 +132,7 @@
             | formula AND formula {FAnd($1, $3)}             
             | formula OR formula {FOr($1, $3)} 
             | LPAREN formula RPAREN {$2} 
-            | term IN IPMASK { let addr, mask = $3 in FIn($1, addr, mask) }
+            | term IN term SLASH term { FIn($1, $3, $5) }
             // XOR, IFF, and IMPLIES supported as sugar in parser
             | formula IMPLIES formula {FOr(FNot($1), $3)}             
             | formula XOR formula {FAnd(FOr($1, $3), FNot(FAnd($1, $3)))}            

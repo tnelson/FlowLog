@@ -81,7 +81,7 @@ type alloy_ontology = {
       | FTrue -> "true[]"
       | FFalse -> "false[]"
       | FEquals(t1, t2) -> (alloy_of_term t1) ^ " = "^ (alloy_of_term t2)
-      | FIn(t, addr, mask) -> sprintf "%s -> %s -> %s in in_ipv4_range" (alloy_of_term t) addr mask
+      | FIn(t, addr, mask) -> sprintf "%s -> %s -> %s in in_ipv4_range" (alloy_of_term t) (alloy_of_term addr) (alloy_of_term mask)
       | FNot(f2) ->  "not ("^(alloy_of_formula stateid f2)^")"
       | FAtom("", relname, tlargs) -> 
           (String.concat "->" (map alloy_of_term tlargs))^" in "^stateid^"."^relname

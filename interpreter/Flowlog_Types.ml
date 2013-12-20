@@ -19,7 +19,7 @@ open NetCore_Types
               | FFalse 
               | FEquals of term * term
               (* pkt.nwsrc in 10.0.1.1/24 *)
-              | FIn of term * string * string
+              | FIn of term * term * term
               | FNot of formula               
                 (* module, relname, args*)
               | FAtom of string * string * term list 
@@ -182,9 +182,9 @@ type typeid = string;;
       | FEquals(t1, t2) -> (string_of_term ~verbose:verbose t1) ^ " = "^ (string_of_term ~verbose:verbose t2)
       | FIn(t, addr, mask) ->
         if verbose = Verbose || verbose = Brief then 
-          (string_of_term ~verbose:verbose t) ^ " IN "^ addr ^ "/" ^ mask
+          (string_of_term ~verbose:verbose t) ^ " IN "^ (string_of_term ~verbose:verbose addr) ^ "/" ^ (string_of_term ~verbose:verbose mask)
         else
-          sprintf "in_ipv4_range(%s,%s,%s)" (string_of_term ~verbose:verbose t) addr mask          
+          sprintf "in_ipv4_range(%s,%s,%s)" (string_of_term ~verbose:verbose t) (string_of_term ~verbose:verbose addr) (string_of_term ~verbose:verbose mask)          
       | FNot(f) ->  
         (match verbose with 
           | XsbForcePositive -> "not_"^(string_of_formula ~verbose:verbose f)

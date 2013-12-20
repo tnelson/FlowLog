@@ -271,7 +271,7 @@ let field_to_masked_pattern (fld: string) (aval:string) (maskstr:string): NetCor
       | FTrue -> Some(Everything)
       | FFalse -> Some(Nothing)   
 
-      | FIn(TField(varname, fld), addr, mask) when varname = oldpkt ->
+      | FIn(TField(varname, fld), TConst(addr), TConst(mask)) when varname = oldpkt ->
         Some(Hdr(field_to_masked_pattern fld addr mask))
 
 

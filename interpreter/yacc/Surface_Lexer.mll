@@ -49,6 +49,7 @@ rule token = parse
   | "true" { TRUE }
   | "false" { FALSE }
   
+  | '/' { SLASH }
   | '.' { PERIOD }
   | ":=" { COLON_EQUALS }  
   | ':' { COLON }
@@ -63,15 +64,6 @@ rule token = parse
   | ')' { RPAREN }  
 
   | "any" { any_counter := !any_counter+1; NAME("any"^(string_of_int !any_counter)) }
-
-  | ['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9']
-    "/"['0'-'9']+ as ip_with_mask
-    { match Str.split (Str.regexp "/") ip_with_mask with
-        | addr::mask::[] ->
-          IPMASK(nwaddr_to_int_string (Packet.ip_of_string addr), mask)
-        | _ -> Printf.printf "Bad IP mask.\n%!"; 
-               token lexbuf;
-    }
 
   | ['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9'] as dotted_ip 
     { NUMBER(nwaddr_to_int_string (Packet.ip_of_string dotted_ip))}
