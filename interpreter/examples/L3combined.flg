@@ -15,14 +15,42 @@ ON ip_packet(pkt) WHERE pkt.locSw = 0x1000000000000001: // TODO(adf) should come
   DO forward(new) WHERE
     pkt.nwDst IN 10.0.2.0/24 and
     new.dlSrc = ca:fe:ca:fe:00:02 and // gw mac
-    new.dlDst = 00:00:00:00:00:02 and // TODO(adf): should ONLY apply to 10.0.2.2
     new.locPt = 2; // where attached
 
   DO forward(new) WHERE
     pkt.nwDst IN 10.0.1.0/24 and
     new.dlSrc = ca:fe:ca:fe:00:01 and // gw mac
-    new.dlDst = 00:00:00:00:00:01 and // TODO(adf): should ONLY apply to 10.0.1.2
     new.locPt = 1;
+
+// outbound dlDst translators, built with arp snooping
+
+ON ip_packet(pkt) WHERE pkt.locSw = 0x2000000000000001: // subnet 1 translator
+  DO forward(new) WHERE
+    pkt.dlDst = ca:fe:ca:fe:00:01 and // subnet 1 gw mac addr
+    pkt.locPt != 1 and
+    new.locPt = 1;
+
+  DO forward(new) WHERE
+    pkt.nwDst IN 10.0.1.0/24 and // subnet 1 range
+    cached(pkt.nwDst, new.dlDst) and
+    pkt.nwDst != 10.0.1.1 and // all gw ip addrs
+    pkt.nwDst != 10.0.2.1 and
+    pkt.locPt = 1 and
+    new.locPt = 2;
+
+ON ip_packet(pkt) WHERE pkt.locSw = 0x2000000000000002: // subnet 2 translator
+  DO forward(new) WHERE
+    pkt.dlDst = ca:fe:ca:fe:00:02 and // subnet 2 gw mac addr
+    pkt.locPt != 1 and
+    new.locPt = 1;
+
+  DO forward(new) WHERE
+    pkt.nwDst IN 10.0.2.0/24 and // subnet 2 range
+    cached(pkt.nwDst, new.dlDst) and
+    pkt.nwDst != 10.0.1.1 and // all gw ip addrs
+    pkt.nwDst != 10.0.2.1 and
+    pkt.locPt = 1 and
+    new.locPt = 2;
 
 
 // AND translate for outbound (should be sequentially composed with above)

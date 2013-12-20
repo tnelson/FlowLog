@@ -2,6 +2,8 @@
 
 # Based on PaneDemo.py from PANE VM available at http://pane.cs.brown.edu
 
+import math
+
 from optparse import OptionParser
 
 from mininet.net import Mininet
@@ -41,7 +43,10 @@ class FlowlogDemo(object):
 
     def buildTopo(self):
         switch = {}
-        num_hosts = 2
+        translator = {}
+        subnet_root = {}
+        num_subnets = 2
+        num_hosts_per_subnet = 2
         # 15 Mbps bandwidth and 2 ms delay on each link
         linkopts = dict(bw=15, delay='2ms', loss=0, use_htb=True)
 
@@ -49,18 +54,38 @@ class FlowlogDemo(object):
         topo = FlowlogTopo()
         router = topo.addSwitch('r1', dpid="1000000000000001") # dpid is in hex by default
 
+        # Add the dlDst translators for each subnet
+
+        translator[1] = topo.addSwitch('t1', dpid="2000000000000001")
+        translator[2] = topo.addSwitch('t2', dpid="2000000000000002")
+
+        topo.addLink(router, translator[1], **linkopts)
+        topo.addLink(router, translator[2], **linkopts)
+
+        # Add the root switches for each subnet
+
+        subnet_root[1] = topo.addSwitch('sr1', dpid="3000000000000001")
+        subnet_root[2] = topo.addSwitch('sr2', dpid="3000000000000002")
+
+        topo.addLink(translator[1], subnet_root[1],  **linkopts)
+        topo.addLink(translator[2], subnet_root[2], **linkopts)
+
+        # Add some edge switches
+
         switch[1] = topo.addSwitch('s1')
         switch[2] = topo.addSwitch('s2')
 
-        topo.addLink(router, switch[1], **linkopts)
-        topo.addLink(router, switch[2], **linkopts)
+        topo.addLink(subnet_root[1], switch[1], **linkopts)
+        topo.addLink(subnet_root[2], switch[2], **linkopts)
 
         # Add some regular hosts
-        for h in irange(1, num_hosts):
-            host = topo.addHost('host%s' % h, ip='10.0.%s.2/24' % h,
-                                defaultRoute='dev host%s-eth0 via 10.0.%s.1' % (h, h),
-                                cpu=0.4/num_hosts)
-            topo.addLink(host, switch[h], **linkopts)
+        for s in irange(1, num_subnets):
+          for h in irange(1, num_hosts_per_subnet):
+            global_host = (s - 1) * num_hosts_per_subnet + h
+            host = topo.addHost('host%s' % global_host, ip='10.0.%s.%s/24' % (s, 1 + h),
+                                defaultRoute='dev host%s-eth0 via 10.0.%s.1' % (global_host, s),
+                                cpu=0.4/(num_subnets * num_hosts_per_subnet))
+            topo.addLink(host, switch[s], **linkopts)
 
         return topo
 
