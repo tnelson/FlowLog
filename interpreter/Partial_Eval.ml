@@ -243,6 +243,13 @@ let field_to_pattern (fld: string) (aval:string): NetCore_Pattern.t =
     | _ -> failwith ("field_to_pattern: "^fld^" -> "^aval) in
     (* TODO: dlVLan, dlVLanPCP *)
 
+let field_to_masked_pattern (fld: string) (aval:string) (maskstr:string): NetCore_Pattern.t =
+  let mask_val = Int32.of_int (32 - (int_of_string maskstr)) in
+  match fld with
+    | "nwsrc" -> {all with ptrnNwSrc = WildcardPartial (nwaddr_of_int_string aval, mask_val) }
+    | "nwdst" -> {all with ptrnNwDst = WildcardPartial (nwaddr_of_int_string aval, mask_val) }
+    | _ -> failwith ("field_to_maskeD_pattern: "^fld^" -> "^aval^" / "^maskstr) in
+
   let rec eq_to_pred (eqf: formula): pred option =
     match eqf with
       | FNot(innerf) ->        
@@ -264,8 +271,9 @@ let field_to_pattern (fld: string) (aval:string): NetCore_Pattern.t =
       | FTrue -> Some(Everything)
       | FFalse -> Some(Nothing)   
 
-      | FIn(t, addr, mask) -> 
-        failwith "unsupported: IN formula that needed conversion to NetCore predicate"
+      | FIn(TField(varname, fld), addr, mask) when varname = oldpkt ->
+        Some(Hdr(field_to_masked_pattern fld addr mask))
+
 
       (* PE may leave a disjunction or negated disjunction if it doesn't involve newpkt
          (meaning it needs processing here) and inside the disj are conjunctions over tuples!

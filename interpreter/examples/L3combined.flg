@@ -1,33 +1,38 @@
-
-
 INCLUDE "examples/Arp_Cache.flg";
 
 // L3 routing
 
+
+// subnets(subnet, gw ip, gw mac, locSw, locpt)
+//
+// ON ip_pkt(pkt)
+//   DO forward(new) WHERE
+//    subnets(pkt.nwdst IN, _, new.dldst, pkt.locSw, new.locPt)
+
 ON ip_packet(pkt):
 
   DO forward(new) WHERE
-    pkt.nwDst IN 10.0.2.0/24 and // was 10.0.2.2 
+    pkt.nwDst IN 10.0.2.0/24 and
     new.dlSrc = ca:fe:ca:fe:00:02 and // gw mac
-    new.dlDst = 00:00:00:00:00:02 and
+    new.dlDst = 00:00:00:00:00:02 and // TODO(adf): should ONLY apply to 10.0.2.2
     new.locPt = 2; // where attached
 
   DO forward(new) WHERE
-    pkt.nwDst = 10.0.1.2 and
+    pkt.nwDst IN 10.0.1.0/24 and
     new.dlSrc = ca:fe:ca:fe:00:01 and // gw mac
-    new.dlDst = 00:00:00:00:00:01 and
+    new.dlDst = 00:00:00:00:00:01 and // TODO(adf): should ONLY apply to 10.0.2.2
     new.locPt = 1;
 
 
-// AND translate for outbound
+// AND translate for outbound (should be sequentially composed with above)
 
-ON ip_packet(pkt) WHERE pkt.nwDst = 10.0.1.2:
-  DO forward(new) WHERE
-    new.dlDst = 00:00:00:00:00:01;
+//ON ip_packet(pkt) WHERE pkt.nwDst = 10.0.1.2:
+//  DO forward(new) WHERE
+//    new.dlDst = 00:00:00:00:00:01;
 
-ON ip_packet(pkt) WHERE pkt.nwDst = 10.0.2.2:
-  DO forward(new) WHERE
-    new.dlDst = 00:00:00:00:00:02;
+//ON ip_packet(pkt) WHERE pkt.nwDst = 10.0.2.2:
+//  DO forward(new) WHERE
+//    new.dlDst = 00:00:00:00:00:02;
 
 // config
 
