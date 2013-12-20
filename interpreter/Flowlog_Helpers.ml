@@ -357,7 +357,7 @@ let nwport_to_string (n: Int32.t): string = Int32.to_string n
       | "ipaddr" -> Packet.string_of_ip (nwaddr_of_int_string strval)
       | "macaddr" -> Packet.string_of_mac (macaddr_of_int_string strval)
       | "portid" -> strval
-      | "switchid" -> strval
+      | "switchid" -> OpenFlow0x01.string_of_switchId (Int64.of_string strval)
       | "ethtyp" -> Packet.string_of_dlTyp (int_of_string strval)          
       | _ -> strval);;
 

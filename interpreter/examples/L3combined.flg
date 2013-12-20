@@ -1,4 +1,5 @@
 INCLUDE "examples/Arp_Cache.flg";
+INCLUDE "examples/Mac_Learning.inc.flg";
 
 // L3 routing
 
@@ -9,7 +10,7 @@ INCLUDE "examples/Arp_Cache.flg";
 //   DO forward(new) WHERE
 //    subnets(pkt.nwdst IN, _, new.dldst, pkt.locSw, new.locPt)
 
-ON ip_packet(pkt):
+ON ip_packet(pkt) WHERE pkt.locSw = 0x1000000000000001: // TODO(adf) should come from subnets config
 
   DO forward(new) WHERE
     pkt.nwDst IN 10.0.2.0/24 and
@@ -20,7 +21,7 @@ ON ip_packet(pkt):
   DO forward(new) WHERE
     pkt.nwDst IN 10.0.1.0/24 and
     new.dlSrc = ca:fe:ca:fe:00:01 and // gw mac
-    new.dlDst = 00:00:00:00:00:01 and // TODO(adf): should ONLY apply to 10.0.2.2
+    new.dlDst = 00:00:00:00:00:01 and // TODO(adf): should ONLY apply to 10.0.1.2
     new.locPt = 1;
 
 

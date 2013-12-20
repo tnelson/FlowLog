@@ -780,13 +780,13 @@ let make_policy_stream (p: flowlog_program)
                                           ("pt", (nwport_to_string portid))]}
             else None)
             feats.ports in
-        printf "SWITCH %Ld connected. Flowlog events triggered: %s\n%!" sw (String.concat ", " (map (string_of_event p) notifs));
+        printf "SWITCH 0x%Lx connected. Flowlog events triggered: %s\n%!" sw (String.concat ", " (map (string_of_event p) notifs));
         List.iter (fun notif -> ignore (respond_to_notification p notif)) notifs;        
 
       | SwitchDown(swid) -> 
         let sw_string = Int64.to_string swid in        
         let notif = {typeid="switch_down"; values=construct_map [("sw", sw_string)]} in          
-          printf "SWITCH %Ld went down. Triggered: %s\n%!" swid (string_of_event p notif);
+          printf "SWITCH %Lx went down. Triggered: %s\n%!" swid (string_of_event p notif);
           ignore(respond_to_notification p notif);                
     and
 

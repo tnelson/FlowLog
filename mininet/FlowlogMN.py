@@ -40,20 +40,27 @@ class FlowlogDemo(object):
         self.options, self.args = opts.parse_args()
 
     def buildTopo(self):
+        switch = {}
         num_hosts = 2
         # 15 Mbps bandwidth and 2 ms delay on each link
         linkopts = dict(bw=15, delay='2ms', loss=0, use_htb=True)
 
-        # Create an empty network with one switch
+        # Create a network with a two switches, each attached to a router.
         topo = FlowlogTopo()
-        switch = topo.addSwitch('s1')
+        router = topo.addSwitch('r1', dpid="1000000000000001") # dpid is in hex by default
+
+        switch[1] = topo.addSwitch('s1')
+        switch[2] = topo.addSwitch('s2')
+
+        topo.addLink(router, switch[1], **linkopts)
+        topo.addLink(router, switch[2], **linkopts)
 
         # Add some regular hosts
         for h in irange(1, num_hosts):
             host = topo.addHost('host%s' % h, ip='10.0.%s.2/24' % h,
                                 defaultRoute='dev host%s-eth0 via 10.0.%s.1' % (h, h),
                                 cpu=0.4/num_hosts)
-            topo.addLink(host, switch, **linkopts)
+            topo.addLink(host, switch[h], **linkopts)
 
         return topo
 
