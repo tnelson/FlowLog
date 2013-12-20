@@ -184,7 +184,7 @@ type typeid = string;;
         if verbose = Verbose || verbose = Brief then 
           (string_of_term ~verbose:verbose t) ^ " IN "^ addr ^ "/" ^ mask
         else
-          "range"^addr^"_"^mask^"("^(string_of_term ~verbose:verbose t)^")"
+          sprintf "in_ipv4_range(%s,%s,%s)" (string_of_term ~verbose:verbose t) addr mask          
       | FNot(f) ->  
         (match verbose with 
           | XsbForcePositive -> "not_"^(string_of_formula ~verbose:verbose f)
