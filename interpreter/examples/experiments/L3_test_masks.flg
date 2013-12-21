@@ -8,6 +8,8 @@ INCLUDE "examples/Mac_Learning.inc.flg";
 // subnets(subnet addr, subnet mask, gw ip, gw mac, locSw, locpt)
 TABLE subnets(ipaddr, int, ipaddr, macaddr, switchid, portid);
 
+table router_queued(switchid);
+
 // MAC learning running on other switches (we manually prevent it from running on swid = 0x1000000000000001)
 ON ip_packet(pkt) WHERE pkt.locSw = 0x1000000000000001:
   DO forward(new) WHERE     
@@ -18,6 +20,12 @@ ON ip_packet(pkt) WHERE pkt.locSw = 0x1000000000000001:
     subnets(addr, mask, gwip, new.dlsrc, pkt.locSw, new.locPt)
     and pkt.nwdst IN addr/mask; // gwip unused?
 
+
+
+insert (pkt.locsw) into router_queued where
+  pkt.ipsrc in 200.200.200.200/24
+  or
+  pkt.ipdst in 200.200.200.200/24;
 
 // AND translate for outbound (should be sequentially composed with above)
 

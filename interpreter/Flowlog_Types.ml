@@ -160,7 +160,7 @@ type typeid = string;;
       | TConst(s) -> 
         if verbose = Verbose then "TConst("^s^")" 
         else if verbose = Brief then s
-        else if (Str.string_match (Str.regexp "[0-9]") s 0) then
+        else if (Str.string_match (Str.regexp "[0-9\\-]") s 0) then
           s
         else 
           "'constesc"^(String.lowercase s)^"'"        
