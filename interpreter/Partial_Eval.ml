@@ -273,7 +273,10 @@ let field_to_masked_pattern (fld: string) (aval:string) (maskstr:string): NetCor
 
       | FIn(TField(varname, fld), TConst(addr), TConst(mask)) when varname = oldpkt ->
         Some(Hdr(field_to_masked_pattern fld addr mask))
-
+      | FIn(_,_,_) ->
+        (*failwith ("Uncompilable IN formula:"^(string_of_formula eqf))*)
+        (* Substituion did not remove vars. *)
+        None
 
       (* PE may leave a disjunction or negated disjunction if it doesn't involve newpkt
          (meaning it needs processing here) and inside the disj are conjunctions over tuples!
@@ -346,6 +349,37 @@ let handle_all_and_port_together (oldpkt: string) (apred: pred) (acts: action_at
     (apred, acts)
   end;;
 
+(* If there is an FIn(_,_,_) in the top-level conjunction, it may need substitution with equalities produced in PE. *)
+let substitute_ranges (f: formula): formula = 
+  let subfs = conj_to_list f in
+  let (ins, eqs) = fold_left (fun (accins, accnonins) subf -> match subf with
+                                  | FIn(_,_,_) -> (subf::accins, accnonins)
+                                  | FEquals(t1, t2) -> (accins, subf::accnonins)
+                                  | _ -> (accins, accnonins)) ([],[]) subfs in  
+  (* gather assignments*)
+  let assignments = fold_left (fun acc subf -> match subf with 
+                                  | FEquals((TVar(_) as v), (TConst(_) as c))  
+                                  | FEquals((TConst(_) as c), (TVar(_) as v)) -> (v, c) :: acc  
+                                  | _ -> acc) [] eqs in
+
+  (* TODO: we can use this to bootstrap join support. To do so, we need to check for contradictions 
+     and include negated-equals that we're currently trapping inside NOT. *)
+
+  (* substitute according to assignments *)
+  let result = substitute_terms f assignments in 
+  
+  if !global_verbose > 2 then
+  begin
+    printf "--- substitute_ranges ---\n%!";
+    printf "FMLA: %s\n%!" (string_of_formula f);
+    iter (fun (v, c) -> (printf "ASSN: %s -> %s\n%!" (string_of_term v) (string_of_term c))) assignments;  
+    printf "SUBS: %s\n%!" (string_of_formula result);
+  end;
+
+  (* If there are still variables left in INs, they are free to vary arbitrarily, and so the compiler will ignore that IN. *)
+  result;;  
+
+
 (* Side effect: reads current state in XSB *)
 (* Note: if given a non-packet-triggered clause, this function will happily compile it, but the trigger relation will be empty in current state
    and this reduce the clause to <false>. If the caller wants efficiency, it should pass only packet-triggered clauses. *)
@@ -368,13 +402,15 @@ let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_h
         (* todo: this is pretty inefficient for large numbers of tuples. do better? *)
         
         (*let bodies = disj_to_list (disj_to_top (nnf pebody)) in *)
-        let bodies = disj_to_list (disj_to_top ~ignore_negation:true pebody) in 
+        let bodies_before_substitute_ranges = disj_to_list (disj_to_top ~ignore_negation:true pebody) in 
         
         (*printf "bodies after nnf/disj_to_top = %s\n%!" (String.concat "   \n " (map string_of_formula bodies));*)
         (* anything not the old packet is a RESULT variable.
            Remember that we know this clause is packet-triggered, but
            we have no constraints on what gets produced. Maybe a bunch of 
            non-packet variables e.g. +R(x, y, z) ... *)
+
+        let bodies = map substitute_ranges bodies_before_substitute_ranges in
 
          (*printf "BODIES from PE of single clause: %d\n%!" (length bodies);       *)
 

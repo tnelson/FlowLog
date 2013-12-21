@@ -131,7 +131,8 @@ let reassemble_xsb_equality (incpkt: string) (tlargs: term list) (tuple: term li
 		  match xsbterm,origterm with 
         | TVar(_), _ -> failwith "reassemble_xsb_equality: unconstrained variable"
         | TField(_, _), _ -> failwith "field def in xsb term returned"
-        | _, TVar(vname) -> FTrue  (* COMPILATION: free variable *)
+        (* COMPILATION: free variable. Keep this assertion around in case it's needed. *)
+        | TConst(c), TVar(vname) -> FEquals(TVar(vname), TConst(c)) (*FTrue *)
 		    | _ -> FEquals(origterm, xsbterm))
     	 tlargs tuple;;
 

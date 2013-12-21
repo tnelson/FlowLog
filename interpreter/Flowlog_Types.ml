@@ -318,7 +318,7 @@ let rec substitute_term (f: formula) (v: term) (t: term): formula =
           if st1 = st2 then FTrue
           else equals_if_consistent st1 st2     
         | FIn(t, addr, mask) ->          
-            FIn(substitute_term_result t, addr, mask)      
+            FIn(substitute_term_result t, substitute_term_result addr, substitute_term_result mask)      
         | FAtom(modstr, relstr, argterms) -> 
           let newargterms = map (fun arg -> substitute_term_result arg) argterms in
             FAtom(modstr, relstr, newargterms)

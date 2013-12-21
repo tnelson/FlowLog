@@ -136,6 +136,13 @@ let well_formed_rule (p: flowlog_program) (r: srule): unit =
       | FEquals(t1, t2) ->
         well_formed_term headrelname headterms inrelname inargname t1;
         well_formed_term headrelname headterms inrelname inargname t2;
+
+      | FIn(t, addr, mask) -> 
+        well_formed_term headrelname headterms inrelname inargname t;
+        well_formed_term headrelname headterms inrelname inargname addr;
+        well_formed_term headrelname headterms inrelname inargname mask;        
+        (* *)
+
       | _ -> failwith "validate_rule" in
 
   (* regardless whether this rule is DO or INSERT etc. check these: *)
