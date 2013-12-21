@@ -9,3 +9,4 @@ interpreter/examples/*.json
 Surface_Lexer.ml
 Surface_Parser.ml
 Surface_Parser.mli
+*.pyc
