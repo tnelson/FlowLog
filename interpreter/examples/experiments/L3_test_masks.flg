@@ -23,9 +23,9 @@ ON ip_packet(pkt) WHERE pkt.locSw = 0x1000000000000001:
 
 
 insert (pkt.locsw) into router_queued where
-  pkt.ipsrc in 200.200.200.200/24
+  pkt.nwsrc in 200.200.200.200/24
   or
-  pkt.ipdst in 200.200.200.200/24;
+  pkt.nwdst in 200.200.200.200/24;
 
 // AND translate for outbound (should be sequentially composed with above)
 
