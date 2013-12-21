@@ -6,6 +6,7 @@ TABLE subnets(ipaddr, int, ipaddr, macaddr, switchid, portid, switchid);
 
 // table representing packets which router needs to send an ARP query for
 // TODO(adf): how do we deliver this packet later???
+// TODO(adf): actually store the packet, not just it's nwdst
 TABLE router_queued(ipaddr);
 
 
@@ -13,31 +14,31 @@ TABLE router_queued(ipaddr);
 
 ON ip_packet(pkt):
   DO forward(new) WHERE
-    subnets(addr, mask, gwip, new.dlSrc, pkt.locSw, new.locPt, trSw) // gwip, twSw unused
+    subnets(addr, mask, ANY, new.dlSrc, pkt.locSw, new.locPt, ANY)
     and pkt.nwDst IN addr/mask;
 
 // inbound path for subnet translators: just pass to the router, which is on port 1
 
 ON ip_packet(pkt):
   DO forward(new) WHERE
-    subnets(addr, mask, gwip, pkt.dlDst, gwmac, gwpt, pkt.locSw) // many unused variables
+    subnets(ANY, ANY, ANY, pkt.dlDst, ANY, ANY, pkt.locSw)
     and pkt.locPt != 1
     and new.locPt = 1;
 
-// outbound dlDst translators, built from the ARP cache
+// outbound path for subnet translators: set dlDst based on ARP cache
 
 ON ip_packet(pkt):
   DO forward(new) WHERE
-    subnets(addr, mask, gwip, gwmac, gwsw, gwpt, pkt.locSw)
+    subnets(addr, mask, gwip, ANY, ANY, ANY, pkt.locSw)
     and pkt.nwDst IN addr/mask
     and cached(pkt.nwDst, new.dlDst)
     and pkt.nwDst != gwip
     and pkt.locPt = 1
     and new.locPt = 2;
 
-// finally, send ARP request for IPs we can't translate and queue the pkt
+// finally, send an ARP request for IPs we can't translate and queue the pkt
 
-ON ip_packet(pkt) WHERE subnets(addr, mask, gwip, gwmac, gwsw, gwpt, pkt.locSw)
+ON ip_packet(pkt) WHERE subnets(addr, mask, gwip, gwmac, ANY, ANY, pkt.locSw)
                         and pkt.nwDst IN addr/mask
                         and not cached(pkt.nwDst, ANY)
                         and pkt.dlDst != gwmac
@@ -57,11 +58,11 @@ ON ip_packet(pkt) WHERE subnets(addr, mask, gwip, gwmac, gwsw, gwpt, pkt.locSw)
     new.arp_sha = 00:00:CA:FE:CA:FE and // Controller MAC
     new.arp_spa = 10.10.10.1 and // Controller IP addr (10.10.10.1)
 
-    switch_has_port(new.locSw, new.locPt); // REQUIRED: this rule is not compiled TODO(adf): needed???
+    switch_has_port(new.locSw, new.locPt); // REQUIRED? this rule is not compiled TODO(adf): needed???
 
 
 // with the above physically wired translators, we are trying to achieve
-// sequentially composition with what is, logically, this program:
+// sequential composition with what is, logically, this program:
 //
 //  ON ip_packet(pkt):
 //    DO forward(new) WHERE
