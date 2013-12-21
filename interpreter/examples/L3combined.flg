@@ -1,35 +1,39 @@
 INCLUDE "examples/Arp_Cache.flg";
 INCLUDE "examples/Mac_Learning.inc.flg";
 
+// subnets(subnet addr, subnet mask, gw ip, gw mac, locSw, locpt, trSw)
+TABLE subnets(ipaddr, int, ipaddr, macaddr, switchid, portid, switchid);
+
 // L3 routing
 
-
-// subnets(subnet, gw ip, gw mac, locSw, locpt)
-//
-// ON ip_pkt(pkt)
-//   DO forward(new) WHERE
-//    subnets(pkt.nwdst IN, _, new.dldst, pkt.locSw, new.locPt)
-
-ON ip_packet(pkt) WHERE pkt.locSw = 0x1000000000000001: // TODO(adf) should come from subnets config
-
+ON ip_packet(pkt):
   DO forward(new) WHERE
-    pkt.nwDst IN 10.0.2.0/24 and
-    new.dlSrc = ca:fe:ca:fe:00:02 and // gw mac
-    new.locPt = 2; // where attached
+    subnets(addr, mask, gwip, new.dlSrc, pkt.locSw, new.locPt, trSw) // gwip, twSw unused
+    and pkt.nwDst IN addr/mask;
 
+// inbound path for subnet translators: just pass to the router, which is on port 1
+
+ON ip_packet(pkt):
   DO forward(new) WHERE
-    pkt.nwDst IN 10.0.1.0/24 and
-    new.dlSrc = ca:fe:ca:fe:00:01 and // gw mac
-    new.locPt = 1;
+    subnets(addr, mask, gwip, pkt.dlDst, gwmac, gwpt, pkt.locSw) // many unused variables
+    and pkt.locPt != 1
+    and new.locPt = 1;
 
 // outbound dlDst translators, built with arp snooping
 
-ON ip_packet(pkt) WHERE pkt.locSw = 0x2000000000000001: // subnet 1 translator
+/* WAITING ON FIX FOR ISSUE #36. CAN DELETE NEXT TWO STANZAS AFTER FIXED.
+ON ip_packet(pkt):
   DO forward(new) WHERE
-    pkt.dlDst = ca:fe:ca:fe:00:01 and // subnet 1 gw mac addr
-    pkt.locPt != 1 and
-    new.locPt = 1;
+    subnets(addr, mask, gwip, gwmac, gwmac, gwpt, pkt.locSw)
+    and pkt.nwDst IN addr/mask
+    and cached(pkt.nwDst, new.dlDst)
+    and pkt.nwDst != 10.0.1.1 // all gw ip addrs TODO(adf): how include automatically?
+    and pkt.nwDst != 10.0.2.1
+    and pkt.locPt = 1
+    and new.locPt = 2;
+*/
 
+ON ip_packet(pkt) WHERE pkt.locSw = 0x2000000000000001: // subnet 1 translator
   DO forward(new) WHERE
     pkt.nwDst IN 10.0.1.0/24 and // subnet 1 range
     cached(pkt.nwDst, new.dlDst) and
@@ -38,12 +42,8 @@ ON ip_packet(pkt) WHERE pkt.locSw = 0x2000000000000001: // subnet 1 translator
     pkt.locPt = 1 and
     new.locPt = 2;
 
-ON ip_packet(pkt) WHERE pkt.locSw = 0x2000000000000002: // subnet 2 translator
-  DO forward(new) WHERE
-    pkt.dlDst = ca:fe:ca:fe:00:02 and // subnet 2 gw mac addr
-    pkt.locPt != 1 and
-    new.locPt = 1;
 
+ON ip_packet(pkt) WHERE pkt.locSw = 0x2000000000000002: // subnet 2 translator
   DO forward(new) WHERE
     pkt.nwDst IN 10.0.2.0/24 and // subnet 2 range
     cached(pkt.nwDst, new.dlDst) and
@@ -52,19 +52,24 @@ ON ip_packet(pkt) WHERE pkt.locSw = 0x2000000000000002: // subnet 2 translator
     pkt.locPt = 1 and
     new.locPt = 2;
 
+// with the above physically wired translators, we are trying to achieve
+// sequentially composition with what is, logically, this program:
+//
+//  ON ip_packet(pkt):
+//    DO forward(new) WHERE
+//      cached(pkt.nwDst, new.dlDst);
+//
+//  (on the outbound direction of the router)
 
-// AND translate for outbound (should be sequentially composed with above)
 
-//ON ip_packet(pkt) WHERE pkt.nwDst = 10.0.1.2:
-//  DO forward(new) WHERE
-//    new.dlDst = 00:00:00:00:00:01;
-
-//ON ip_packet(pkt) WHERE pkt.nwDst = 10.0.2.2:
-//  DO forward(new) WHERE
-//    new.dlDst = 00:00:00:00:00:02;
 
 // config
 
 ON startup(ev):
+  // subnets(addr,  mask, gw ip,    gw mac,            locSw,            locpt, trSw)
+  INSERT (10.0.1.0, 24,   10.0.1.1, ca:fe:ca:fe:00:01, 0x1000000000000001, 1, 0x2000000000000001) INTO subnets;
+  INSERT (10.0.2.0, 24,   10.0.2.1, ca:fe:ca:fe:00:02, 0x1000000000000001, 2, 0x2000000000000002) INTO subnets;
+
+  // for ARP cache. TODO(adf): should be derived from above automatically!
   INSERT (10.0.1.1, ca:fe:ca:fe:00:01) INTO cached; // 10.0.1.1/24 gw mac addr
   INSERT (10.0.2.1, ca:fe:ca:fe:00:02) INTO cached; // 10.0.2.1/24 gw mac addr
