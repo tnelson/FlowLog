@@ -4,6 +4,11 @@ INCLUDE "examples/Mac_Learning.inc.flg";
 // subnets(subnet addr, subnet mask, gw ip, gw mac, locSw, locpt, trSw)
 TABLE subnets(ipaddr, int, ipaddr, macaddr, switchid, portid, switchid);
 
+// table representing packets which router needs to send an ARP query for
+// TODO(adf): how do we deliver this packet later???
+TABLE router_queued(ipaddr);
+
+
 // L3 routing
 
 ON ip_packet(pkt):
@@ -19,38 +24,41 @@ ON ip_packet(pkt):
     and pkt.locPt != 1
     and new.locPt = 1;
 
-// outbound dlDst translators, built with arp snooping
+// outbound dlDst translators, built from the ARP cache
 
-/* WAITING ON FIX FOR ISSUE #36. CAN DELETE NEXT TWO STANZAS AFTER FIXED.
 ON ip_packet(pkt):
   DO forward(new) WHERE
-    subnets(addr, mask, gwip, gwmac, gwmac, gwpt, pkt.locSw)
+    subnets(addr, mask, gwip, gwmac, gwsw, gwpt, pkt.locSw)
     and pkt.nwDst IN addr/mask
     and cached(pkt.nwDst, new.dlDst)
-    and pkt.nwDst != 10.0.1.1 // all gw ip addrs TODO(adf): how include automatically?
-    and pkt.nwDst != 10.0.2.1
+    and pkt.nwDst != gwip
     and pkt.locPt = 1
     and new.locPt = 2;
-*/
 
-ON ip_packet(pkt) WHERE pkt.locSw = 0x2000000000000001: // subnet 1 translator
-  DO forward(new) WHERE
-    pkt.nwDst IN 10.0.1.0/24 and // subnet 1 range
-    cached(pkt.nwDst, new.dlDst) and
-    pkt.nwDst != 10.0.1.1 and // all gw ip addrs
-    pkt.nwDst != 10.0.2.1 and
-    pkt.locPt = 1 and
-    new.locPt = 2;
+// finally, send ARP request for IPs we can't translate and queue the pkt
 
+ON ip_packet(pkt) WHERE subnets(addr, mask, gwip, gwmac, gwsw, gwpt, pkt.locSw)
+                        and pkt.nwDst IN addr/mask
+                        and not cached(pkt.nwDst, ANY)
+                        and pkt.dlDst != gwmac
+                        and pkt.nwDst != gwip
+                        and pkt.locPt = 1:
 
-ON ip_packet(pkt) WHERE pkt.locSw = 0x2000000000000002: // subnet 2 translator
-  DO forward(new) WHERE
-    pkt.nwDst IN 10.0.2.0/24 and // subnet 2 range
-    cached(pkt.nwDst, new.dlDst) and
-    pkt.nwDst != 10.0.1.1 and // all gw ip addrs
-    pkt.nwDst != 10.0.2.1 and
-    pkt.locPt = 1 and
-    new.locPt = 2;
+  INSERT (pkt.nwDst) INTO router_queued;
+
+  DO emit_arp(new) WHERE
+    not router_queued(pkt.nwDst) and
+    new.locSw = pkt.locSw and
+    new.dlDst = ff:ff:ff:ff:ff:ff and
+    new.dlSrc = 00:00:ca:fe:ca:fe and // controller mac addr
+
+    new.arp_op = 1 and // ARP request
+    new.arp_tpa = pkt.nwDst and
+    new.arp_sha = 00:00:CA:FE:CA:FE and // Controller MAC
+    new.arp_spa = 10.10.10.1 and // Controller IP addr (10.10.10.1)
+
+    switch_has_port(new.locSw, new.locPt); // REQUIRED: this rule is not compiled TODO(adf): needed???
+
 
 // with the above physically wired translators, we are trying to achieve
 // sequentially composition with what is, logically, this program:
@@ -59,7 +67,8 @@ ON ip_packet(pkt) WHERE pkt.locSw = 0x2000000000000002: // subnet 2 translator
 //    DO forward(new) WHERE
 //      cached(pkt.nwDst, new.dlDst);
 //
-//  (on the outbound direction of the router)
+//  (on the outbound direction of the router). plus, issuing ARP requests
+//  for addresses we don't know how to translate
 
 
 
