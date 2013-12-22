@@ -1,7 +1,8 @@
 INCLUDE "examples/Arp_Cache.flg";
+INCLUDE "examples/L3external.flg";
 INCLUDE "examples/Mac_Learning.inc.flg";
 
-// subnets(subnet addr, subnet mask, gw ip, gw mac, locSw, locpt, trSw)
+// directly attached subnets(subnet addr, subnet mask, gw ip, gw mac, locSw, locpt, trSw)
 TABLE subnets(ipaddr, int, ipaddr, macaddr, switchid, portid, switchid);
 
 // table representing packets which router needs to send an ARP query for
@@ -10,7 +11,7 @@ TABLE subnets(ipaddr, int, ipaddr, macaddr, switchid, portid, switchid);
 TABLE router_queued(ipaddr);
 
 
-// L3 routing
+// L3 routing to directly attached subnets
 
 ON ip_packet(pkt):
   DO forward(new) WHERE
