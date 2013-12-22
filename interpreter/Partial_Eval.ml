@@ -794,8 +794,8 @@ let respond_to_notification (p: flowlog_program) (notif: event): string list =
         exit(101);        
       end;;
 
-(* Frenetic reports every switch has a port 65534. *)
-let lies_port = nwport_of_string "65534";;
+(* Ignore the switch's non-physical ports (pp. 18-19 of OpenFlow 1.0 spec). *)
+let ofpp_max_port = nwport_of_string "0xff00";;
 
 (* If notables is true, send everything to controller *)
 let make_policy_stream (p: flowlog_program) 
@@ -810,7 +810,7 @@ let make_policy_stream (p: flowlog_program)
         let sw_string = Int64.to_string sw in        
         let notifs = 
           filter_map (fun portid -> 
-            if portid <> lies_port then 
+            if portid < ofpp_max_port then
               Some {typeid="switch_port"; 
                     values=construct_map [("sw", sw_string);
                                           ("pt", (nwport_to_string portid))]}
