@@ -22,12 +22,12 @@ let fwd_actions = ref [];;
 
 (* Push function for packet stream. Used to emit rather than forward. *)
 (* Not sure why the input can be option. *)
-let emit_push: ((NetCore_Types.switchId * NetCore_Types.portId * Packet.bytes) option -> unit) option ref = ref None;;
+let emit_push: ((NetCore_Types.switchId * NetCore_Types.portId * OpenFlow0x01_Core.payload) option -> unit) option ref = ref None;;
 
-let guarded_emit_push (swid: switchId) (pt: portId) (bytes: Packet.bytes): unit = 
+let guarded_emit_push (swid: switchId) (pt: portId) (payload: OpenFlow0x01_Core.payload): unit =
   match !emit_push with
     | None -> printf "Packet stream has not been created yet. Error!\n%!"
-    | Some f -> f (Some (swid,pt,bytes));;
+    | Some f -> f (Some (swid,pt,payload));;
 
 let ms_on_packet_processing = ref 0.;;
 let counter_inc_pkt = ref 0;;
@@ -558,7 +558,7 @@ let emit_packet (p: flowlog_program) (ev: event): unit =
   
   (* TODO: confirm dltyp/nwProto etc. are consistent with whatever type of packet we're producing 
      At the moment, someone can emit_arp with dlTyp = 0x000 or something dumb like that. *)
-  guarded_emit_push swid pt (marshal_packet ev);;  
+  guarded_emit_push swid pt (OpenFlow0x01_Core.NotBuffered (marshal_packet ev));;
 
 let send_event (p: flowlog_program) (ev: event) (ip: string) (pt: string): unit =
   printf "sending: %s\n%!" (string_of_event p ev);  
@@ -826,7 +826,7 @@ let make_policy_stream (p: flowlog_program)
           ignore(respond_to_notification p notif);                
     and
 
-    reportPacketCallback (sw: switchId) (pt: port) (pkt: Packet.packet) : NetCore_Types.action =   
+    reportPacketCallback (sw: switchId) (pt: port) (pkt: Packet.packet) (buf: int32 option) : NetCore_Types.action =
       printf "[REPORT ONLY] Packet arrived on switch %Ld, port %s.\n%s\n%!" 
         sw (NetCore_Pretty.string_of_port pt) (Packet.to_string pkt);
       [] 
@@ -878,10 +878,13 @@ let make_policy_stream (p: flowlog_program)
       
     (* The callback to be invoked when the policy says to send pkt to controller *)
     (* callback here. *)
-    updateFromPacket (sw: switchId) (pt: port) (pkt: Packet.packet) : NetCore_Types.action =        
+    updateFromPacket (sw: switchId) (pt: port) (pkt: Packet.packet) (buf: int32 option) : NetCore_Types.action =
       (* Update the policy via the push function *)
       let startt = Unix.gettimeofday() in 
-      (*printf "Packet in on switch %Ld.\n%s\n%!" sw (Packet.to_string pkt);*)
+      let buf_id = match buf with
+                    | Some id -> id
+                    | None -> Int32.of_int (-1) in
+      printf "Packet in on switch %Ld in buffer %ld.\n%s\n%!" sw buf_id (Packet.to_string pkt);
       counter_inc_pkt := !counter_inc_pkt + 1;
       fwd_actions := []; (* populated by things respond_to_notification calls *)
 
