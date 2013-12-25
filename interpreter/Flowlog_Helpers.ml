@@ -274,7 +274,7 @@ let rec disj_to_top ?(ignore_negation: bool = false) (f: formula): formula =
     try ignore (get_outgoing prgm relname); true with | Not_found -> false;;  
 
   let is_io_rel (prgm: flowlog_program) (relname: string): bool =
-    is_incoming_table prgm relname or is_outgoing_table prgm relname;;
+    is_incoming_table prgm relname || is_outgoing_table prgm relname;;
 
 (* This version is meant to work on a list of AST decls. *)  
 (*let get_fields_for_type_preproc (decls: sdecl list) (etype: string): string list =      
