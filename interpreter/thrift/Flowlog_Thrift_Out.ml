@@ -3,6 +3,7 @@
 open Thrift
 open Flowlog_rpc_types
 open Flowlog_Types
+open Flowlog_Helpers
 open ExtList.List
 open Printf
 

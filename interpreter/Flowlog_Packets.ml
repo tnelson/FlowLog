@@ -110,7 +110,7 @@ let get_field_helper (ev: event) (fldname: string): string  =
 
 (*  Should really be something more contentful than the empty string. *)
 let field_is_defined (ev: event) (fldname: string): bool =
-  (get_field_helper ev fldname) <> "";;
+  (StringMap.mem fldname ev.values) && (get_field_helper ev fldname) <> "";;
 
 
 (* (1A) Field defaults (if any)
@@ -262,7 +262,7 @@ let get_field (ev: event) (fldname: string): string =
               (*printf "get_default_rec %s %s %s %s\n%!" typename fldname (String.concat ", "supertypes) (assoc (typename,fldname) defaults_table);*)
               assoc (typename,fldname) defaults_table
            with Not_found -> get_default_rec supertypes)
-        | _ -> failwith ("get_field. no default specified for: "^fldname^" of "^ev.typeid) in
+        | _ -> raise (NoDefaultForField(fldname, ev.typeid)) in
     try
       let evval = get_field_helper ev fldname in
         if field_is_defined ev fldname then evval

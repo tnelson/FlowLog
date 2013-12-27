@@ -5,6 +5,7 @@
 open Flowlog_Types
 open Flowlog_Packets
 open Flowlog_Helpers
+open Flowlog_Builtins
 open Surface_Parser
 open Surface_Lexer
 open Printf
@@ -126,6 +127,12 @@ let well_formed_rule (p: flowlog_program) (r: srule): unit =
 
   let well_formed_atom (headrelname: string) (headterms: term list) (inrelname: string) (inargname: string) (atom: formula) :unit =
     match atom with 
+      | FAtom(modname, relname, argtl) when Flowlog_Builtins.is_built_in relname -> 
+        let bip = Flowlog_Builtins.get_built_in relname in
+        if (length argtl) <> (length bip.biparity) then
+          raise (BadBuiltInUse relname);
+        iter (well_formed_term headrelname headterms inrelname inargname) argtl;
+
       | FAtom(modname, relname, argtl) -> 
         (try    
           if (length (get_table p relname).tablearity) <> length argtl then 

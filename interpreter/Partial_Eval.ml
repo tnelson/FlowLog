@@ -109,6 +109,25 @@ let rec partial_evaluation (p: flowlog_program) (incpkt: string) (f: formula): f
 
 (***************************************************************************************)
 
+(** Add NetCore action to set a packet's header fields during forwarding
+      TODO(adf): add support for VLAN, VLAN PCP, IP ToS, and transport srcPort &
+                 dstPort once Flowlog includes in the packet types *)
+  let enhance_action_atom (afld: string) (aval: string) (anact: action_atom): action_atom =
+  match anact with
+    | SwitchAction(oldout) ->
+      (match afld with 
+        | "locpt" -> anact
+        | "dlsrc" -> SwitchAction({oldout with outDlSrc = Some (None, macaddr_of_int_string aval) })
+        | "dldst" -> SwitchAction({oldout with outDlDst = Some (None, macaddr_of_int_string aval) })
+        | "dltyp" -> failwith ("OpenFlow 1.0 does not allow this field to be updated")
+        | "nwsrc" -> SwitchAction({oldout with outNwSrc = Some (None, (nwaddr_of_int_string aval)) })
+        | "nwdst" -> SwitchAction({oldout with outNwDst = Some (None, (nwaddr_of_int_string aval)) })
+        | "tpsrc" -> SwitchAction({oldout with outTpSrc = Some (None, (tpport_of_int_string aval)) })
+        | "tpdst" -> SwitchAction({oldout with outTpDst = Some (None, (tpport_of_int_string aval)) })        
+        | "nwproto" -> failwith ("OpenFlow 1.0 does not allow this field to be updated")
+        | _ -> failwith ("enhance_action_atom unknown afld: "^afld^" -> "^aval))
+    | _ -> failwith ("enhance_action_atom non SwitchAction: "^afld^" -> "^aval);;
+
 let rec build_unsafe_switch_actions (oldpkt: string) (body: formula): action =
   let create_port_actions (actlist: action) (lit: formula): action =
     let no_contradiction_or_repetition (aval: string): bool = 
@@ -172,24 +191,6 @@ let rec build_unsafe_switch_actions (oldpkt: string) (body: formula): action =
 
     | _ -> failwith ("create_port_actions: bad lit: "^(string_of_formula lit)) in
 
-
-
-  (** Add NetCore action to set a packet's header fields during forwarding
-      TODO(adf): add support for VLAN, VLAN PCP, IP ToS, and transport srcPort &
-                 dstPort once Flowlog includes in the packet types *)
-  let enhance_action_atom (afld: string) (aval: string) (anact: action_atom): action_atom =
-  match anact with
-    | SwitchAction(oldout) ->
-      (match afld with 
-        | "locpt" -> anact
-        | "dlsrc" -> SwitchAction({oldout with outDlSrc = Some (None, macaddr_of_int_string aval) })
-        | "dldst" -> SwitchAction({oldout with outDlDst = Some (None, macaddr_of_int_string aval) })
-        | "dltyp" -> failwith ("OpenFlow 1.0 does not allow this field to be updated")
-        | "nwsrc" -> SwitchAction({oldout with outNwSrc = Some (None, (nwaddr_of_int_string aval)) })
-        | "nwdst" -> SwitchAction({oldout with outNwDst = Some (None, (nwaddr_of_int_string aval)) })
-        | "nwproto" -> failwith ("OpenFlow 1.0 does not allow this field to be updated")
-        | _ -> failwith ("enhance_action_atom unknown afld: "^afld^" -> "^aval))
-    | _ -> failwith ("enhance_action_atom non SwitchAction: "^afld^" -> "^aval) in
 
   let create_mod_actions (actlist: action) (lit: formula): action =
     match lit with 
@@ -543,12 +544,21 @@ let program_to_netcore (p: flowlog_program) (callback: get_packet_handler): (pol
   
 let forward_packet (p: flowlog_program) (ev: event): unit =
   printf "forwarding: %s\n%!" (string_of_event p ev);
-  write_log (sprintf ">>> forwarding: %s\n%!" (string_of_event p ev));
-  (* TODO use allpackets here. compilation uses it, but XSB returns every port individually. *)
-  printf "WARNING: field modifications not yet supported in netcore.\n%!";  
-  fwd_actions := 
-    SwitchAction({id with outPort = Physical(nwport_of_string (get_field ev "locpt"))})
-    :: !fwd_actions;;
+  write_log (sprintf ">>> forwarding from XSB-constructed event: %s\n%!" (string_of_event p ev));
+  (* TODO use allpackets here. compilation uses it, but XSB returns every port individually. *)  
+  let base_action = SwitchAction({id with outPort = Physical(nwport_of_string (get_field ev "locpt"))}) in  
+    (* add modifications to fields as prescribed in the event *)
+    fwd_actions := 
+      (fold_left (fun acc afld ->        
+        if field_is_defined ev afld then 
+        begin
+          let aval = get_field_helper ev afld in
+            (*printf "%s %s %s\n%!" (NetCore_Pretty.string_of_action [acc]) afld aval; *)
+            enhance_action_atom afld aval acc                  
+        end
+        else acc)
+      base_action (remove legal_to_modify_packet_fields "locpt"))
+      :: !fwd_actions;;
 
 let emit_packet (p: flowlog_program) (ev: event): unit =  
   printf "emitting: %s\n%!" (string_of_event p ev);

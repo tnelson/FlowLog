@@ -14,11 +14,13 @@ let global_verbose = ref 0;;
 exception UndeclaredIncomingRelation of string;;
 exception UndeclaredOutgoingRelation of string;;
 exception UndeclaredTable of string;;
+exception BadBuiltInUse of string;;
 exception BadArityOfTable of string;;
 exception UndeclaredField of string * string;;
 exception NonCondensedNoField of string;;
 exception RelationHadMultipleReacts of string;;
 exception RelationHadMultipleDecls of string;;
+exception NoDefaultForField of string * string;;
 
 (* True if string str1 ends with string str2 *)
 let ends_with (str1 : string) (str2 : string) : bool = 
@@ -348,6 +350,10 @@ let macaddr_to_int_string (n: Int64.t): string = Int64.to_string n
 let nwport_of_string (s: string): Int32.t = Int32.of_string s
 let nwport_to_string (n: Int32.t): string = Int32.to_string n
 
+(* For transport-layer ports *)
+let tpport_of_int_string (s: string): int = int_of_string s
+
+
 
 (*************************************************************)
  (* improve this when we have more than strings running around 
@@ -599,3 +605,117 @@ let rec safe_compare_pols (p1: pol) (p2: pol): bool =
 module PredSet  = Set.Make( struct type t = pred let compare = smart_compare_preds_int end );;
 
 (* PredSet.add Nothing PredSet.empty ;;*)
+
+
+(* If verbose flag is not set, prepare for XSB. Otherwise, add extra info for debug. *)
+
+  let xsb_of_term ?(mode:xsbmode = Xsb) (t: term): string = 
+    match t with
+      | TConst(s) ->         
+        if (Str.string_match (Str.regexp "[0-9\\-]") s 0) then
+          s
+        else 
+          "'constesc"^(String.lowercase s)^"'"        
+      | TVar(s) ->
+        (match mode with           
+          | XsbAddUnderscoreVars | XsbForcePositive -> "_"^(String.uppercase s)
+          |  _ -> (String.uppercase s))
+      | TField(varname, fname) -> 
+        (match mode with          
+          | XsbAddUnderscoreVars | XsbForcePositive -> "_"^(String.uppercase (varname^"__"^fname))
+          | _ -> (String.uppercase (varname^"__"^fname)));;
+
+  let string_of_term ?(verbose:printmode = Brief) (t: term): string = 
+    match t with
+      | TConst(s) -> 
+        if verbose = Verbose then "TConst("^s^")" 
+        else s
+      | TVar(s) ->
+        (match verbose with 
+          | Verbose -> "TVar("^s^")"          
+          |  _ -> (String.uppercase s))
+      | TField(varname, fname) -> 
+        (match verbose with
+          | Verbose -> "TField("^varname^"."^fname^")"       
+          | _ -> (String.uppercase (varname^"__"^fname)));;
+
+  let rec string_of_formula ?(verbose:printmode = Brief) (f: formula): string = 
+    match f with
+      | FTrue -> "true"
+      | FFalse -> "false"
+      | FEquals(t1, t2) -> (string_of_term ~verbose:verbose t1) ^ " = "^ (string_of_term ~verbose:verbose t2)
+      | FIn(t, addr, mask) ->        
+          (string_of_term ~verbose:verbose t) ^ " IN "^ (string_of_term ~verbose:verbose addr) ^ "/" ^ (string_of_term ~verbose:verbose mask)
+      | FNot(f) ->  
+        "(not "^(string_of_formula ~verbose:verbose f)^")"
+      | FAtom("", relname, tlargs) ->         
+          relname^"("^(String.concat "," (map (string_of_term ~verbose:verbose) tlargs))^")"
+      | FAtom(modname, relname, tlargs) -> 
+          modname^"/"^relname^"("^(String.concat "," (map (string_of_term ~verbose:verbose) tlargs))^")"
+      | FAnd(f1, f2) -> (string_of_formula ~verbose:verbose f1) ^ ", "^ (string_of_formula ~verbose:verbose f2)
+      | FOr(f1, f2) -> (string_of_formula ~verbose:verbose f1) ^ " or "^ (string_of_formula ~verbose:verbose f2);;
+  
+  let action_string outrel argterms fmla: string = 
+    let argstring = (String.concat "," (map (string_of_term ~verbose:Verbose) argterms)) in
+      outrel^"("^argstring^") WHERE "^(string_of_formula ~verbose:Verbose fmla);;
+
+  let string_of_rule (r: srule): string =
+    match r.action with 
+      | ADelete(outrel, argterms, fmla) ->  
+        "ON "^r.onrel^"("^r.onvar^"): DELETE "^(action_string outrel argterms fmla);                         
+      | AInsert(outrel, argterms, fmla) ->
+        "ON "^r.onrel^"("^r.onvar^"): INSERT "^(action_string outrel argterms fmla);
+      | ADo(outrel, argterms, fmla) ->  
+        "ON "^r.onrel^"("^r.onvar^"): DO "^(action_string outrel argterms fmla);;
+
+  let string_of_field_decl (d : (string * typeid)): string = 
+    let s1, s2 = d in s1^":"^s2;;
+
+  let string_of_outgoing_fields (ofld: outgoing_fields): string = 
+    match ofld with
+      | SameAsOnFields -> " (same as on)"
+      | AnyFields -> " (any)"
+      | FixedEvent(tname) -> " (:"^tname^")";;
+
+  let string_of_declaration (d: sdecl): string =
+    match d with 
+      | DeclTable(tname, argtypes) -> "TABLE "^tname^" "^(String.concat "," argtypes);
+      | DeclRemoteTable(tname, argtypes) -> "REMOTE TABLE "^tname^" "^(String.concat "," argtypes);
+      | DeclInc(tname, argtype) -> "INCOMING "^tname^" "^argtype;
+      | DeclOut(tname, arg) -> "OUTGOING "^tname^" "^(string_of_outgoing_fields arg);
+      | DeclEvent(evname, argdecls) -> "EVENT "^evname^" "^(String.concat "," (map string_of_field_decl argdecls));;
+
+  let string_of_outspec (spec: spec_out) =
+    match spec with 
+      | OutForward -> "forward"      
+      | OutEmit(typ) -> "emit["^typ^"]"
+      | OutPrint -> "print"
+      | OutLoopback -> "loopback"
+      | OutSend(evtype, ip, pt) -> "event("^evtype^") to "^ip^":"^pt;;  
+
+  let string_of_reactive (r: sreactive): string =
+    match r with       
+      | ReactRemote(tblname, argtypes, qname, ip, port, refresh) ->
+        tblname^"TABLE (remote) = "^qname^"("^(String.concat "," argtypes)^") @ "^ip^" "^port;
+      | ReactOut(outrel, outf, spec) ->
+        outrel^"("^(string_of_outgoing_fields outf)^") (output rel) =  @ "^(string_of_outspec spec);
+      | ReactInc(evtype, relname) -> 
+        relname^" (input rel) "^evtype;;
+  
+  let string_of_stmt (stmt: stmt): string = 
+    match stmt with 
+      | SReactive(rstmt) -> (string_of_reactive rstmt);
+      | SDecl(dstmt) -> (string_of_declaration dstmt);
+      | SRule(rstmt) -> (string_of_rule rstmt);;
+
+  let pretty_print_ast (ast: flowlog_ast): unit =
+    iter (fun inc -> printf "INCLUDE %s;\n%!" inc) ast.includes;
+    iter (fun stmt -> printf "%s\n%!" (string_of_stmt stmt)) ast.statements;;
+
+  let string_of_clause ?(verbose: printmode = Brief) (cl: clause): string =
+    "CLAUSE: "^(string_of_formula ~verbose:verbose cl.head)^" :- "^(string_of_formula ~verbose:verbose cl.body)^"\n"^
+    (if verbose = Verbose then "FROM RULE: "^(string_of_rule cl.orig_rule) else "");;
+
+  let string_of_triggered_clause ?(verbose: bool = false) (cl: triggered_clause): string =
+    "TRIGGER: "^cl.oldpkt^" "^(string_of_clause cl.clause);;
+

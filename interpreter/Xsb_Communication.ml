@@ -185,13 +185,33 @@ module Xsb = struct
 						then (f :: f1) :: r1
 						else [f] :: (f1 :: r1);;
     
+  let rec xsb_of_formula ?(mode:xsbmode = Xsb) (f: formula): string = 
+    match f with
+      | FTrue -> "true"
+      | FFalse -> "false"
+      | FEquals(t1, t2) -> (xsb_of_term ~mode:mode t1) ^ " = "^ (xsb_of_term ~mode:mode t2)
+      | FIn(t, addr, mask) ->
+          sprintf "in_ipv4_range(%s,%s,%s)" (xsb_of_term ~mode:mode t) (xsb_of_term ~mode:mode addr) (xsb_of_term ~mode:mode  mask)          
+      | FNot(f) ->  
+        (match mode with 
+          | XsbForcePositive -> "not_"^(xsb_of_formula ~mode:mode f)
+          | _ -> "(not "^(xsb_of_formula ~mode:mode f)^")")
+      | FAtom("", relname, tlargs) when Flowlog_Builtins.is_built_in relname ->         
+          Flowlog_Builtins.xsb_for_built_in mode relname tlargs
+      | FAtom("", relname, tlargs) ->         
+          relname^"("^(String.concat "," (map (xsb_of_term ~mode:mode) tlargs))^")"
+      | FAtom(modname, relname, tlargs) -> 
+          modname^"/"^relname^"("^(String.concat "," (map (xsb_of_term ~mode:mode) tlargs))^")"
+      | FAnd(f1, f2) -> (xsb_of_formula ~mode:mode f1) ^ ", "^ (xsb_of_formula ~mode:mode f2)
+      | FOr(f1, f2) -> failwith "xsb_of_formula: unsupported formula type for XSB conversion:"^(string_of_formula f);;
+
 	(* For variables not proceeded with underscore, XSB prints binding sets and requires a semicolon between them.
 	   This is problematic since we have no way of knowing how many semicolons to enter. Instead, tell XSB
 	   exactly how to print the results, with no semicolons between binding sets. *)
 	let build_xsb_query_string (f: formula) : string = 
-		let varstrs = map (string_of_term ~verbose:Xsb) (get_vars_and_fieldvars f) in
+		let varstrs = map xsb_of_term (get_vars_and_fieldvars f) in
 		let varoutfrags = map (fun varstr -> sprintf "write('%s='), writeln(_%s)" varstr varstr) varstrs in 
-		let fstr = (string_of_formula ~verbose:XsbAddUnderscoreVars f) in		
+		let fstr = (xsb_of_formula ~mode:XsbAddUnderscoreVars f) in		
 		    (* printf "%s\n(%s, %s, fail).\n%!" (string_of_formula f) fstr (String.concat "," varoutfrags);*)
 		    (* The setof construct wrapped around the formula prevents duplicate results *)
 			sprintf "(setof(t, %s, _), %s, fail)." fstr (String.concat "," varoutfrags);;
@@ -326,7 +346,7 @@ module Communication = struct
 
 	let clause_to_xsb ?(forcepositive = false) (cls: clause): string =	  
 	  let fpflag = if forcepositive then XsbForcePositive else XsbAddUnderscoreVars in
-		(string_of_formula ~verbose:fpflag cls.head)^" :- "^(string_of_formula ~verbose:fpflag cls.body);;
+		(Xsb.xsb_of_formula ~mode:fpflag cls.head)^" :- "^(Xsb.xsb_of_formula ~mode:fpflag cls.body);;
 
 	(* Substitute notif vars for their fields and produce a string for XSB to consume *)
 	(* We need to have a (possible) ON context for dealing with the forward relation *)	
@@ -347,12 +367,12 @@ module Communication = struct
 		(* engine will sometimes be told to retract _, need to retract ALL matches, not just first match *)
 	let retract_formula (tup: formula): unit = 
 	    if !global_verbose >= 1 then count_retract_formula := !count_retract_formula + 1;
-		ignore (send_message ("retractall("^(string_of_formula ~verbose:Xsb tup)^").") 0);;
+		ignore (send_message ("retractall("^(Xsb.xsb_of_formula tup)^").") 0);;
 
 	let assert_formula (tup: formula): unit = 
 		(* with trie indexing, we no longer need to worry about storing multiples of the same tuple *)
 		if !global_verbose >= 1 then count_assert_formula := !count_assert_formula + 1;
-		ignore (send_message ("assert("^(string_of_formula ~verbose:Xsb tup)^").") 0);;
+		ignore (send_message ("assert("^(Xsb.xsb_of_formula tup)^").") 0);;
 
 	let assert_event_and_subevents (p: flowlog_program) (notif: event): unit =	
 			iter assert_formula (inc_event_to_formulas p notif);;
@@ -363,14 +383,13 @@ module Communication = struct
 	let get_on_context (p: flowlog_program) (c: clause): event_def option =
 	  Some (get_event p c.orig_rule.onrel);;
 		
-
 	let start_clause (prgm: flowlog_program) ?(forcepositive = false) (cls : clause) : unit =
 		(*if debug then print_endline ("start_clause: assert((" ^ (Type_Helpers.clause_to_string cls) ^ ")).");
 		if debug then (List.iter (fun t -> (Printf.printf "var: %s\n%!" (Type_Helpers.term_to_string t))) (get_vars cls));*)
 		let on_context = get_on_context prgm cls in
 		let new_head = subs_xsb_formula prgm ~context_on:on_context cls.head in
 		let new_body = subs_xsb_formula prgm ~context_on:on_context cls.body in		
-		printf "start_clause substituted: %s :- %s" (string_of_formula ~verbose:Xsb new_head) (string_of_formula ~verbose:Xsb new_body);
+		printf "start_clause substituted: %s :- %s" (Xsb.xsb_of_formula new_head) (Xsb.xsb_of_formula new_body);
 		let subs_cls = {head = new_head; 
 		                body = new_body;
 						orig_rule = cls.orig_rule}  in
