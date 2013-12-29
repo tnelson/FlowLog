@@ -10,18 +10,19 @@ ON startup(empty):
 // Outgoing traffic (new flow)
 ON tcp_packet(p) WHERE p.locPt = 1 AND NOT nat(p.nwSrc, p.tpSrc, ANY):
   DO forward(new) WHERE
-    new.locPt = 2 AND nextpt(new.tpSrc);    
+//    new.locPt = 2 AND nextpt(new.tpSrc);    <-- gets compiled (leads to race condition)
+    new.locPt = 2 AND nextpt(old) AND add(old, 1, new.tpSrc);  // <-- not compiled (correct)
   DELETE (x) FROM nextpt;
   INSERT (x) INTO nextpt WHERE 
     nextpt(old) AND add(old, 1, x);
   INSERT (p.nwSrc, p.tpSrc, pt) INTO nat WHERE nextpt(pt);
 
 // Outgoing traffic (existing flow)
-//ON tcp_packet(p) WHERE p.locPt = 1 AND nat(p.nwSrc, p.tpSrc, pt):
-//  DO forward(new) WHERE
-    //new.locPt = 2 AND new.tpSrc = pt;
+ON tcp_packet(p) WHERE p.locPt = 1 AND nat(p.nwSrc, p.tpSrc, pt):
+  DO forward(new) WHERE
+    new.locPt = 2 AND new.tpSrc = pt;
 
 // Return traffic (known destination)
-//ON tcp_packet(p) WHERE p.locPt = 2 AND nat(p.nwDst, oldpt, p.tpDst):
-//  DO forward(new) WHERE
-    //new.locPt = 1 AND new.tpDst = oldpt;
+ON tcp_packet(p) WHERE p.locPt = 2 AND nat(p.nwDst, oldpt, p.tpDst):
+  DO forward(new) WHERE
+    new.locPt = 1 AND new.tpDst = oldpt;
