@@ -26,6 +26,7 @@
 (require scheme/class)
 (require scheme/file)
 (require scheme/pretty)
+(require racket/match)
 (require "ios.ss")
 (require "ios-parse.ss")
 
@@ -69,6 +70,18 @@
         
         (store (policy 'InboundACL inbound-ACL) (make-path root-path "InboundACL.p"))
         (store (policy 'OutboundACL outbound-ACL) (make-path root-path "OutboundACL.p"))
+        
+        (define (flatten-policies inboundacl outboundacl)          
+          `(and (or ,@inboundacl) (or ,@outboundacl)))
+               
+        
+        
+        ; FLOWLOG:
+        (store (sexpr-to-flowlog (flatten-policies (policy 'InboundACL inbound-ACL) 
+                                                              (policy 'OutboundACL outbound-ACL)))
+                          (make-path root-path "IOS.flg"))        
+        
+        
         ;(store (policy 'InsideNAT inside-NAT) (make-path root-path "InsideNAT.p"))
         ;(store (policy 'OutsideNAT outside-NAT) (make-path root-path "OutsideNAT.p"))
         ;(store (policy 'LocalSwitching local-switch) (make-path root-path "LocalSwitching.p"))
@@ -100,3 +113,26 @@
     (let [(port (open-output-file path #:mode 'text #:exists 'replace))]
       (pretty-display contents port)  ; FLOWLOG changed to pretty-display from pretty-print
       (close-output-port port))))
+
+(require racket/string)
+
+(define (sexpr-to-flowlog sexpr) 
+  (display ">>>")
+  (pretty-display sexpr)
+  (match sexpr
+    ; concatenate strings for each arg, use "OR" as separator
+    [`(or ,args ...) (string-append "( " (string-join (map sexpr-to-flowlog (remove-duplicates args)) " \nOR\n ") " )")]
+    [`(and ,args ...) (string-append "( " (string-join (map sexpr-to-flowlog (remove-duplicates args)) " AND ")" )")]
+    [`(not ,arg) (string-append "NOT " (sexpr-to-flowlog arg))]
+    [`(= ,arg1 ,arg2)      
+     (define s1 (sexpr-to-flowlog arg1))
+     (define s2 (sexpr-to-flowlog arg2))
+     (if (regexp-match #rx"^[0-9\\.]+/" s1)
+         (string-append s2 " IN " s1)
+         (string-append "(" s1 " = " s2 ")"))]
+    
+    [(list linenum decision varargs pred) (string-append "// " (symbol->string linenum) "\n" (sexpr-to-flowlog pred))]
+    [(? string? x) x]
+    [(? symbol? x) (symbol->string x)]    
+    [x (pretty-display x) (raise "error with sexpr-to-flowlog")]))
+

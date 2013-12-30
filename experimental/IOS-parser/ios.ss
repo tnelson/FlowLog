@@ -513,7 +513,7 @@
     
     (define arg-variable-list 
       (cond [(equal? rule-type 'acl) ; inbound uses entry
-             '(pkt)]
+             '(p)]
             
             [(equal? rule-type 'outacl) ; outbound uses exit
              '(new)]
@@ -906,7 +906,7 @@
         (name hostname interf)
         (decision)
         `(,@additional-conditions
-          (= ,src-addr-in ,(if (equal? rule-type 'outacl) "new.nwsrc" "p.nwsrc")))
+          (= ,src-addr-in ,(if (equal? rule-type 'outacl) 'new.nwsrc 'p.nwsrc)))
         rule-type))
     
     ;; symbol symbol string (listof (listof symbol)) -> rule%
@@ -973,8 +973,8 @@
         (name hostname interf)
         (decision)
         `(,@additional-conditions
-          (= ,src-addr-in ,(if (equal? rule-type 'outacl) "new.nwsrc" "p.nwsrc")) 
-          (= ,dest-addr-in ,(if (equal? rule-type 'outacl) "new.nwdst" "p.nwdst")))
+          (= ,src-addr-in ,(if (equal? rule-type 'outacl) 'new.nwsrc 'p.nwsrc)) 
+          (= ,dest-addr-in ,(if (equal? rule-type 'outacl) 'new.nwdst 'p.nwdst)))
         rule-type))
     
     ;; symbol symbol string (listof (listof symbol)) -> rule%
@@ -3311,14 +3311,14 @@
                                   rules
                                   (send hostname name)
                                   (send interf text)
-                                  `((= ,hostname "p.locsw")
-                                    (= ,interf "p.locpt"))
+                                  `((= ,hostname p.locsw)
+                                    (= ,interf p.locpt))
                                   'acl)))
                 (list (if default-ACL-permit
                           (list (make-object rule%
                                   'default-ACE
                                   'permit
-                                  `((= ,hostname "p.locsw"))
+                                  `((= ,hostname p.locsw))
                                   'acl))
                           '())))))
     
@@ -3332,14 +3332,14 @@
                                   rules
                                   (send hostname name)
                                   (send interf text)
-                                  `((= ,hostname "new.locsw")
-                                    (= ,interf "new.locpt"))
+                                  `((= ,hostname new.locsw)
+                                    (= ,interf new.locpt))
                                   'outacl)))
                 (list (if default-ACL-permit
                           (list (make-object rule%
                                   'default-ACE
                                   'permit
-                                  `((= ,hostname "new.locsw"))
+                                  `((= ,hostname new.locsw))
                                   'outacl))
                           '())))))
     
@@ -3988,7 +3988,7 @@
        ;(printf "~a ~a ~a ~a~n~n" dec conds prevdenies (length remaining))
        (if (equal? dec 'deny) 
            (decorrelate remaining (cons conds prevdenies))
-           (cons `(,n ,dec ,argvars (and ,conds ,@(map (lambda (adeny) `(not (and ,@adeny))) prevdenies))) 
+           (cons `(,n ,dec ,argvars (and ,@conds ,@(map (lambda (adeny) `(not (and ,@adeny))) prevdenies))) 
                  (decorrelate remaining prevdenies)))]))
     
   
