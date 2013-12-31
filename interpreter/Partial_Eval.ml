@@ -834,6 +834,8 @@ let make_policy_stream (p: flowlog_program)
         let notif = {typeid="switch_down"; values=construct_map [("sw", sw_string)]} in          
           printf "SWITCH %Lx went down. Triggered: %s\n%!" swid (string_of_event p notif);
           ignore(respond_to_notification p notif);                
+      | FlowRemoved(swid, frm) ->
+          printf "Flow Removed on switch %Lx: %s\n%!" swid (OpenFlow0x01.FlowRemoved.to_string frm)
     and
 
     reportPacketCallback (sw: switchId) (pt: port) (pkt: Packet.packet) (buf: int32 option) : NetCore_Types.action =
