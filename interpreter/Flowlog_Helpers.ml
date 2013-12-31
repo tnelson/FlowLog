@@ -582,6 +582,8 @@ let rec safe_compare_pols (p1: pol) (p2: pol): bool =
   match p1, p2 with
     | Action(acts1), Action(acts2) -> 
       safe_compare_actions acts1 acts2
+    | ActionWithMeta(acts1, meta1), ActionWithMeta(acts2, meta2) ->
+      safe_compare_actions acts1 acts2  (* TODO(adf): should we check the metadata? *)
     (* assume: only one switch event handler *)
     | HandleSwitchEvent(_), HandleSwitchEvent(_) -> true
     | Filter(apred1), Filter(apred2) -> smart_compare_preds apred1 apred2
