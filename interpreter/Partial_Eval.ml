@@ -835,7 +835,44 @@ let make_policy_stream (p: flowlog_program)
           printf "SWITCH %Lx went down. Triggered: %s\n%!" swid (string_of_event p notif);
           ignore(respond_to_notification p notif);                
       | FlowRemoved(swid, frm) ->
-          printf "Flow Removed on switch %Lx: %s\n%!" swid (OpenFlow0x01.FlowRemoved.to_string frm)
+
+      (* Because Flowlog has no option type in events, we use zero to indicate no constraint.*)
+      let build_flow_removed_event (frm: OpenFlow0x01_Core.flowRemoved): (string*string) list =
+        printf "Flow Removed on switch %Lx: %s\n%!" swid (OpenFlow0x01.FlowRemoved.to_string frm);
+        let open OpenFlow0x01_Core in 
+        let dlsrcval = (match frm.pattern.dlSrc with | None -> "0" | Some(x) -> macaddr_to_int_string x) in
+        let dldstval = (match frm.pattern.dlSrc with | None -> "0" | Some(x) -> macaddr_to_int_string x) in
+        let dltypval = (match frm.pattern.dlTyp with | None -> "0" | Some(x) -> string_of_int x) in
+        let nwprotoval = (match frm.pattern.nwProto with | None -> "0" | Some(x) -> string_of_int x) in
+        let inportval = (match frm.pattern.inPort with | None -> "0" | Some(x) -> string_of_int x) in
+        let tpsrcval = (match frm.pattern.tpSrc with | None -> "0" | Some(x) -> tpport_to_int_string x) in
+        let tpdstval = (match frm.pattern.tpDst with | None -> "0" | Some(x) -> tpport_to_int_string x) in
+
+        let nwsrcaddrval = (match frm.pattern.nwSrc with | None -> "0" | Some(x) -> nwaddr_to_int_string x.m_value) in
+        let nwsrcmaskval = (match frm.pattern.nwSrc with | None -> "32" 
+                                                         | Some(addrmsk) -> (match addrmsk.m_mask with 
+                                                                  | None -> "32"
+                                                                  | Some(msk) -> nwaddr_to_int_string msk)) in
+        let nwdstaddrval = (match frm.pattern.nwDst with | None -> "0" | Some(x) -> nwaddr_to_int_string x.m_value) in
+        let nwdstmaskval = (match frm.pattern.nwDst with | None -> "32" 
+                                                         | Some(addrmsk) -> (match addrmsk.m_mask with 
+                                                                  | None -> "32"
+                                                                  | Some(msk) -> nwaddr_to_int_string msk)) in
+        let reasonstr = (match frm.reason with | IdleTimeout -> "idletimeout" 
+                                               | HardTimeout -> "hardtimeout" 
+                                               | Delete -> "delete") in
+        [("reason",reasonstr);("inport",inportval);
+         ("dlsrc",dlsrcval);("dldst",dldstval);
+         ("dltyp",dltypval);("nwproto",nwprotoval);
+         ("tpsrc",tpsrcval);("tpdst",tpdstval);
+         ("nwsrcaddr",nwsrcaddrval);("nwdstaddr",nwdstaddrval);
+         ("nwsrcmask",nwsrcmaskval);("nwdstmask",nwdstmaskval);
+         ] in
+
+        let sw_string = Int64.to_string swid in        
+        let notif = {typeid="flow_removed"; values=construct_map ([("sw", sw_string)]@(build_flow_removed_event frm))} in                    
+          printf "Triggered event: %s\n%!" (string_of_event p notif);
+          ignore(respond_to_notification p notif);                          
     and
 
     reportPacketCallback (sw: switchId) (pt: port) (pkt: Packet.packet) (buf: int32 option) : NetCore_Types.action =

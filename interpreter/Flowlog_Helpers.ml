@@ -352,6 +352,7 @@ let nwport_to_string (n: Int32.t): string = Int32.to_string n
 
 (* For transport-layer ports *)
 let tpport_of_int_string (s: string): int = int_of_string s
+let tpport_to_int_string (n: int): string = string_of_int n
 
 
 
