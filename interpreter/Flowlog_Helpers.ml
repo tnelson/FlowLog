@@ -295,7 +295,7 @@ let rec disj_to_top ?(ignore_negation: bool = false) (f: formula): formula =
       let _, typ = find (fun (n,_) -> n = k) 
                         (get_event prgm notif.typeid).evfields in
         typ
-    with | Not_found -> failwith ("get_type_for_field: "^notif.typeid^" "^k);;
+    with | Not_found -> failwith ("get_type_for_field: "^notif.typeid^" "^k^"; possibly missing built-in definitions in Flowlog_Packets?");;
 
   let get_valid_fields_for_input_rel (p: flowlog_program) (rname: string): (string list) = 
     try

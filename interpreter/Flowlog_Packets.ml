@@ -149,6 +149,14 @@ let legal_to_match_packet_fields = ["dltyp"; "nwproto"; "locsw"]
 
 let swpt_fields = [("sw", "switchid");("pt", "portid")];;
 let swdown_fields = [("sw", "switchid")];;
+let flow_removed_fields = [
+         ("inport",   "portid");
+         ("sw",       "switchid");("reason",   "string");
+         ("dlsrc",    "macaddr"); ("dldst",    "macaddr");
+         ("dltyp",    "ethtyp");  ("nwproto",  "int");
+         ("tpsrc",    "tcpport"); ("tpdst",    "tcpport");
+         ("nwsrcaddr","ipaddr");  ("nwdstaddr","ipaddr");
+         ("nwsrcmask","int");     ("nwdstmask","int")];;
 
 (**********************************************)
 
@@ -230,14 +238,17 @@ let build_flavor_reacts (flav: packet_flavor): sreactive list =
 let built_in_decls = [DeclInc(switch_reg_relname, "switch_port");
                       DeclInc(switch_down_relname, "switch_down");
                       DeclInc(startup_relname, "startup");
+                      DeclInc("flow_removed", "flow_removed");
                       DeclOut("forward", SameAsOnFields);
                       DeclEvent("startup", []);
                       DeclEvent("switch_port", swpt_fields);
-                      DeclEvent("switch_down", swdown_fields)]
+                      DeclEvent("switch_down", swdown_fields);
+                      DeclEvent("flow_removed", flow_removed_fields)]
                     @ flatten (map build_flavor_decls packet_flavors);;
 
 let built_in_reacts = [ ReactInc("switch_port", switch_reg_relname);
                         ReactInc("switch_down", switch_down_relname);
+                        ReactInc("flow_removed", "flow_removed");
                         ReactInc("startup", startup_relname);
                         ReactOut("forward", SameAsOnFields, OutForward);
                       ] @ flatten (map build_flavor_reacts packet_flavors);;

@@ -27,3 +27,11 @@ ON tcp_packet(p) WHERE p.locPt = 1 AND nat(p.nwSrc, p.tpSrc, pt):
 ON tcp_packet(p) WHERE p.locPt = 2 AND nat(p.nwDst, oldpt, p.tpDst):
   DO forward(new) WHERE
     new.locPt = 1 AND new.tpDst = oldpt;
+
+
+// TEST
+
+TABLE temptbl(macaddr);
+ON flow_removed(fr):
+  INSERT (fr.dlSrc) INTO temptbl
+  WHERE reason = "delete";
