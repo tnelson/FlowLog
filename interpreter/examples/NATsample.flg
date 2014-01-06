@@ -1,0 +1,8 @@
+INCLUDE "examples/NATgeneric.flg";
+
+ON startup(empty):
+  INSERT (0x3000000000000000, 1, 2, 192.168.1.10) INTO natconfig;
+
+  // TODO(adf): NATgeneric.flg should have these automatically based on natconfig
+  INSERT (192.168.1.10, 0x6, 10000) INTO seqpt;
+  INSERT (192.168.1.10, 0x11, 10000) INTO seqpt;
