@@ -1,0 +1,43 @@
+/*
+ * Sample program which configures Layer 3 routing between two directly-
+ * attached subnets. Forwarding within subnets is handled by MAC Learning.
+ * A third, external subnet is also attached, representing "the internet".
+ *
+ * Note: "gw" is the abbreviation for "gateway"
+ *
+ *
+ * The router is identified by DPID 0x1000000000000001
+ *
+ * The first subnet is 10.0.1.0/24 (gw 10.0.1.1), attached to port 1
+ * The second is 10.0.2.0/24 (gw 10.0.2.1), attached to port 2
+ *
+ * Each subnet has a "translator switch" which represents the flow table
+ * between the router and the root ("Layer 2") switch of the subnet. The
+ * translator switch rewrites the destination MAC address using ARP.
+ *
+ */
+
+INCLUDE "examples/L3router.flg";
+INCLUDE "examples/Mac_Learning.inc.flg";
+
+
+ON startup(ev):
+
+  // Config for Directly-attached Subnets
+
+  // subnets(addr,  mask, gw ip,    gw mac,            locSw,            locpt, trSw)
+  INSERT (10.0.1.0, 24,   10.0.1.1, ca:fe:ca:fe:00:01, 0x1000000000000001, 1, 0x2000000000000001) INTO subnets;
+  INSERT (10.0.2.0, 24,   10.0.2.1, ca:fe:ca:fe:00:02, 0x1000000000000001, 2, 0x2000000000000002) INTO subnets;
+
+  // for ARP cache. TODO(adf): should be derived from above automatically!
+  INSERT (10.0.1.1, ca:fe:ca:fe:00:01) INTO cached; // 10.0.1.1/24 gw mac addr
+  INSERT (10.0.2.1, ca:fe:ca:fe:00:02) INTO cached; // 10.0.2.1/24 gw mac addr
+
+  // Config for External Subnets
+
+  // TODO(adf): should not advertise this subnet, probably. maybe break out an "interfaces" table?
+  // then, local subnets will be those where nexthop is in "interfaces"
+  INSERT (10.0.10.0, 30, 10.0.10.1, be:ef:be:ef:00:00, 0x1000000000000001, 3, 0x2000000000000000) INTO subnets;
+  INSERT (10.0.10.2, be:ef:be:ef:00:01) INTO cached; // BGP peer TODO(adf): should get from ARP!
+
+  INSERT (192.168.0.0, 16, 10.0.10.2) INTO routes;

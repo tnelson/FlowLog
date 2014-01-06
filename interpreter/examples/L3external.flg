@@ -1,9 +1,34 @@
+/*
+ * Basic functionality for handling external (non-directly attached) subnets.
+ *
+ * The core of this module is a routing table with a list of subnets and their
+ * corresponding gateway's IP address.
+ *
+ *
+ * TODO:
+ *  - expose routes as an external table which is managed by Quagga
+ *  - should issue ARP requests for every nexthop (gateway) IP
+ *    automatically, rather than requiring they be entered into the cached
+ *    relation by hand at startup.
+ */
 
-// additional routes (non-directly attached subnets)
-//           (subnet, mask, next-hop IP
+/*******************************************************************************
+ *
+ * Data Structures
+ *
+ ******************************************************************************/
+
+// Routing table for non-directly attached subnets
+//
+// Column values:
+// subnet, mask, next-hop IP
 TABLE routes(ipaddr, int, ipaddr);
 
-// L3 routing to non-directly attached subnets
+/*******************************************************************************
+ *
+ * L3 routing to non-directly attached subnets
+ *
+ ******************************************************************************/
 
 ON ip_packet(pkt):
   DO forward(new) WHERE
@@ -12,15 +37,3 @@ ON ip_packet(pkt):
     and pkt.nwDst IN addr/mask
     and nexthop IN nexthop_subnet/nexthop_mask
     and cached(nexthop, new.dlDst); // MAC addr of nexthop IP
-
-
-// config
-
-ON startup(ev):
-
-  // TODO(adf): should not advertise this subnet, probably. maybe break out an "interfaces" table?
-  // then, local subnets will be those where nexthop is in "interfaces"
-  INSERT (10.0.10.0, 30, 10.0.10.1, be:ef:be:ef:00:00, 0x1000000000000001, 3, 0x2000000000000000) INTO subnets;
-  INSERT (10.0.10.2, be:ef:be:ef:00:01) INTO cached; // BGP peer TODO(adf): should get from ARP!
-
-  INSERT (192.168.0.0, 16, 10.0.10.2) INTO routes;

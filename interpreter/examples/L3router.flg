@@ -1,24 +1,50 @@
+/*
+ * Basic functionality for routing to directly attached subnets.
+ *
+ * (description goes here)
+ *
+ */
+
 INCLUDE "examples/Arp_Cache.flg";
 INCLUDE "examples/L3external.flg";
-INCLUDE "examples/Mac_Learning.inc.flg";
 
-// directly attached subnets(subnet addr, subnet mask, gw ip, gw mac, locSw, locpt, trSw)
+
+/*******************************************************************************
+ *
+ * Data Structures
+ *
+ ******************************************************************************/
+
+// Information about directly attached subnets
+//
+// Column values:
+// subnet addr, subnet mask, gw ip, gw mac, locSw, locpt, trSw
 TABLE subnets(ipaddr, int, ipaddr, macaddr, switchid, portid, switchid);
 
-// table representing packets which router needs to send an ARP query for
+// Table representing packets which router needs to send an ARP query for
+//
 // TODO(adf): how do we deliver this packet later???
-// TODO(adf): actually store the packet, not just it's nwdst
+// TODO(adf): actually store the packet buffer, not just its nwdst
 TABLE router_queued(ipaddr);
 
-
-// L3 routing to directly attached subnets
+/*******************************************************************************
+ *
+ * L3 routing to directly attached subnets
+ *
+ ******************************************************************************/
 
 ON ip_packet(pkt):
   DO forward(new) WHERE
     subnets(addr, mask, ANY, new.dlSrc, pkt.locSw, new.locPt, ANY)
     and pkt.nwDst IN addr/mask;
 
-// inbound path for subnet translators: just pass to the router, which is on port 1
+/*******************************************************************************
+ *
+ * Per-subnet translators: inbound path
+ *
+ * The inbound path is simple: just pass to the router, which is on port 1
+ *
+ ******************************************************************************/
 
 ON ip_packet(pkt):
   DO forward(new) WHERE
@@ -26,7 +52,19 @@ ON ip_packet(pkt):
     and pkt.locPt != 1
     and new.locPt = 1;
 
-// outbound path for subnet translators: set dlDst based on ARP cache
+/*******************************************************************************
+ *
+ * Per-subnet translators: outbound path
+ *
+ * Our goal here is to rewrite the destination MAC address (dlDst) based on the
+ * IP address. This mapping is obtained from ARP, so we first try to do the
+ * rewrite based on the ARP cache. If the ARP cache lacks a mapping, we store
+ * the packet, issue an ARP request, and later forward the packet once the ARP
+ * reply is received.
+ *
+ ******************************************************************************/
+
+// Default path: set dlDst based on ARP cache
 
 ON ip_packet(pkt):
   DO forward(new) WHERE
@@ -37,7 +75,7 @@ ON ip_packet(pkt):
     and pkt.locPt = 1
     and new.locPt = 2;
 
-// finally, send an ARP request for IPs we can't translate and queue the pkt
+// Alternate path: send an ARP request for IPs we can't translate and queue the pkt
 
 ON ip_packet(pkt) WHERE subnets(addr, mask, gwip, gwmac, ANY, ANY, pkt.locSw)
                         and pkt.nwDst IN addr/mask
@@ -71,16 +109,3 @@ ON ip_packet(pkt) WHERE subnets(addr, mask, gwip, gwmac, ANY, ANY, pkt.locSw)
 //
 //  (on the outbound direction of the router). plus, issuing ARP requests
 //  for addresses we don't know how to translate
-
-
-
-// config
-
-ON startup(ev):
-  // subnets(addr,  mask, gw ip,    gw mac,            locSw,            locpt, trSw)
-  INSERT (10.0.1.0, 24,   10.0.1.1, ca:fe:ca:fe:00:01, 0x1000000000000001, 1, 0x2000000000000001) INTO subnets;
-  INSERT (10.0.2.0, 24,   10.0.2.1, ca:fe:ca:fe:00:02, 0x1000000000000001, 2, 0x2000000000000002) INTO subnets;
-
-  // for ARP cache. TODO(adf): should be derived from above automatically!
-  INSERT (10.0.1.1, ca:fe:ca:fe:00:01) INTO cached; // 10.0.1.1/24 gw mac addr
-  INSERT (10.0.2.1, ca:fe:ca:fe:00:02) INTO cached; // 10.0.2.1/24 gw mac addr
