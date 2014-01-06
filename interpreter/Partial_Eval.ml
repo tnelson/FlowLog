@@ -98,9 +98,14 @@ let rec partial_evaluation (p: flowlog_program) (incpkt: string) (f: formula): f
 
       (* No longer need to lock the mutex here, because called from respond_to_notification *)
       let xsbresults: (term list list) = get_state_maybe_remote p f in
-      (*printf "DISJUNCTS FROM ATOM: %d\n%!" (length xsbresults);       *)        
-        let disjuncts = map 
-          (fun tl -> build_and (reassemble_xsb_equality incpkt tlargs tl)) 
+      (* Consider formulas like: seqpt(PUBLICIP,0x11,X) -- need to remove constants from tlargs before reassembling equalities *)
+      let tlargs_no_constants = (filter (fun t -> match t with | TConst(_) -> false | _ -> true) tlargs) in
+        let disjuncts = map
+          (fun tl ->
+              if !global_verbose > 2 then
+                printf "Reassembling an XSB equality for formula %s. incpkt=%s; tl=%s; tlargs_no_constants=%s\n%!"
+                       (string_of_formula f) incpkt (String.concat "," (map string_of_term tl)) (String.concat "," (map string_of_term tlargs_no_constants));
+              build_and (reassemble_xsb_equality incpkt tlargs_no_constants tl))
           xsbresults in
         let fresult = build_or disjuncts in
         if !global_verbose >= 3 then 

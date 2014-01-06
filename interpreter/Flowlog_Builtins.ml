@@ -16,14 +16,12 @@ open ExtList.List
 type builtin_predicate = { bipid: string; 
                            biparity: typeid list; 
                            bipxsb: xsbmode -> term list -> string;                           
-                           bip_compile: term list -> pred option};;
+                           bip_compile: (term list -> pred) option};;
 
 (* TODO: concern about types here: add has arity (int,int,int) but also should apply to 
    any other numeric type, like tcpport. *)
 
 exception BIPAddException of term list;;
-
-let bip_add_compile (tl: term list): pred option = None;;
 
 (* FAtom("", "add", ...) -->
    *)
@@ -43,7 +41,7 @@ let bip_add_xsb (mode:xsbmode) (tl: term list): string =
 let bip_add = { bipid="add";
 				biparity = ["int"; "int"; "int"];
 				bipxsb = bip_add_xsb;
-				bip_compile = bip_add_compile};;
+				bip_compile = None};;
 
 
 (**************************************)
@@ -51,10 +49,13 @@ let builtin_predicates = [(bip_add.bipid, bip_add)];;
 
 
 let is_built_in (relname: string): bool = 
-   mem_assoc relname builtin_predicates;;
+  mem_assoc relname builtin_predicates;;
 
 let get_built_in (relname: string): builtin_predicate =
   assoc relname builtin_predicates;;
+
+let is_uncompilable_built_in (relname: string): bool =
+  is_built_in relname && (get_built_in relname).bip_compile = None;;
 
 let xsb_for_built_in (mode:xsbmode) (relname: string) (tl: term list): string =    
    let bip = get_built_in relname in

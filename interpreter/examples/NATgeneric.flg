@@ -94,6 +94,7 @@ ON tcp_packet(pkt) WHERE not ptassign(0x6, pkt.nwSrc, pkt.tpSrc, ANY, ANY) AND
   INSERT (0x6, pkt.nwSrc, pkt.tpSrc, publicIP, publicPt) INTO ptassign;
 
 
+
 // TODO(adf): any way to do this without the copy-and-paste??
 ON udp_packet(pkt) WHERE not ptassign(0x11, pkt.nwSrc, pkt.tpSrc, ANY, ANY) AND
                          natconfig(pkt.locSw, pkt.locPt, publicLocPt, publicIP) AND

@@ -8,6 +8,7 @@ open Flowlog_Helpers
 open ExtList.List
 open Printf
 
+exception UsesUncompilableBuiltIns of formula;;
 exception IllegalFieldModification of formula;;
 exception IllegalAssignmentViaEquals of formula;;
 exception IllegalAtomMustBePositive of formula;;
@@ -99,6 +100,10 @@ let rec forbidden_assignment_check (newpkt: string) (f: formula) (innot: bool): 
         check_not_same_pkt t1 t2;
 
     | FAtom(modname, relname, tlargs) ->       		
+          (* Is this a built-in that can't be compiled? *)
+          if Flowlog_Builtins.is_uncompilable_built_in relname then
+            raise (UsesUncompilableBuiltIns f);
+
       		(* new field must be legal for modification by openflow *)
       		iter check_legal_pkt_fields tlargs;
       		(* if involves a newpkt, must be positive *)    
@@ -157,6 +162,7 @@ let can_compile_clause_to_fwd (cl: clause): bool =
     else
       false
   with (* catch only "expected" exceptions *)
+    | UsesUncompilableBuiltIns(_) -> if debug then printf "UsesUncompilableBuiltIns\n%!"; false
     | IllegalFieldModification(_) -> if debug then printf "IllegalFieldModification\n%!"; false
     | IllegalAssignmentViaEquals(_) -> if debug then printf "IllegalAssignmentViaEquals\n%!"; false
     | IllegalAtomMustBePositive(_) -> if debug then printf "IllegalAtomMustBePositive\n%!"; false
@@ -242,7 +248,15 @@ let weaken_uncompilable_packet_triggered_clause (oldpkt: string) (cl: clause): c
           begin
             if !global_verbose >= 3 then 
               printf "Removing atom (not compilable; equality): %s\n%!" (string_of_formula lit);
-            acc end            
+            acc end
+
+        | FAtom(_, relname, _)
+        | FNot(FAtom(_, relname, _)) when Flowlog_Builtins.is_uncompilable_built_in relname ->
+          begin
+            if !global_verbose >= 3 then
+              printf "Removing atom (not compilable built-in atomic): %s\n%!" (string_of_formula lit);
+            acc end
+
         | FAtom(_,_,args) 
         | FNot(FAtom(_,_,args)) 
           when exists (function | TField(_, fld) -> not (compilable_field_to_test fld) | _ -> false) args -> 
