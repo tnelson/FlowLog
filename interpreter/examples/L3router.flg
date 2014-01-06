@@ -3,6 +3,8 @@
  *
  * (description goes here)
  *
+ * TODO:
+ *  - split out an "interfaces" relation which has (ip, mac, locsw, locpt)
  */
 
 INCLUDE "examples/Arp_Cache.flg";
