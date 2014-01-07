@@ -33,8 +33,7 @@ sig Ethtyp {}
 sig Portid {} 
 sig Nwprotocol {}
 // TODO: If a base type is unused, don't declare it. 
-sig UdpPort {}
-sig TcpPort {}
+sig TpPort {} // transport-layer port (TCP or UDP) number
 
 sig FLString {} 
 sig FLInt{} 

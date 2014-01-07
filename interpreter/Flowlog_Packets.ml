@@ -72,12 +72,13 @@ let packet_flavors = [
    {label = "tcp"; superflavor = Some "ip";
     build_condition = (fun vname -> FAnd(FEquals(TField(vname, "dltyp"), TConst("0x0800")),
                                     FEquals(TField(vname, "nwproto"), TConst("0x6"))));
-    fields = [("tpsrc", "tcpport"); ("tpdst", "tcpport")]}; (* expect we'll want flags eventually *)
+    fields = [("tpsrc", "tpport"); ("tpdst", "tpport")]}; (* expect we'll want flags eventually *)
 
+    (* "tpport" represents a transport-layer port, i.e. either TCP or UDP port. *)
    {label = "udp"; superflavor = Some "ip";
     build_condition = (fun vname -> FAnd(FEquals(TField(vname, "dltyp"), TConst("0x0800")),
                                     FEquals(TField(vname, "nwproto"), TConst("0x11"))));
-    fields = [("tpsrc", "udpport"); ("tpdst", "udpport")]};
+    fields = [("tpsrc", "tpport"); ("tpdst", "tpport")]};
 
    {label = "igmp"; superflavor = Some "ip";
     build_condition = (fun vname -> FAnd(FEquals(TField(vname, "dltyp"), TConst("0x0800")),
@@ -154,7 +155,7 @@ let flow_removed_fields = [
          ("sw",       "switchid");("reason",   "string");
          ("dlsrc",    "macaddr"); ("dldst",    "macaddr");
          ("dltyp",    "ethtyp");  ("nwproto",  "int");
-         ("tpsrc",    "tcpport"); ("tpdst",    "tcpport");
+         ("tpsrc",    "tpport"); ("tpdst",    "tpport");
          ("nwsrcaddr","ipaddr");  ("nwdstaddr","ipaddr");
          ("nwsrcmask","int");     ("nwdstmask","int")];;
 

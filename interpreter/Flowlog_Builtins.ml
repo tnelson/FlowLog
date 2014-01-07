@@ -19,7 +19,7 @@ type builtin_predicate = { bipid: string;
                            bip_compile: (term list -> pred) option};;
 
 (* TODO: concern about types here: add has arity (int,int,int) but also should apply to 
-   any other numeric type, like tcpport. *)
+   any other numeric type, like tpport or macaddr. *)
 
 exception BIPAddException of term list;;
 
