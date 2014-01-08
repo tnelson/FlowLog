@@ -187,15 +187,20 @@ let rec gather_nonneg_equalities_involving_vars
 
 exception SubstitutionLedToInconsistency of formula;;
 
-(* If about to substitute in something like 5=7, abort because the whole conjunction is unsatisfiable *)
-let equals_if_consistent (t1: term) (t2: term): formula =
+(* If about to substitute in something like 5=7, abort because the whole conjunction is unsatisfiable
+   Alternatively, return a FFalse *)
+let equals_if_consistent (report_inconsistency: bool) (t1: term) (t2: term): formula =
   match (t1, t2) with
-    | (TConst(str1), TConst(str2)) when str1 <> str2 -> raise (SubstitutionLedToInconsistency((FEquals(t1, t2))))
+    | (TConst(str1), TConst(str2)) when str1 <> str2 -> 
+      if report_inconsistency then
+        raise (SubstitutionLedToInconsistency((FEquals(t1, t2))))
+      else 
+        FFalse
     | _ -> FEquals(t1, t2);;
 
 (* f[v -> t] 
    Substitutions of variables apply to fields of that variable, too. *)
-let rec substitute_term (f: formula) (v: term) (t: term): formula = 
+let rec substitute_term (report_inconsistency: bool) (f: formula) (v: term) (t: term): formula = 
   let substitute_term_result (curr: term): term =
     match curr, v, t with 
       | x, y, _ when x = y -> t
@@ -211,30 +216,33 @@ let rec substitute_term (f: formula) (v: term) (t: term): formula =
           let st2 = substitute_term_result t2 in
           (* Remove fmlas which will be "x=x"; avoids inf. loop. *)
           if st1 = st2 then FTrue
-          else equals_if_consistent st1 st2     
+          else equals_if_consistent report_inconsistency st1 st2     
         | FIn(t, addr, mask) ->          
             FIn(substitute_term_result t, substitute_term_result addr, substitute_term_result mask)      
         | FAtom(modstr, relstr, argterms) -> 
           let newargterms = map (fun arg -> substitute_term_result arg) argterms in
             FAtom(modstr, relstr, newargterms)
         | FOr(f1, f2) ->         
-            let subs1 = substitute_term f1 v t in
-            let subs2 = substitute_term f2 v t in
+            let subs1 = substitute_term report_inconsistency f1 v t in
+            let subs2 = substitute_term report_inconsistency f2 v t in
             if subs1 = FFalse then subs2 
             else if subs2 = FFalse then subs1            
             else FOr(subs1, subs2)       
         | FAnd(f1, f2) ->
             (* remove superfluous FTrues/FFalses *) 
-            let subs1 = substitute_term f1 v t in
-            let subs2 = substitute_term f2 v t in
+            let subs1 = substitute_term report_inconsistency f1 v t in
+            let subs2 = substitute_term report_inconsistency f2 v t in
             if subs1 = FTrue then subs2 
             else if subs2 = FTrue then subs1            
             else FAnd(subs1, subs2)       
         | FNot(f2) -> 
-            FNot(substitute_term f2 v t);;
+            let innerresult = substitute_term report_inconsistency f2 v t in
+            if innerresult = FFalse then FTrue 
+            else if innerresult = FTrue then FFalse 
+            else FNot(innerresult);;
 
-let substitute_terms (f: formula) (subs: (term * term) list): formula = 
-  fold_left (fun fm (v, t) -> substitute_term fm v t) f subs;;
+let substitute_terms ?(report_inconsistency: bool = true) (f: formula) (subs: (term * term) list): formula = 
+  fold_left (fun fm (v, t) -> substitute_term report_inconsistency fm v t) f subs;;
 
 (* assume a clause body. exempt gives the terms that are in the head, and thus need to not be removed *)
 let rec minimize_variables ?(exempt: term list = []) (f: formula): formula = 
@@ -253,7 +261,7 @@ let rec minimize_variables ?(exempt: term list = []) (f: formula): formula =
 
       (* subst process will discover inconsistency due to multiple vals e.g. x=7, x=9, and throw exception *)
       try
-        let newf = (substitute_term f x t) in
+        let newf = (substitute_term true f x t) in
           (*printf "will subs out %s to %s. New is: %s.\n%!" (string_of_term x) (string_of_term t) (string_of_formula newf);*)
           minimize_variables ~exempt:exempt newf
         with SubstitutionLedToInconsistency(_) -> FFalse;;

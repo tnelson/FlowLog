@@ -12,7 +12,6 @@ exception UsesUncompilableBuiltIns of formula;;
 exception IllegalFieldModification of formula;;
 exception IllegalAssignmentViaEquals of formula;;
 exception IllegalAtomMustBePositive of formula;;
-exception IllegalExistentialUse of formula;;
 exception IllegalModToNewpkt of (term * term);;
 exception IllegalEquality of (term * term);;
 exception NonTableField of formula;;
@@ -110,43 +109,11 @@ let rec forbidden_assignment_check (newpkt: string) (f: formula) (innot: bool): 
       		if (innot && (ExtList.List.exists (function | TField(fvar, _) when fvar = newpkt -> true | _ -> false) tlargs)) then  	
       			raise (IllegalAtomMustBePositive f);;      		
 
-(* returns list of existentials used by f. Will throw exception if re-used in new *atomic* fmla.
-	assume this is a clause fmla (no disjunction) *)
-let rec common_existential_check (newpkt: string) (sofar: string list) (f: formula): string list =
-  (* If extending this method beyond just FORWARD clauses, remember that any var in the head
-      is "safe" to cross literals. *)
-	let ext_helper (t: term): (string list) =
-		match t with 
-			| TVar(v) -> 
-				if mem v sofar then raise (IllegalExistentialUse f)
-				else [v]
-			| TConst(_) -> []
-			| TField(_,_) -> []
-		in
-
-	match f with
-		| FTrue -> []
-   	| FFalse -> []
-   	| FAnd(f1, f2) ->
-     		 let lhs_uses = common_existential_check newpkt sofar f1 in
-     		 	(* unique is in ExtLst.List --- removes duplicates *)
-     		 	unique (lhs_uses @ common_existential_check newpkt (lhs_uses @ sofar) f2)
-  	| FOr(f1, f2) -> failwith "common_existential_check"      		 
-  	| FNot(f) -> common_existential_check newpkt sofar f 
-   	| FEquals(t1, t2) -> 
-   		(* equals formulas don't represent a join. do nothing *)
-   		sofar
-    | FIn(_,_,_) ->
-      sofar
-
-   	| FAtom(modname, relname, tlargs) ->  
-    		unique (flatten (map ext_helper tlargs));;	
-
 let validate_fwd_clause (cl: clause): unit =
   (*printf "Validating clause: %s\n%!" (string_of_clause cl);*)
 	match cl.head with 
 		| FAtom("", "forward", [TVar(newpktname)]) ->
-      ignore (common_existential_check newpktname [] cl.body);  
+      (*ignore (common_existential_check newpktname [] cl.body);  *)
 			forbidden_assignment_check newpktname cl.body false;    
       printf "Forward clause was valid.\n%!";
 		| _ -> failwith "validate_clause";;
@@ -166,7 +133,6 @@ let can_compile_clause_to_fwd (cl: clause): bool =
     | IllegalFieldModification(_) -> if debug then printf "IllegalFieldModification\n%!"; false
     | IllegalAssignmentViaEquals(_) -> if debug then printf "IllegalAssignmentViaEquals\n%!"; false
     | IllegalAtomMustBePositive(_) -> if debug then printf "IllegalAtomMustBePositive\n%!"; false
-    | IllegalExistentialUse(_) -> if debug then printf "IllegalExistentialUse\n%!"; false
     | NonTableField(_) -> if debug then printf "NonTableField\n%!"; false
     | IllegalModToNewpkt(_, _) -> if debug then printf "IllegalModToNewpkt\n%!"; false
     | IllegalEquality(_,_) -> if debug then printf "IllegalEquality\n%!"; false;;
@@ -212,18 +178,14 @@ let weaken_uncompilable_packet_triggered_clause (oldpkt: string) (cl: clause): c
   (* for now, naive solution: remove offensive literals outright. easy to prove correctness 
     of goal: result is a fmla that is implied by the real body. *)
     (* acc contains formula built so far, plus the variables seen *)
-    let safeargs = (match cl.head with | FAtom(_, _, args) -> args | _ -> failwith "strip_incoming_atom") in
       if !global_verbose >= 3 then
         printf "   --- WEAKENING: Checking clause body in case need to weaken: %s\n%!" (string_of_formula cl.body);
       
-      (* 'seen' keeps track of the terms used in relational lits so far *)
+      (* 'seen' keeps track of the terms used in relational lits so far 
+         TODO: once joins are fully functional, seen can be removed *)
+
       let may_strip_literal (acc: formula * term list) (lit: formula): (formula * term list) = 
         let (fmlasofar, seen) = acc in         
-
-        let not_is_oldpkt_field (atomarg: term): bool = 
-          match atomarg with
-            | TField(fvar, ffld) when oldpkt = fvar -> false
-            | _ -> true in
 
         match lit with 
         | FTrue -> acc
@@ -268,14 +230,7 @@ let weaken_uncompilable_packet_triggered_clause (oldpkt: string) (cl: clause): c
         (* If this atom involves an already-seen variable not in tlargs, remove it *)
         | FAtom (_, _, atomargs)  
         | FNot(FAtom (_, _, atomargs)) ->
-          if length (list_intersection (subtract (filter not_is_oldpkt_field atomargs) safeargs) seen) > 0 then 
-          begin
-            (* removing this atom, so a fresh term shouldnt be remembered *)
-            if !global_verbose >= 3 then
-              printf "Removing atom (already seen): %s\n%!" (string_of_formula lit);
-            acc
-          end 
-          else if fmlasofar = FTrue then
+          if fmlasofar = FTrue then
              (lit, (unique (seen @ atomargs)))
           else 
             (FAnd(fmlasofar, lit), (unique (seen @ atomargs))) 

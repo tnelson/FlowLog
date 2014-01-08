@@ -1,0 +1,47 @@
+/*
+  Use log_for_flowlog.log
+  and
+  dpctl dump-flows
+
+  to evaluate compiled output.
+*/
+
+
+TABLE test1(macaddr, macaddr);
+TABLE test2(macaddr, macaddr);
+TABLE test3(macaddr);
+
+ON startup(empty):
+
+// TO TEST NEGATION: expect only 1 predicate
+/*
+  insert (1, 101) into test1;
+  insert (2, 102) into test1;
+  insert (3, 103) into test1;
+  insert (3, 104) into test1;
+  insert (101, 4) into test2;
+  insert (102, 5) into test2;
+  insert (103, 6) into test2;
+  //insert (101) into test3;
+  insert (102) into test3;
+  insert (103) into test3;
+*/
+
+// TO TEST MULTIPLE NEW VALUES: expect 2 singles and 1 dupe
+  insert (1, 101) into test1;
+  insert (2, 102) into test1;
+  insert (3, 103) into test1;
+  insert (3, 104) into test1;
+  insert (101, 4) into test2;
+  insert (102, 5) into test2;
+  insert (103, 6) into test2;
+  insert (104, 7) into test2;
+
+
+/////////////////////////////////////////////
+ON packet(pkt):
+  DO forward(new) WHERE
+    test1(pkt.dlDst, x) and
+    test2(x, new.dlDst) and
+    not test3(x) and
+    pkt.locPt != new.locPt;

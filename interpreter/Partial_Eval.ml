@@ -355,24 +355,58 @@ let handle_all_and_port_together (oldpkt: string) (apred: pred) (acts: action_at
     (apred, acts)
   end;;
 
+exception ContradictionInPE of formula * formula;;
+
 (* If there is an FIn(_,_,_) in the top-level conjunction, it may need substitution with equalities produced in PE. *)
 let substitute_ranges (f: formula): formula = 
+  try
+
+  if !global_verbose > 5 then printf "substitute_ranges: %s\n%!" (string_of_formula f);
+
   let subfs = conj_to_list f in
-  let (ins, eqs) = fold_left (fun (accins, accnonins) subf -> match subf with
-                                  | FIn(_,_,_) -> (subf::accins, accnonins)
-                                  | FEquals(t1, t2) -> (accins, subf::accnonins)
-                                  | _ -> (accins, accnonins)) ([],[]) subfs in  
-  (* gather assignments*)
+  (* After PE, the formula will be a conjunction of equalities, INs, and negated PE fmlas. *)  
+  let (ins, eqs, negs) = fold_left (fun (accins, accnonins, accnegs) subf -> match subf with
+                                    | FIn(_,_,_) -> (subf::accins, accnonins, accnegs)
+                                    | FEquals(t1, t2) -> (accins, subf::accnonins, accnegs)
+                                    | FNot(fnot) -> (accins, accnonins, fnot::accnegs)
+                                    | _ -> (accins, accnonins, accnegs)) ([],[],[]) subfs in  
+
+  (* gather assignments from the equality formulas 
+     detect duplicate or bad assignments *)
   let assignments = fold_left (fun acc subf -> match subf with 
                                   | FEquals((TVar(_) as v), (TConst(_) as c))  
-                                  | FEquals((TConst(_) as c), (TVar(_) as v)) -> (v, c) :: acc  
-                                  | _ -> acc) [] eqs in
+                                  | FEquals((TConst(_) as c), (TVar(_) as v)) -> 
+
+                                    (* TODO: don't believe that we need to search any negated subfmlas for a contradiction
+                                        But here is where we'd do it.*)
+
+                                    (* search any positive equalities for a contradiction to this assignment *)
+                                    if (mem_assoc v acc) && (assoc v acc) <> c then 
+                                    begin
+                                      (*printf "contradiction in PE: %s %s %s\n%!" (string_of_term v) (string_of_term (assoc v acc)) (string_of_term c);*)
+                                      (* Without this exception, we will try to substitute below and end up with, e.g. FEquals(5,7) *)
+                                      raise (ContradictionInPE(subf, (FEquals(v,c))))
+                                      (* failwith ("contradictory assignment to "^(string_of_term v)^": "^(string_of_term (assoc v acc))^" versus"^(string_of_term c))*)
+                                    end
+                                    else
+                                      (v, c) :: acc  
+
+                                  (* For now assume joins are only on variables, not fields.
+                                     TODO: if we add joins on virtual packet fields for composition, will need to store assigns here, too. *)
+                                  | FEquals((TField(_, _), TConst(_)))
+                                  | FEquals(TConst(_),(TField(_, _))) -> acc
+
+                                  (* TODO: will also have to support equality between fields... *)
+                                  | FEquals(TField(_,_), TField(_,_)) -> acc
+
+                                  | _ -> failwith ("unexpected eq fmla:"^(string_of_formula subf))
+                                ) [] eqs in
 
   (* TODO: we can use this to bootstrap join support. To do so, we need to check for contradictions 
      and include negated-equals that we're currently trapping inside NOT. *)
 
-  (* substitute according to assignments *)
-  let result = substitute_terms f assignments in 
+  (* substitute according to assignments. but don't freak out if result contains a 5=7, since may be part of negated subfmla *)
+  let result = substitute_terms ~report_inconsistency:false f assignments in 
   
   if !global_verbose > 2 then
   begin
@@ -383,7 +417,9 @@ let substitute_ranges (f: formula): formula =
   end;
 
   (* If there are still variables left in INs, they are free to vary arbitrarily, and so the compiler will ignore that IN. *)
-  result;;  
+  result
+
+  with | ContradictionInPE(_,_) -> if !global_verbose > 5 then printf "ContradictionInPE: \n%!"; FFalse;;  
 
 
 (* Side effect: reads current state in XSB *)
@@ -418,6 +454,7 @@ let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_h
 
         let bodies = map substitute_ranges bodies_before_substitute_ranges in
 
+        (*printf "BODIES: %s" (String.concat ",\n" (map string_of_formula bodies));*)
          (*printf "BODIES from PE of single clause: %d\n%!" (length bodies);       *)
 
         let result = 
