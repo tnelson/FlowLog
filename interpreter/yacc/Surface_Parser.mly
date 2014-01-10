@@ -46,6 +46,10 @@
   %token COMMA
   %token LPAREN
   %token RPAREN
+  %token UNTIL
+  %token THEN
+  %token FORWARD
+  %token STASH
   %token <string> QUOTED_IDENTIFIER
   %token <bool> BOOLEAN
   %token <string> NUMBER
@@ -110,16 +114,26 @@
     {map (fun act -> let triggerrel, triggervar, optwhere = $1 in 
            {onrel=triggerrel; onvar=triggervar; action=(add_conjunct_to_action act optwhere)}) $3};
 
-  on_clause: ON NAME LPAREN NAME RPAREN optional_fmla {($2,$4,$6)};
+  on_clause: ON NAME LPAREN NAME RPAREN optional_where {($2,$4,$6)};
 
   action_clause: 
-            | DELETE LPAREN term_list RPAREN FROM NAME optional_fmla SEMICOLON {ADelete($6, $3, $7)} 
-            | INSERT LPAREN term_list RPAREN INTO NAME optional_fmla SEMICOLON {AInsert($6, $3, $7)} 
-            | DO NAME LPAREN term_list RPAREN optional_fmla SEMICOLON {ADo($2, $4, $6)};  
+            | DELETE LPAREN term_list RPAREN FROM NAME optional_where SEMICOLON {ADelete($6, $3, $7)} 
+            | INSERT LPAREN term_list RPAREN INTO NAME optional_where SEMICOLON {AInsert($6, $3, $7)} 
+            | DO FORWARD LPAREN term RPAREN optional_where optional_timeout SEMICOLON {AForward($4, $6, $7)}            
+            | STASH LPAREN term RPAREN optional_where until_clause optional_then SEMICOLON {AStash($3, $5, $6, $7)};             
+            | DO NAME LPAREN term_list RPAREN optional_where SEMICOLON {ADo($2, $4, $6)};            
+            
+  until_clause: UNTIL formula {$2};
 
-  optional_fmla: 
+  optional_where: 
             | WHERE formula {$2} 
             | {FTrue};
+  optional_timeout:
+            | TIMEOUT NUMBER {Some(int_of_string $2)} 
+            | {None};      
+  optional_then: 
+            | THEN action_clause_list {$2}             
+            | {[]};  
   
   formula: 
             | TRUE {FTrue}  

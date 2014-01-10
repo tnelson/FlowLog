@@ -39,6 +39,11 @@ rule token = parse
   | "then" { THEN }
   | "on" { ON }
 
+  | "forward" { FORWARD }
+  | "stash" { STASH }
+  | "then" { THEN }
+  | "until" { UNTIL }  
+
   | "in" { IN }
   | "not" { NOT }
   | "or" { OR }
