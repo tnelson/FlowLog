@@ -663,15 +663,24 @@ module PredSet  = Set.Make( struct type t = pred let compare = smart_compare_pre
     let argstring = (String.concat "," (map (string_of_term ~verbose:Verbose) argterms)) in
       outrel^"("^argstring^") WHERE "^(string_of_formula ~verbose:Verbose fmla);;
 
-  let string_of_rule (r: srule): string =
-    match r.action with 
+  let rec string_of_action (ac: Flowlog_Types.action): string = 
+    match ac with 
       | ADelete(outrel, argterms, fmla) ->  
-        "ON "^r.onrel^"("^r.onvar^"): DELETE "^(action_string outrel argterms fmla);                         
+        "DELETE "^(action_string outrel argterms fmla);                         
       | AInsert(outrel, argterms, fmla) ->
-        "ON "^r.onrel^"("^r.onvar^"): INSERT "^(action_string outrel argterms fmla);
+        "INSERT "^(action_string outrel argterms fmla);
       | ADo(outrel, argterms, fmla) ->  
-        "ON "^r.onrel^"("^r.onvar^"): DO "^(action_string outrel argterms fmla);;
+        "DO "^(action_string outrel argterms fmla)
+      | AForward(p, fmla, tout) -> 
+        "FORWARD "^(action_string "forward" [p] fmla)
+      | AStash(p, where, until, thens) -> 
+        ("STASH "^(action_string "stash" [p] where)^
+        " until " ^(string_of_formula ~verbose:Verbose until)^" then "^
+        (String.concat ";" (map string_of_action thens)));;
 
+  let string_of_rule (r: srule): string =
+    "ON "^r.onrel^"("^r.onvar^"):"^(string_of_action r.action);;
+    
   let string_of_field_decl (d : (string * typeid)): string = 
     let s1, s2 = d in s1^":"^s2;;
 

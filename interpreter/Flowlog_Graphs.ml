@@ -56,7 +56,11 @@ let depends_from_clause (prgm: named_program) (cl: clause): data_edge list =
     | ADelete(headrel, _, fmla) ->
       depends_from_rule prgm "-" cl.orig_rule.onrel headrel fmla
     | ADo(headrel, _, fmla) -> 
-      depends_from_rule prgm "" cl.orig_rule.onrel headrel fmla;;
+      depends_from_rule prgm "" cl.orig_rule.onrel headrel fmla
+    | AForward(p, fmla, tout) -> 
+      depends_from_rule prgm "" cl.orig_rule.onrel "forward" fmla
+    | AStash(p, where, until, thens) -> 
+      depends_from_rule prgm "" cl.orig_rule.onrel "stash" where;;
 
 let enhance_graph_with_clause (prgm: named_program) (acc: depend_graph) (cl: clause): depend_graph =
   let new_dependencies = unique (depends_from_clause prgm cl @ acc.dependencies) in

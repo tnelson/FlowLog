@@ -65,7 +65,12 @@ let clauses_of_rule (r: srule): clause list =
         | AInsert(relname, terms, condition) -> 
             map (build_clause r atom_for_on relname terms (Some plus_prefix)) (disj_to_list (disj_to_top (nnf condition)));
         | ADo(relname, terms, condition) -> 
-            map (build_clause r atom_for_on relname terms None) (disj_to_list (disj_to_top (nnf condition)));;     
+            map (build_clause r atom_for_on relname terms None) (disj_to_list (disj_to_top (nnf condition)))
+        | AForward(p, fmla, tout) -> 
+            map (build_clause r atom_for_on "forward" [p] None) (disj_to_list (disj_to_top (nnf fmla)))
+        | AStash(p, where, until, thens) -> 
+            (* TODO: not enough yet; need to handle the "until" and "then" parts! *)
+            map (build_clause r atom_for_on "stash" [p] None) (disj_to_list (disj_to_top (nnf where)));;     
 
 let field_var_or_var (t: term): string =
   match t with
@@ -106,7 +111,7 @@ let well_formed_rule (p: flowlog_program) (r: srule): unit =
            if this is an insert/delete rule, disallow non = inargname fields.  *)        
       | TField(vname, fname) when mem vname (field_vars_in headterms) ->              
         (match r.action with 
-          | ADo(_, outrelterms, where) -> 
+          | ADo(_, outrelterms, where) ->       
             (try              
               (* forward is a special case: it has the type of its trigger. *)
               let valid_fields = (match (get_outgoing p headrelname).outarity with
@@ -115,7 +120,13 @@ let well_formed_rule (p: flowlog_program) (r: srule): unit =
                                    | SameAsOnFields -> get_valid_fields_for_input_rel p inrelname) in
               if not (mem fname valid_fields) then 
                 raise (UndeclaredField(vname, fname))
-            with | Not_found -> raise (UndeclaredOutgoingRelation headrelname))
+            with | Not_found -> raise (UndeclaredOutgoingRelation headrelname))          
+            (* TODO: kind of a tangle here. *)
+          | AForward(pkt, _, _) 
+          | AStash(pkt, _, _, _) -> 
+            let valid_fields = get_valid_fields_for_input_rel p inrelname in
+              if not (mem fname valid_fields) then 
+                raise (UndeclaredField(vname, fname))                        
           | AInsert(_, outrelterms, where)  
           | ADelete(_, outrelterms, where) -> 
             raise (UndeclaredField(vname, fname)))
@@ -163,7 +174,12 @@ let well_formed_rule (p: flowlog_program) (r: srule): unit =
       | Not_found -> raise (UndeclaredIncomingRelation inrelname)          
   in 
 
-  match r.action with     
+  match r.action with  
+    | AForward(p, fmla, tout) -> 
+      validate_common_elements r.onrel r.onvar "forward" [p] fmla;      
+    | AStash(p, where, until, thens) -> 
+      validate_common_elements r.onrel r.onvar "stash" [p] where;
+      validate_common_elements r.onrel r.onvar "stash" [p] until;
     (* DO must have outgoing relation in action, and must be correct arity *)
     |  ADo(outrelname, outrelterms, where) -> 
         validate_common_elements r.onrel r.onvar outrelname outrelterms where;
@@ -308,7 +324,11 @@ let rec expand_includes (ast : flowlog_ast) (prev_includes : string list) : flow
         | ADelete(headrel, _, fmla) ->
           Hashtbl.add memos.delete_triggers r.onrel headrel
         | ADo(headrel, _, fmla) -> 
-          Hashtbl.add memos.out_triggers r.onrel headrel in
+          Hashtbl.add memos.out_triggers r.onrel headrel 
+        | AForward(p, fmla, tout) -> 
+          Hashtbl.add memos.out_triggers r.onrel "forward" 
+        | AStash(p, where, until, thens) -> 
+          Hashtbl.add memos.out_triggers r.onrel "stash" in
      iter depends_from_rule rules;
      iter (fun tdef -> Hashtbl.add memos.tablemap tdef.tablename tdef) tables;
      iter (fun odef -> Hashtbl.add memos.outgoingmap odef.outname odef) outgoings;

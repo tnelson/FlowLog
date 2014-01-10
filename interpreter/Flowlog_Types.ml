@@ -34,7 +34,10 @@ type typeid = string;;
   type action = 
               | ADelete of string * term list * formula 
               | AInsert of string * term list * formula 
-              | ADo of string * term list * formula;;
+              | ADo of string * term list * formula
+              (* pkt var to stash; where clause; until clause; then clause*)
+              | AStash of term * formula * formula * action list
+              | AForward of term * formula * int option;;
 
   type refresh = 
       (* number, units *)
@@ -271,8 +274,14 @@ let add_conjunct_to_action (act: action) (f: formula) =
     | _ when f = FTrue -> act
     | ADelete(a, b, fmla) -> ADelete(a, b, FAnd(f, fmla)) 
     | AInsert(a, b, fmla) -> AInsert(a, b, FAnd(f, fmla))
-    | ADo(a, b, fmla) -> ADo(a, b, FAnd(f, fmla));;
+    | ADo(a, b, fmla) -> ADo(a, b, FAnd(f, fmla))
+    | AForward(p, fmla, tout) -> AForward(p, FAnd(f, fmla), tout)
+    | AStash(p, where, until, thens) -> AStash(p, FAnd(f, where), until, thens);;
 
+(*
+    | AForward(p, fmla, tout) -> 
+    | AStash(p, where, until, thens) -> 
+*)
 (************************************************************************************)
 (* BUILT-IN CONSTANTS, MAGIC-NUMBERS, EVENTS, REACTIVE DEFINITIONS, ETC.            *)
 (* Packet flavors and built-in relations are governed by the Flowlog_Packets        *)

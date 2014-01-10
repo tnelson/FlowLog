@@ -235,6 +235,10 @@ let alloy_actions (out: out_channel) (p: flowlog_program): unit =
         {fortable=true;  outrel = (plus_prefix^"_"^outrel);  outargs = outargs; where = where; increl = r.onrel; incvar = r.onvar}
       | ADo(outrel, outargs, where) -> 
         {fortable=false; outrel = outrel;                    outargs = outargs; where = where; increl = r.onrel; incvar = r.onvar}
+      | AForward(pkt, where, tout) -> 
+        {fortable=false; outrel = "forward";                 outargs = [pkt]; where = where; increl = r.onrel; incvar = r.onvar}
+      | AStash(pkt, where, until, thens) -> 
+        {fortable=false; outrel = "stash";                   outargs = [pkt]; where = where; increl = r.onrel; incvar = r.onvar}
   in
   
   let outarg_to_poss_equality (evrestricted: string) (i: int) (outarg: term): string =
