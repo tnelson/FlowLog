@@ -11,19 +11,21 @@ ON packet(pkt):
     not pt = pkt.locPt
     AND not learned(pkt.locSw, pkt.locPt, pkt.dlSrc);
 
+  // known branch: timeout 15, timeout 10
   DO forward(new) WHERE
     learned(pkt.locSw, new.locPt, pkt.dlDst) AND
     pkt.locPt != new.locPt
     TIMEOUT 15;
-//  DO forward(new) WHERE
-//    NOT learned(pkt.locSw, ANY, pkt.dlDst) AND
-//    NOT pkt.locPt = new.locPt
-//    TIMEOUT 15;
+  DO forward(new) WHERE
+    learned(pkt.locSw, new.locPt, pkt.dlDst) AND
+    pkt.locPt != new.locPt
+    TIMEOUT 10;
 
-  // double up on rules: these will never be removed. the others WILL BE.
-//  DO forward(new) WHERE
-//    learned(pkt.locSw, new.locPt, pkt.dlDst) AND
-//    pkt.locPt != new.locPt;
+  // unknown branch: no-timeout + 15
+  DO forward(new) WHERE
+    NOT learned(pkt.locSw, ANY, pkt.dlDst) AND
+    NOT pkt.locPt = new.locPt
+    TIMEOUT 20;
   DO forward(new) WHERE
     NOT learned(pkt.locSw, ANY, pkt.dlDst) AND
     NOT pkt.locPt = new.locPt;

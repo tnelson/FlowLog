@@ -508,11 +508,19 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: triggered_cl
      (Don't try to unique first; would be a danger of losing the timeout if there is overlap with a non-timeout rule.
    *)
 
-    let pre_unique_with_metadata = map (fun (pr, ac, ru) -> (pr, build_metadata_action_pol ac ru)) pre_unique_pas in
+  (*iter
+    (fun (ap, ac, r) -> write_log (sprintf "%s %s %s\n" (NetCore_Pretty.string_of_action ac) (NetCore_Pretty.string_of_pred ap) (string_of_rule r)))
+    pre_unique_pas;*)
 
-    let clause_pas = unique ~cmp:(fun tup1 tup2 ->
-                                  let (pp1, actpol1) = tup1 in
-                                  let (pp2, actpol2) = tup2 in
+    let pre_unique_with_metadata = map (fun (pr, ac, ru) -> (ac, pr, build_metadata_action_pol ac ru)) pre_unique_pas in
+
+  (*iter
+    (fun (ac, ap, aa) -> write_log (sprintf "%s %s %s\n" (NetCore_Pretty.string_of_action ac) (NetCore_Pretty.string_of_pred ap) (NetCore_Pretty.string_of_pol aa)))
+    pre_unique_with_metadata;*)
+
+    let clause_aps = unique ~cmp:(fun tup1 tup2 ->
+                                  let (ac1, pp1, actpol1) = tup1 in
+                                  let (ac2, pp2, actpol2) = tup2 in
                                     (safe_compare_pols actpol1 actpol2) && (smart_compare_preds pp1 pp2)) pre_unique_with_metadata in
 
   (*printf "Done creating clause_pas! %d members.\n%!" (length clause_pas);*)
@@ -524,54 +532,70 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: triggered_cl
                         (NetCore_Pretty.string_of_pred ap)
                         (NetCore_Pretty.string_of_action aa)) ) disj_pas;*)
   let or_of_preds_for_action_pol (apol: pol): pred =
-    fold_left (fun acc (smallpred, actpol) ->
+    fold_left (fun acc (act, smallpred, actpol) ->
               if not (safe_compare_pols apol actpol) then acc
               else if acc = Nothing then smallpred
               else if smallpred = Nothing then acc
               else Or(acc, smallpred))
             Nothing
-            clause_pas in
+            clause_aps in
 
-    if length clause_pas = 0 then
+    if length clause_aps = 0 then
       Action([])
-    else if length clause_pas = 1 then
-      let (pred, actpol) = (hd clause_pas) in
+    else if length clause_aps = 1 then
+      let (act, pred, actpol) = (hd clause_aps) in
         Seq(Filter(pred), actpol)
     else
     begin
-      let actionpolsused = unique ~cmp:safe_compare_pols
-                            (map (fun (ap, aa) -> aa) clause_pas) in
-      let actionpolswithphysicalports = filter (fun smallpol -> not (involves_allports_atom smallpol)) actionpolsused in
-      let actionpolswithallports = filter (fun smallpol -> (involves_allports_atom smallpol)) actionpolsused in
+      let non_all_actionsused = unique ~cmp:safe_compare_actions
+                        (filter_map (fun (ac, ap, aa) -> if involves_allports_atom aa then None else Some(ac)) clause_aps) in
+      let actionpolswithallports = filter_map (fun (ac, ap, aa) -> if (involves_allports_atom aa) then Some(aa) else None) clause_aps in
+
       (*printf "actionsued = %s\nactionswithphysicalports = %s\n%!"
        (String.concat ";" (map NetCore_Pretty.string_of_action actionsused))
        (String.concat ";" (map NetCore_Pretty.string_of_action actionswithphysicalports));*)
 
+    (* When folded over, will produce an IF statement prioritizing HIGHEST timeout *)
+    let sort_by_decreasing_timeout (p1: pol) (p2: pol): int =
+    (* WARNING: this sort function only works for the limited, single-timeout-only metadata we use as of this writing *)
+      match p1, p2 with
+        | Action(_), Action(_) -> 0
+        | Action(_), ActionWithMeta(_,  [NetCore_Types.IdleTimeout (OpenFlow0x01_Core.ExpiresAfter n)]) -> 1
+        | ActionWithMeta(_,  [NetCore_Types.IdleTimeout (OpenFlow0x01_Core.ExpiresAfter n)]), Action(_) -> -1
+        | ActionWithMeta(_,  [NetCore_Types.IdleTimeout (OpenFlow0x01_Core.ExpiresAfter n1)]),
+          ActionWithMeta(_,  [NetCore_Types.IdleTimeout (OpenFlow0x01_Core.ExpiresAfter n2)]) -> Pervasives.compare n1 n2
+        | _ -> failwith ("sort_by_increasing_timeout: "^(NetCore_Pretty.string_of_pol p1)^", "^(NetCore_Pretty.string_of_pol p2)) in
+
+    let get_action_pols_for_action (a: action): pol list =
+      let raws = unique (fold_left (fun acc (ac, ap, aa) ->
+          if (safe_compare_actions a ac) then aa::acc else acc) [] clause_aps) in
+        (sort ~cmp:sort_by_decreasing_timeout raws) in
+
       (* Build a single union over policies for each distinct action *)
       (* if we get dup packets, make certain || isn't getting compiled to bag union in netcore *)
-      let singleunion_ports = fold_left
-                (fun (acc: pol) (aportactionpol: pol) ->
-                  let newpred = simplify_netcore_predicate (or_of_preds_for_action_pol aportactionpol) in
-                 (*  write_log (sprintf "ite_of_preds_for_action: %s = %s"
-                    (NetCore_Pretty.string_of_action aportaction)
-                    (NetCore_Pretty.string_of_pol newpol));*)
-                  if newpred = Nothing then acc
-                  else
-                    let newpol = Seq(Filter(newpred), aportactionpol) in
-                      if acc = Action([]) then
-                        newpol
-                      else
-                        Union(acc, newpol))
+      let union_over_ports = fold_left
+                (fun (acc: pol) (aportaction: action) ->
+                  (* which metadata combos do we have for this action? *)
+                  let actionpols = get_action_pols_for_action aportaction in
+
+                  write_log (sprintf "%s\n" (String.concat ",  " (map NetCore_Pretty.string_of_pol actionpols)));
+
+                  let ite_chain = fold_left (fun (acc2: pol) (acpol: pol) ->
+                    let newpred = simplify_netcore_predicate (or_of_preds_for_action_pol acpol) in
+                      if newpred = Nothing then acc
+                      else ITE(newpred, acpol, acc2)) (Action([])) actionpols in
+
+                    Union(acc, ite_chain))
                 (Action([]))
-                actionpolswithphysicalports in
+                non_all_actionsused in
 
       (* the "allports" actions (note, may have multiple unique allports acts,
          due to metadata) must always be checked first*)
       (* If not all-ports, can safely union without overlap *)
       fold_left (fun (acc: pol) (apactpol: pol) ->
           ITE(or_of_preds_for_action_pol apactpol, apactpol, acc))
-        singleunion_ports
-        actionpolswithallports
+        union_over_ports
+        (sort ~cmp:sort_by_decreasing_timeout actionpolswithallports)
     end;;
 
 (*
