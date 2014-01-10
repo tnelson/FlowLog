@@ -1,25 +1,39 @@
 
-TABLE learned(switchid, portid, macaddr); 
-TABLE switch_has_port(switchid, portid); 
+TABLE learned(switchid, portid, macaddr);
+TABLE switch_has_port(switchid, portid);
 
 
 ON packet(pkt):
-  INSERT (pkt.locSw, pkt.locPt, pkt.dlSrc) INTO learned WHERE 
-    not learned(pkt.locSw, pkt.locPt, pkt.dlSrc);  
+  INSERT (pkt.locSw, pkt.locPt, pkt.dlSrc) INTO learned WHERE
+    not learned(pkt.locSw, pkt.locPt, pkt.dlSrc);
 
   DELETE (pkt.locSw, pt, pkt.dlSrc) FROM learned WHERE
-    not pt = pkt.locPt 
-    AND not learned(pkt.locSw, pkt.locPt, pkt.dlSrc);  
+    not pt = pkt.locPt
+    AND not learned(pkt.locSw, pkt.locPt, pkt.dlSrc);
 
-  DO forward(new) WHERE 
-    learned(pkt.locSw, new.locPt, pkt.dlDst) AND          
+  DO forward(new) WHERE
+    learned(pkt.locSw, new.locPt, pkt.dlDst) AND
     pkt.locPt != new.locPt
-    TIMEOUT 10;
-     
+    TIMEOUT 15;
+//  DO forward(new) WHERE
+//    NOT learned(pkt.locSw, ANY, pkt.dlDst) AND
+//    NOT pkt.locPt = new.locPt
+//    TIMEOUT 15;
+
+  // double up on rules: these will never be removed. the others WILL BE.
+//  DO forward(new) WHERE
+//    learned(pkt.locSw, new.locPt, pkt.dlDst) AND
+//    pkt.locPt != new.locPt;
   DO forward(new) WHERE
     NOT learned(pkt.locSw, ANY, pkt.dlDst) AND
     NOT pkt.locPt = new.locPt;
-    
+
+TABLE omgremoved (macaddr);
+
+ON flow_removed (fr):
+  INSERT (fr.dlSrc) INTO omgremoved
+  WHERE fr.reason = "idletimeout";
+
 
 ON switch_port(swpt):
   INSERT (swpt.sw, swpt.pt) INTO switch_has_port;
