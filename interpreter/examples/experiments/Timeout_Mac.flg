@@ -1,0 +1,29 @@
+
+TABLE learned(switchid, portid, macaddr); 
+TABLE switch_has_port(switchid, portid); 
+
+
+ON packet(pkt):
+  INSERT (pkt.locSw, pkt.locPt, pkt.dlSrc) INTO learned WHERE 
+    not learned(pkt.locSw, pkt.locPt, pkt.dlSrc);  
+
+  DELETE (pkt.locSw, pt, pkt.dlSrc) FROM learned WHERE
+    not pt = pkt.locPt 
+    AND not learned(pkt.locSw, pkt.locPt, pkt.dlSrc);  
+
+  DO forward(new) WHERE 
+    learned(pkt.locSw, new.locPt, pkt.dlDst) AND          
+    pkt.locPt != new.locPt
+    TIMEOUT 10;
+     
+  DO forward(new) WHERE
+    NOT learned(pkt.locSw, ANY, pkt.dlDst) AND
+    NOT pkt.locPt = new.locPt;
+    
+
+ON switch_port(swpt):
+  INSERT (swpt.sw, swpt.pt) INTO switch_has_port;
+
+ON switch_down(swd):
+  DELETE (swd.sw, ANY) FROM switch_has_port;
+  DELETE (swd.sw, ANY, ANY) FROM learned;

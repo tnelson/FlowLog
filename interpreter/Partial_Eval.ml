@@ -425,7 +425,7 @@ let substitute_ranges (f: formula): formula =
 (* Side effect: reads current state in XSB *)
 (* Note: if given a non-packet-triggered clause, this function will happily compile it, but the trigger relation will be empty in current state
    and this reduce the clause to <false>. If the caller wants efficiency, it should pass only packet-triggered clauses. *)
-let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_handler option) (tcl: triggered_clause): (pred * action) list =   
+let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_handler option) (tcl: triggered_clause): (pred * action * srule) list =   
     if !global_verbose > 4 then (match callback with 
       | None -> printf "\n--- Packet triggered clause to netcore (FULL COMPILE) on: \n%s\n%!" (string_of_triggered_clause tcl)
       | Some(_) -> printf "\n--- Packet triggered clause to netcore (~CONTROLLER~) on: \n%s\n%!" (string_of_triggered_clause tcl));
@@ -471,8 +471,14 @@ let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_h
               let bigpred = fold_left (fun acc body -> Or(acc, build_unsafe_switch_pred tcl.oldpkt body)) Nothing bodies in
                 [(bigpred, [ControllerAction(f)])] in      
 
-          result          
+          (* add context: the rule for this clause*)
+          (map (fun (apred, anact) -> (apred, anact, tcl.clause.orig_rule)) result)
       | _ -> failwith "pkt_triggered_clause_to_netcore";;
+
+
+let unique_combine ?(cmp: 'a -> 'a -> bool = (=)) ?(comb: 'a -> 'a -> 'a = (fun x y -> x)) (lst: 'a list): 'a list =
+  (* TODO!!!  *)
+  unique ~cmp:cmp lst;;
 
 (* return the union of policies for each clause *)
 (* Side effect: reads current state in XSB *)
@@ -480,26 +486,22 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: triggered_cl
   (*printf "ENTERING pkt_triggered_clauses_to_netcore!\n%!";*)
   let pre_unique_pas = appendall (map (pkt_triggered_clause_to_netcore p callback) clauses) in
   
-  let clause_pas = unique ~cmp:(fun pair1 pair2 -> 
-                              let (pp1, pa1) = pair1 in 
-                              let (pp2, pa2) = pair2 in 
-                                (safe_compare_actions pa1 pa2) && (smart_compare_preds pp1 pp2))   
+  (* Can't use normal unique---danger of losing the timeout if there is overlap with a non-timeout rule
+     instead use custom unique_combine func, which adjusts which of 2 comparable elements it keeps *)
+  let clause_pas = unique_combine ~cmp:(fun tup1 tup2 -> 
+                                       let (pp1, pa1, r1) = tup1 in 
+                                       let (pp2, pa2, r2) = tup2 in 
+                                         (safe_compare_actions pa1 pa2) && (smart_compare_preds pp1 pp2))
+                                ~comb:(fun tup1 tup2 -> 
+                                       let (pp1, pa1, r1) = tup1 in 
+                                       let (pp2, pa2, r2) = tup2 in 
+                                         match r1.action with 
+                                          | AForward(_, _, None) -> tup2
+                                          | AForward(_, _, Some(x)) -> tup1
+                                          | _ -> failwith "non-forward rule in pkt_triggered_clauses_to_netcore") 
                   pre_unique_pas in
 
-  (*printf "Done creating clause_pas! %d members.\n%!" (length clause_pas);*)
-  (*let separate_disjunct_pair (ap, aa) =
-    match ap with 
-      | Or(ap1, ap2) -> map (fun newpred -> (newpred, aa)) (gather_predicate_or ap) 
-      | _ -> [(ap, aa)] in
-
-      (* so many unique calls ---> expensive. TODO. change to sets. *)
-  let pre_unique_disj_pas = (appendall (map separate_disjunct_pair clause_pas)) in
-  let disj_pas = unique ~cmp:(fun pair1 pair2 -> 
-                              let (pp1, pa1) = pair1 in 
-                              let (pp2, pa2) = pair2 in 
-                                (safe_compare_actions pa1 pa2) && (smart_compare_preds pp1 pp2))  
-                 pre_unique_disj_pas in
-  printf "Done creating disj_pas! %d members. before unique check was %d\n%!" (length disj_pas) (length pre_unique_disj_pas);*)
+  (*printf "Done creating clause_pas! %d members.\n%!" (length clause_pas);*)  
 
   (*iter (fun (ap, aa) -> write_log (sprintf "!!! %s %s\n%!"
                         (NetCore_Pretty.string_of_pred ap) 
@@ -508,7 +510,7 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: triggered_cl
                         (NetCore_Pretty.string_of_pred ap) 
                         (NetCore_Pretty.string_of_action aa)) ) disj_pas;*)
   let or_of_preds_for_action (a: action): pred =
-    fold_left (fun acc (smallpred, act) -> 
+    fold_left (fun acc (smallpred, act, r) -> 
               if not (safe_compare_actions a act) then acc 
               else if acc = Nothing then smallpred
               else if smallpred = Nothing then acc
@@ -516,17 +518,14 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: triggered_cl
             Nothing
             clause_pas in
 
-  (*let ite_of_preds_for_action (a: action): pol =    
-    fold_left (fun acc (smallpred, act) ->               
-              if not (safe_compare_actions a act) then acc 
-              else 
-              begin
-                let simppred = simplify_netcore_predicate smallpred in 
-                  if simppred = Nothing then acc
-                  else ITE(simppred, Action(act), acc)
-              end) 
-            (Action([]))
-            disj_pas in   *)
+          (* TODO ^^^ want to aggregate all rules responsible for a certain pred/action pair.
+             this will give us metadata for debugging as well as timeout 
+
+            currently we group all preds that produce a given action-set, then take their OR.
+            
+
+
+              *)
 
     if length clause_pas = 0 then 
       Action([])
@@ -571,6 +570,14 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: triggered_cl
       else
         singleunion
     end;;
+
+(*
+TODO ///
+need to connect rules <-> clauses <-> pred/action so that we can do:
+
+let metadata = [NetCore_Types.IdleTimeout (OpenFlow0x01_Core.ExpiresAfter n)] in
+ActionWithMeta(aportaction, metadata)
+*)
 
 (* Side effect: reads current state in XSB *)
 (* Set up policies for all packet-triggered clauses *)

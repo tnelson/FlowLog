@@ -672,7 +672,7 @@ module PredSet  = Set.Make( struct type t = pred let compare = smart_compare_pre
       | ADo(outrel, argterms, fmla) ->  
         "DO "^(action_string outrel argterms fmla)
       | AForward(p, fmla, tout) -> 
-        "FORWARD "^(action_string "forward" [p] fmla)
+        "FORWARD "^(action_string "forward" [p] fmla)^" TIMEOUT: "^(match tout with | None -> "none" | Some(x) -> string_of_int x)
       | AStash(p, where, until, thens) -> 
         ("STASH "^(action_string "stash" [p] where)^
         " until " ^(string_of_formula ~verbose:Verbose until)^" then "^
