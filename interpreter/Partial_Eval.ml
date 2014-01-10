@@ -555,7 +555,9 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: triggered_cl
        (String.concat ";" (map NetCore_Pretty.string_of_action actionsused))
        (String.concat ";" (map NetCore_Pretty.string_of_action actionswithphysicalports));*)
 
-    (* When folded over, will produce an IF statement prioritizing HIGHEST timeout *)
+    (* When folded over, will produce an IF statement prioritizing HIGHEST timeout.
+       This enforces the invariant that if a packet is sent out port N by 2 flowlog rules, the highest of the two timeouts takes effect.
+       Note that if the rules send the packet out different ports, their two separate timeouts will be respected *)
     let sort_by_decreasing_timeout (p1: pol) (p2: pol): int =
     (* WARNING: this sort function only works for the limited, single-timeout-only metadata we use as of this writing *)
       match p1, p2 with
@@ -578,7 +580,7 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: triggered_cl
                   (* which metadata combos do we have for this action? *)
                   let actionpols = get_action_pols_for_action aportaction in
 
-                  write_log (sprintf "%s\n" (String.concat ",  " (map NetCore_Pretty.string_of_pol actionpols)));
+                  (*write_log (sprintf "%s\n" (String.concat ",  " (map NetCore_Pretty.string_of_pol actionpols)));*)
 
                   let ite_chain = fold_left (fun (acc2: pol) (acpol: pol) ->
                     let newpred = simplify_netcore_predicate (or_of_preds_for_action_pol acpol) in
@@ -597,14 +599,6 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: triggered_cl
         union_over_ports
         (sort ~cmp:sort_by_decreasing_timeout actionpolswithallports)
     end;;
-
-(*
-TODO ///
-need to connect rules <-> clauses <-> pred/action so that we can do:
-
-let metadata = [NetCore_Types.IdleTimeout (OpenFlow0x01_Core.ExpiresAfter n)] in
-ActionWithMeta(aportaction, metadata)
-*)
 
 (* Side effect: reads current state in XSB *)
 (* Set up policies for all packet-triggered clauses *)
