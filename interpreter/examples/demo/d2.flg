@@ -1,31 +1,31 @@
 EVENT host_report {mac, sw, pt};
 OUTGOING notify_police(macaddr, switchid, portid);
 
-OUTGOING notify_police(mac, sw, pt) THEN 
+OUTGOING notify_police(mac, sw, pt) THEN
   SEND EVENT host_report {mac:=mac, sw:=sw, pt:=pt} TO 127.0.0.1:5050;
 
 ON packet_in(pkt):
   DO notify_police(pkt.dlSrc, pkt.locSw, pkt.locPt) WHERE
-    not learned(ANY, ANY, pkt.dlSrc); 
+    not learned(ANY, ANY, pkt.dlSrc);
 
 // ^ There is a problem with the last line! :-)
 
 ///////////////////////////////
 // Unchanged:
 
-TABLE learned(switchid, portid, macaddr); 
-TABLE switch_has_port(switchid, portid); 
+TABLE learned(switchid, portid, macaddr);
+TABLE switch_has_port(switchid, portid);
 
 ON switch_port_in(swpt):
   INSERT (swpt.sw, swpt.pt) INTO switch_has_port;
 
-ON packet_in(pkt):  
-  INSERT (pkt.locSw, pkt.locPt, pkt.dlSrc) INTO learned WHERE 
-    not learned(pkt.locSw, pkt.locPt, pkt.dlSrc);  
+ON packet_in(pkt):
+  INSERT (pkt.locSw, pkt.locPt, pkt.dlSrc) INTO learned WHERE
+    not learned(pkt.locSw, pkt.locPt, pkt.dlSrc);
 
-  DO forward(new) WHERE 
+  DO forward(new) WHERE
     learned(pkt.locSw, new.locPt, pkt.dlDst);
-    
-  DO forward(new) WHERE 
+
+  DO forward(new) WHERE
     NOT learned(pkt.locSw, ANY, pkt.dlDst) AND
     NOT pkt.locPt = new.locPt;

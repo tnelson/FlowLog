@@ -28,24 +28,24 @@ let sod = function
     Some v -> v
   | None -> raise Die;;
 
-let print_notif_values tbl = 
-  Hashtbl.iter (fun k v -> 
-                Printf.printf "%s -> %s\n%!" k v) tbl 
+let print_notif_values tbl =
+  Hashtbl.iter (fun k v ->
+                Printf.printf "%s -> %s\n%!" k v) tbl
 
 
-(*  The resulting list contains all the tuples (as string lists) returned.  
+(*  The resulting list contains all the tuples (as string lists) returned.
 
     Note: each query opens a separate, new connection to the black-box.
 *)
-let doBBquery (qryname: string) (bbip: string) (bbport: string) (args: term list): string list list = 
-    let cli = connect ~host:bbip (int_of_string bbport) in 
+let doBBquery (qryname: string) (bbip: string) (bbport: string) (args: term list): string list list =
+    let cli = connect ~host:bbip (int_of_string bbport) in
     try
       Printf.printf "Sending BB query...\n%!";
       let qry = new query in
       qry#set_relName qryname;
-      qry#set_arguments (map string_of_term args); 
-      let qresult = cli.bb#doQuery qry in          
-      let result = Hashtbl.fold (fun k v sofar -> k :: sofar)                     
+      qry#set_arguments (map string_of_term args);
+      let qresult = cli.bb#doQuery qry in
+      let result = Hashtbl.fold (fun k v sofar -> k :: sofar)
                                     (sod qresult#get_result)
                                     [] in
         cli.trans#close;
@@ -60,20 +60,20 @@ let doBBquery (qryname: string) (bbip: string) (bbport: string) (args: term list
   Each notification opens a separate, new, connection to the black-box.
 *)
 
-let doBBnotify (ev: event) (bbip: string) (bbport: string) : unit=            	    
-            let cli = connect ~host:bbip (int_of_string bbport) in 
+let doBBnotify (ev: event) (bbip: string) (bbport: string) : unit=
+            let cli = connect ~host:bbip (int_of_string bbport) in
             try
 
-              printf "Sending notification...\n%!"; 
+              printf "Sending notification...\n%!";
               let notif = new notification in
               let tbl = (Hashtbl.create (StringMap.cardinal ev.values)) in
               notif#set_notificationType ev.typeid;
               notif#set_values tbl;
               StringMap.iter (fun k v -> Hashtbl.add tbl k v) ev.values;
-              printf "Making RPC invocation...\n%!"; 
-              cli.bb#notifyMe notif;      
+              printf "Making RPC invocation...\n%!";
+              cli.bb#notifyMe notif;
               cli.trans#close;
-              printf "RPC invocation complete. Socket closed.\n%!"; 
+              printf "RPC invocation complete. Socket closed.\n%!";
 
             with | Transport.E (_,what) ->
                      Printf.printf "ERROR sending notification: %s\n%!" what;

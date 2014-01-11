@@ -12,7 +12,7 @@ table router_queued(switchid);
 
 // MAC learning running on other switches (we manually prevent it from running on swid = 0x1000000000000001)
 ON ip_packet(pkt) WHERE pkt.locSw = 0x1000000000000001:
-  DO forward(new) WHERE     
+  DO forward(new) WHERE
   ((pkt.nwDst IN 10.0.1.0/24 and new.dlDst = 00:00:00:00:00:01)
    or
    (pkt.nwDst IN 10.0.2.0/24 and new.dlDst = 00:00:00:00:00:02))

@@ -12,7 +12,7 @@ TABLE ethtest(macaddr);
 ON packet_in(p):
   INSERT (p.dlSrc) INTO ethtest;
 
-ON ip_packet_in(p): 
+ON ip_packet_in(p):
   INSERT (p.nwSrc) INTO iptest;
 
 ON arp_packet_in(p):

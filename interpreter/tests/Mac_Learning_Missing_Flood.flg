@@ -1,35 +1,35 @@
 
-/* This variation on Mac_Learning is identical except for different names. 
+/* This variation on Mac_Learning is identical except for different names.
    Used for change-impact soundness testing. */
 
-TABLE learned(switchid, portid, macaddr); 
-TABLE switch_has_port(switchid, portid); 
+TABLE learned(switchid, portid, macaddr);
+TABLE switch_has_port(switchid, portid);
 
 // all the events used here are built-in
 
 ON packet_in(p):
-  
-  // ***TODO*** Add these restrictions (which only exist for limiting to-controller traffic) 
+
+  // ***TODO*** Add these restrictions (which only exist for limiting to-controller traffic)
   // automatically. But not always easy! Naive learned/notlearned have some issues
   // in that to use them one sometimes needs complex joins?
 
   // Instead, bespoke optimizations that can be tested via change impact. (old, unoptimized ==
   // new, optimized?)
 
-  INSERT (p.locSw, p.locPt, p.dlSrc) INTO learned WHERE 
-    not learned(p.locSw, p.locPt, p.dlSrc);  
+  INSERT (p.locSw, p.locPt, p.dlSrc) INTO learned WHERE
+    not learned(p.locSw, p.locPt, p.dlSrc);
 
   DELETE (p.locSw, pt, p.dlSrc) FROM learned WHERE
-    not pt = p.locPt 
+    not pt = p.locPt
     // The optimization requirement: ctrlr will learn something new
-    AND not learned(p.locSw, p.locPt, p.dlSrc);  
+    AND not learned(p.locSw, p.locPt, p.dlSrc);
 
-    // This rule doesn't have the negations all at the end of the 
+    // This rule doesn't have the negations all at the end of the
     // resulting clauses. If no ps forwarded, it means negation-shuffling has failed.
-  DO forward(n) WHERE 
-    learned(p.locSw, n.locPt, p.dlDst) AND          
+  DO forward(n) WHERE
+    learned(p.locSw, n.locPt, p.dlDst) AND
     p.locPt != n.locPt;
-    
+
 
 ON switch_port_in(swpt):
   INSERT (swpt.sw, swpt.pt) INTO switch_has_port;

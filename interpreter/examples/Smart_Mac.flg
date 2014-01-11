@@ -1,11 +1,11 @@
 
-TABLE learned(int, int, int); 
-TABLE switch_has_port(int, int); 
+TABLE learned(int, int, int);
+TABLE switch_has_port(int, int);
 
 EVENT start_timer {seconds, id};
 EVENT timer_expired {id};
 
-TABLE switch_has_port(int, int); 
+TABLE switch_has_port(int, int);
 TABLE nonSwitchPorts(int, int);
 TABLE macConnectedAt(int48, int, int);
 TABLE ucST(int, int, int, int);
@@ -17,12 +17,12 @@ TABLE spanningTree(int, int);
 TABLE ucTC(int, int);
 
 OUTGOING start_timer(int, string);
-INCOMING timer_expired(timer_expired); 
+INCOMING timer_expired(timer_expired);
 
 /////////////////////
 
 INCOMING timer_expired THEN INSERT INTO timer_expired;
-OUTGOING start_timer(seconds, id) THEN 
+OUTGOING start_timer(seconds, id) THEN
   SEND EVENT start_timer {seconds:=seconds, id:=id} TO 127.0.0.1 9091;
 
 ////////////////////////////////////////////
@@ -38,7 +38,7 @@ ON startup(empty_event):
 ON switch_port_in(swpt):
   INSERT (swpt.sw, swpt.pt) INTO switch_has_port;
 
-  DO emit(newpkt) WHERE 
+  DO emit(newpkt) WHERE
     newpkt.locSw = swpt.sw AND
     newpkt.locPt = swpt.pt AND
     newpkt.dlTyp = 0x1001 AND
@@ -50,14 +50,14 @@ ON timer_expired(timer) WHERE timer.id = "tNIB":
 
   DO emit(newpkt) WHERE
     switch_has_port(newpkt.locSw, newpkt.locPt) AND
-    newpkt.dlTyp = 0x1001 AND 
+    newpkt.dlTyp = 0x1001 AND
     newpkt.dlSrc = newpkt.locSw AND
     newpkt.dlDst = newpkt.locPt;
-  DELETE (sw1, pt1, sw2, pt2) FROM ucST WHERE 
+  DELETE (sw1, pt1, sw2, pt2) FROM ucST WHERE
     ucST(sw1, pt1, sw2, pt2); // <-- to constrain
-  DELETE (sw1, pt1, sw2, pt2) FROM switchTopology WHERE 
+  DELETE (sw1, pt1, sw2, pt2) FROM switchTopology WHERE
     switchTopology(sw1, pt1, sw2, pt2); // <-- to constrain
-  INSERT (sw1, pt1, sw2, pt2) INTO switchTopology WHERE 
+  INSERT (sw1, pt1, sw2, pt2) INTO switchTopology WHERE
     ucST(sw1, pt1, sw2, pt2);
   DELETE (sw1, sw2) FROM ucTC WHERE
     ucTC(sw1, sw2);
@@ -66,7 +66,7 @@ ON timer_expired(timer) WHERE timer.id = "tNIB":
   DELETE (sw, pt) FROM spanningTree WHERE
     spanningTree(sw, pt);
   INSERT (sw, pt) INTO spanningTree WHERE
-    ucTree(sw, pt); 
+    ucTree(sw, pt);
   DELETE (sw, pt) FROM nonSwitchPorts WHERE
     nonSwitchPorts(sw, pt);
   INSERT (sw, pt) INTO nonSwitchPorts WHERE
@@ -81,66 +81,66 @@ ON packet_in(pkt):
   // IGNORING SYMMETRY
   //INSERT (pkt.locSw, pkt.dlSrc) INTO ucTC WHERE pkt.dlTyp = 0x1001;
   INSERT (pkt.dlSrc, pkt.locSw) INTO ucTC WHERE pkt.dlTyp = 0x1001;
-  INSERT (sw, pkt.locSw) INTO ucTC WHERE pkt.dlTyp = 0x1001 
+  INSERT (sw, pkt.locSw) INTO ucTC WHERE pkt.dlTyp = 0x1001
     AND ucTC(sw, pkt.dlSrc);
-  INSERT (pkt.dlSrc, sw) INTO ucTC WHERE pkt.dlTyp = 0x1001 
+  INSERT (pkt.dlSrc, sw) INTO ucTC WHERE pkt.dlTyp = 0x1001
     AND ucTC(pkt.locSw, sw);
-  INSERT (sw1, sw2) INTO ucTC WHERE pkt.dlTyp = 0x1001 
+  INSERT (sw1, sw2) INTO ucTC WHERE pkt.dlTyp = 0x1001
     AND ucTC(sw1, pkt.dlSrc) AND ucTC(pkt.locSw, sw2);
 
-  INSERT (pkt.dlSrc, pkt.locSw, pkt.locPt) INTO macConnectedAt WHERE 
+  INSERT (pkt.dlSrc, pkt.locSw, pkt.locPt) INTO macConnectedAt WHERE
     NOT pkt.dlTyp = 0x1001 AND
     nonSwitchPorts(pkt.locSw, pkt.locPt) AND
     NOT macConnectedAt(pkt.dlSrc, pkt.locSw, pkt.locPt); // pol opt
   // new mac on this port
-  DELETE (mac, pkt.locSw, pkt.locPt) FROM macConnectedAt WHERE 
+  DELETE (mac, pkt.locSw, pkt.locPt) FROM macConnectedAt WHERE
     NOT pkt.dlTyp = 0x1001 AND mac != pkt.dlSrc AND
     macConnectedAt(mac, pkt.locSw, pkt.locPt);
   // known to be elsewhere
-  DELETE (pkt.dlSrc, sw, pkt.locPt) FROM macConnectedAt WHERE 
+  DELETE (pkt.dlSrc, sw, pkt.locPt) FROM macConnectedAt WHERE
     NOT pkt.dlTyp = 0x1001 AND sw != pkt.locSw AND
     macConnectedAt(pkt.dlSrc, sw, pkt.locPt);
-  DELETE (pkt.dlSrc, pkt.locSw, pt) FROM macConnectedAt WHERE 
+  DELETE (pkt.dlSrc, pkt.locSw, pt) FROM macConnectedAt WHERE
     NOT pkt.dlTyp = 0x1001 AND pt != pkt.locPt AND
     macConnectedAt(pkt.dlSrc, pkt.locSw, pt);
 
 
   // recall: smuggling (orig sw, orig pt) in (dlSrc, dlDst)
   INSERT (pkt.dlSrc, pkt.dlDst) INTO ucTree WHERE pkt.dlTyp = 0x1001 AND
-    NOT ucTC(pkt.dlSrc, pkt.locSw) AND NOT ucTC(pkt.locSw, pkt.dlSrc); 
+    NOT ucTC(pkt.dlSrc, pkt.locSw) AND NOT ucTC(pkt.locSw, pkt.dlSrc);
   INSERT (pkt.locSw, pkt.locPt) INTO ucTree WHERE pkt.dlTyp = 0x1001 AND
-    NOT ucTC(pkt.dlSrc, pkt.locSw) AND NOT ucTC(pkt.locSw, pkt.dlSrc); 
+    NOT ucTC(pkt.dlSrc, pkt.locSw) AND NOT ucTC(pkt.locSw, pkt.dlSrc);
 
 ////////////////////////////////////////////
 
 // For MACL
 ON packet_in(pkt):
-	
-  INSERT (pkt.locSw, pkt.locPt, pkt.dlSrc) INTO learned WHERE 
+
+  INSERT (pkt.locSw, pkt.locPt, pkt.dlSrc) INTO learned WHERE
     not pkt.dlTyp = 0x1001 and
-    not learned(pkt.locSw, pkt.locPt, pkt.dlSrc);  
+    not learned(pkt.locSw, pkt.locPt, pkt.dlSrc);
 
   DELETE (pkt.locSw, pt, pkt.dlSrc) FROM learned WHERE
     not pkt.dlTyp = 0x1001 and
-  	NOT pt = pkt.locPt 
+  	NOT pt = pkt.locPt
     // The optimization requirement: ctrlr will learn something new
-    AND not learned(pkt.locSw, pkt.locPt, pkt.dlSrc);  
+    AND not learned(pkt.locSw, pkt.locPt, pkt.dlSrc);
 
-  DO forward(new) WHERE   
-    // know where to go 
-    (learned(pkt.locSw, new.locPt, pkt.dlDst) AND          
-     not pkt.dlTyp = 0x1001 and 
+  DO forward(new) WHERE
+    // know where to go
+    (learned(pkt.locSw, new.locPt, pkt.dlDst) AND
+     not pkt.dlTyp = 0x1001 and
      pkt.locPt != new.locPt)
     OR
     // don't know where to go: forward along new edges of spanning tree
-    (NOT learned(pkt.locSw, x, pkt.dlDst) AND    
+    (NOT learned(pkt.locSw, x, pkt.dlDst) AND
      NOT pkt.locPt = new.locPt AND
      spanningTree(pkt.locSw, new.locPt) AND // use pkt.sw here, not new
      not pkt.dlTyp = 0x1001)
-    OR 
+    OR
     // don't know where to go: also send to adjacent non-fabric ports
-    (NOT learned(pkt.locSw, x, pkt.dlDst) AND    
+    (NOT learned(pkt.locSw, x, pkt.dlDst) AND
      NOT pkt.locPt = new.locPt AND
      nonSwitchPorts(pkt.locSw, new.locPt) AND // use pkt.sw here, not new
      not pkt.dlTyp = 0x1001);
-  
+

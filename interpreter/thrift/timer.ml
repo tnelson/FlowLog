@@ -1,10 +1,10 @@
 (*
   Modified from ocaml tutorial by Tim
 
-  Timer black-box. 
+  Timer black-box.
   - Receives notifications to set timers;
   - Sends timer notifications when timers expire;
-  - Responds to requests for the current time. 
+  - Responds to requests for the current time.
 *)
 
 (* TODO: Michael points out that we ought to have a Black-box functor, to aid in abstraction and avoid code-reuse.
@@ -14,7 +14,7 @@ open Arg
 open Thrift
 open Flowlog_rpc_types
 open Thread
-open Printf 
+open Printf
 
 let timer_port = 9091;;
 
@@ -39,8 +39,8 @@ let connect ~host port =
     { trans = tx ; proto = proto; fl = fl}
 ;;
 
-let send_notif notif = 
-    let cli = connect ~host:"127.0.0.1" 9090 in 
+let send_notif notif =
+    let cli = connect ~host:"127.0.0.1" 9090 in
     try
       cli.fl#notifyMe notif;
       cli.trans#close;
@@ -53,7 +53,7 @@ object (self)
 
   val counter: int ref = ref 0;
 
-  method notifyMe notif = 
+  method notifyMe notif =
     let ntype = sod ((sod notif)#get_notificationType) in
     let values = sod ((sod notif)#get_values) in
       Printf.printf "received notification. type=%s\n%!" ntype;
@@ -62,8 +62,8 @@ object (self)
       begin
         let reply = new notification in
         let tbl = (Hashtbl.create 2) in
-        (* TODO: abstract this out *) 
-          reply#set_notificationType "exception";          
+        (* TODO: abstract this out *)
+          reply#set_notificationType "exception";
           Hashtbl.add tbl "sender" "Timer";
           Hashtbl.add tbl "message" "Timer supports only start_timer notifications.";
           reply#set_values tbl;
@@ -72,25 +72,25 @@ object (self)
       end
       else
       begin
-        try 
-        (* case-sensitive. But Flowlog's parser downcases everything. So fields are always lowercase.*)        
+        try
+        (* case-sensitive. But Flowlog's parser downcases everything. So fields are always lowercase.*)
           let timer_id = (Hashtbl.find values "id") in
           let seconds = int_of_string (Hashtbl.find values "seconds") in
-          ignore (Thread.create (fun x ->                                  
+          ignore (Thread.create (fun x ->
                                   Printf.printf "Starting timer for id=%s. seconds=%d.\n%!" timer_id seconds;
                                   Unix.sleep seconds;
                                   let reply = new notification in
                                   let tbl = (Hashtbl.create 2) in
-                                  reply#set_notificationType "timer_expired";                                            
+                                  reply#set_notificationType "timer_expired";
                                   Hashtbl.add tbl "id" timer_id;
                                   reply#set_values tbl;
                                   send_notif reply;
                                   Printf.printf "Sent timer for id=%s.\n%!" timer_id) 0);
-        with Not_found -> 
+        with Not_found ->
           printf "...but did not contain well-formed fields.\n%!";
       end
-  
-  
+
+
   method doQuery qry =
     let relname = (sod (sod qry)#get_relName) in
     let args = (sod (sod qry)#get_arguments) in
@@ -103,7 +103,7 @@ object (self)
       (* need to return a QueryReply. s/b only one argument. if it's a variable,
          return the value. if it's a constant, compare. e.g. if time=10,
          time(X) should return {[10]}. But time(3) should return {}. time(10) would return {[10]}.
-         In this BB, time(10) is supremely unlikely to ever be called, but doing the check anyway. *)          
+         In this BB, time(10) is supremely unlikely to ever be called, but doing the check anyway. *)
       (* Can't use Sys.time because that's proc. seconds used by THIS process.
          Instead, use Unix.time(), which is seconds since epoch. *)
       let thetime = string_of_int(int_of_float(Unix.time())) in
@@ -111,7 +111,7 @@ object (self)
         begin
           rep#set_exception_code "1";
           rep#set_exception_message "Timer.time expects a single argument."
-        end 
+        end
         else if (List.hd args) = (String.capitalize (List.hd args)) then
         begin
           Hashtbl.add tbl [thetime] true
@@ -119,7 +119,7 @@ object (self)
         else if (List.hd args) = thetime then
         begin
           (* for constant, only return a tuple of it's equal to the current time. *)
-          Hashtbl.add tbl [thetime] true 
+          Hashtbl.add tbl [thetime] true
         end;
 
         rep#set_result tbl;
@@ -128,11 +128,11 @@ object (self)
     else if relname = "nonce" then
     begin
       Printf.printf "handling nonce query\n%!";
-      (* this nonce is not secure. 
+      (* this nonce is not secure.
          it's also sequential...
-         it's not even guaranteed unique. 
+         it's not even guaranteed unique.
          it's also generated adhoc---ocaml has no gensym? *)
-      let nonce = string_of_int !counter in 
+      let nonce = string_of_int !counter in
         counter := (!counter) + 1;
 
         Printf.printf "Nonce was: %d\n%!" !counter;
@@ -141,7 +141,7 @@ object (self)
         begin
           rep#set_exception_code "1";
           rep#set_exception_message "Timer.nonce expects a single argument."
-        end 
+        end
         else if (List.hd args) = (String.capitalize (List.hd args)) then
         begin
           Hashtbl.add tbl [nonce] true
@@ -149,14 +149,14 @@ object (self)
         else if (List.hd args) = nonce then
         begin
           (* for constant *)
-          Hashtbl.add tbl [nonce] true 
+          Hashtbl.add tbl [nonce] true
         end;
 
         rep#set_result tbl;
         rep
 
     end
-    else 
+    else
     begin
       Printf.printf "invalid query relation %s\n%!" relname;
       rep#set_exception_code "2";
@@ -184,15 +184,15 @@ let dobb () =
     server#serve;
 ;;
 
-let timer_expire id  = 
-    Printf.printf "timer expired. sending notification\n%!"; 
+let timer_expire id  =
+    Printf.printf "timer expired. sending notification\n%!";
     let notif = new notification in
       notif#set_notificationType "timer";
       let tbl = (Hashtbl.create 1) in
         Hashtbl.add tbl "id" id;
         notif#set_values tbl;
         send_notif notif;
-        Printf.printf "notification sent\n%!";; 
+        Printf.printf "notification sent\n%!";;
 
 
 dobb();;

@@ -106,7 +106,7 @@ let packet_flavors = [
  ******************************************************************************)
 
 (* raises Not_found on invalid field, which is why we wrap with get_field *)
-let get_field_helper (ev: event) (fldname: string): string  =  
+let get_field_helper (ev: event) (fldname: string): string  =
     StringMap.find fldname ev.values;;
 
 (*  Should really be something more contentful than the empty string. *)
@@ -116,7 +116,7 @@ let field_is_defined (ev: event) (fldname: string): bool =
 
 (* (1A) Field defaults (if any)
    Just an association list from (type,field) -> value.
-   Single place for defaults so that marshalling functions and verification can 
+   Single place for defaults so that marshalling functions and verification can
    use a single source.
 
    Referer (get_field) is responsible for climbing the tree to get defaults of supertypes. *)
@@ -131,7 +131,7 @@ let defaults_table = [
   (("tcp_packet", "tpack"), "0");
   (("tcp_packet", "tpoffset"), "0");
   (("tcp_packet", "tpwindow"), "0");
-  (("tcp_packet", "tpurgent"), "0");    
+  (("tcp_packet", "tpurgent"), "0");
 ];;
 
 
@@ -177,8 +177,8 @@ let map_from_relname_to_flavor: packet_flavor StringMap.t =
                                            (StringMap.add (flavor_to_inrelname flav) flav acc))
             StringMap.empty packet_flavors;;
 
-let get_superflavor_typename (typename: string): typeid option = 
-  try 
+let get_superflavor_typename (typename: string): typeid option =
+  try
     match (StringMap.find typename map_from_typename_to_flavor).superflavor with
       | Some(l) -> Some(flavor_to_typename (StringMap.find l map_from_label_to_flavor))
       | None -> None
@@ -233,7 +233,7 @@ let build_flavor_decls (flav: packet_flavor): sdecl list =
    DeclOut(flavor_to_emitrelname flav, FixedEvent(flavor_to_typename flav))];;
 let build_flavor_reacts (flav: packet_flavor): sreactive list =
   [ReactInc(flavor_to_typename flav, flavor_to_inrelname flav);
-   ReactOut(flavor_to_emitrelname flav, FixedEvent(flavor_to_typename flav), 
+   ReactOut(flavor_to_emitrelname flav, FixedEvent(flavor_to_typename flav),
             (*map create_id_assign (flavor_to_fields flav), *) OutEmit(flavor_to_typename flav))];;
 
 let built_in_decls = [DeclInc(switch_reg_relname, "switch_port");
@@ -264,12 +264,12 @@ let is_packet_in_table (relname: string): bool =
   mem relname built_in_packet_input_tables;;
 
 (* Ascend up the flavor tree looking for a default. Start with the event's type. *)
-let get_field (ev: event) (fldname: string): string =    
+let get_field (ev: event) (fldname: string): string =
   let supertypes = (built_in_supertypes ev.typeid) in
-  
-    let rec get_default_rec (typenamelist: typeid list) = 
-      match typenamelist with 
-        | typename::supertypes ->  
+
+    let rec get_default_rec (typenamelist: typeid list) =
+      match typenamelist with
+        | typename::supertypes ->
           (try
               (*printf "get_default_rec %s %s %s %s\n%!" typename fldname (String.concat ", "supertypes) (assoc (typename,fldname) defaults_table);*)
               assoc (typename,fldname) defaults_table

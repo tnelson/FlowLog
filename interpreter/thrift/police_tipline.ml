@@ -10,7 +10,7 @@ open Arg
 open Thrift
 open Flowlog_rpc_types
 open Thread
-open Printf 
+open Printf
 
 let police_port = 5050;; (* the five oh *)
 
@@ -35,8 +35,8 @@ let connect ~host port =
     { trans = tx ; proto = proto; fl = fl}
 ;;
 
-let send_notif notif = 
-    let cli = connect ~host:"127.0.0.1" 9090 in 
+let send_notif notif =
+    let cli = connect ~host:"127.0.0.1" 9090 in
     try
       cli.fl#notifyMe notif;
       cli.trans#close;
@@ -48,46 +48,46 @@ class bb_handler =
 object (self)
   inherit BlackBox.iface
 
-  method notifyMe notif = 
+  method notifyMe notif =
     let ntype = sod ((sod notif)#get_notificationType) in
     let values = sod ((sod notif)#get_values) in
       printf "received notification. type=%s\n%!" ntype;
       (* <>, not != *)
       if ntype = "stolen_laptop_found" then
-      begin        
-        (* case-sensitive. But Flowlog's parser downcases everything. So fields are always lowercase.*)        
-        try 
+      begin
+        (* case-sensitive. But Flowlog's parser downcases everything. So fields are always lowercase.*)
+        try
           let mac = (Hashtbl.find values "mac") in
           let swid = (Hashtbl.find values "swid") in
           let time = (Hashtbl.find values "time") in
             printf "Our anonymous tipster, who sounds like a Flowlog Controller, saw %s on switch %s at time=%s.\n%!" mac swid time
             (* Don't leave this check out: without it, this app could freeze. *)
-        with Not_found -> 
+        with Not_found ->
           printf "...but did not contain well-formed fields.\n%!";
       end
       else if ntype = "host_report" then
-      begin        
-        try 
+      begin
+        try
           let mac = (Hashtbl.find values "mac") in
           let swid = (Hashtbl.find values "sw") in
           let ptid = (Hashtbl.find values "pt") in
-            printf "[host_report] saw %s on switch %s port %s.\n%!" mac swid ptid  
-        with Not_found -> 
+            printf "[host_report] saw %s on switch %s port %s.\n%!" mac swid ptid
+        with Not_found ->
           printf "...but did not contain well-formed fields.\n%!";
-      end      
-      else      
+      end
+      else
       begin
         let reply = new notification in
         let tbl = (Hashtbl.create 2) in
-        (* TODO: abstract this out *) 
-          reply#set_notificationType "exception";          
+        (* TODO: abstract this out *)
+          reply#set_notificationType "exception";
           Hashtbl.add tbl "sender" "Police_Tipline";
           Hashtbl.add tbl "message" "The tipline can't accept anything but stolen_laptop_found.";
           reply#set_values tbl;
           send_notif reply;
           Printf.printf "Sent exception.\n%!";
-      end      
-  
+      end
+
 
 method doQuery qry =
     let relname = (sod (sod qry)#get_relName) in
@@ -99,7 +99,7 @@ method doQuery qry =
     rep#set_exception_message "The _man_ answers to no one's queries!";
     rep#set_result tbl;
     rep
-    
+
 end
 
 let dobb () =

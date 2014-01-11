@@ -5,7 +5,7 @@
     sending queries, and sending notifications.
 *)
 
-(* note to self: all open does is avoid the "module." 
+(* note to self: all open does is avoid the "module."
    not quite like #include or require. *)
 open Arg
 open Thrift
@@ -25,34 +25,34 @@ let sod = function
     Some v -> v
   | None -> raise Die;;
 
-let lowercase_notif_values tbl = 
-  Hashtbl.iter (fun k v ->                 
+let lowercase_notif_values tbl =
+  Hashtbl.iter (fun k v ->
                   (* newbie ocaml note: <> is structural inequality, != is physical *)
-                  if (String.lowercase k) <> k then 
+                  if (String.lowercase k) <> k then
                   begin
                     Hashtbl.add tbl (String.lowercase k) v;
                     Hashtbl.remove tbl k;
                     Printf.printf "Replacing %s key with lowercase: %s -> %s\n%!" k (String.lowercase k) v;
                   end;
                   Printf.printf "%s -> %s\n%!" k v) tbl;
-                   
+
 class fl_handler (a_program : flowlog_program)  =
 object (self)
   inherit FlowLogInterpreter.iface
-  
+
   (* Always created within a program context *)
   val the_program : flowlog_program = a_program;
-    
-  method notifyMe rpc_notif : unit = 
+
+  method notifyMe rpc_notif : unit =
     let ntypestr = sod ((sod rpc_notif)#get_notificationType) in
     let values = sod ((sod rpc_notif)#get_values) in
     Printf.printf "received notification. type=%s\n%!" ntypestr;
     lowercase_notif_values values;  (* case insensitive field names *)
-    try           
-      let fieldlist = map String.lowercase (get_fields_for_type the_program ntypestr) in          
-        (* construct a list of terms from the hashtbl in values. use the type as an index *)      
+    try
+      let fieldlist = map String.lowercase (get_fields_for_type the_program ntypestr) in
+        (* construct a list of terms from the hashtbl in values. use the type as an index *)
 
-      let vals = fold_left (fun acc fld -> 
+      let vals = fold_left (fun acc fld ->
            if (not (Hashtbl.mem values fld)) then
                raise (Failure ("Field "^fld^" was not included in an incoming event of type: "^ntypestr))
            else
@@ -60,10 +60,10 @@ object (self)
          [] fieldlist in
 
         let ev: event = {typeid = ntypestr; values = construct_map vals} in
-          ignore (respond_to_notification the_program ev);                
+          ignore (respond_to_notification the_program ev);
 
-    with 
-      | Not_found -> (Printf.printf "   *** Nothing to be done with this notification.\n%!")     
+    with
+      | Not_found -> (Printf.printf "   *** Nothing to be done with this notification.\n%!")
       | Failure(msg) -> (Printf.printf "   *** ERROR! Ignoring notification (type=%s) for reason: %s\n%!" ntypestr msg)
 
 end
@@ -95,7 +95,7 @@ let start_listening (a_program : flowlog_program) : unit =
 		 pf
   in
     (* first thing: listen for notifications *)
-    (* returns handle of thread. ignore result to avoid warning *) 
+    (* returns handle of thread. ignore result to avoid warning *)
 
     ignore (Thread.create (fun x -> (server#serve)) 0);
     (*Lwt.async (fun () -> return (server#serve));*)

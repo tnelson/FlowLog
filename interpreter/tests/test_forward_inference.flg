@@ -4,13 +4,13 @@
   and    (2) actually perform the modification when tested with h1 ping h2.
   (3) When replacing ip_packet_in with packet_in, should not pass validation.
 
-  (4) Moreover, this should be tested with -notables to 
+  (4) Moreover, this should be tested with -notables to
       confirm that fields are handled properly in XSB.
 
 */
 
 
-//ON packet_in(p): 
+//ON packet_in(p):
 ON ip_packet_in(p):
   DO forward(new) WHERE
     new.nwSrc = 100 AND

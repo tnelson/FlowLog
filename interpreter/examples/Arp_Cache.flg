@@ -59,7 +59,7 @@ ON arp_packet(request) WHERE request.arp_op = 1 AND
   DO emit_arp(new) WHERE
     (cached(request.arp_tpa, new.arp_sha) XOR // XOR: don't dup packets when also cached
      (request.arp_tpa = request.arp_spa and
-      new.arp_sha = request.arp_sha) 
+      new.arp_sha = request.arp_sha)
     ) and
 
     // Make it an ARP reply

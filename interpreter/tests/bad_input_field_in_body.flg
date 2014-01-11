@@ -2,10 +2,10 @@
 // This program should produce a compiler error:
 // It uses an unknown field for switch_port_in.
 
-TABLE switch_has_port(switchid, portid); 
+TABLE switch_has_port(switchid, portid);
 
 // MALFORMED CLAUSE *BODY*
 ON switch_port_in(swpt):
-  INSERT (swpt.sw, swpt.pt) INTO switch_has_port 
+  INSERT (swpt.sw, swpt.pt) INTO switch_has_port
   WHERE swpt.omgwtfbbq = swpt.omgwtfbbq;
 

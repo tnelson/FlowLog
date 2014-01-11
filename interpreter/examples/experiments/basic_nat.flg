@@ -13,7 +13,7 @@ ON tcp_packet(p) WHERE p.locPt = 1 AND NOT nat(p.nwSrc, p.tpSrc, ANY):
 //    new.locPt = 2 AND nextpt(new.tpSrc);    <-- gets compiled (leads to race condition)
     new.locPt = 2 AND nextpt(old) AND add(old, 1, new.tpSrc);  // <-- not compiled (correct)
   DELETE (x) FROM nextpt;
-  INSERT (x) INTO nextpt WHERE 
+  INSERT (x) INTO nextpt WHERE
     nextpt(old) AND add(old, 1, x);
   INSERT (p.nwSrc, p.tpSrc, pt) INTO nat WHERE
     nextpt(old) AND add(old, 1, pt);

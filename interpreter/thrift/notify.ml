@@ -37,12 +37,12 @@ Array.iter (fun str -> match (split (regexp "=") str) with
                                   Hashtbl.add tbl k v;
                        | _ -> failwith "bad defn")
            (Array.sub Sys.argv 2 ((Array.length Sys.argv) - 2));;
-      
+
 
 let dobb () =
-  let cli = connect ~host:"127.0.0.1" 9090 in 
+  let cli = connect ~host:"127.0.0.1" 9090 in
   try
-    Printf.printf "sending notification...\n%!"; 
+    Printf.printf "sending notification...\n%!";
     let notif = new notification in
       notif#set_notificationType notifname;
       notif#set_values tbl;
