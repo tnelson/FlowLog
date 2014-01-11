@@ -74,7 +74,6 @@
 (provide IOS-config%)
 (provide make-empty-IOS-config)
 (provide policy)
-(provide vocabulary)
 (provide TCP-flags)
 (provide string-capitalize)
 
@@ -494,17 +493,7 @@
   (class object%
     (init-field name decision conditions rule-type)    
     (super-make-object)
-    
-    ; Need the rule's head to contain args depending on which type of rule
-    ; it is (i.e., its policy/decision pairing). We cannot just filter on what's used
-    ; because that could result in a non-standard vector of variables in each. We want
-    ; to standardize!    
-    ;(define full-arg-list-for-ordering 
-    ;  '(hostname 
-    ;    entry-interface src-addr-in src-addr-out dest-addr-in dest-addr-out
-    ;    protocol message flags
-    ;    src-port-in src-port-out dest-port-in dest-port-out length next-hop exit-interface))          
-    
+        
     
     ;; IMPORTANT
     ;; DO NOT attempt to have individual policies with different request vectors.
@@ -519,9 +508,7 @@
              '(new)]
             
             [(equal? rule-type 'nat) ; inside and outside 
-             '(hostname entry-interface 
-                        src-addr-in dest-addr-in src-port-in dest-port-in protocol
-                        src-addr-out dest-addr-out src-port-out dest-port-out)]
+             '(p new)]
             
             [(equal? rule-type 'encrypt)              
              '(next-hop)]
@@ -536,37 +523,13 @@
                         
             ; Static routes are decided on the basis of the destination address only.
              [(equal? rule-type 'staticroute)
-              '(hostname dest-addr-in next-hop exit-interface)]
-             
-            ;[(and (equal? rule-type 'staticroute) 
-            ;      (equal? decision 'route))
-            ; '(hostname dest-addr-in next-hop)]
-            ;[(and (equal? rule-type 'staticroute) 
-            ;      (equal? decision 'forward))
-            ; '(hostname dest-addr-in exit-interface)]
-            ;[(and (equal? rule-type 'staticroute) 
-            ;      (or (equal? decision 'drop)
-            ;          (equal? decision 'pass)))
-            ; '(hostname dest-addr-in)]
+              '(p new next-hop)]            
                         
             ; Policy routes, however, need more:
              [(or (equal? rule-type 'defaultpolicyroute)
                   (equal? rule-type 'policyroute))
-              '(hostname entry-interface src-addr-in dest-addr-in src-port-in dest-port-in protocol next-hop exit-interface)]
+              '(p new next-hop)]
              
-            ;[(and (or (equal? rule-type 'defaultpolicyroute)
-            ;          (equal? rule-type 'policyroute))
-            ;      (equal? decision 'route))
-            ; '(hostname entry-interface src-addr-in dest-addr-in src-port-in dest-port-in protocol next-hop)]
-            ;[(and (or (equal? rule-type 'defaultpolicyroute)
-            ;          (equal? rule-type 'policyroute))
-            ;      (equal? decision 'forward))
-            ; '(hostname entry-interface src-addr-in dest-addr-in src-port-in dest-port-in protocol exit-interface)]
-            ;[(and (or (equal? rule-type 'defaultpolicyroute)
-            ;          (equal? rule-type 'policyroute))
-            ;      (or (equal? decision 'drop)
-            ;          (equal? decision 'pass)))
-            ; '(hostname entry-interface src-addr-in dest-addr-in src-port-in dest-port-in protocol)]
             
             
             [(and (or (equal? rule-type 'defaultpolicyroute)
@@ -584,17 +547,7 @@
             
             [(or (equal? rule-type 'networkswitching) 
                  (equal? rule-type 'localswitching))
-             '(hostname next-hop exit-interface)] 
-            
-;            [(and (or (equal? rule-type 'networkswitching) 
-;                      (equal? rule-type 'localswitching))
-;                  (equal? decision 'forward))
-;             '(hostname next-hop exit-interface)]                        
-;            [(and (or (equal? rule-type 'networkswitching) 
-;                      (equal? rule-type 'localswitching))
-;                  (or (equal? decision 'drop)
-;                      (equal? decision 'pass)))
-;             '(hostname next-hop)]                        
+             '(p new)] 
                         
             [(error (format "Unknown rule type: ~a with decision: ~a. Name ~v. Conditions: ~v."
                             rule-type decision name conditions))]))
@@ -996,8 +949,8 @@
         (extended-name hostname interf suffix)
         (decision)
         `(,@additional-conditions
-          (,dest-addr-in src-addr-out)
-          (,src-addr-in dest-addr-in))
+          (,dest-addr-in new.nwSrc)
+          (,src-addr-in p.nwDst))           
         'nat))
     
     ;; symbol symbol string (listof (listof symbol)) -> rule%
@@ -1076,8 +1029,8 @@
         (extended-name hostname interf suffix)
         (decision)
         `(,@additional-conditions
-          (,dest-addr-in src-addr-out)
-          (,src-addr-in dest-addr-in)
+          (,dest-addr-in new.nwSrc)
+          (,src-addr-in p.nwDst)
           (Prot-ICMP protocol)
           (,msg paf))
         'nat))
@@ -1251,12 +1204,12 @@
         (decision)
         (list (connection-predicate))
         `(,@additional-conditions         
-          (,(connection-predicate) src-addr-in src-port-in protocol dest-addr-in dest-port-in)
-          (,src-addr-in src-addr-in)
-          (,prot protocol)
-          (,src-port-in src-port-in)
-          (,dest-addr-in dest-addr-in)
-          (,dest-port-in dest-port-in))
+          (,(connection-predicate) p.nwSrc p.tpSrc p.nwProto p.nwDst p.tpDst)
+          (= ,src-addr-in src-addr-in)
+          (= ,prot p.nwProto)
+          (= ,src-port-in src-port-in)
+          (= ,dest-addr-in dest-addr-in)
+          (= ,dest-port-in dest-port-in))
         rule-type))
     
     ;; -> symbol
@@ -2433,11 +2386,11 @@
   (make-object rule%
     (string->symbol (string-append (symbol->string (send hostname name)) "-default-NAT"))
     'translate
-    `((= src-addr-in src-addr-out)
-      (= dest-addr-in dest-addr-out)
-      (= src-port-in src-port-out)
-      (= dest-port-in dest-port-out)
-      (,hostname hostname))
+    `((= p.nwSrc new.nwSrc)
+      (= p.nwDst new.nwDst)
+      (= p.tpSrc new.tpSrc)
+      (= p.tpDst new.tpDst)
+      (routerAlias ,hostname p.locSw))
     'nat))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -2512,7 +2465,7 @@
          'forward
          `(,@additional-conditions
            (,dest-addr-in dest-addr-in)
-           (,next-hop exit-interface))
+           (portAlias ,hostname ,next-hop new.locPt))
          'staticroute)
        (make-object rule%
          (name hostname "drop")
@@ -2528,7 +2481,7 @@
   (make-object rule%
     (string->symbol (string-append (symbol->string (send hostname name)) "-default-route"))
     'pass
-    `((,hostname hostname))
+    `((routeralias ,hostname p.locSw))
     rule-type))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -2651,10 +2604,10 @@
                          'forward
                          'pass)
                      (if (eqv? (get-field decision match-rule) 'permit)
-                         `((,next-hop exit-interface)
+                         `((portAlias new.locSw ,next-hop new.locPt)
                            ; dest-addr-in is the middle-of-router address in the context of this policy
                            (= next-hop dest-addr-in))
-                         `((,next-hop exit-interface)))
+                         `((portAlias new.locSw ,next-hop new.locpt)))
                      'policyroute)
                (send match-rule
                      augment/replace-decision
@@ -3311,14 +3264,14 @@
                                   rules
                                   (send hostname name)
                                   (send interf text)
-                                  `((= ,hostname p.locsw)
+                                  `((routerAlias ,hostname p.locsw)
                                     (= ,interf p.locpt))
                                   'acl)))
                 (list (if default-ACL-permit
                           (list (make-object rule%
                                   'default-ACE
                                   'permit
-                                  `((= ,hostname p.locsw))
+                                  `((routerAlias ,hostname p.locsw))
                                   'acl))
                           '())))))
     
@@ -3332,14 +3285,14 @@
                                   rules
                                   (send hostname name)
                                   (send interf text)
-                                  `((= ,hostname new.locsw)
+                                  `((routerAlias ,hostname new.locsw)
                                     (= ,interf new.locpt))
                                   'outacl)))
                 (list (if default-ACL-permit
                           (list (make-object rule%
                                   'default-ACE
                                   'permit
-                                  `((= ,hostname new.locsw))
+                                  `((routerAlias ,hostname new.locsw))
                                   'outacl))
                           '())))))
     
@@ -3376,8 +3329,8 @@
                            route-maps
                            ACLs
                            interfaces
-                           `((,hostname hostname)
-                             (,interf entry-interface))))
+                           `((routerAlias ,hostname p.locSw)
+                             (portAlias ,hostname ,interf p.locPt))))
                    (NAT-interfaces side)))
             (append (NAT-static-translations side) (NAT-dynamic-translations side)))))
     
@@ -3394,8 +3347,8 @@
                            route-maps
                            ACLs
                            interfaces
-                           `((,hostname hostname)
-                             (,interf entry-interface))))
+                           `((routerAlias ,hostname p.locSw)
+                             (portAlias ,hostname ,interf p.locPt))))
                    (NAT-interfaces (if (eqv? side 'inside) 'outside 'inside))))
             (append (NAT-static-translations side) (NAT-dynamic-translations side)))))
     
@@ -3429,10 +3382,10 @@
                                                     (symbol->string name)
                                                     "-primary"))
                      'forward
-                     `((,hostname hostname)
+                     `((routerAlias ,hostname p.locSw)
                        (,(get-field primary-network interf) next-hop)
                        ; dest-addr-in is the middle-of-router address in the context of this policy                                   
-                       (,interf exit-interface))
+                       (portAlias ,hostname ,interf new.locPt))
                      'localswitching)
                    
                    ; these drop rules are to make sure that mismatched interfaces
@@ -3443,7 +3396,7 @@
                                                     (symbol->string name)
                                                     "-drop-p"))
                      'drop
-                     `((,hostname hostname)
+                     `((routerAlias ,hostname p.locSw)
                        (,(get-field primary-network interf) next-hop))
                      'localswitching))))                    
               (hash-filter interfaces (λ (name interf)
@@ -3459,12 +3412,12 @@
                                                     (symbol->string name)
                                                     "-secondary"))
                      'forward
-                     `((,hostname hostname)
+                     `((routerAlias ,hostname p.locSw)
                        ; dest-addr-in is the middle-of-router address in the context of this policy
                        ;(= next-hop dest-addr-in)
                        ;(,(get-field secondary-network interf) dest-addr-in)
                        (,(get-field secondary-network interf) next-hop)
-                       (,interf exit-interface))
+                       (portAlias ,hostname ,interf new.locPt))
                      'localswitching)
                    
                    (make-object rule%
@@ -3473,7 +3426,7 @@
                                                     (symbol->string name)
                                                     "-drop-s"))
                      'drop
-                     `((,hostname hostname)
+                     `((routerAlias ,hostname p.locSw)
                        (,(get-field secondary-network interf) next-hop))
                      'localswitching)
                    )))
@@ -3494,9 +3447,9 @@
                                                  (symbol->string name)
                                                  "-primary"))
                   'forward
-                  `((,hostname hostname)
+                  `((routerAlias ,hostname p.locSw)
                     (,(get-field primary-network interf) next-hop)
-                    (,interf exit-interface))
+                    (portAlias ,hostname ,interf new.locpt))
                   'networkswitching)))
             (hash-filter interfaces (λ (name interf)
                                       (get-field primary-address interf))))
@@ -3509,9 +3462,9 @@
                                                  (symbol->string name)
                                                  "-secondary"))
                   'forward
-                  `((,hostname hostname)
+                  `((routerAlias ,hostname p.locSw)
                     (,(get-field secondary-network interf) next-hop)
-                    (,interf exit-interface))
+                    (portAlias ,hostname ,interf new.locPt))
                   'networkswitching)))
             (hash-filter interfaces (λ (name interf)
                                       (get-field secondary-address interf))))))
@@ -3526,7 +3479,7 @@
                 (send route
                       rules
                       (send hostname name)
-                      `((,hostname hostname))))
+                      `((routerAlias ,hostname p.locsw))))
               static-routes))
         (list (make-default-routing-rule hostname 'staticroute)))))
     
@@ -3550,8 +3503,8 @@
                                   (send hostname name)
                                   (send interf text)
                                   ACLs
-                                  `((,hostname hostname)
-                                    (,interf entry-interface))
+                                  `((routerAlias ,hostname p.locsw)
+                                    (portAlias ,hostname ,interf p.locpt))
                                   'policyroute
                                  ))
                           (get-ordered-maps (get-field policy-route-map-ID interf) route-maps)))))
@@ -3572,8 +3525,8 @@
                                   (send hostname name)
                                   (send interf text)
                                   ACLs
-                                  `((,hostname hostname)
-                                    (,interf entry-interface))))
+                                  `((routerAlias ,hostname p.locsw)
+                                    (portAlias ,hostname ,interf p.locpt))))
                           (get-ordered-maps (get-field policy-route-map-ID interf) route-maps)))))
         (list (make-default-routing-rule hostname 'defaultpolicyroute)))))
     
@@ -3590,8 +3543,8 @@
                                  (send hostname name)
                                  (send interf text)
                                  ACLs
-                                 `((,hostname hostname)
-                                   (,interf exit-interface))))
+                                 `((routerAlias ,hostname p.locsw)
+                                   (portAlias ,hostname ,interf new.locpt))))
                          (get-ordered-maps (get-field crypto-map-ID interf) crypto-maps)))))))
     ))
 
@@ -3760,137 +3713,6 @@
   (string->symbol (string-append (symbol->string pre)
                                  (symbol->string sym))))
 
-;; (listof rule%) -> (listof symbol)
-;;   Constructs a policy vocabulary from a list of rules
-(define (vocabulary rules)     
-  
-  (define hostnames (remove-duplicates
-                           (append*
-                            (map (λ (rule)
-                                   (map (λ (name)
-                                          (send name text))
-                                        (send rule extract-atoms hostname%)))
-                                 rules))))
-  
-  (define real-interfaces (remove-duplicates
-                           (append*
-                            (map (λ (rule)
-                                   (map (λ (interf)
-                                          (send interf text))
-                                        (send rule extract-atoms interface%)))
-                                 rules))))
-  
-  (define length-children (remove-duplicates
-                           (append*
-                            (map (λ (rule)
-                                   (send rule extract-atoms length%))                    
-                                 rules))))
-  
-  (define types-tree (value-tree rules
-                                 address<%>
-                                 (make-object network-address% '0.0.0.0 '0.0.0.0 #f)))
-  
-  (define ports-tree (value-tree rules
-                                 port<%>
-                                 (make-object port-range% 0 65535)))
-  (define ports-decls (apply append (map (lambda (pchild) (make-tp-preds pchild 'Port)) (tree-children ports-tree))))  
-  
-  `(Theory IOS-vocab
-    (Vocab IOS-vocab
-           (Types
-            IPAddress
-            Port
-            Hostname
-            
-            PayloadAndFlags
-            ;ICMPMessage            
-            ;TCPFlags            
-            ;Length
-            
-            ; Special handling for this particular sort. Since
-            ; exit-interface: Interface (i.e. possibly Interf-drop) 
-            ; But if we have a PREDICATE ieth0: Interf-real, 
-            ; (ieth0 exit-interface) is not well sorted. 
-            ; Whereas if Ieth0 is a type, (Ieth0 exit-interface) downcasts automatically.
-            ;(Interface > Interf-drop Interf-real)                        
-            ;(Interf-real > ,@real-interfaces)
-            Interface
-            Protocol-any                                     
-            )            
-           
-           ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-           ; Predicates instead of constants for hostnames, etc. for efficiency. 
-           (Predicates ,@(map (λ (predicate)
-                                `(,predicate IPAddress Port Protocol-any IPAddress Port))
-                              (remove-duplicates (flatten (map (λ (rule)
-                                                                 (send rule extract-predicates))
-                                         
-                                                               rules))))                                             
-                       
-                       ,@(map (lambda (name) `(,name Hostname)) hostnames)
-                                             
-                       (interf-drop Interface)                       
-                       ,@(map (lambda (name) `(,name Interface))  
-                              real-interfaces)
-                       
-                       (icmp-echo PayloadAndFlags) ; all were ICMPMessage
-                       (icmp-echo-reply PayloadAndFlags)
-                       (icmp-time-exceeded PayloadAndFlags)
-                       (icmp-unreachable PayloadAndFlags)
-                       
-                       (prot-ICMP Protocol-any)
-                       (prot-TCP Protocol-any)
-                       (prot-UDP Protocol-any)
-                                             
-                       ,@(map (lambda (name) `(,name PayloadAndFlags)) ; was TCPFlags 
-                              TCP-flags)
-                       ,@(map (lambda (name) `(,name PayloadAndFlags)) ; was Length
-                              length-children)
-                        
-                       ,@(apply append (map (lambda (tchild) (make-tp-preds tchild 'IPAddress)) (tree-children types-tree)))
-                       ,@ports-decls                                                              
-
-                       )                                                       
-           )     
-    (Axioms
-     ,@(map (lambda (pr) `(disjoint ,(first pr) ,(second pr))) (get-noneq-pairs-no-order hostnames))     
-     (disjoint icmp-echo-reply icmp-time-exceeded)
-     (disjoint icmp-echo-reply icmp-unreachable)
-     (disjoint icmp-time-exceeded icmp-unreachable)
-     (disjoint prot-TCP prot-UDP)
-     (disjoint prot-TCP prot-ICMP)
-     (disjoint prot-UDP prot-ICMP)
-     
-     (abstract Interface) ; every interface is either real or drop
-     ;(abstract Interf-real)
-     ;(abstract ICMPMessage)
-     ;(abstract Protocol-any)
-          
-     ,@(map (lambda (pr) `(disjoint ,(first pr) ,(second pr))) (get-noneq-pairs-no-order (cons 'interf-drop real-interfaces)))     
-     ,@(map (lambda (pr) `(disjoint ,(first pr) ,(second pr))) (get-noneq-pairs-no-order length-children))
-     
-     (atmostone-all Hostname)     
-     ;(atmostone-all interf-real)
-     (atmostone interf-drop)
-     (atmostone-all Protocol-any)
-     (atmostone icmp-echo)
-     (atmostone icmp-echo-reply)
-     ;(atmostone-all Length)
-     
-     ,@(constraints (value-tree rules address<%> (make-object network-address% '0.0.0.0 '0.0.0.0 #f)))     
-     ,@(constraints (value-tree rules port<%> (make-object port-range% 0 65535)))
-     
-     (nonempty Hostname)
-     (nonempty Interface)
-     (nonempty IPAddress)
-     (nonempty Protocol-any)
-     (nonempty Port)
-     ;(nonempty ICMPMessage)
-     ;(nonempty TCPFlags)
-     ;(nonempty Length)
-     (nonempty PayloadAndFlags)
-     )))
-
 ; TN removed NONE, not needed
 (define TCP-flags '(fSYN fACK fFIN fPSH fURG fRST))
 
@@ -3901,81 +3723,6 @@
 ;; symbol (listof rule%) -> (listof symbol)
 ;;   Constructs a policy from a list of rules
 (define (policy name rules)
-  ; "Must have" decision lists. Make sure these decisions get at least an empty rule  
- ; (define acl-decisions '(permit deny drop))
- ; (define nat-decisions '(translate))
- ; (define route-decisions '(forward route pass drop))
- ; (define switching-decisions '(forward pass drop))
- ; (define encryption-decisions '(encrypt))
- ; 
- ; (define decisions-that-appear (remove-duplicates (map (λ (rule)
- ;                                                         (get-field decision rule))
- ;                                                       rules)))
-  
- ; (define (any-missing decision-list rule-type)
- ;   (define missing (foldl (lambda (a-decision sofar) (remove a-decision sofar))
- ;                          decision-list
- ;                          decisions-that-appear))
- ;  ; (printf "any-missing: decision-list=~v; decisions-that-appear=~v; missing=~v~n" decision-list decisions-that-appear missing)
- ;   (map (lambda (a-decision) 
- ;          (define rname (string->symbol (string-append "ruleNever" (symbol->string a-decision))))                                              
- ;          (make-object rule% 
- ;            rname 
- ;            a-decision 
- ;            '( false )
- ;            rule-type)) 
- ;        missing))
-  
-  ;(define extra-rules-needed 
-  ;  (cond [(equal? 'InboundACL name)
-  ;         (any-missing acl-decisions 'acl)]
-  ;        [(equal? 'OutboundACL name)
-  ;         (any-missing acl-decisions 'acl)]
-  ;        [(equal? 'InsideNAT name)
-  ;         (any-missing nat-decisions 'nat)]
-  ;        [(equal? 'OutsideNAT name)
-  ;         (any-missing nat-decisions 'nat)]
-  ;        [(equal? 'LocalSwitching name)
-  ;         (any-missing switching-decisions 'localswitching)]
-  ;        [(equal? 'NetworkSwitching name)
-  ;         (any-missing switching-decisions 'networkswitching)]
-  ;        [(equal? 'StaticRoute name)
-  ;         (any-missing route-decisions 'staticroute)]
-  ;        [(equal? 'PolicyRoute name)
-  ;         (any-missing route-decisions 'policyroute)]
-  ;        [(equal? 'DefaultPolicyRoute name)
-  ;         (any-missing route-decisions 'policyroute)]
-  ;        [(equal? 'Encryption name)
-  ;         (any-missing encryption-decisions 'encrypt)]          
-  ;        [else 
-  ;        empty]))
-  
-  ;'(Policy uses IOS-vocab
-  ;         ; We may not use all of these in a single policy. Indeed, we expect not to.
-  ;         ; However, for now, just list all the possibilities.
-  ;         (Variables                        
-  ;          (hostname Hostname)
-  ;          (entry-interface Interface)
-  ;                      
-  ;          (src-addr-in IPAddress)
-  ;          (src-addr-out IPAddress)
-  ;          (dest-addr-in IPAddress)
-  ;          (dest-addr-out IPAddress)
-  ;          (protocol Protocol-any)
-  ;          
-  ;          (paf PayloadAndFlags)
-  ;          
-  ;          ;(message ICMPMessage)
-  ;          ;(length Length)            
-  ;          ;(flags TCPFlags)
-  ;          
-  ;          (src-port-in Port)
-  ;          (src-port-out Port)
-  ;          (dest-port-in Port)
-  ;          (dest-port-out Port)
-  ;          
-  ;          (next-hop IPAddress)
-  ;          (exit-interface Interface))   
   
   ;; FLOWLOG: todo result is not actual rules; need to decorrelate
   
