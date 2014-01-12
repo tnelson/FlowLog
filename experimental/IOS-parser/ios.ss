@@ -558,7 +558,7 @@
     ;; -> (listof any)
     ;;   Returns a symbol for this rule
     (define/public (text)
-      `(,name ,decision ,arg-variable-list ,(textualize conditions)))
+      `(RULE ,name ,decision ,arg-variable-list ,(textualize conditions)))
               ;:- ,@(textualize conditions)))         
     
     ;; symbol (listof (listof symbol))
@@ -2435,14 +2435,14 @@
          (name hostname "route")
          'route
          `(,@additional-conditions
-           (,dest-addr-in dest-addr-in)
-           (,next-hop next-hop))
+           (= ,dest-addr-in dest-addr-in)
+           (= ,next-hop next-hop))
          'staticroute)
        (make-object rule%
          (name hostname "drop")
          'drop
          `(,@additional-conditions
-           (,dest-addr-in dest-addr-in))
+           (= ,dest-addr-in dest-addr-in))
          'staticroute)))
     ))
 
@@ -2565,7 +2565,7 @@
                      (if (eqv? (get-field decision match-rule) 'permit)
                          'route
                          'pass)
-                     `((,next-hop next-hop))
+                     `((= ,next-hop next-hop))
                      rule-type)
                (send match-rule
                      augment/replace-decision
@@ -2675,7 +2675,7 @@
                                        (number->string line-no)))
         'Advertise
         `(,@conditions
-          (,address next-hop))
+          (=,address next-hop))
         'encrypt))
     ))
 
@@ -2700,7 +2700,7 @@
         (name hostname)
         'encrypt
         `(,@conditions
-          (,address next-hop))
+          (= ,address next-hop))
         'encrypt))
     ))
 
@@ -3383,7 +3383,7 @@
                                                     "-primary"))
                      'forward
                      `((routerAlias ,hostname p.locSw)
-                       (,(get-field primary-network interf) next-hop)
+                       (= ,(get-field primary-network interf) next-hop)
                        ; dest-addr-in is the middle-of-router address in the context of this policy                                   
                        (portAlias ,hostname ,interf new.locPt))
                      'localswitching)
@@ -3397,7 +3397,7 @@
                                                     "-drop-p"))
                      'drop
                      `((routerAlias ,hostname p.locSw)
-                       (,(get-field primary-network interf) next-hop))
+                       (= ,(get-field primary-network interf) next-hop))
                      'localswitching))))                    
               (hash-filter interfaces (λ (name interf)
                                         (get-field primary-address interf))))
@@ -3416,7 +3416,7 @@
                        ; dest-addr-in is the middle-of-router address in the context of this policy
                        ;(= next-hop dest-addr-in)
                        ;(,(get-field secondary-network interf) dest-addr-in)
-                       (,(get-field secondary-network interf) next-hop)
+                       (= ,(get-field secondary-network interf) next-hop)
                        (portAlias ,hostname ,interf new.locPt))
                      'localswitching)
                    
@@ -3427,7 +3427,7 @@
                                                     "-drop-s"))
                      'drop
                      `((routerAlias ,hostname p.locSw)
-                       (,(get-field secondary-network interf) next-hop))
+                       (= ,(get-field secondary-network interf) next-hop))
                      'localswitching)
                    )))
               (hash-filter interfaces (λ (name interf)
@@ -3448,7 +3448,7 @@
                                                  "-primary"))
                   'forward
                   `((routerAlias ,hostname p.locSw)
-                    (,(get-field primary-network interf) next-hop)
+                    (= ,(get-field primary-network interf) next-hop)
                     (portAlias ,hostname ,interf new.locpt))
                   'networkswitching)))
             (hash-filter interfaces (λ (name interf)
@@ -3463,7 +3463,7 @@
                                                  "-secondary"))
                   'forward
                   `((routerAlias ,hostname p.locSw)
-                    (,(get-field secondary-network interf) next-hop)
+                    (= ,(get-field secondary-network interf) next-hop)
                     (portAlias ,hostname ,interf new.locPt))
                   'networkswitching)))
             (hash-filter interfaces (λ (name interf)
@@ -3731,11 +3731,11 @@
   (define (decorrelate fs prevdenies) 
     (match fs 
       [(list) empty]
-      [(cons (list n dec argvars conds) remaining)
+      [(cons `(RULE ,n ,dec ,argvars ,conds) remaining)
        ;(printf "~a ~a ~a ~a~n~n" dec conds prevdenies (length remaining))
        (if (equal? dec 'deny) 
            (decorrelate remaining (cons conds prevdenies))
-           (cons `(,n ,dec ,argvars (and ,@conds ,@(map (lambda (adeny) `(not (and ,@adeny))) prevdenies))) 
+           (cons `(RULE ,n ,dec ,argvars (and ,@conds ,@(map (lambda (adeny) `(not (and ,@adeny))) prevdenies))) 
                  (decorrelate remaining prevdenies)))]))
     
   
