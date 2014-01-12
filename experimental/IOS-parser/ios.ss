@@ -1,7 +1,8 @@
 #lang racket/base
 
 (require racket/match)
-
+(require racket/math) 
+    
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;  Cisco IOS Configuration Modeling
 ;;  Copyright (C) 2009-2010 Christopher Barratt & Brown University
@@ -174,6 +175,15 @@
        (number->string (arithmetic-shift (bitwise-and numeric-address #x0000FF00) -8))
        "." ;"-"
        (number->string (bitwise-and numeric-address #x000000FF))))
+       
+    
+    ; number of bits set to 1 starting from beginning. 
+    ; as soon as you hit a zero, stop
+    (define/public (number->cidr numeric-mask)      
+      (number->string 
+       (for/sum ([i (reverse (build-list 32 values))])
+        #:break (not (bitwise-bit-set? numeric-mask i))
+        1)))
     ))
 
 
@@ -185,7 +195,7 @@
     (super-make-object)
     
     (inherit dotted-octet->number)
-    (inherit number->dashed-octet)
+    (inherit number->dashed-octet)       
     
     ;; The host address
     (define host (dotted-octet->number symbolic-address))
@@ -234,6 +244,7 @@
     
     (inherit dotted-octet->number)
     (inherit number->dashed-octet)
+    (inherit number->cidr)
     
     ;; The network address
     (define network (bitwise-and (dotted-octet->number symbolic-address)
@@ -246,14 +257,15 @@
     ;;   Returns a symbol in ip-A.B.C.D/ip-E.F.G.H form
     ;; If the address and mask are both 0, return the root. -TN
     (define/public (text)
-      ;(printf "Test: ~a ~a ~n" (address) (mask))
+      
+      ;(printf "Test: ~a ~a / ~a ~a ~n" (address) (number->dashed-octet (address)) (mask) (number->cidr (mask)))
       (if (and (equal? 0 (address)) 
                (equal? 0 (mask)))
           'IPAddress
           (string->symbol (string-append 
                                          (number->dashed-octet (address))
                                          "/"
-                                         (number->dashed-octet (mask))))))
+                                         (number->cidr (mask))))))
     
     ;; address<%> -> boolean
     ;;   Returns whether this address<%> equals another address<%>
@@ -312,10 +324,9 @@
     ;; The port
     (define port numeric-port)
     
-    ;; -> symbol
-    ;;   Returns a symbol in port-N form
+    ;; -> symbol    
     (define/public (text)
-      (string->symbol (string-append "port-" (number->string port))))
+      (string->symbol (number->string port)))
     
     ;; port<%> -> boolean
     ;;   Returns whether this port<%> equals another port<%>
@@ -456,7 +467,7 @@
     ;;   Returns a symbol in the form hostname-X
     (define/public (text)
       ;(string->symbol 
-       (string-append "\"host-" (symbol->string hostname) "\""))
+       (string-append "\"" (symbol->string hostname) "\"" ))
     ;)
     
     ;; -> boolean
@@ -655,7 +666,7 @@
     ;; -> symbol
     ;;   Returns the name for this interface
     (define/public (text)
-      (string->symbol (string-uncapitalize (symbol->string name))))
+      (string->symbol (string-append "\"" (string-uncapitalize (symbol->string name)) "\"")))
     
     ;; -> boolean
     ;;   Returns whether this interface<%> represents a single interface
@@ -870,7 +881,7 @@
         (extended-name hostname interf suffix)
         (decision)
         `(,@additional-conditions
-          (,src-addr-in dest-addr-in))
+          (= ,src-addr-in p.nwDst))
         'nat))
     
     ;; symbol symbol string (listof (listof symbol)) -> rule%
@@ -881,7 +892,7 @@
         (extended-name hostname interf suffix)
         (decision)
         `(,@additional-conditions
-          (,src-addr-in dest-addr-in))
+          (=,src-addr-in p.nwDst))
         'nat))
     
     ;; symbol symbol string (listof (listof symbol)) -> rule%
@@ -902,7 +913,7 @@
         (extended-name hostname interf suffix)
         (decision)
         `(,@additional-conditions
-          (,src-addr-in dest-addr-out))
+          (= ,src-addr-in dest-addr-out))
         'nat))
     ))
 
@@ -938,7 +949,7 @@
         (extended-name hostname interf suffix)
         (decision)
         `(,@additional-conditions
-          (,src-addr-in dest-addr-in))
+          (= ,src-addr-in p.nwDst))
         'nat))
     
     ;; symbol symbol  string (listof (listof symbol)) -> rule%
@@ -949,8 +960,8 @@
         (extended-name hostname interf suffix)
         (decision)
         `(,@additional-conditions
-          (,dest-addr-in new.nwSrc)
-          (,src-addr-in p.nwDst))           
+          (= ,dest-addr-in new.nwSrc)
+          (= ,src-addr-in p.nwDst))           
         'nat))
     
     ;; symbol symbol string (listof (listof symbol)) -> rule%
@@ -961,7 +972,7 @@
         (extended-name hostname interf suffix)
         (decision)
         `(,@additional-conditions
-          (,dest-addr-in src-addr-in))
+          (= ,dest-addr-in src-addr-in))
         'nat))
     
     ;; symbol symbol string (listof (listof symbol)) -> rule%
@@ -972,8 +983,8 @@
         (extended-name hostname interf suffix)
         (decision)
         `(,@additional-conditions
-          (,dest-addr-in src-addr-in)
-          (,src-addr-in dest-addr-out))
+          (= ,dest-addr-in src-addr-in)
+          (= ,src-addr-in dest-addr-out))
         'nat))
     ))
 
@@ -1002,10 +1013,10 @@
         (name hostname interf)
         (decision)
         `(,@additional-conditions
-          (,src-addr-in src-addr-in)
+          (= ,src-addr-in src-addr-in)
           (Prot-ICMP protocol)
           (,msg paf)
-          (,dest-addr-in dest-addr-in))
+          (= ,dest-addr-in p.nwDst))
         rule-type))
     
     ;; symbol symbol string (listof (listof symbol)) -> rule%
@@ -1016,7 +1027,7 @@
         (extended-name hostname interf suffix)
         (decision)
         `(,@additional-conditions
-          (,src-addr-in dest-addr-in)
+          (= ,src-addr-in p.nwDst)
           (Prot-ICMP protocol)
           (,msg paf))
         'nat))
@@ -1029,8 +1040,8 @@
         (extended-name hostname interf suffix)
         (decision)
         `(,@additional-conditions
-          (,dest-addr-in new.nwSrc)
-          (,src-addr-in p.nwDst)
+          (= ,dest-addr-in new.nwSrc)
+          (= ,src-addr-in p.nwDst)
           (Prot-ICMP protocol)
           (,msg paf))
         'nat))
@@ -1043,7 +1054,7 @@
         (extended-name hostname interf suffix)
         (decision)
         `(,@additional-conditions
-          (,dest-addr-in src-addr-in)
+          (= ,dest-addr-in src-addr-in)
           (Prot-ICMP protocol)
           (,msg paf))
         'nat))
@@ -1056,8 +1067,8 @@
         (extended-name hostname interf suffix)
         (decision)
         `(,@additional-conditions
-          (,dest-addr-in src-addr-in)
-          (,src-addr-in dest-addr-out)
+          (= ,dest-addr-in src-addr-in)
+          (= ,src-addr-in dest-addr-out)
           (Prot-ICMP protocol)
           (,msg paf))
         'nat))
@@ -1083,11 +1094,11 @@
         (name hostname interf)
         (decision)
         `(,@additional-conditions
-          (,src-addr-in src-addr-in) 
+          (= ,src-addr-in src-addr-in) 
           (,prot protocol)
-          (,src-port-in src-port-in)
-          (,dest-addr-in dest-addr-in)
-          (,dest-port-in dest-port-in))
+          (= ,src-port-in src-port-in)
+          (= ,dest-addr-in p.nwDst)
+          (= ,dest-port-in p.tpDst))
         rule-type))
     
     ;; symbol symbol string (listof (listof symbol)) -> rule%
@@ -1098,10 +1109,10 @@
         (extended-name hostname interf suffix)
         (decision)
         `(,@additional-conditions
-          (,src-addr-in dest-addr-in)
+          (= ,src-addr-in p.nwDst)
           (,prot protocol)
-          (,dest-port-in src-port-in)
-          (,src-port-in dest-port-in))
+          (= ,dest-port-in src-port-in)
+          (= ,src-port-in p.tpDst))
         'nat))
     
     ;; symbol symbol string (listof (listof symbol)) -> rule%
@@ -1112,11 +1123,11 @@
         (extended-name hostname interf suffix)
         (decision)
         `(,@additional-conditions
-          (,dest-addr-in src-addr-out)
-          (,src-addr-in dest-addr-in)
+          (= ,dest-addr-in src-addr-out)
+          (= ,src-addr-in p.nwDst)
           (,prot protocol)
-          (,dest-port-in src-port-in)
-          (,src-port-in dest-port-in))
+          (= ,dest-port-in src-port-in)
+          (= ,src-port-in p.tpDst))
         'nat))
     
     ;; symbol symbol string (listof (listof symbol)) -> rule%
@@ -1127,10 +1138,10 @@
         (extended-name hostname interf suffix)
         (decision)
         `(,@additional-conditions
-          (,dest-addr-in src-addr-in)
+          (= ,dest-addr-in src-addr-in)
           (,prot protocol)
-          (,src-port-in dest-port-in)
-          (,dest-port-in src-port-in))
+          (= ,src-port-in dest-port-in)
+          (= ,dest-port-in src-port-in))
         'nat))
     
     ;; symbol symbol string (listof (listof symbol)) -> rule%
@@ -1141,11 +1152,11 @@
         (extended-name hostname interf suffix)
         (decision)
         `(,@additional-conditions
-          (,dest-addr-in src-addr-in)
-          (,src-addr-in dest-addr-out)
+          (= ,dest-addr-in src-addr-in)
+          (= ,src-addr-in dest-addr-out)
           (,prot protocol)
-          (,src-port-in dest-port-in)
-          (,dest-port-in src-port-in))
+          (= ,src-port-in dest-port-in)
+          (= ,dest-port-in src-port-in))
         'nat))
     ))
 
@@ -1208,8 +1219,8 @@
           (= ,src-addr-in src-addr-in)
           (= ,prot p.nwProto)
           (= ,src-port-in src-port-in)
-          (= ,dest-addr-in dest-addr-in)
-          (= ,dest-port-in dest-port-in))
+          (= ,dest-addr-in p.nwDst)
+          (= ,dest-port-in p.tpDst))
         rule-type))
     
     ;; -> symbol
@@ -1512,12 +1523,12 @@
                            augment/replace-decision
                            (augmented-name "trans" match-rule)
                            'translate
-                           `((,(get-field primary-address (hash-ref interfaces interface-ID)) dest-addr-in)
+                           `((,(get-field primary-address (hash-ref interfaces interface-ID)) p.nwDst)
                              (= src-addr-in src-addr-out)
                              (= src-port-in src-port-out)
                              ,(if overload
-                                  `(Port dest-port-in)
-                                  `(= dest-port-in dest-port-out)))
+                                  `(Port p.tpDst)
+                                  `(= p.tpDst new.tpDst)))
                            'nat))
                     (list
                      (send match-rule
@@ -1526,8 +1537,8 @@
                            'translate
                            `((= src-addr-in src-addr-out)
                              (= src-port-in src-port-out)
-                             (= dest-addr-in dest-addr-out)
-                             (= dest-port-in dest-port-out))
+                             (= p.nwDst new.nwDst)
+                             (= p.tpDst new.tpDst))
                            'nat)
                      (send match-rule
                            augment/replace-decision
@@ -1543,8 +1554,8 @@
                       'drop
                       `((,(get-field primary-address (hash-ref interfaces interface-ID)) dest-addr-in)
                         ,(if overload
-                             `(Port dest-port-in)
-                             `(= dest-port-in dest-port-out)))
+                             `(Port p.tpDst)
+                             `(= p.tpDst new.tpDst)))
                       'nat))
               (filter (λ (match-rule)
                         (eqv? (get-field decision match-rule) 'permit))
@@ -1575,15 +1586,15 @@
                      'translate
                      (if (eqv? (get-field decision match-rule) 'permit)
                          `((,(get-field primary-address (hash-ref interfaces interface-ID)) src-addr-out)
-                           (= dest-addr-in dest-addr-out)
+                           (= p.nwDst new.nwDst)
                            ,(if overload
                                 `(Port src-port-out)
                                 `(= src-port-in src-port-out))
-                           (= dest-port-in dest-port-in))
+                           (= dest-port-in dest-port-in)) ; TODO: why tautology here?
                          `((= src-addr-in src-addr-out)
                            (= src-port-in src-port-out)
-                           (= dest-addr-in dest-addr-out)
-                           (= dest-port-in dest-port-out))))
+                           (= p.nwDst new.nwDst)
+                           (= p.tpDst new.tpDst))))
                (send match-rule
                      augment/replace-decision
                      (name hostname "drop")
@@ -1627,8 +1638,8 @@
                            'translate
                            `((= src-addr-in src-addr-out)
                              (= src-port-in src-port-out)
-                             (= dest-addr-in dest-addr-out)
-                             (= dest-port-in dest-port-out)))
+                             (= p.nwDst new.nwDst)
+                             (= p.tpDst new.tpDst)))
                      (send match-rule
                            augment/replace-decision
                            (name hostname "drop")
@@ -1642,8 +1653,8 @@
                       'drop
                       `((,(get-field primary-address (hash-ref interfaces interface-ID)) dest-addr-in)
                         ,(if overload
-                             `(Port dest-port-in)
-                             `(= dest-port-in dest-port-out)))))
+                             `(Port p.tpDst)
+                             `(= p.tpDst new.tpDst)))))
               (filter (λ (match-rule)
                         (eqv? (get-field decision match-rule) 'permit))
                       match-rules)))))
@@ -1676,12 +1687,12 @@
                            (= src-addr-in src-addr-out)
                            (= src-port-in src-port-out)
                            ,(if overload
-                                `(Port dest-port-out)
-                                `(= dest-port-in dest-port-out)))
+                                `(Port new.nwDst)
+                                `(= p.tpDst new.tpDst)))
                          `((= src-addr-in src-addr-out)
                            (= src-port-in src-port-out)
-                           (= dest-addr-in dest-addr-out)
-                           (= dest-port-in dest-port-out))))
+                           (= p.nwDst new.nwDst)
+                           (= p.tpDst new.tpDst))))
                (send match-rule
                      augment/replace-decision
                      (name hostname "drop")
@@ -1712,11 +1723,11 @@
                            (augmented-name "trans" match-rule)
                            'translate
                            `((,(get-field primary-address (hash-ref interfaces interface-ID)) src-addr-in)
-                             (= dest-addr-in dest-addr-out)
+                             (= p.nwDst new.nwDst)
                              ,(if overload
                                   `(Port src-port-in)
                                   `(= src-port-in src-port-out))
-                             (= dest-port-in dest-port-out))))
+                             (= p.tpDst new.tpDst))))
                     (list
                      (send match-rule
                            augment/replace-decision
@@ -1724,8 +1735,8 @@
                            'translate
                            `((= src-addr-in src-addr-out)
                              (= src-port-in src-port-out)
-                             (= dest-addr-in dest-addr-out)
-                             (= dest-port-in dest-port-out)))
+                             (= p.nwDst new.nwDst)
+                             (= p.tpDst new.tpDst)))
                      (send match-rule
                            augment/replace-decision
                            (name hostname "drop")
@@ -1777,8 +1788,8 @@
                                 `(= dest-port-in dest-port-out)))
                          `((= src-addr-in src-addr-out)
                            (= src-port-in src-port-out)
-                           (= dest-addr-in dest-addr-out)
-                           (= dest-port-in dest-port-out))))
+                           (= p.nwDst new.nwDst)
+                           (= p.tpDst new.tpDst))))
                (send match-rule
                      augment/replace-decision
                      (augmented-name "drop" match-rule)
@@ -1816,8 +1827,8 @@
                            'translate
                            `((= src-addr-in src-addr-out)
                              (= src-port-in src-port-out)
-                             (= dest-addr-in dest-addr-out)
-                             (= dest-port-in dest-port-out)))
+                             (= p.nwDst new.nwDst)
+                             (= p.tpDst new.tpDst)))
                      (send match-rule
                            augment/replace-decision
                            (augmented-name "trans" match-rule)
@@ -1860,9 +1871,9 @@
          `(,@additional-conditions
            (,from-src-addr-in src-addr-in)
            (,to-src-addr-in src-addr-out)
-           (= dest-addr-in dest-addr-out)
+           (= p.nwDst new.nwDst)
            (= src-port-in src-port-out)
-           (= dest-port-in dest-port-out))
+           (= p.tpDst new.tpDst))
          'nat)
        (make-object rule%
          (name hostname "drop")
@@ -1880,11 +1891,11 @@
          (name hostname "trans")
          'translate
          `(,@additional-conditions
-           (,to-src-addr-in dest-addr-in)
-           (,from-src-addr-in dest-addr-out)
+           (,to-src-addr-in p.nwDst)
+           (,from-src-addr-in new.nwDst)
            (= src-addr-in src-addr-out)
            (= src-port-in src-port-out)
-           (= dest-port-in dest-port-out))
+           (= p.tpDst new.tpDst))
          'nat)
        (make-object rule%
          (name hostname "drop")
@@ -1916,11 +1927,11 @@
          `(,@additional-conditions
            (,from-src-addr-in src-addr-in)
            (,to-src-addr-in src-addr-out)
-           (= dest-addr-in dest-addr-out)
+           (= p.nwDst new.nwDst)
            (,prot protocol)
            (,from-src-port-in src-port-in)
            (,to-src-port-in src-port-out)
-           (= dest-port-in dest-port-out))
+           (= p.tpDst new.tpDst))
          'nat)
        (make-object rule%
          (name hostname "drop")
@@ -1939,8 +1950,8 @@
          (name hostname "trans")
          'translate
          `(,@additional-conditions
-           (,to-src-addr-in dest-addr-in)
-           (,from-src-addr-in dest-addr-out)
+           (,to-src-addr-in p.nwDst)
+           (,from-src-addr-in new.nwDst)
            (,prot protocol)
            (,to-src-port-in dest-port-in)
            (,from-src-port-in dest-port-out)
@@ -2464,14 +2475,14 @@
          (name hostname "route")
          'forward
          `(,@additional-conditions
-           (,dest-addr-in dest-addr-in)
+           (= ,dest-addr-in dest-addr-in)
            (portAlias ,hostname ,next-hop new.locPt))
          'staticroute)
        (make-object rule%
          (name hostname "drop")
          'drop
          `(,@additional-conditions
-           (,dest-addr-in dest-addr-in))
+           (= ,dest-addr-in dest-addr-in))
          'staticroute)))
     ))
 
@@ -3265,7 +3276,7 @@
                                   (send hostname name)
                                   (send interf text)
                                   `((routerAlias ,hostname p.locsw)
-                                    (= ,interf p.locpt))
+                                    (portAlias ,hostname ,interf p.locpt))
                                   'acl)))
                 (list (if default-ACL-permit
                           (list (make-object rule%
@@ -3286,7 +3297,7 @@
                                   (send hostname name)
                                   (send interf text)
                                   `((routerAlias ,hostname new.locsw)
-                                    (= ,interf new.locpt))
+                                    (portAlias ,hostname ,interf new.locpt))
                                   'outacl)))
                 (list (if default-ACL-permit
                           (list (make-object rule%

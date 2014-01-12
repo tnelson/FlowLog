@@ -126,6 +126,10 @@
     ; and ippacket won't give the ports. 
     ; Do we need to separate out by TCP/UDP etc?
     
+    ; TODO: protocols currently "prot-ICMP" etc.
+    ; TODO: different kinds of NAT
+    ; TODO: flags? no support in flowlog this iteration.
+    
     ; FLOWLOG:
     (store (string-append "TABLE nat(ipaddr, tpport, tpport);\n\n"
                           
@@ -133,6 +137,9 @@
                           (sexpr-to-flowlog flattened-forward)
                           ";\n\n"
                           
+                          
+                          ;; TODO: but this applies only for overload, right? not pool.
+                          ;; pool will need different handling.
                           "INSERT (p.nwSrc, p.tpSrc, newpt) INTO nat WHERE\n"
                           "NOT nat(p.nwSrc, p.tpSrc, ANY) AND internalNATPort(p.locSw, p.locPt)\n"
                           ;; TODO
@@ -175,17 +182,40 @@
     [`(and ,args ...) (string-append "( " (string-join (map sexpr-to-flowlog (remove-duplicates args)) " AND ")" )")]
     [`(not ,arg) (string-append "NOT " (sexpr-to-flowlog arg))]
     [`(RULE ,linenum ,decision ,varargs ,pred) (string-append "\n// " (symbol->string linenum) "\n" (sexpr-to-flowlog pred))]
+    ; equality or IN:
     [`(= ,arg1 ,arg2)      
-     (define s1 (sexpr-to-flowlog arg1))
-     (define s2 (sexpr-to-flowlog arg2))
-     (if (regexp-match #rx"^[0-9\\.]+/" s1)
-         (string-append s2 " IN " s1)
-         (string-append "(" s1 " = " s2 ")"))]
-    ; This needs to come after RULE and =
+     ; The IOS compiler produces "empty" assertions sometimes. deal with them
+     (cond [(or (equal? arg1 'IPAddress)
+                (equal? arg2 'IPAddress)
+                (equal? arg1 'Port)
+                (equal? arg2 'Port))
+            "true"]
+           [else
+            (define s1 (sexpr-to-flowlog arg1))
+            (define s2 (sexpr-to-flowlog arg2))
+            (if (regexp-match #rx"^[0-9\\.]+/" s1)
+                (string-append s2 " IN " s1)
+                (string-append "(" s1 " = " s2 ")"))])]    
+    ; table reference
+    ; (this needs to come after concrete keywords like RULE, and, =, etc.)
     [`(,(? symbol? predname) ,args ...)      
-     (string-append (symbol->string predname) "( " (string-join (map sexpr-to-flowlog args) ", ")" )")]    
+     (string-append (symbol->string predname) "( " (string-join (map sexpr-to-flowlog args) ", ")" )")] 
+    ; implicit and:
     [(list args ...) (sexpr-to-flowlog `(and ,@args))]    
     [(? string? x) x]
-    [(? symbol? x) (symbol->string x)]    
+    [(? symbol? x) 
+     ; Midway I realized that we could just turn "src-addr-in"
+     ; into "p.nwSrc" here, rather than bit-by-bit in IOS.ss.     
+     ; So some will already be converted, some won't.
+     (cond [(equal? x 'src-addr-in) "p.nwSrc"]
+           [(equal? x 'src-port-in) "p.tpSrc"]
+           [(equal? x 'dest-addr-in) "p.nwDst"]
+           [(equal? x 'dest-port-in) "p.tpDst"]
+           [(equal? x 'src-addr-out) "new.nwSrc"]
+           [(equal? x 'src-port-out) "new.tpSrc"]
+           [(equal? x 'dest-addr-out) "new.nwDst"]
+           [(equal? x 'dest-port-out) "new.tpDst"]
+           
+           [else (symbol->string x)])]    
     [x (pretty-display x) (raise "error with sexpr-to-flowlog")]))
 
