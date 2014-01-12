@@ -3720,37 +3720,41 @@
 ;; Policy Generation
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;; symbol (listof rule%) -> (listof symbol)
+
 ;;   Constructs a policy from a list of rules
-(define (policy name rules)
-  
-  ;; FLOWLOG: todo result is not actual rules; need to decorrelate
-  
+;;   returns an association list from members of decs-wanted to (RULE ...) sets
+(define (policy decs-wanted rules)
+
+  ; Margrave had automatic policy combination. 
+  ;(RComb (fa permit deny translate route forward drop pass advertise encrypt))
+  ; Decorrelation is needed to get that effect in Flowlog.
+
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  ;;; decorrelation (BY FIRST-APPLICABLE)
+  ; Not just for ACLs. 
+  ; ACL example: 
   ; P1 D2 P3 D4 P5 -> (p1) or (p3 and not d2) or (p5 and not d2 and not d4) ...
   ; Implicit deny-default here.
-  (define (decorrelate fs prevdenies) 
+  (define (decorrelate fs prevs goaldec) 
     (match fs 
       [(list) empty]
       [(cons `(RULE ,n ,dec ,argvars ,conds) remaining)
        ;(printf "~a ~a ~a ~a~n~n" dec conds prevdenies (length remaining))
-       (if (equal? dec 'deny) 
-           (decorrelate remaining (cons conds prevdenies))
-           (cons `(RULE ,n ,dec ,argvars (and ,@conds ,@(map (lambda (adeny) `(not (and ,@adeny))) prevdenies))) 
-                 (decorrelate remaining prevdenies)))]))
-    
+       (if (not (equal? dec goaldec)) 
+           (decorrelate remaining (cons conds prevs) goaldec)
+           (cons `(RULE ,n ,dec ,argvars (and ,@conds ,@(map (lambda (aprev) `(not (and ,@aprev))) prevs))) 
+                 (decorrelate remaining prevs goaldec)))]))
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;    
   
   (define fragments (map (λ (rule)
                      (send rule text)) rules))
-  (if (or (equal? 'InboundACL name) (equal? 'OutboundACL name)) 
-      (decorrelate fragments empty)
-      fragments)
   
- ;          `(Rules
- ;           ,@(map (λ (rule)
- ;                    (send rule text))
- ;                  (append rules extra-rules-needed)))
- ;          
-           ;(RComb (fa permit deny translate route forward drop pass advertise encrypt))
-;           )
+  ; decorrelate before returning. for some policy types there's really 
+  ; only one decision we want in flowlog (like permit for ACLs and translate for NAT)
+  ; for others, we need multiples (forward/route/pass in routing policies)
+
+  (map (lambda (dec-wanted)
+         `(,dec-wanted ,(decorrelate fragments empty dec-wanted)))
+      decs-wanted)  
 )
 

@@ -53,117 +53,105 @@
                                              default-ACL-permit))
                                 filenames))
     
-    (define inboundacl (policy 'InboundACL (combine-rules configurations inbound-ACL-rules)))
-    (define outboundacl (policy 'OutboundACL (combine-rules configurations outbound-ACL-rules)))
+    ; assoc returns the (k, v) pair. we just want v.
+    (define (assoc2 key lst) (second (assoc key lst)))
     
-    (define inside-NAT (policy 'InsideNAT (combine-rules configurations inside-NAT-rules)))
-    (define outside-NAT (policy 'InsideNAT (combine-rules configurations outside-NAT-rules)))
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    ;; Decorrelate and produce rule sets for appropriate policy decisions
     
-    (define local-switch (policy 'LocalSwitching (combine-rules configurations local-switching-rules)))
-    (define localswitching-forward (filter (lambda (r) (equal? 'forward (third r))) local-switch))
-    (define localswitching-pass (filter (lambda (r) (equal? 'pass (third r))) local-switch))
+    (define inboundacl (assoc2 'permit (policy '(permit) (combine-rules configurations inbound-ACL-rules))))
+    (define outboundacl (assoc2 'permit (policy '(permit) (combine-rules configurations outbound-ACL-rules))))
     
-    (define network-switch (policy 'NetworkSwitching (combine-rules configurations network-switching-rules)))
-    (define networkswitching-forward (filter (lambda (r) (equal? 'forward (third r))) network-switch))
-    (define networkswitching-pass (filter (lambda (r) (equal? 'pass (third r))) network-switch))
+    (define insidenat (assoc2 'translate (policy '(translate) (combine-rules configurations inside-NAT-rules))))
+    (define outsidenat (assoc2 'translate (policy '(translate) (combine-rules configurations outside-NAT-rules))))
     
-    (define static-route (policy 'StaticRouting (combine-rules configurations static-route-rules)))
-    (define staticroute-forward (filter (lambda (r) (equal? 'forward (third r))) static-route))
-    (define staticroute-route (filter (lambda (r) (equal? 'route (third r))) static-route))
-    (define staticroute-pass (filter (lambda (r) (equal? 'pass (third r))) static-route))
+    (define local-switch (policy '(forward pass) (combine-rules configurations local-switching-rules)))
+    (define localswitching-forward (assoc2 'forward local-switch))
+    (define localswitching-pass (assoc2 'pass local-switch))
     
+    (define network-switch (policy '(forward pass) (combine-rules configurations network-switching-rules)))
+    (define networkswitching-forward (assoc2 'forward network-switch))
+    (define networkswitching-pass (assoc2 'pass network-switch))
     
+    (define static-route (policy '(forward route pass) (combine-rules configurations static-route-rules)))
+    (define staticroute-forward (assoc2 'forward static-route))
+    (define staticroute-route (assoc2 'route static-route))
+    (define staticroute-pass (assoc2 'pass static-route))
+       
+    (define policy-route (policy '(forward route pass) (combine-rules configurations policy-routing-rules)))
+    (define policyroute-forward (assoc2 'forward policy-route))
+    (define policyroute-route (assoc2 'route policy-route))
+    (define policyroute-pass (assoc2 'pass policy-route))
     
-    (define policy-route (policy 'PolicyRouting (combine-rules configurations policy-routing-rules)))
-    (define policyroute-forward (filter (lambda (r) (equal? 'forward (third r))) policy-route))
-    (define policyroute-route (filter (lambda (r) (equal? 'route (third r))) policy-route))
-    (define policyroute-pass (filter (lambda (r) (equal? 'pass (third r))) policy-route))
-    
-    (define default-policy-route (policy 'DefaultPolicyRouting (combine-rules configurations default-policy-routing-rules)))           
-    (define defaultpolicyroute-forward (filter (lambda (r) (equal? 'forward (third r))) default-policy-route))
-    (define defaultpolicyroute-route (filter (lambda (r) (equal? 'route (third r))) default-policy-route))
-    (define defaultpolicyroute-pass (filter (lambda (r) (equal? 'pass (third r))) default-policy-route))    
+    (define default-policy-route (policy '(forward route pass) (combine-rules configurations default-policy-routing-rules)))           
+    (define defaultpolicyroute-forward (assoc2 'forward default-policy-route))
+    (define defaultpolicyroute-route (assoc2 'route default-policy-route))
+    (define defaultpolicyroute-pass (assoc2 'pass default-policy-route))    
       
-      ;; 
-      ; *** TODO *** concern: need to bake in first-applicable between forward-route-pass?
-      ;; ^^^ TODO!
-      
-      ; FLOWLOG: cross-policy flattening will happen here
-        ; FLOWLOG: decorrelation, etc. should happen within the policy function
-                
-   
-        ; from margrave IOS
-#|        (or (and (= next-hop dest-addr_) 
-                 ([,localswitching forward] ahostname dest-addr_ exit))
-            (and ([,localswitching pass] ahostname dest-addr_ exit))
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    ; Flatten rule-sets into one forward block
             
-            (or ([,policyroute forward] ahostname entry src-addr_ dest-addr_ src-port_ dest-port_ protocol next-hop exit)
-                (and ([,policyroute route] ahostname entry src-addr_ dest-addr_ src-port_ dest-port_ protocol next-hop exit)
-                     ([,networkswitching forward] ahostname next-hop exit))
-                (and ([,policyroute pass] ahostname entry src-addr_ dest-addr_ src-port_ dest-port_ protocol next-hop exit)
-                     (or ([,staticroute forward] ahostname dest-addr_ next-hop exit)
-                         (and ([,staticroute route] ahostname dest-addr_ next-hop exit)
-                              ([,networkswitching forward] ahostname next-hop exit))
-                         (and ([,staticroute pass] ahostname dest-addr_ next-hop exit)
-                              (or ([,defaultpolicyroute forward] ahostname entry src-addr_ dest-addr_ src-port_ dest-port_ protocol next-hop exit)
-                                  (and ([,defaultpolicyroute route] ahostname entry src-addr_ dest-addr_ src-port_ dest-port_ protocol next-hop exit)
-                                       ([,networkswitching forward] ahostname next-hop exit))
-                                  ; Final option: Packet is dropped.
-                                  (and ([,defaultpolicyroute pass] ahostname entry src-addr_ dest-addr_ src-port_ dest-port_ protocol next-hop exit)
-                                       (= next-hop dest-addr_)
-                                       (interf-drop exit)))))))))))))))
-      |#  
-        
-    ; need to map fourth over all of these
-        (define flattened-policies
-          `(and 
-            ; Pass ACLs (in and out)
-            (or ,@inboundacl) 
-            (or ,@outboundacl)
-            ; NAT
-            ; TODO
-            ; routing, switching
-            (or ,@localswitching-forward
-                (and ,@localswitching-pass                         
-                     (or ,@policyroute-forward
-                         (and ,@policyroute-route
-                              ,@networkswitching-forward)
-                         (and ,@policyroute-pass
-                              (or ,@staticroute-forward
-                                  (and ,@staticroute-route
-                                       ,@networkswitching-forward)
-                                  
-                                  (and ,@staticroute-pass
-                                       (or ,@defaultpolicyroute-forward
-                                           (and ,@defaultpolicyroute-route
-                                                ,@networkswitching-forward)
-                                           ; Final option: Packet is dropped.
-                                           ; No final option here in actual program.
-                                           ; If no satisfying new, then nothing to do.
-                                           )))))))))
-
-        ;(display flattened-policies)
+    (define flattened-forward
+      `(and 
+        ; Pass ACLs (in and out)
+        (or ,@inboundacl) 
+        (or ,@outboundacl)
+        ; NAT
+        (or (and (or ,@insidenat) 
+                 (internalNATPort p.locSw p.locPt))
+            (and (or ,@outsidenat) 
+                 (externalNATPort p.locSw p.locPt)))
+        ; routing, switching
+        (or ,@localswitching-forward
+            (and ,@localswitching-pass                         
+                 (or ,@policyroute-forward
+                     (and ,@policyroute-route
+                          ,@networkswitching-forward)
+                     (and ,@policyroute-pass
+                          (or ,@staticroute-forward
+                              (and ,@staticroute-route
+                                   ,@networkswitching-forward)                              
+                              (and ,@staticroute-pass
+                                   (or ,@defaultpolicyroute-forward
+                                       (and ,@defaultpolicyroute-route
+                                            ,@networkswitching-forward)
+                                       ; Final option: Packet is dropped.
+                                       ; No final option here in actual program.
+                                       ; If no satisfying new, then nothing to do.
+                                       )))))))))
+    
+    (pretty-display flattened-forward)
     
     ; TODO: On what? packet(p) won't give the nw fields!
     ; and ippacket won't give the ports. 
     ; Do we need to separate out by TCP/UDP etc?
     
-        ; FLOWLOG:
-        (store (string-append "ON ip_packet(p): DO forward(new) WHERE \n" (sexpr-to-flowlog flattened-policies))
-               (make-path root-path "IOS.flg"))        
-        
-        ; For debugging purposes:
-        (store inboundacl (make-path root-path "InboundACL.p"))
-        (store outboundacl (make-path root-path "OutboundACL.p"))
-        (store inside-NAT (make-path root-path "InsideNAT.p"))
-        (store outside-NAT (make-path root-path "OutsideNAT.p"))
-        (store local-switch (make-path root-path "LocalSwitching.p"))
-        (store network-switch (make-path root-path "NetworkSwitching.p"))
-        (store static-route (make-path root-path "StaticRoute.p"))
-        (store policy-route (make-path root-path "PolicyRoute.p"))
-        (store default-policy-route (make-path root-path "DefaultPolicyRoute.p"))
-        
-        ))
+    ; FLOWLOG:
+    (store (string-append "TABLE nat(ipaddr, tpport, tpport);\n\n"
+                          
+                          "ON ip_packet(p): DO forward(new) WHERE \n" 
+                          (sexpr-to-flowlog flattened-forward)
+                          ";\n\n"
+                          
+                          "INSERT (p.nwSrc, p.tpSrc, newpt) INTO nat WHERE\n"
+                          "NOT nat(p.nwSrc, p.tpSrc, ANY) AND internalNATPort(p.locSw, p.locPt)\n"
+                          ;; TODO
+                          " [TODO: increment, set newpt etc. same as in existing?]"
+                          ";\n")
+           (make-path root-path "IOS.flg"))        
+    
+    ; For debugging purposes:
+    (store inboundacl (make-path root-path "InboundACL.p"))
+    (store outboundacl (make-path root-path "OutboundACL.p"))
+    (store insidenat (make-path root-path "InsideNAT.p"))
+    (store outsidenat (make-path root-path "OutsideNAT.p"))
+    (store local-switch (make-path root-path "LocalSwitching.p"))
+    (store network-switch (make-path root-path "NetworkSwitching.p"))
+    (store static-route (make-path root-path "StaticRoute.p"))
+    (store policy-route (make-path root-path "PolicyRoute.p"))
+    (store default-policy-route (make-path root-path "DefaultPolicyRoute.p"))
+    
+    ))
 
 ;; string string -> path
 (define (make-path base file)
