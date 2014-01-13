@@ -42,41 +42,13 @@ class FlowlogDemo(object):
         self.options, self.args = opts.parse_args()
 
     def buildTopo(self):
-        switch = {}
-        translator = {}
-        subnet_root = {}
         num_subnets = 2
         num_hosts_per_subnet = 2
         # 15 Mbps bandwidth and 2 ms delay on each link
         linkopts = dict(bw=15, delay='2ms', loss=0, use_htb=True)
 
-        # Create a network with a two subnets, each attached to the router.
         topo = FlowlogTopo()
-        router = topo.addSwitch('r1', dpid="1000000000000001") # dpid is in hex by default
-
-        # Add the dlDst translators for each subnet
-
-        translator[1] = topo.addSwitch('t1', dpid="2000000000000001")
-        translator[2] = topo.addSwitch('t2', dpid="2000000000000002")
-
-        topo.addLink(router, translator[1], **linkopts)
-        topo.addLink(router, translator[2], **linkopts)
-
-        # Add the root switches for each subnet
-
-        subnet_root[1] = topo.addSwitch('sr1', dpid="3000000000000001")
-        subnet_root[2] = topo.addSwitch('sr2', dpid="3000000000000002")
-
-        topo.addLink(translator[1], subnet_root[1],  **linkopts)
-        topo.addLink(translator[2], subnet_root[2], **linkopts)
-
-        # Add some edge switches
-
-        switch[1] = topo.addSwitch('s1')
-        switch[2] = topo.addSwitch('s2')
-
-        topo.addLink(subnet_root[1], switch[1], **linkopts)
-        topo.addLink(subnet_root[2], switch[2], **linkopts)
+        nat = topo.addSwitch('nat', dpid="3000000000000000") # dpid is in hex by default
 
         # Add some regular hosts
         for s in irange(1, num_subnets):
@@ -85,7 +57,7 @@ class FlowlogDemo(object):
             host = topo.addHost('host%s' % global_host, ip='10.0.%s.%s/24' % (s, 1 + h),
                                 defaultRoute='dev host%s-eth0 via 10.0.%s.1' % (global_host, s),
                                 cpu=0.4/(num_subnets * num_hosts_per_subnet))
-            topo.addLink(host, switch[s], **linkopts)
+            topo.addLink(host, nat, **linkopts)
 
         return topo
 
@@ -118,7 +90,7 @@ class FlowlogDemo(object):
         controller = customConstructor(CONTROLLERS, self.options.controller)
         switch = customConstructor(SWITCHES, self.options.switch)
 
-        network = Mininet(topo, controller=controller, link=TCLink, 
+        network = Mininet(topo, controller=controller, link=TCLink,
                           # host=CPULimitedHost, # seems better without this
                           switch=switch, ipBase='10.0.0.0/24',
                           autoSetMacs=True)
