@@ -22,6 +22,37 @@ exception RelationHadMultipleReacts of string;;
 exception RelationHadMultipleDecls of string;;
 exception NoDefaultForField of string * string;;
 
+
+  let string_of_term ?(verbose:printmode = Brief) (t: term): string =
+    match t with
+      | TConst(s) ->
+        if verbose = Verbose then "TConst("^s^")"
+        else s
+      | TVar(s) ->
+        (match verbose with
+          | Verbose -> "TVar("^s^")"
+          |  _ -> (String.uppercase s))
+      | TField(varname, fname) ->
+        (match verbose with
+          | Verbose -> "TField("^varname^"."^fname^")"
+          | _ -> (String.uppercase (varname^"__"^fname)));;
+
+  let rec string_of_formula ?(verbose:printmode = Brief) (f: formula): string =
+    match f with
+      | FTrue -> "true"
+      | FFalse -> "false"
+      | FEquals(t1, t2) -> (string_of_term ~verbose:verbose t1) ^ " = "^ (string_of_term ~verbose:verbose t2)
+      | FIn(t, addr, mask) ->
+          (string_of_term ~verbose:verbose t) ^ " IN "^ (string_of_term ~verbose:verbose addr) ^ "/" ^ (string_of_term ~verbose:verbose mask)
+      | FNot(f) ->
+        "(not "^(string_of_formula ~verbose:verbose f)^")"
+      | FAtom("", relname, tlargs) ->
+          relname^"("^(String.concat "," (map (string_of_term ~verbose:verbose) tlargs))^")"
+      | FAtom(modname, relname, tlargs) ->
+          modname^"/"^relname^"("^(String.concat "," (map (string_of_term ~verbose:verbose) tlargs))^")"
+      | FAnd(f1, f2) -> (string_of_formula ~verbose:verbose f1) ^ ", "^ (string_of_formula ~verbose:verbose f2)
+      | FOr(f1, f2) -> (string_of_formula ~verbose:verbose f1) ^ " or "^ (string_of_formula ~verbose:verbose f2);;
+
 (* True if string str1 ends with string str2 *)
 let ends_with (str1 : string) (str2 : string) : bool =
 	if String.length str2 > String.length str1 then false
@@ -214,8 +245,9 @@ let rec disj_to_top ?(ignore_negation: bool = false) (f: formula): formula =
           (match f2 with
             | FTrue | FFalse
             | FAtom(_,_,_)
-            | FEquals(_,_) -> f
-            | _  -> failwith ("disj_to_top: expected nnf fmla"))
+            | FEquals(_,_)
+            | FIn(_,_,_) -> f
+            | _  -> failwith ("disj_to_top: expected nnf formula; got unexpected negation: "^(string_of_formula f)))
         | FNot(_) -> f
 
         | FAnd(f1, f2) ->
@@ -633,36 +665,6 @@ module PredSet  = Set.Make( struct type t = pred let compare = smart_compare_pre
         (match mode with
           | XsbAddUnderscoreVars | XsbForcePositive -> "_"^(String.uppercase (varname^"__"^fname))
           | _ -> (String.uppercase (varname^"__"^fname)));;
-
-  let string_of_term ?(verbose:printmode = Brief) (t: term): string =
-    match t with
-      | TConst(s) ->
-        if verbose = Verbose then "TConst("^s^")"
-        else s
-      | TVar(s) ->
-        (match verbose with
-          | Verbose -> "TVar("^s^")"
-          |  _ -> (String.uppercase s))
-      | TField(varname, fname) ->
-        (match verbose with
-          | Verbose -> "TField("^varname^"."^fname^")"
-          | _ -> (String.uppercase (varname^"__"^fname)));;
-
-  let rec string_of_formula ?(verbose:printmode = Brief) (f: formula): string =
-    match f with
-      | FTrue -> "true"
-      | FFalse -> "false"
-      | FEquals(t1, t2) -> (string_of_term ~verbose:verbose t1) ^ " = "^ (string_of_term ~verbose:verbose t2)
-      | FIn(t, addr, mask) ->
-          (string_of_term ~verbose:verbose t) ^ " IN "^ (string_of_term ~verbose:verbose addr) ^ "/" ^ (string_of_term ~verbose:verbose mask)
-      | FNot(f) ->
-        "(not "^(string_of_formula ~verbose:verbose f)^")"
-      | FAtom("", relname, tlargs) ->
-          relname^"("^(String.concat "," (map (string_of_term ~verbose:verbose) tlargs))^")"
-      | FAtom(modname, relname, tlargs) ->
-          modname^"/"^relname^"("^(String.concat "," (map (string_of_term ~verbose:verbose) tlargs))^")"
-      | FAnd(f1, f2) -> (string_of_formula ~verbose:verbose f1) ^ ", "^ (string_of_formula ~verbose:verbose f2)
-      | FOr(f1, f2) -> (string_of_formula ~verbose:verbose f1) ^ " or "^ (string_of_formula ~verbose:verbose f2);;
 
   let action_string outrel argterms fmla: string =
     let argstring = (String.concat "," (map (string_of_term ~verbose:Verbose) argterms)) in
