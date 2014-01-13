@@ -569,9 +569,10 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: triggered_cl
         | _ -> failwith ("sort_by_increasing_timeout: "^(NetCore_Pretty.string_of_pol p1)^", "^(NetCore_Pretty.string_of_pol p2)) in
 
     let get_action_pols_for_action (a: action): pol list =
-      let raws = unique (fold_left (fun acc (ac, ap, aa) ->
+      let raws = (fold_left (fun acc (ac, ap, aa) ->
           if (safe_compare_actions a ac) then aa::acc else acc) [] clause_aps) in
-        (sort ~cmp:sort_by_decreasing_timeout raws) in
+      let unique_raws = unique ~cmp:safe_compare_pols raws in
+        (sort ~cmp:sort_by_decreasing_timeout unique_raws) in
 
       (* Build a single union over policies for each distinct action *)
       (* if we get dup packets, make certain || isn't getting compiled to bag union in netcore *)
