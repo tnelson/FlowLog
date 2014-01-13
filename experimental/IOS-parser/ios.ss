@@ -65,8 +65,8 @@
 (provide static-route-gateway%)
 (provide static-route-interface%)
 (provide set-action<%>)
-(provide next-hop-gateway%)
-(provide next-hop-interface%)
+(provide nexthop-gateway%)
+(provide nexthop-interface%)
 (provide route-map%)
 (provide neighbor<%>)
 (provide neighbor%)
@@ -529,24 +529,24 @@
              '(p new)]
             
             [(equal? rule-type 'encrypt)              
-             '(next-hop)]
+             '(nexthop)]
             
             ; Decision "forward" means the destination is directly attached.
             ; Decision "route" means it must pass through another router
             ;   (and then networkswitching must be consulted)
             
             ;;;;;;;;;;;;;;;;
-            ; routing: packet ---> next-hop or exit-interface.
+            ; routing: packet ---> nexthop or exit-interface.
             ; types are from cisco language constructs
                         
             ; Static routes are decided on the basis of the destination address only.
              [(equal? rule-type 'staticroute)
-              '(p new next-hop)]            
+              '(p new nexthop)]            
                         
             ; Policy routes, however, need more:
              [(or (equal? rule-type 'defaultpolicyroute)
                   (equal? rule-type 'policyroute))
-              '(p new next-hop)]
+              '(p new nexthop)]
              
             
             
@@ -558,10 +558,10 @@
             
             
             ;;;;;;;;;;;;;;;;
-            ; switching: next-hop, packet ---> exit-interface
-            ; Local: next-hop is the destination (OUT, not necessarily IN?)
+            ; switching: nexthop, packet ---> exit-interface
+            ; Local: nexthop is the destination (OUT, not necessarily IN?)
             ;    ^^^ This means that the localswitching policy is applied before any routing.
-            ; Network: next-hop is just an address. 
+            ; Network: nexthop is just an address. 
             
             [(or (equal? rule-type 'networkswitching) 
                  (equal? rule-type 'localswitching))
@@ -2440,7 +2440,7 @@
 (define static-route-gateway%
   (class* abstract-static-route% (static-route<%>)
     (init line-number)
-    (init-field dest-addr-in next-hop)
+    (init-field dest-addr-in nexthop)
     (super-make-object line-number)
     
     (inherit name)
@@ -2454,7 +2454,7 @@
          'route
          `(,@additional-conditions
            (= ,dest-addr-in dest-addr-in)
-           (= ,next-hop next-hop))
+           (= ,nexthop nexthop))
          'staticroute)
        (make-object rule%
          (name hostname "drop")
@@ -2469,7 +2469,7 @@
 (define static-route-interface%
   (class* abstract-static-route% (static-route<%>)
     (init line-number)
-    (init-field dest-addr-in next-hop)
+    (init-field dest-addr-in nexthop)
     (super-make-object line-number)
     
     (inherit name)
@@ -2483,7 +2483,7 @@
          'forward
          `(,@additional-conditions
            (= ,dest-addr-in dest-addr-in)
-           (portAlias ,(wrapq hostname) ,next-hop new.locPt))
+           (portAlias ,(wrapq hostname) ,(wrapq nexthop) new.locPt))
          'staticroute)
        (make-object rule%
          (name hostname "drop")
@@ -2499,7 +2499,7 @@
   (make-object rule%
     (string->symbol (string-append (symbol->string (send hostname name)) "-default-route"))
     'pass
-    `((routeralias ,(wrapq hostname) p.locSw))
+    `((routerAlias ,(wrapq hostname) p.locSw))
     rule-type))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -2511,7 +2511,7 @@
 (define route-map%
   (class* abstract-map% ()
     (init ACL-IDs lengths)
-    (init-field next-hop default-next-hop)
+    (init-field nexthop default-nexthop)
     (super-make-object ACL-IDs lengths)
     
     (inherit-field match-ACL-IDs match-lengths)
@@ -2523,8 +2523,8 @@
       (make-object route-map%
         (append match-ACL-IDs (list ACL-ID))
         match-lengths
-        next-hop
-        default-next-hop))
+        nexthop
+        default-nexthop))
     
     ;; number -> route-map%
     ;;   Inserts a packet length as a match condition for this map
@@ -2532,43 +2532,43 @@
       (make-object route-map%
         match-ACL-IDs
         (append match-lengths (list length))
-        next-hop
-        default-next-hop))
+        nexthop
+        default-nexthop))
     
     ;; set-action<%> -> route-map%
     ;;   Sets the next hop for this route map
-    (define/public (set-next-hop action)
+    (define/public (set-nexthop action)
       (make-object route-map%
         match-ACL-IDs
         match-lengths
         action
-        default-next-hop))
+        default-nexthop))
     
     ;; set-action<%> -> route-map%
     ;;   Sets the default next hop for this route map
-    (define/public (set-default-next-hop action)
+    (define/public (set-default-nexthop action)
       (make-object route-map%
         match-ACL-IDs
         match-lengths
-        next-hop
+        nexthop
         action))
     
     ;; symbol symbol (hashtable symbol ACL%) (listof (listof symbol)) -> (listof rule%)
     ;;   Returns a list of the routing rules that this map contains
     (define/public (routing-rules hostname interf ACLs additional-conditions rule-type)
-      (send next-hop rules (match-rules hostname interf ACLs additional-conditions rule-type) rule-type))
+      (send nexthop rules (match-rules hostname interf ACLs additional-conditions rule-type) rule-type))
     
     ;; symbol symbol (hashtable symbol ACL%) (listof (listof symbol)) -> (listof rule%)
     ;;   Returns a list of the default routing rules that this map contains
     (define/public (default-routing-rules hostname interf ACLs additional-conditions)
-      (send default-next-hop rules (match-rules hostname interf ACLs additional-conditions 'defaultpolicyroute)))
+      (send default-nexthop rules (match-rules hostname interf ACLs additional-conditions 'defaultpolicyroute)))
     ))
 
-;; next-hop-gateway% : number address boolean
+;; nexthop-gateway% : number address boolean
 ;;   Represents the next hop address in a route map
-(define next-hop-gateway%
+(define nexthop-gateway%
   (class* object% (set-action<%>)
-    (init-field line-no next-hop)
+    (init-field line-no nexthop)
     (super-make-object)
     
     ;; (listof rule%) -> (listof rule%)
@@ -2583,7 +2583,7 @@
                      (if (eqv? (get-field decision match-rule) 'permit)
                          'route
                          'pass)
-                     `((= ,next-hop next-hop))
+                     `((= ,nexthop nexthop))
                      rule-type)
                (send match-rule
                      augment/replace-decision
@@ -2602,11 +2602,11 @@
                                          (string-append "-" suffix)))))
     ))
 
-;; next-hop-interface : number symbol boolean
+;; nexthop-interface : number symbol boolean
 ;;   Represents the next hop interface in a route map
-(define next-hop-interface%
+(define nexthop-interface%
   (class* object% (set-action<%>)
-    (init-field line-no next-hop)
+    (init-field line-no nexthop)
     (super-make-object)
     
     ;; (listof rule%) -> (listof rule%)
@@ -2622,10 +2622,10 @@
                          'forward
                          'pass)
                      (if (eqv? (get-field decision match-rule) 'permit)
-                         `((portAlias new.locSw ,next-hop new.locPt)
+                         `((portAlias new.locSw ,(wrapq nexthop) new.locPt)
                            ; dest-addr-in is the middle-of-router address in the context of this policy
-                           (= next-hop dest-addr-in))
-                         `((portAlias new.locSw ,next-hop new.locpt)))
+                           (= nexthop dest-addr-in))
+                         `((portAlias new.locSw ,(wrapq nexthop) new.locpt)))
                      'policyroute)
                (send match-rule
                      augment/replace-decision
@@ -2693,7 +2693,7 @@
                                        (number->string line-no)))
         'Advertise
         `(,@conditions
-          (=,address next-hop))
+          (=,address nexthop))
         'encrypt))
     ))
 
@@ -2718,7 +2718,7 @@
         (name hostname)
         'encrypt
         `(,@conditions
-          (= ,address next-hop))
+          (= ,address nexthop))
         'encrypt))
     ))
 
@@ -2800,6 +2800,12 @@
                 crypto-maps
                 default-ACL-permit)
     (super-make-object)
+    
+    (define/public (get-hostname)
+      hostname)
+    
+    (define/public (get-interfaces)
+      interfaces)
     
     ;; hostname% -> IOS-config%
     (define/public (set-hostname name)
@@ -3093,7 +3099,7 @@
     
     ;; symbol set-action<%> -> IOS-config%
     ;;   Sets the next hop for a route map
-    (define/public (set-route-map-next-hop name sequence-num action)
+    (define/public (set-route-map-nexthop name sequence-num action)
       (let* [(map-set (hash-ref route-maps name make-empty-map-set))
              (route-map (send map-set get-map/default sequence-num default-route-map))]
         (make-object IOS-config%
@@ -3109,7 +3115,7 @@
                           insert-map
                           sequence-num
                           (send route-map
-                                set-next-hop
+                                set-nexthop
                                 action)))
           networks
           neighbors
@@ -3119,7 +3125,7 @@
     
     ;; symbol set-action<%> -> IOS-config%
     ;;   Sets the default next hop for a route map
-    (define/public (set-route-map-default-next-hop name sequence-num action)
+    (define/public (set-route-map-default-nexthop name sequence-num action)
       (let* [(map-set (hash-ref route-maps name make-empty-map-set))
              (route-map (send map-set get-map/default sequence-num default-route-map))]
         (make-object IOS-config%
@@ -3135,7 +3141,7 @@
                           insert-map
                           sequence-num
                           (send route-map
-                                set-default-next-hop
+                                set-default-nexthop
                                 action)))
           networks
           neighbors
@@ -3401,7 +3407,7 @@
                                                     "-primary"))
                      'forward
                      `((routerAlias ,(wrapq hostname) p.locSw)
-                       (= ,(get-field primary-network interf) next-hop)
+                       (= ,(get-field primary-network interf) nexthop)
                        ; dest-addr-in is the middle-of-router address in the context of this policy                                   
                        (portAlias ,(wrapq hostname) ,(wrapq interf) new.locPt))
                      'localswitching)
@@ -3415,7 +3421,7 @@
                                                     "-drop-p"))
                      'drop
                      `((routerAlias ,(wrapq hostname) p.locSw)
-                       (= ,(get-field primary-network interf) next-hop))
+                       (= ,(get-field primary-network interf) nexthop))
                      'localswitching))))                    
               (hash-filter interfaces (λ (name interf)
                                         (get-field primary-address interf))))
@@ -3432,9 +3438,9 @@
                      'forward
                      `((routerAlias ,(wrapq hostname) p.locSw)
                        ; dest-addr-in is the middle-of-router address in the context of this policy
-                       ;(= next-hop dest-addr-in)
+                       ;(= nexthop dest-addr-in)
                        ;(,(get-field secondary-network interf) dest-addr-in)
-                       (= ,(get-field secondary-network interf) next-hop)
+                       (= ,(get-field secondary-network interf) nexthop)
                        (portAlias ,(wrapq hostname) ,(wrapq interf) new.locPt))
                      'localswitching)
                    
@@ -3445,7 +3451,7 @@
                                                     "-drop-s"))
                      'drop
                      `((routerAlias ,(wrapq hostname) p.locSw)
-                       (= ,(get-field secondary-network interf) next-hop))
+                       (= ,(get-field secondary-network interf) nexthop))
                      'localswitching)
                    )))
               (hash-filter interfaces (λ (name interf)
@@ -3466,7 +3472,7 @@
                                                  "-primary"))
                   'forward
                   `((routerAlias ,(wrapq hostname) p.locSw)
-                    (= ,(get-field primary-network interf) next-hop)
+                    (= ,(get-field primary-network interf) nexthop)
                     (portAlias ,(wrapq hostname) ,(wrapq interf) new.locpt))
                   'networkswitching)))
             (hash-filter interfaces (λ (name interf)
@@ -3481,7 +3487,7 @@
                                                  "-secondary"))
                   'forward
                   `((routerAlias ,(wrapq hostname) p.locSw)
-                    (= ,(get-field secondary-network interf) next-hop)
+                    (= ,(get-field secondary-network interf) nexthop)
                     (portAlias ,(wrapq hostname) ,(wrapq interf) new.locPt))
                   'networkswitching)))
             (hash-filter interfaces (λ (name interf)

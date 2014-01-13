@@ -1303,49 +1303,49 @@
 ;; number symbol number (listof any) IOS-config% -> IOS-config%
 (define (parse-route-map-set-default-interface line name sequence-num line-tokens config)
   (send config
-        set-route-map-default-next-hop
+        set-route-map-default-nexthop
         name
         sequence-num
-        (make-object next-hop-interface% line (first line-tokens))))
+        (make-object nexthop-interface% line (first line-tokens))))
 
 ;; number symbol number (listof any) IOS-config% -> IOS-config%
 (define (parse-route-map-set-IP line name sequence-num line-tokens config)
   (case (first line-tokens)
     [(default) (parse-route-map-set-IP-default line name sequence-num (rest line-tokens) config)]
-    [(next-hop) (parse-route-map-set-IP-next-hop line name sequence-num (rest line-tokens) config)]
-    [else (warning-unsupported line (first line-tokens) '(default next-hop))
+    [(nexthop) (parse-route-map-set-IP-nexthop line name sequence-num (rest line-tokens) config)]
+    [else (warning-unsupported line (first line-tokens) '(default nexthop))
                       config]))
 
 ;; number symbol number (listof any) IOS-config% -> IOS-config%
 (define (parse-route-map-set-IP-default line name sequence-num line-tokens config)
   (case (first line-tokens)
-    [(next-hop) (parse-route-map-set-IP-default-next-hop line name sequence-num (rest line-tokens) config)]
-    [else (warning-unsupported line (first line-tokens) '(next-hop))
+    [(nexthop) (parse-route-map-set-IP-default-nexthop line name sequence-num (rest line-tokens) config)]
+    [else (warning-unsupported line (first line-tokens) '(nexthop))
                       config]))
 
 ;; number symbol number (listof any) IOS-config% -> IOS-config%
-(define (parse-route-map-set-IP-default-next-hop line name sequence-num line-tokens config)
+(define (parse-route-map-set-IP-default-nexthop line name sequence-num line-tokens config)
   (send config
-        set-route-map-default-next-hop
+        set-route-map-default-nexthop
         name
         sequence-num
-        (make-object next-hop-gateway% line (make-object host-address% (first line-tokens)))))
+        (make-object nexthop-gateway% line (make-object host-address% (first line-tokens)))))
 
 ;; number symbol number (listof any) IOS-config% -> IOS-config%
-(define (parse-route-map-set-IP-next-hop line name sequence-num line-tokens config)
+(define (parse-route-map-set-IP-nexthop line name sequence-num line-tokens config)
   (send config
-        set-route-map-next-hop
+        set-route-map-nexthop
         name
         sequence-num
-        (make-object next-hop-gateway% line (make-object host-address% (first line-tokens)))))
+        (make-object nexthop-gateway% line (make-object host-address% (first line-tokens)))))
 
 ;; number symbol number (listof any) IOS-config% -> IOS-config%
 (define (parse-route-map-set-interface line name sequence-num line-tokens config)
   (send config
-        set-route-map-next-hop
+        set-route-map-nexthop
         name
         sequence-num
-        (make-object next-hop-interface% line (first line-tokens))))
+        (make-object nexthop-interface% line (first line-tokens))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Border Gateway Protocol
@@ -1399,7 +1399,7 @@
   (case (first line-tokens)
     [(isakmp) (parse-crypto-isakmp (line-number input) (rest line-tokens) config)]
     [(map) (parse-crypto-map (rest line-tokens) input config)]
-    [else (warning-unsupported (line-number input) (first line-tokens) '(default next-hop))
+    [else (warning-unsupported (line-number input) (first line-tokens) '(default nexthop))
                       config]))
 
 ;; number (listof any) IOS-config% -> IOS-config%

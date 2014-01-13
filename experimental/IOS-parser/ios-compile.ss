@@ -88,10 +88,31 @@
     (define defaultpolicyroute-route (assoc2 'route default-policy-route))
     (define defaultpolicyroute-pass (assoc2 'pass default-policy-route))    
       
-    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    ; Flatten rule-sets into one forward block
-            
-    (define flattened-forward
+    
+    ;;;;;;;;;;;;; Get next-hop ;;;;;;;;;;;;;;
+    ; IN: p[fields]
+    ; OUT: next-hop [existential variable]
+    ; policyroute-route || pr-pass and sr-route || pr-pass and sr-pass and defpol-route 
+    ; since these policies were first-applicable, decorrelation within pols is already done
+    (define next-hop-fragment 
+      `(or ,@policyroute-route
+           (and (or ,@policyroute-pass)
+                (or ,@staticroute-route))
+           (and (or ,@policyroute-pass)
+                (or ,@staticroute-pass)
+                (or ,@defaultpolicyroute-route))))
+    ; Caveat: these will use flat router-names 
+    ; Caveat: these will use flat interface names
+    ; NOTE: We DO NOT SUPPORT routes that use an interface-name instead of a next-hop. 
+    ;       Thus everything needs a next-hop or will be dropped
+    
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    ; For now, don't use NetworkSwitching or LocalSwitching.
+    ; Instead, just feed the resulting program tuples in the subnets table.
+    
+   
+    
+   #|(define flattened-forward
       `(and 
         ; Pass ACLs (in and out)
         (or ,@inboundacl) 
@@ -119,8 +140,17 @@
                                        ; No final option here in actual program.
                                        ; If no satisfying new, then nothing to do.
                                        )))))))))
+    |#
+;    (pretty-display next-hop-fragment)
     
-    (pretty-display flattened-forward)
+    (define (extract-ifdata config)      
+      (define hostname (send config get-hostname))
+      (define interfaces (send config get-interfaces))
+      (pretty-display hostname)
+      (pretty-display interfaces)
+      )
+    
+    (map extract-ifdata configurations)
     
     ; TODO: On what? packet(p) won't give the nw fields!
     ; and ippacket won't give the ports. 
@@ -131,20 +161,11 @@
     ; TODO: flags? no support in flowlog this iteration.
     
     ; FLOWLOG:
-    (store (string-append "TABLE nat(ipaddr, tpport, tpport);\n\n"
-                          
-                          "ON ip_packet(p): DO forward(new) WHERE \n" 
-                          (sexpr-to-flowlog flattened-forward)
+    (store (string-append "NEXT-HOP FRAGMENT: \n\n"
+                          (sexpr-to-flowlog next-hop-fragment)
                           ";\n\n"
                           
-                          
-                          ;; TODO: but this applies only for overload, right? not pool.
-                          ;; pool will need different handling.
-                          "INSERT (p.nwSrc, p.tpSrc, newpt) INTO nat WHERE\n"
-                          "NOT nat(p.nwSrc, p.tpSrc, ANY) AND internalNATPort(p.locSw, p.locPt)\n"
-                          ;; TODO
-                          " [TODO: increment, set newpt etc. same as in existing?]"
-                          ";\n")
+                        )
            (make-path root-path "IOS.flg"))        
     
     ; For debugging purposes:
@@ -173,15 +194,28 @@
 
 (require racket/string)
 
-(define (sexpr-to-flowlog sexpr) 
-  (display "sexpr-to-flowlog >>>")
-  (pretty-display sexpr)
+(define (simplify-sexpr sexpr)
   (match sexpr    
-    ; concatenate strings for each arg, use "OR" as separator
-    [`(or ,args ...) (string-append "( " (string-join (map sexpr-to-flowlog (remove-duplicates args)) " \nOR\n ") " )")]
-    [`(and ,args ...) (string-append "( " (string-join (map sexpr-to-flowlog (remove-duplicates args)) " AND ")" )")]
-    [`(not ,arg) (string-append "NOT " (sexpr-to-flowlog arg))]
-    [`(RULE ,linenum ,decision ,varargs ,pred) (string-append "\n// " (symbol->string linenum) "\n" (sexpr-to-flowlog pred))]
+    [`(or ,args ...)
+     (define newargs (remove-duplicates (filter (lambda (a) (not (equal? a 'false))) (map simplify-sexpr args))))
+     (cond [(member 'true newargs) 'true]
+           [(empty? newargs) 'false]
+           [(equal? (length newargs) 1) (first newargs)]
+           [else `(or ,@newargs)])]
+    [`(and ,args ...) 
+     (define newargs (remove-duplicates (filter (lambda (a) (not (equal? a 'true))) (map simplify-sexpr args))))
+     (cond [(member 'false newargs) 'false]
+           [(empty? newargs) 'true]
+           [(equal? (length newargs) 1) (first newargs)]
+           [else `(and ,@newargs)])]
+    [`(not ,arg) 
+     (define newarg (simplify-sexpr arg))
+     (match newarg 
+       [`(not ,arg2) arg2]
+       [x `(not ,x)])]
+    [`(RULE ,linenum ,decision ,varargs ,pred) 
+     (define newpred (simplify-sexpr pred))     
+     `(RULE ,linenum ,decision ,varargs ,newpred)]
     ; equality or IN:
     [`(= ,arg1 ,arg2)      
      ; The IOS compiler produces "empty" assertions sometimes. deal with them
@@ -189,19 +223,13 @@
                 (equal? arg2 'IPAddress)
                 (equal? arg1 'Port)
                 (equal? arg2 'Port))
-            "true"]
-           [else
-            (define s1 (sexpr-to-flowlog arg1))
-            (define s2 (sexpr-to-flowlog arg2))
-            (if (regexp-match #rx"^[0-9\\.]+/" s1)
-                (string-append s2 " IN " s1)
-                (string-append "(" s1 " = " s2 ")"))])]    
-    ; table reference
-    ; (this needs to come after concrete keywords like RULE, and, =, etc.)
+            'true]
+           [else sexpr])]   
+        
     [`(,(? symbol? predname) ,args ...)      
-     (string-append (symbol->string predname) "( " (string-join (map sexpr-to-flowlog args) ", ")" )")] 
+     sexpr] 
     ; implicit and:
-    [(list args ...) (sexpr-to-flowlog `(and ,@args))]    
+    [(list args ...) (simplify-sexpr `(and ,@args))]    
     [(? string? x) x]
     [(? symbol? x) 
      ; Midway I realized that we could just turn "src-addr-in"
@@ -214,8 +242,34 @@
            [(equal? x 'src-addr-out) "new.nwSrc"]
            [(equal? x 'src-port-out) "new.tpSrc"]
            [(equal? x 'dest-addr-out) "new.nwDst"]
-           [(equal? x 'dest-port-out) "new.tpDst"]
-           
+           [(equal? x 'dest-port-out) "new.tpDst"]           
            [else (symbol->string x)])]    
+    [x (pretty-display x) (raise "error with simplify-sexpr")]))
+
+(define (sexpr-to-flowlog sexpr)
+  (sexpr-to-flowlog-helper (simplify-sexpr sexpr)))
+
+(define (sexpr-to-flowlog-helper simplified)   
+  (display "sexpr-to-flowlog >>>")
+  (pretty-display simplified)
+  (match simplified    
+    ; concatenate strings for each arg, use "OR" as separator    
+    [`(or ,args ...) (string-append "( " (string-join (map sexpr-to-flowlog (remove-duplicates args)) " \nOR\n ") " )")]
+    [`(and ,args ...) (string-append "( " (string-join (map sexpr-to-flowlog (remove-duplicates args)) " AND ")" )")]
+    [`(not ,arg) (string-append "NOT " (sexpr-to-flowlog arg))]
+    [`(RULE ,linenum ,decision ,varargs ,pred) (string-append "\n// " (symbol->string linenum) "\n" (sexpr-to-flowlog pred))]
+    ; equality or IN:
+    [`(= ,arg1 ,arg2)      
+     (define s1 (sexpr-to-flowlog arg1))
+     (define s2 (sexpr-to-flowlog arg2))
+     (if (regexp-match #rx"^[0-9\\.]+/" s1)
+         (string-append s2 " IN " s1)
+         (string-append "(" s1 " = " s2 ")"))]    
+    ; table reference
+    ; (this needs to come after concrete keywords like RULE, and, =, etc.)
+    [`(,(? symbol? predname) ,args ...)      
+     (string-append (symbol->string predname) "( " (string-join (map sexpr-to-flowlog args) ", ")" )")] 
+    [(? string? x) x]
+    [(? symbol? x) (symbol->string x)]    
     [x (pretty-display x) (raise "error with sexpr-to-flowlog")]))
 
