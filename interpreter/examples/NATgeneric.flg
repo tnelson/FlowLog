@@ -9,6 +9,7 @@
  *  - handle ICMP echo based on ICMP Query's "Identifier" field
  *    see: http://tools.ietf.org/html/rfc3022 ("Traditional NAT")
  *         http://tools.ietf.org/html/rfc5508 ("NAT for ICMP")
+ *  - how can we do UDP and TCP blocks without copy and paste?
  *
  */
 
@@ -50,24 +51,27 @@ TABLE reusept(ipaddr, int, int);
 ON tcp_packet(pkt) WHERE ptassign(0x6, pkt.nwSrc, pkt.tpSrc, ip, pt):
   DO forward(new) WHERE
     natconfig(pkt.locSw, pkt.locPt, new.locPt, ip) AND
-    new.nwSrc = ip AND new.tpSrc = pt;
+    new.nwSrc = ip AND new.tpSrc = pt
+    TIMEOUT 120;
 
-// TODO(adf): can we do this without copy-and-paste??
 ON udp_packet(pkt) WHERE ptassign(0x11, pkt.nwSrc, pkt.tpSrc, ip, pt):
   DO forward(new) WHERE
     natconfig(pkt.locSw, pkt.locPt, new.locPt, ip) AND
-    new.nwSrc = ip AND new.tpSrc = pt;
+    new.nwSrc = ip AND new.tpSrc = pt
+    TIMEOUT 120;
 
 // Returning traffic
 ON tcp_packet(pkt) WHERE ptassign(0x6, ip, pt, pkt.nwDst, pkt.tpDst):
   DO forward(new) WHERE
     natconfig(pkt.locSw, new.locPt, pkt.locPt, pkt.nwDst) AND
-    new.nwDst = ip AND new.tpDst = pt;
+    new.nwDst = ip AND new.tpDst = pt
+    TIMEOUT 120;
 
 ON udp_packet(pkt) WHERE ptassign(0x11, ip, pt, pkt.nwDst, pkt.tpDst):
   DO forward(new) WHERE
     natconfig(pkt.locSw, new.locPt, pkt.locPt, pkt.nwDst) AND
-    new.nwDst = ip AND new.tpDst = pt;
+    new.nwDst = ip AND new.tpDst = pt
+    TIMEOUT 120;
 
 /*******************************************************************************
  *
@@ -85,7 +89,8 @@ ON tcp_packet(pkt) WHERE not ptassign(0x6, pkt.nwSrc, pkt.tpSrc, ANY, ANY) AND
   DO forward(new) WHERE
     new.locPt = publicLocPt AND
     new.nwSrc = publicIP AND
-    new.tpSrc = publicPt;
+    new.tpSrc = publicPt
+    TIMEOUT 120;
 
   DELETE (publicIP, 0x6, ANY) FROM seqpt;
 
@@ -94,8 +99,6 @@ ON tcp_packet(pkt) WHERE not ptassign(0x6, pkt.nwSrc, pkt.tpSrc, ANY, ANY) AND
   INSERT (0x6, pkt.nwSrc, pkt.tpSrc, publicIP, publicPt) INTO ptassign;
 
 
-
-// TODO(adf): any way to do this without the copy-and-paste??
 ON udp_packet(pkt) WHERE not ptassign(0x11, pkt.nwSrc, pkt.tpSrc, ANY, ANY) AND
                          natconfig(pkt.locSw, pkt.locPt, publicLocPt, publicIP) AND
                          seqpt(publicIP, 0x11, x) AND add(x, 1, publicPt):
@@ -103,7 +106,8 @@ ON udp_packet(pkt) WHERE not ptassign(0x11, pkt.nwSrc, pkt.tpSrc, ANY, ANY) AND
   DO forward(new) WHERE
     new.locPt = publicLocPt AND
     new.nwSrc = publicIP AND
-    new.tpSrc = publicPt;
+    new.tpSrc = publicPt
+    TIMEOUT 120;
 
   DELETE (publicIP, 0x11, ANY) FROM seqpt;
 
@@ -121,7 +125,9 @@ ON udp_packet(pkt) WHERE not ptassign(0x11, pkt.nwSrc, pkt.tpSrc, ANY, ANY) AND
 
 // Outgoing direction -- flow match will have a private IP and private port as
 // the source pair
-ON flow_removed(fr) WHERE natconfig(fr.sw, fr.inPort, ANY, publicIP):
+ON flow_removed(fr) WHERE natconfig(fr.sw, fr.inPort, ANY, publicIP) and
+                          ptassign(fr.nwProto, fr.nwSrcAddr, fr.tpSrc, publicIP, publicPt) and
+                          fr.reason = "IdleTimeout":
 
   DELETE (fr.nwProto, fr.nwSrcAddr, fr.tpSrc, publicIP, publicPt) FROM ptassign;
 
@@ -129,7 +135,9 @@ ON flow_removed(fr) WHERE natconfig(fr.sw, fr.inPort, ANY, publicIP):
 
 // Returning direction -- flow match will have a NAT's public IP and port as
 // the destination pair
-ON flow_removed(fr) WHERE natconfig(fr.sw, ANY, fr.inPort, fr.nwDstAddr):
+ON flow_removed(fr) WHERE natconfig(fr.sw, ANY, fr.inPort, fr.nwDstAddr) and
+                          ptassign(fr.nwProto, fr.nwSrcAddr, fr.tpSrc, publicIP, publicPt) and
+                          fr.reason = "IdleTimeout":
 
   DELETE (fr.nwProto, ANY, ANY, fr.nwDstAddr, fr.tpDst) FROM ptassign;
 
