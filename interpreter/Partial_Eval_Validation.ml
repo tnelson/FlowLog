@@ -8,6 +8,7 @@ open Flowlog_Helpers
 open ExtList.List
 open Printf
 
+exception InvalidINUse of formula;;
 exception UsesUncompilableBuiltIns of formula;;
 exception IllegalFieldModification of formula;;
 exception IllegalAssignmentViaEquals of formula;;
@@ -41,7 +42,7 @@ let rec forbidden_assignment_check (newpkt: string) (f: formula) (innot: bool): 
     let check_legal_negation (t1: term) (t2: term): unit =
       let dangerous = (match (t1, t2) with
           | (TField(v1, f1), TField(v2, f2)) ->
-            f1 <> "locpt" || f2 <> "locpt"
+            (f1 <> "locpt" || f2 <> "locpt")
           | (TField(v1, f1), TConst(cstr)) -> v1 = newpkt
           | _ -> false) in
       (*(printf "check_legal_negation: %s %s %b %b\n%!" (string_of_term t1) (string_of_term t2) innot dangerous);*)
@@ -83,8 +84,12 @@ let rec forbidden_assignment_check (newpkt: string) (f: formula) (innot: bool): 
     | FNot(f) -> forbidden_assignment_check newpkt f (not innot);
 
     | FIn(t,_,_) ->
-      check_legal_negation t t;
+      (* No need to check for legal negation *)
       check_legal_pkt_fields t;
+      (* But need to disallow "new" in range. *)
+      (match t with
+        | TField(tv, tf) when tv = newpkt -> raise (InvalidINUse f)
+        | _ -> ());
 
     | FEquals(t1, t2) ->
         (* ALLOWED:
