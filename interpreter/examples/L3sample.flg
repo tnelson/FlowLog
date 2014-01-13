@@ -25,9 +25,11 @@ ON startup(ev):
 
   // Config for Directly-attached Subnets
 
+  // remember: ports 1 and 2 are reserved for NAT (at the moment)
+
   // subnets(addr,  mask, gw ip,    gw mac,            locSw,            locpt, trSw)
-  INSERT (10.0.1.0, 24,   10.0.1.1, ca:fe:ca:fe:00:01, 0x1000000000000001, 1, 0x2000000000000001) INTO subnets;
-  INSERT (10.0.2.0, 24,   10.0.2.1, ca:fe:ca:fe:00:02, 0x1000000000000001, 2, 0x2000000000000002) INTO subnets;
+  INSERT (10.0.1.0, 24,   10.0.1.1, ca:fe:ca:fe:00:01, 0x1000000000000001, 3, 0x2000000000000001) INTO subnets;
+  INSERT (10.0.2.0, 24,   10.0.2.1, ca:fe:ca:fe:00:02, 0x1000000000000001, 4, 0x2000000000000002) INTO subnets;
 
   // for ARP cache. TODO(adf): should be derived from above automatically!
   INSERT (10.0.1.1, ca:fe:ca:fe:00:01) INTO cached; // 10.0.1.1/24 gw mac addr
@@ -37,7 +39,20 @@ ON startup(ev):
 
   // TODO(adf): should not advertise this subnet, probably. maybe break out an "interfaces" table?
   // then, local subnets will be those where nexthop is in "interfaces"
-  INSERT (10.0.10.0, 30, 10.0.10.1, be:ef:be:ef:00:00, 0x1000000000000001, 3, 0x2000000000000000) INTO subnets;
-  INSERT (10.0.10.2, be:ef:be:ef:00:01) INTO cached; // BGP peer TODO(adf): should get from ARP!
+  INSERT (192.168.1.0, 24, 192.168.1.2, be:ef:be:ef:00:00, 0x1000000000000001, 5, 0x2000000000000000) INTO subnets;
+  INSERT (192.168.1.1, be:ef:be:ef:00:01) INTO cached; // BGP peer TODO(adf): should get from ARP!
 
-  INSERT (192.168.0.0, 16, 10.0.10.2) INTO routes;
+  INSERT (8.0.0.0, 8, 192.168.1.1) INTO routes;
+  INSERT (4.4.0.0, 16, 192.168.1.1) INTO routes;
+
+
+  // Config for NAT
+  // NAT has external-facing IP 192.168.1.10
+
+  INSERT (0x4000000000000001, 1, 2, 192.168.1.10) INTO natconfig;
+
+  // TODO(adf): NATgeneric.flg should have these automatically based on natconfig
+  INSERT (192.168.1.10, 0x6, 10000) INTO seqpt;
+  INSERT (192.168.1.10, 0x11, 10000) INTO seqpt;
+
+  INSERT (192.168.1.10, ca:fe:ca:fe:00:00) INTO cached;

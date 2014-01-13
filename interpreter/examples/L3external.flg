@@ -28,7 +28,11 @@ TABLE routes(ipaddr, int, ipaddr);
  *
  * L3 routing to non-directly attached subnets
  *
+ * TODO(adf): would be great if NAT were not explicitly considered here
+ *
  ******************************************************************************/
+
+// packets destined to outside whose source does NOT need NATing
 
 ON ip_packet(pkt):
   DO forward(new) WHERE
@@ -36,4 +40,20 @@ ON ip_packet(pkt):
     and subnets(nexthop_subnet, nexthop_mask, ANY, new.dlSrc, pkt.locSw, new.locPt, ANY)
     and pkt.nwDst IN addr/mask
     and nexthop IN nexthop_subnet/nexthop_mask
-    and cached(nexthop, new.dlDst); // MAC addr of nexthop IP
+    and cached(nexthop, new.dlDst) // MAC addr of nexthop IP
+
+
+    and needs_nat(needs_nat_subnet, needs_nat_mask)
+    and NOT (pkt.nwSrc IN needs_nat_subnet/needs_nat_mask);
+
+// packets destined to outside whose source says they need NATing
+
+ON ip_packet(pkt):
+  DO forward(new) WHERE
+    routes(addr, mask, nexthop)
+    and pkt.nwDst IN addr/mask
+
+    and needs_nat(needs_nat_subnet, needs_nat_mask)
+    and (pkt.nwSrc IN needs_nat_subnet/needs_nat_mask)
+
+    and new.locPt = 1; // TODO(adf): magic NAT port?

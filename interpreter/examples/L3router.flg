@@ -5,11 +5,12 @@
  *
  * TODO:
  *  - split out an "interfaces" relation which has (ip, mac, locsw, locpt)
+ *  - would be great if NAT were't explicitly included here
  */
 
 INCLUDE "examples/Arp_Cache.flg";
+INCLUDE "examples/NATgeneric.flg";
 INCLUDE "examples/L3external.flg";
-
 
 /*******************************************************************************
  *
@@ -33,12 +34,28 @@ TABLE router_queued(ipaddr);
  *
  * L3 routing to directly attached subnets
  *
+ * Only wrinkle is that we need to send packets to our NAT switch if they need
+ * to be un-NAT'd before processing. L3external.flg contains the rule which
+ * sends to the NAT for packets which need NATing before hitting external.
+ *
  ******************************************************************************/
+
+// TODO(adf): need a table which ties "our" nat to this router
 
 ON ip_packet(pkt):
   DO forward(new) WHERE
     subnets(addr, mask, ANY, new.dlSrc, pkt.locSw, new.locPt, ANY)
-    and pkt.nwDst IN addr/mask;
+    and pkt.nwDst IN addr/mask
+    // exempt packets to the NAT
+    and NOT natconfig(ANY, ANY, ANY, pkt.nwDst);
+
+// on the router, send all NAT-destined traffic to the NAT
+ON ip_packet(pkt):
+  DO forward(new) WHERE
+    natconfig(ANY, ANY, ANY, pkt.nwDst)
+    and subnets(ANY, ANY, ANY, ANY, pkt.locSw, ANY, ANY)
+    and pkt.locPt != 1
+    and new.locPt = 1; // TODO(adf): should be magic NAT port?
 
 /*******************************************************************************
  *

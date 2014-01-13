@@ -35,9 +35,11 @@ ON packet(pkt) WHERE pkt.dlTyp != 0x0806 and // ARP
 
                                                      // TODO(adf): drop 802.1D bridge-local frames
 
+                                                         // TODO(adf): this has GOT to be come a table...
                      pkt.locSw != 0x1000000000000001 and // dpid for our "router"
                      pkt.locSw != 0x2000000000000001 and // dpids for our "translators"
-                     pkt.locSw != 0x2000000000000002:    // dpids for our "translators"
+                     pkt.locSw != 0x2000000000000002 and // dpids for our "translators"
+                     pkt.locSw != 0x4000000000000001:    // dpid for "router$nat"
 
 
   // ***TODO*** Add these restrictions (which only exist for limiting to-controller traffic)

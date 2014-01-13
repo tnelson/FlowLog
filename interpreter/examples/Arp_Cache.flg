@@ -156,7 +156,7 @@ check cachedImmediateReply for 2 but 1 Event, 2 State
  ******************************************************************************/
 
 ON arp_packet(reply) WHERE reply.arp_op = 2 AND
-                              reply.dlSrc != 00:00:ca:fe:ca:fe:
+                           reply.dlSrc != 00:00:ca:fe:ca:fe:
 
   //
   // Learn from replies

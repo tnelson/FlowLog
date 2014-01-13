@@ -51,21 +51,27 @@ class FlowlogDemo(object):
         linkopts = dict(bw=15, delay='2ms', loss=0, use_htb=True)
 
         # Create a network with a two subnets, each attached to the router.
+
+        # first, the router and its NAT
         topo = FlowlogTopo()
-        router = topo.addSwitch('r1', dpid="1000000000000001") # dpid is in hex by default
+        router = topo.addSwitch('r1-router', dpid="1000000000000001") # dpid is in hex by default
+
+        nat = topo.addSwitch('r1-nat', dpid="4000000000000001")
+        topo.addLink(router, nat, **linkopts) # "inside"
+        topo.addLink(router, nat, **linkopts) # "outside"
 
         # Add the dlDst translators for each subnet
 
-        translator[1] = topo.addSwitch('t1', dpid="2000000000000001")
-        translator[2] = topo.addSwitch('t2', dpid="2000000000000002")
+        translator[1] = topo.addSwitch('r1-t1', dpid="2000000000000001")
+        translator[2] = topo.addSwitch('r1-t2', dpid="2000000000000002")
 
         topo.addLink(router, translator[1], **linkopts)
         topo.addLink(router, translator[2], **linkopts)
 
         # Add the root switches for each subnet
 
-        subnet_root[1] = topo.addSwitch('sr1', dpid="3000000000000001")
-        subnet_root[2] = topo.addSwitch('sr2', dpid="3000000000000002")
+        subnet_root[1] = topo.addSwitch('r1-sr1', dpid="3000000000000001")
+        subnet_root[2] = topo.addSwitch('r1-sr2', dpid="3000000000000002")
 
         topo.addLink(translator[1], subnet_root[1],  **linkopts)
         topo.addLink(translator[2], subnet_root[2], **linkopts)
