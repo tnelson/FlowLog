@@ -212,6 +212,9 @@
     (define/public (text)
       (string->symbol (number->dashed-octet host)))
     
+    (define/public (text-address)
+      (number->dashed-octet (address)))
+    
     ;; address<%> -> boolean
     ;;   Returns whether this address<%> equals another address<%>
     (define/public (equals? rhs)
@@ -273,6 +276,12 @@
                                          (number->dashed-octet (address))
                                          "/"
                                          (number->cidr (mask))))))
+    
+    (define/public (text-address)
+      (number->dashed-octet (address)))
+    
+    (define/public (text-mask)
+      (number->cidr (mask)))
     
     ;; address<%> -> boolean
     ;;   Returns whether this address<%> equals another address<%>
@@ -669,6 +678,20 @@
                 policy-route-map-ID
                 crypto-map-ID)
     (super-make-object)
+    
+    (define/public (get-primary-address)
+      primary-address)
+    (define/public (get-primary-network)
+      primary-network)
+    
+    (define/public (get-secondary-address)
+      secondary-address)
+    (define/public (get-secondary-network)
+      secondary-network)
+    
+    (define/public (get-nat-side)
+      NAT-side)
+    
     
     ;; -> symbol
     ;;   Returns the name for this interface

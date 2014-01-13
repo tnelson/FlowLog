@@ -143,14 +143,36 @@
     |#
 ;    (pretty-display next-hop-fragment)
     
-    (define (extract-ifdata config)      
-      (define hostname (send config get-hostname))
+    (define (extract-ifs ifaceid iface)
+      (define name (send iface text))    
+      (define prim-addr-obj (send iface get-primary-address))
+      (define sec-addr-obj (send iface get-secondary-address))
+      (define prim-netw-obj (send iface get-primary-network))
+      (define sec-netw-obj (send iface get-secondary-network))      
+      (define prim-addr (send prim-addr-obj text-address))
+      (define sec-addr (if sec-addr-obj  
+                           (send sec-addr-obj text-address) 
+                           #f))
+      (define prim-netw `(,(send prim-netw-obj text-address),(send prim-netw-obj text-mask)))
+      (define sec-netw (if sec-netw-obj 
+                           `(,(send sec-netw-obj text-address),(send sec-netw-obj text-mask))
+                           #f))
+      
+      (unless (equal? ifaceid name) (error "extract-ifs"))
+      `(,name 
+        ,prim-addr ,prim-netw
+        ,sec-addr ,sec-netw ))
+    
+    (define (extract-hosts config)      
+      (define hostname (send (send config get-hostname) name))
       (define interfaces (send config get-interfaces))
-      (pretty-display hostname)
-      (pretty-display interfaces)
+      (define interface-keys (hash-keys interfaces))
+      (printf "hostname: ~v~n" hostname)     
+      (define interface-defns (hash-map interfaces extract-ifs))
+      (pretty-display interface-defns) 
       )
     
-    (map extract-ifdata configurations)
+    (for-each extract-hosts configurations)
     
     ; TODO: On what? packet(p) won't give the nw fields!
     ; and ippacket won't give the ports. 
@@ -250,8 +272,8 @@
   (sexpr-to-flowlog-helper (simplify-sexpr sexpr)))
 
 (define (sexpr-to-flowlog-helper simplified)   
-  (display "sexpr-to-flowlog >>>")
-  (pretty-display simplified)
+  ;(display "sexpr-to-flowlog >>>")
+  ;(pretty-display simplified)
   (match simplified    
     ; concatenate strings for each arg, use "OR" as separator    
     [`(or ,args ...) (string-append "( " (string-join (map sexpr-to-flowlog (remove-duplicates args)) " \nOR\n ") " )")]
