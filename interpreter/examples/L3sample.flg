@@ -54,7 +54,7 @@ ON startup(ev):
 
   // [policy] which internal subnets need to be nat'd
   INSERT (10.0.1.0, 24) INTO needs_nat;
-  INSERT (10.0.2.0, 24) INTO needs_nat;
+  // INSERT (10.0.2.0, 24) INTO needs_nat; TODO(tn): BUG HERE!!!
 
   // TODO(adf): NATgeneric.flg should have these automatically based on natconfig
   INSERT (192.168.1.10, 0x6, 10000) INTO seqpt;
