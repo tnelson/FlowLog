@@ -50,7 +50,7 @@ class FlowlogDemo(object):
         # 15 Mbps bandwidth and 2 ms delay on each link
         linkopts = dict(bw=15, delay='2ms', loss=0, use_htb=True)
 
-        # Create a network with a two switches, each attached to a router.
+        # Create a network with a two subnets, each attached to the router.
         topo = FlowlogTopo()
         router = topo.addSwitch('r1', dpid="1000000000000001") # dpid is in hex by default
 
