@@ -523,12 +523,14 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: triggered_cl
                                   let (ac2, pp2, actpol2) = tup2 in
                                     (safe_compare_pols actpol1 actpol2) && (smart_compare_preds pp1 pp2)) pre_unique_with_metadata in
 
+
   (*printf "Done creating clause_pas! %d members.\n%!" (length clause_pas);*)
 
-  (*iter (fun (ap, aa) -> write_log (sprintf "!!! %s %s\n%!"
+  (*iter (fun (ac, ap, aa) -> write_log (sprintf "!!! %s ...  %s ... %s \n%!"
                         (NetCore_Pretty.string_of_pred ap)
-                        (NetCore_Pretty.string_of_action aa)) ) clause_pas;
-  iter (fun (ap, aa) -> write_log (sprintf "--- %s %s\n%!"
+                        (NetCore_Pretty.string_of_action ac)
+                        (NetCore_Pretty.string_of_pol aa)) ) clause_aps;
+  (*iter (fun (ap, aa) -> write_log (sprintf "--- %s %s\n%!"*)
                         (NetCore_Pretty.string_of_pred ap)
                         (NetCore_Pretty.string_of_action aa)) ) disj_pas;*)
   let or_of_preds_for_action_pol (apol: pol): pred =
@@ -574,21 +576,21 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: triggered_cl
       let unique_raws = unique ~cmp:safe_compare_pols raws in
         (sort ~cmp:sort_by_decreasing_timeout unique_raws) in
 
+    let per_action_helper (actionpols: pol list): pol =
+      fold_left (fun (actionacc: pol) (acpol: pol) ->
+          let newpred = simplify_netcore_predicate (or_of_preds_for_action_pol acpol) in
+            if newpred = Nothing then actionacc
+            else ITE(newpred, acpol, actionacc))
+         (Action([]))
+         actionpols in
+
       (* Build a single union over policies for each distinct action *)
       (* if we get dup packets, make certain || isn't getting compiled to bag union in netcore *)
       let union_over_ports = fold_left
                 (fun (acc: pol) (aportaction: action) ->
                   (* which metadata combos do we have for this action? *)
                   let actionpols = get_action_pols_for_action aportaction in
-
-                  (*write_log (sprintf "%s\n" (String.concat ",  " (map NetCore_Pretty.string_of_pol actionpols)));*)
-
-                  let ite_chain = fold_left (fun (acc2: pol) (acpol: pol) ->
-                    let newpred = simplify_netcore_predicate (or_of_preds_for_action_pol acpol) in
-                      if newpred = Nothing then acc
-                      else ITE(newpred, acpol, acc2)) (Action([])) actionpols in
-
-                    Union(acc, ite_chain))
+                    Union(acc, per_action_helper actionpols))
                 (Action([]))
                 non_all_actionsused in
 
