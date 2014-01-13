@@ -785,11 +785,11 @@ let get_local_tables_triggered (p: flowlog_program) (sign: bool) (notif: event):
 (* Returns list of names of tables that have been modified *)
 let respond_to_notification (p: flowlog_program) (notif: event): string list =
   try
-      Mutex.lock xsbmutex;
-
       write_log "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<";
       write_log (sprintf "<<< incoming: %s" (string_of_event p notif));
       counter_inc_all := !counter_inc_all + 1;
+
+      Mutex.lock xsbmutex;
 
   (*printf "~~~~ RESPONDING TO NOTIFICATION ABOVE ~~~~~~~~~~~~~~~~~~~\n%!";*)
 
