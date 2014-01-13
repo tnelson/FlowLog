@@ -736,4 +736,3 @@ module PredSet  = Set.Make( struct type t = pred let compare = smart_compare_pre
 
   let string_of_triggered_clause ?(verbose: bool = false) (cl: triggered_clause): string =
     "TRIGGER: "^cl.oldpkt^" "^(string_of_clause cl.clause);;
-

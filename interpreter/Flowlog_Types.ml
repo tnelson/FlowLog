@@ -201,6 +201,22 @@ let equals_if_consistent (report_inconsistency: bool) (t1: term) (t2: term): for
         FFalse
     | _ -> FEquals(t1, t2);;
 
+
+let is_in_ip_range (v: Int32.t) (addr: Int32.t) (mask: int): bool =
+  (* MAXINT (32 bit) *)
+  let nwfield = Int32.of_int (4294967295 lsl (32-mask)) in
+    (Int32.logand v nwfield) = (Int32.logand addr nwfield);;
+
+let in_if_consistent (report_inconsistency: bool) (v: term) (addr: term) (mask: term): formula =
+  match v, addr, mask with
+    | TConst(vval), TConst(addrval), TConst(maskval)
+      when not (is_in_ip_range (Int32.of_string vval) (Int32.of_string addrval) (int_of_string maskval)) ->
+      if report_inconsistency then
+        raise (SubstitutionLedToInconsistency((FIn(v, addr, mask))))
+      else
+        FFalse
+    | _ -> FIn(v, addr, mask);;
+
 (* f[v -> t]
    Substitutions of variables apply to fields of that variable, too. *)
 let rec substitute_term (report_inconsistency: bool) (f: formula) (v: term) (t: term): formula =
@@ -221,7 +237,10 @@ let rec substitute_term (report_inconsistency: bool) (f: formula) (v: term) (t: 
           if st1 = st2 then FTrue
           else equals_if_consistent report_inconsistency st1 st2
         | FIn(t, addr, mask) ->
-            FIn(substitute_term_result t, substitute_term_result addr, substitute_term_result mask)
+            let newt = substitute_term_result t in
+            let newaddr = substitute_term_result addr in
+            let newmask = substitute_term_result mask in
+              in_if_consistent report_inconsistency newt newaddr newmask
         | FAtom(modstr, relstr, argterms) ->
           let newargterms = map (fun arg -> substitute_term_result arg) argterms in
             FAtom(modstr, relstr, newargterms)

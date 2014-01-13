@@ -366,10 +366,10 @@ let handle_all_and_port_together (oldpkt: string) (apred: pred) (acts: action_at
 exception ContradictionInPE of formula * formula;;
 
 (* If there is an FIn(_,_,_) in the top-level conjunction, it may need substitution with equalities produced in PE. *)
-let substitute_ranges (f: formula): formula =
+let substitute_for_join (f: formula): formula =
   try
 
-  if !global_verbose > 5 then printf "substitute_ranges: %s\n%!" (string_of_formula f);
+  if !global_verbose > 5 then printf "substitute_for_join: %s\n%!" (string_of_formula f);
 
   let subfs = conj_to_list f in
   (* After PE, the formula will be a conjunction of equalities, INs, and negated PE fmlas. *)
@@ -385,8 +385,13 @@ let substitute_ranges (f: formula): formula =
                                   | FEquals((TVar(_) as v), (TConst(_) as c))
                                   | FEquals((TConst(_) as c), (TVar(_) as v)) ->
 
-                                    (* TODO: don't believe that we need to search any negated subfmlas for a contradiction
-                                        But here is where we'd do it.*)
+                                    (* why we DO NOT need to check *EQUALITIES* under negated subformulas:
+                                       a contradiction like (x=5 and y=6 and not (x=5 or y=6)
+                                       will be resolved after substitution:
+                                       (5=5 and 6=6 and not (5=5 or 6=6)
+                                       which is a contradiction.
+                                       *INs* buried under negation do need to be handled, but they will be caught
+                                     and turned to FFalse in substitution.  *)
 
                                     (* search any positive equalities for a contradiction to this assignment *)
                                     if (mem_assoc v acc) && (assoc v acc) <> c then
@@ -410,15 +415,16 @@ let substitute_ranges (f: formula): formula =
                                   | _ -> failwith ("unexpected eq fmla:"^(string_of_formula subf))
                                 ) [] eqs in
 
-  (* TODO: we can use this to bootstrap join support. To do so, we need to check for contradictions
-     and include negated-equals that we're currently trapping inside NOT. *)
+  (* above won't be good enough. won't get negated INs and reduce them need to wait until after substitution and do a 2nd pass.
+    wait -- can all this be handled in substitute terms? *)
 
-  (* substitute according to assignments. but don't freak out if result contains a 5=7, since may be part of negated subfmla *)
+  (* substitute according to assignments. but don't freak out if result contains a 5=7, since may be part of negated subfmla
+     But also check for contradictory INs. *)
   let result = substitute_terms ~report_inconsistency:false f assignments in
 
   if !global_verbose > 2 then
   begin
-    printf "--- substitute_ranges ---\n%!";
+    printf "--- substitute_for_join ---\n%!";
     printf "FMLA: %s\n%!" (string_of_formula f);
     iter (fun (v, c) -> (printf "ASSN: %s -> %s\n%!" (string_of_term v) (string_of_term c))) assignments;
     printf "SUBS: %s\n%!" (string_of_formula result);
@@ -435,8 +441,8 @@ let substitute_ranges (f: formula): formula =
    and this reduce the clause to <false>. If the caller wants efficiency, it should pass only packet-triggered clauses. *)
 let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_handler option) (tcl: triggered_clause): (pred * action * srule) list =
     if !global_verbose > 4 then (match callback with
-      | None -> printf "\n--- Packet triggered clause to netcore (FULL COMPILE) on: \n%s\n%!" (string_of_triggered_clause tcl)
-      | Some(_) -> printf "\n--- Packet triggered clause to netcore (~CONTROLLER~) on: \n%s\n%!" (string_of_triggered_clause tcl));
+      | None -> write_log (sprintf "\n--- Packet triggered clause to netcore (FULL COMPILE) on: \n%s\n%!" (string_of_triggered_clause tcl))
+      | Some(_) -> write_log (sprintf "\n--- Packet triggered clause to netcore (~CONTROLLER~) on: \n%s\n%!" (string_of_triggered_clause tcl)));
 
     match tcl.clause.head with
       | FAtom(_, _, headargs) ->
@@ -452,15 +458,21 @@ let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_h
         (* todo: this is pretty inefficient for large numbers of tuples. do better? *)
 
         (*let bodies = disj_to_list (disj_to_top (nnf pebody)) in *)
-        let bodies_before_substitute_ranges = disj_to_list (disj_to_top ~ignore_negation:true pebody) in
+        let bodies_before_substitute_for_join = disj_to_list (disj_to_top ~ignore_negation:true pebody) in
 
-        (*printf "bodies after nnf/disj_to_top = %s\n%!" (String.concat "   \n " (map string_of_formula bodies));*)
+        if !global_verbose > 5 then
+          write_log (sprintf "bodies before substitute_for_join = %s\n%!" (String.concat "   \n " (map string_of_formula bodies_before_substitute_for_join)));
+
         (* anything not the old packet is a RESULT variable.
            Remember that we know this clause is packet-triggered, but
            we have no constraints on what gets produced. Maybe a bunch of
            non-packet variables e.g. +R(x, y, z) ... *)
 
-        let bodies = map substitute_ranges bodies_before_substitute_ranges in
+        let bodies = map substitute_for_join bodies_before_substitute_for_join in
+
+        if !global_verbose > 5 then
+          write_log (sprintf "bodies AFTER substitute_for_join = %s\n%!" (String.concat "   \n " (map string_of_formula bodies)));
+
 
         (*printf "BODIES: %s" (String.concat ",\n" (map string_of_formula bodies));*)
          (*printf "BODIES from PE of single clause: %d\n%!" (length bodies);       *)
