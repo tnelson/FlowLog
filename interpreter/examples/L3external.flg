@@ -53,7 +53,9 @@ ON ip_packet(pkt):
     routes(addr, mask, nexthop)
     and pkt.nwDst IN addr/mask
 
-    and needs_nat(needs_nat_subnet, needs_nat_mask)
+    and subnets(ANY, ANY, ANY, ANY, pkt.locSw, ANY, ANY) // TODO(adf): only apply to routers
+
+    and needs_nat(needs_nat_subnet, needs_nat_mask) // <-- should this be router-specific?
     and (pkt.nwSrc IN needs_nat_subnet/needs_nat_mask)
 
     and new.locPt = 1; // TODO(adf): magic NAT port?

@@ -53,7 +53,7 @@ ON ip_packet(pkt):
 ON ip_packet(pkt):
   DO forward(new) WHERE
     natconfig(ANY, ANY, ANY, pkt.nwDst)
-    and subnets(ANY, ANY, ANY, ANY, pkt.locSw, ANY, ANY)
+    and subnets(ANY, ANY, ANY, ANY, pkt.locSw, ANY, ANY) // TODO(adf): only apply to routers
     and pkt.locPt != 1
     and new.locPt = 1; // TODO(adf): should be magic NAT port?
 
