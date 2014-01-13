@@ -181,6 +181,7 @@ let rec build_unsafe_switch_actions (oldpkt: string) (body: formula): action =
 
     (* IP range forbidden for new packet *)
     | FIn(_,_,_) -> actlist
+    | FNot(FIn(_,_,_)) -> actlist
 
     (* If PE has left a disjunction or negated disjunction (or a standalone negated tuple),
         then it doesn't involve newpkt so ignore this conjunct. *)
