@@ -22,6 +22,11 @@ To use the interpreter, you need:
 
 * The "thrift" package.
 
+* To use our mininet scripts, mininet 2.1.0 or later:
+    http://mininet.org/download/
+
+
+
 -----------------------------
 Legacy notes: 
 
