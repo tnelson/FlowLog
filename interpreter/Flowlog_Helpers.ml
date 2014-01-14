@@ -424,19 +424,22 @@ let atom_to_relname (f: formula): string =
     | FAtom(_, r, _) -> r
     | _ -> failwith "atom_to_relname";;
 
-let rec get_atoms (f: formula): formula list =
+let rec get_atoms_with_sign ?(sign: bool = true) (f: formula): (bool * formula) list =
 	match f with
 		| FTrue -> []
 		| FFalse -> []
     | FIn(_,_,_) -> []
-		| FAtom(modname, relname, tlargs) -> [f]
+		| FAtom(modname, relname, tlargs) -> [(sign, f)]
 		| FEquals(t1, t2) -> []
 		| FAnd(f1, f2) ->
-			(unique (get_atoms f1) @ (get_atoms f2))
+			(unique (get_atoms_with_sign ~sign:sign f1) @ (get_atoms_with_sign ~sign:sign f2))
     | FOr(f1, f2) ->
-      (unique (get_atoms f1) @ (get_atoms f2))
+      (unique (get_atoms_with_sign ~sign:sign f1) @ (get_atoms_with_sign ~sign:sign f2))
 		| FNot(innerf) ->
-			get_atoms innerf;;
+			get_atoms_with_sign ~sign:(not sign) innerf;;
+
+let get_atoms (f: formula): formula list =
+  map (fun (s,a) -> a) (get_atoms_with_sign f);;
 
 let rec get_equalities ?(sign: bool = true) (f: formula): (bool * formula) list =
   match f with
@@ -452,6 +455,19 @@ let rec get_equalities ?(sign: bool = true) (f: formula): (bool * formula) list 
     | FNot(innerf) ->
       get_equalities ~sign:(not sign) innerf;;
 
+let rec get_ins ?(sign: bool = true) (f: formula): (bool * formula) list =
+  match f with
+    | FTrue -> []
+    | FFalse -> []
+    | FAtom(modname, relname, tlargs) -> []
+    | FEquals(t1, t2) -> []
+    | FIn(_,_,_) -> [(sign, f)]
+    | FAnd(f1, f2) ->
+      (unique (get_equalities ~sign:sign f1) @ (get_equalities ~sign:sign f2))
+    | FOr(f1, f2) ->
+      (unique (get_equalities ~sign:sign f1) @ (get_equalities ~sign:sign f2))
+    | FNot(innerf) ->
+      get_equalities ~sign:(not sign) innerf;;
 
 
 
