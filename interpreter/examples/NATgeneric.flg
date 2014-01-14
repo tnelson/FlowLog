@@ -63,7 +63,8 @@ TABLE reusept(ipaddr, int, int);
  ******************************************************************************/
 
 // Outgoing traffic
-ON tcp_packet(pkt) WHERE ptassign(0x6, pkt.nwSrc, pkt.tpSrc, ip, pt):
+ON tcp_packet(pkt) WHERE ptassign(0x6, pkt.nwSrc, pkt.tpSrc, ip, pt) AND
+                         not natconfig(pkt.locSw, ANY, ANY, pkt.nwDst): // <-- when publicPt = privatePt
   DO forward(new) WHERE
     natconfig(pkt.locSw, pkt.locPt, new.locPt, ip) AND
     new.nwSrc = ip AND new.tpSrc = pt
@@ -80,12 +81,14 @@ ON tcp_packet(pkt) WHERE ptassign(0x6, ip, pt, pkt.nwDst, pkt.tpDst):
   DO forward(new) WHERE
     natconfig(pkt.locSw, new.locPt, pkt.locPt, pkt.nwDst) AND
     new.nwDst = ip AND new.tpDst = pt
+    // AND pkt.nwSrc != ip // <-- when publicPt = privatePt  TODO(tn): adding this causes non-proactive compilation
     TIMEOUT 120;
 
 ON udp_packet(pkt) WHERE ptassign(0x11, ip, pt, pkt.nwDst, pkt.tpDst):
   DO forward(new) WHERE
     natconfig(pkt.locSw, new.locPt, pkt.locPt, pkt.nwDst) AND
     new.nwDst = ip AND new.tpDst = pt
+    // AND pkt.nwSrc != ip // <-- when publicPt = privatePt  TODO(tn): adding this causes non-proactive compilation
     TIMEOUT 120;
 
 /*******************************************************************************
@@ -98,7 +101,8 @@ ON udp_packet(pkt) WHERE ptassign(0x11, ip, pt, pkt.nwDst, pkt.tpDst):
  ******************************************************************************/
 
 ON tcp_packet(pkt) WHERE not ptassign(0x6, pkt.nwSrc, pkt.tpSrc, ANY, ANY) AND
-                         natconfig(pkt.locSw, pkt.locPt, publicLocPt, publicIP) AND
+                         natconfig(pkt.locSw, pkt.locPt, publicLocPt, publicIP) AND // <-- when publicPt != privatePt
+                         not natconfig(pkt.locSw, ANY, ANY, pkt.nwDst) AND // <-- when publicPt = privatePt
                          seqpt(publicIP, 0x6, x) AND add(x, 1, publicPt):
 
   DO forward(new) WHERE
@@ -115,7 +119,8 @@ ON tcp_packet(pkt) WHERE not ptassign(0x6, pkt.nwSrc, pkt.tpSrc, ANY, ANY) AND
 
 
 ON udp_packet(pkt) WHERE not ptassign(0x11, pkt.nwSrc, pkt.tpSrc, ANY, ANY) AND
-                         natconfig(pkt.locSw, pkt.locPt, publicLocPt, publicIP) AND
+                         natconfig(pkt.locSw, pkt.locPt, publicLocPt, publicIP) AND // <-- when publicPt != privatePt
+                         not natconfig(pkt.locSw, ANY, ANY, pkt.nwDst) AND // <-- when publicPt = privatePt
                          seqpt(publicIP, 0x11, x) AND add(x, 1, publicPt):
 
   DO forward(new) WHERE
@@ -141,8 +146,8 @@ ON udp_packet(pkt) WHERE not ptassign(0x11, pkt.nwSrc, pkt.tpSrc, ANY, ANY) AND
 // Outgoing direction -- flow match will have a private IP and private port as
 // the source pair
 ON flow_removed(fr) WHERE natconfig(fr.sw, fr.inPort, ANY, publicIP) and
-                          ptassign(fr.nwProto, fr.nwSrcAddr, fr.tpSrc, publicIP, publicPt) and
-                          fr.reason = "IdleTimeout":
+                          ptassign(fr.nwProto, fr.nwSrcAddr, fr.tpSrc, publicIP, publicPt):
+                          // and fr.reason = "IdleTimeout": TODO(tn): doesn't seem to work
 
   DELETE (fr.nwProto, fr.nwSrcAddr, fr.tpSrc, publicIP, publicPt) FROM ptassign;
 
@@ -151,8 +156,8 @@ ON flow_removed(fr) WHERE natconfig(fr.sw, fr.inPort, ANY, publicIP) and
 // Returning direction -- flow match will have a NAT's public IP and port as
 // the destination pair
 ON flow_removed(fr) WHERE natconfig(fr.sw, ANY, fr.inPort, fr.nwDstAddr) and
-                          ptassign(fr.nwProto, fr.nwSrcAddr, fr.tpSrc, publicIP, publicPt) and
-                          fr.reason = "IdleTimeout":
+                          ptassign(fr.nwProto, fr.nwSrcAddr, fr.tpSrc, publicIP, publicPt):
+                          // and fr.reason = "IdleTimeout": TODO(tn): doesn't seem to work
 
   DELETE (fr.nwProto, ANY, ANY, fr.nwDstAddr, fr.tpDst) FROM ptassign;
 

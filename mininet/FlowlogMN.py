@@ -48,7 +48,8 @@ class FlowlogDemo(object):
         num_subnets = 2
         num_hosts_per_subnet = 2
         # 15 Mbps bandwidth and 2 ms delay on each link
-        linkopts = dict(bw=15, delay='2ms', loss=0, use_htb=True)
+        #linkopts = dict(bw=15, delay='2ms', loss=0, use_htb=True) disabled for testing
+        linkopts = dict()
 
         # Create a network with a two subnets, each attached to the router.
 
@@ -57,8 +58,7 @@ class FlowlogDemo(object):
         router = topo.addSwitch('r1-router', dpid="1000000000000001") # dpid is in hex by default
 
         nat = topo.addSwitch('r1-nat', dpid="4000000000000001")
-        topo.addLink(router, nat, **linkopts) # "inside"
-        topo.addLink(router, nat, **linkopts) # "outside"
+        topo.addLink(router, nat, **linkopts)
 
         # Add the dlDst translators for each subnet
 
@@ -93,6 +93,11 @@ class FlowlogDemo(object):
                                 cpu=0.4/(num_subnets * num_hosts_per_subnet))
             topo.addLink(host, switch[s], **linkopts)
 
+        # Finally, add the host which represents our BGP peer
+
+        bgp_peer = topo.addHost('bgp_peer', ip='192.168.1.1/24', mac='be:ef:be:ef:00:01')
+        topo.addLink(router, bgp_peer)
+
         return topo
 
     def launchNetwork(self, network, host_cmd, host_cmd_opts):
@@ -124,12 +129,18 @@ class FlowlogDemo(object):
         controller = customConstructor(CONTROLLERS, self.options.controller)
         switch = customConstructor(SWITCHES, self.options.switch)
 
-        network = Mininet(topo, controller=controller, link=TCLink, 
+        network = Mininet(topo, controller=controller, #link=TCLink, # disable for testing
                           # host=CPULimitedHost, # seems better without this
                           switch=switch, ipBase='10.0.0.0/24',
                           autoSetMacs=True)
 
         self.launchNetwork(network, host_cmd, host_cmd_opts)
+
+        bgp_peer = network.getNodeByName('bgp_peer')
+        bgp_peer.cmd('ifconfig bgp_peer-eth0:1 8.0.0.1')
+        bgp_peer.cmd('ifconfig bgp_peer-eth0:2 4.4.0.1')
+        bgp_peer.cmd('python -mSimpleHTTPServer &')
+
         self.demo(network)
         self.teardownNetwork(network, host_cmd)
 
