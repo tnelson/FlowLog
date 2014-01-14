@@ -1,0 +1,4 @@
+// Test safety check
+
+ON packet(p):
+  DO forward(new) WHERE new.dlSrc != p.dlSrc;

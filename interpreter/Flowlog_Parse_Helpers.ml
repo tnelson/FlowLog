@@ -99,16 +99,7 @@ let is_variable_term (t: term): bool =
     | TVar(x) -> true
     | _ -> false;;
 
-let safe_clause (p: flowlog_program) (cl: clause): unit =
-  (* Every new-packet field that is mentioned (new.x) must be positively constrained somewhere in the clause.
-       (Perhaps a chain of intermediate variables will be used.)
-     This DOES NOT HOLD for in-packet fields and intermediate variables.
-     This must be checked for every rule:
-       - insert/delete must be safe for every var in their tuple
-       - non-forward must be safe for *every* component of their out
-       - forward must be safe for every component of their out that appears *)
-
-  (* STEP 1: Discover what terms need to be proven safe. *)
+let get_terms_to_prove_safe (p: flowlog_program) (cl: clause): term list =
   let on_context = Communication.get_on_context p cl in
   let must_be_safe = (match cl.head with
     | FAtom(modname, relname, [outarg]) when relname = "forward" || (starts_with relname "emit") ->
@@ -134,6 +125,19 @@ let safe_clause (p: flowlog_program) (cl: clause): unit =
 
       printf "checking safety of clause: %s%!" (string_of_clause cl);
       printf "MUST BE SAFE: %s\n\n%!" (String.concat ", " (map (string_of_term ~verbose:Verbose) must_be_safe));
+      must_be_safe;;
+
+let safe_clause (p: flowlog_program) (cl: clause): unit =
+  (* Every new-packet field that is mentioned (new.x) must be positively constrained somewhere in the clause.
+       (Perhaps a chain of intermediate variables will be used.)
+     This DOES NOT HOLD for in-packet fields and intermediate variables.
+     This must be checked for every rule:
+       - insert/delete must be safe for every var in their tuple
+       - non-forward must be safe for *every* component of their out
+       - forward must be safe for every component of their out that appears *)
+
+      (* STEP 1: Discover what terms need to be proven safe. *)
+      let must_be_safe = get_terms_to_prove_safe p cl in
 
       (* STEP 2: discover what terms are proven safe *)
       let get_safe_terms (body: formula): term list =
@@ -152,13 +156,15 @@ let safe_clause (p: flowlog_program) (cl: clause): unit =
         let immediates = unique (flatten (map get_immediate_safe_terms_from (atoms @ eqs))) in
         let eqsteps = unique (flatten (map get_equal_deps eqs)) in
 
-        let all_terms = get_terms (fun x -> true) body in
-
         let rec gst_helper (proven: term list): term list =
           let new_proven = unique (proven @
                                    (* follow the dependencies discovered via equalities *)
                                    (filter_map (fun (ante,cons) -> if mem ante proven then Some(cons) else None) eqsteps) @
                                    (* Also: If TVar(x) is proven, then so too is TField(x, f) for any f. Check after the fact: *)
+                                   (filter_map (fun (ante,cons) ->
+                                      (match ante with
+                                        | TField(v, f) -> if mem (TVar(v)) proven then Some(cons) else None
+                                        | _ -> None)) eqsteps)
                                     ) in
             if (length new_proven) > (length proven) then gst_helper new_proven
             else proven in
