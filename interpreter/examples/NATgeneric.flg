@@ -146,8 +146,8 @@ ON udp_packet(pkt) WHERE not ptassign(0x11, pkt.nwSrc, pkt.tpSrc, ANY, ANY) AND
 // Outgoing direction -- flow match will have a private IP and private port as
 // the source pair
 ON flow_removed(fr) WHERE natconfig(fr.sw, fr.inPort, ANY, publicIP) and
-                          ptassign(fr.nwProto, fr.nwSrcAddr, fr.tpSrc, publicIP, publicPt):
-                          // and fr.reason = "IdleTimeout": TODO(tn): doesn't seem to work
+                          ptassign(fr.nwProto, fr.nwSrcAddr, fr.tpSrc, publicIP, publicPt)
+                          and fr.reason = "IdleTimeout":
 
   DELETE (fr.nwProto, fr.nwSrcAddr, fr.tpSrc, publicIP, publicPt) FROM ptassign;
 
@@ -156,8 +156,8 @@ ON flow_removed(fr) WHERE natconfig(fr.sw, fr.inPort, ANY, publicIP) and
 // Returning direction -- flow match will have a NAT's public IP and port as
 // the destination pair
 ON flow_removed(fr) WHERE natconfig(fr.sw, ANY, fr.inPort, fr.nwDstAddr) and
-                          ptassign(fr.nwProto, fr.nwSrcAddr, fr.tpSrc, publicIP, publicPt):
-                          // and fr.reason = "IdleTimeout": TODO(tn): doesn't seem to work
+                          ptassign(fr.nwProto, fr.nwSrcAddr, fr.tpSrc, publicIP, publicPt)
+                          and fr.reason = "IdleTimeout":
 
   DELETE (fr.nwProto, ANY, ANY, fr.nwDstAddr, fr.tpDst) FROM ptassign;
 
