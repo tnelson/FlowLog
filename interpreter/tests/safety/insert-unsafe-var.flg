@@ -1,0 +1,6 @@
+// Test safety check
+
+TABLE test(ipaddr);
+
+ON packet(p):
+  INSERT (X) INTO test WHERE p.dlSrc = 5;

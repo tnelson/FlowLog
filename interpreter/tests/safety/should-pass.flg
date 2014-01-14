@@ -1,0 +1,8 @@
+// Test safety check
+
+TABLE test(ipaddr);
+
+ON ip_packet(p):
+  DELETE (X) FROM test;
+
+  DO forward(new) WHERE test(new.nwDst) AND p.nwSrc!=new.nwDst;
