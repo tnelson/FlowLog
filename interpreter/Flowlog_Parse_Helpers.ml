@@ -11,6 +11,10 @@ open Surface_Lexer
 open Printf
 open ExtList.List
 open Partial_Eval_Validation
+open Xsb_Communication
+
+exception SyntaxAnyInPlus of formula;;
+exception SyntaxUnsafe of term;;
 
 (* Thanks to Jon Harrop on caml-list *)
 let from_case_insensitive_channel ic =
@@ -83,6 +87,56 @@ let field_vars_in (tl: term list): string list =
     | TVar(vname) -> Some vname
     | TConst(_) -> None
     | TField(vname, _) -> Some vname) tl
+
+
+let is_ANY_term (t: term): bool =
+  match t with
+    | TVar(x) when (starts_with x "any") -> true
+    | _ -> false;;
+
+let is_variable_term (t: term): bool =
+  match t with
+    | TVar(x) -> true
+    | _ -> false;;
+
+let safe_clause (p: flowlog_program) (cl: clause): unit =
+  (* Every new-packet field that is mentioned (new.x) must be positively constrained somewhere in the clause.
+       (Perhaps a chain of intermediate variables will be used.)
+     This DOES NOT HOLD for in-packet fields and intermediate variables.
+     This must be checked for every rule:
+       - insert/delete must be safe for every var in their tuple
+       - non-forward must be safe for *every* component of their out
+       - forward must be safe for every component of their out that appears *)
+
+  let on_context = Communication.get_on_context p cl in
+  let must_be_safe = (match cl.head with
+    | FAtom(modname, relname, [outarg]) when relname = "forward" || (starts_with relname "emit") ->
+      (* forward/emits: use mentioned fields only*)
+      let pfields = Communication.decls_expand_fields p modname relname on_context 1 outarg in
+        (*iter (fun t -> printf "fwd: pfields: %s\n%!" (string_of_term t)) pfields;*)
+        get_terms (fun t -> mem t pfields) cl.body
+
+    (* If a plus rule uses ANY in the head, it's an error *)
+    | FAtom(modname, relname, outargs) when (starts_with relname "plus_")  ->
+      let to_check = (filter is_variable_term outargs) in
+        if (exists is_ANY_term to_check) then raise (SyntaxAnyInPlus(cl.head))
+        else to_check
+
+    (* Minus rules often use ANY in the head, which of course shouldn't be constrained. *)
+    | FAtom(modname, relname, outargs) when (starts_with relname "minus_") ->
+      (filter (fun t -> (not (is_ANY_term t)) && is_variable_term t)
+              outargs)
+
+    | FAtom(modname, relname, outargs) ->
+      (filter (fun t -> match t with | TConst(_) -> false | _ -> true)
+              (flatten (mapi (Communication.decls_expand_fields p modname relname on_context) outargs)))
+    | _ -> failwith ("safe_clause: "^(string_of_formula cl.head))) in
+
+      printf "checking safety of clause: %s%!" (string_of_clause cl);
+      printf "%s\n\n%!" (String.concat ", " (map (string_of_term ~verbose:Verbose) must_be_safe));
+
+
+      ();;
 
 let well_formed_rule (p: flowlog_program) (r: srule): unit =
 
@@ -416,4 +470,5 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
 
                   (* Validation *)
                   iter (well_formed_rule p) the_rules;
+                  iter (safe_clause p) simplified_clauses;
                   p;;

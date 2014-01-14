@@ -76,7 +76,7 @@ let rec get_terms (pred: term -> bool) (f: formula) : term list =
 			filter pred tlargs
 		| FEquals(t1, t2) ->
 			filter pred [t1; t2]
-    | FIn(t,_,_) -> [t]
+    | FIn(t,_,_) -> filter pred [t]
 		| FAnd(f1, f2) ->
 			(unique (get_terms pred f1) @ (get_terms pred f2))
     | FOr(f1, f2) ->
