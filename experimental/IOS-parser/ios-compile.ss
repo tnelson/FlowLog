@@ -87,8 +87,7 @@
     (define defaultpolicyroute-forward (assoc2 'forward default-policy-route))
     (define defaultpolicyroute-route (assoc2 'route default-policy-route))
     (define defaultpolicyroute-pass (assoc2 'pass default-policy-route))    
-      
-    
+
     ;;;;;;;;;;;;; Get next-hop ;;;;;;;;;;;;;;
     ; IN: p[fields]
     ; OUT: next-hop [existential variable]
@@ -110,41 +109,13 @@
     ; For now, don't use NetworkSwitching or LocalSwitching.
     ; Instead, just feed the resulting program tuples in the subnets table.
     
-   
-    
-   #|(define flattened-forward
-      `(and 
-        ; Pass ACLs (in and out)
-        (or ,@inboundacl) 
-        (or ,@outboundacl)
-        ; NAT
-        (or (and (or ,@insidenat) 
-                 (internalNATPort p.locSw p.locPt))
-            (and (or ,@outsidenat) 
-                 (externalNATPort p.locSw p.locPt)))
-        ; routing, switching
-        (or ,@localswitching-forward
-            (and ,@localswitching-pass                         
-                 (or ,@policyroute-forward
-                     (and ,@policyroute-route
-                          ,@networkswitching-forward)
-                     (and ,@policyroute-pass
-                          (or ,@staticroute-forward
-                              (and ,@staticroute-route
-                                   ,@networkswitching-forward)                              
-                              (and ,@staticroute-pass
-                                   (or ,@defaultpolicyroute-forward
-                                       (and ,@defaultpolicyroute-route
-                                            ,@networkswitching-forward)
-                                       ; Final option: Packet is dropped.
-                                       ; No final option here in actual program.
-                                       ; If no satisfying new, then nothing to do.
-                                       )))))))))
-    |#
+  
 ;    (pretty-display next-hop-fragment)
     
+    ; Mutation :-(    
+    
     (define (extract-ifs ifaceid iface)
-      (define name (send iface text))    
+      (define name (symbol->string (send iface text)))
       (define prim-addr-obj (send iface get-primary-address))
       (define sec-addr-obj (send iface get-secondary-address))
       (define prim-netw-obj (send iface get-primary-network))
@@ -152,27 +123,64 @@
       (define prim-addr (send prim-addr-obj text-address))
       (define sec-addr (if sec-addr-obj  
                            (send sec-addr-obj text-address) 
-                           #f))
+                           (list #f #f)))
       (define prim-netw `(,(send prim-netw-obj text-address),(send prim-netw-obj text-mask)))
       (define sec-netw (if sec-netw-obj 
                            `(,(send sec-netw-obj text-address),(send sec-netw-obj text-mask))
-                           #f))
+                           (list #f #f)))
       
-      (unless (equal? ifaceid name) (error "extract-ifs"))
+      (unless (equal? (symbol->string ifaceid) name) (error "extract-ifs"))
       `(,name 
         ,prim-addr ,prim-netw
         ,sec-addr ,sec-netw ))
+
+    ;// subnets(addr,  mask, gw ip,    gw mac,            locSw,            locpt, trSw)
+    ;INSERT (10.0.1.0, 24,   10.0.1.1, ca:fe:ca:fe:00:01, 0x1000000000000001, 2, 0x2000000000000001) INTO subnets;
     
-    (define (extract-hosts config)      
-      (define hostname (send (send config get-hostname) name))
+    (define (vals->subnet addr nwa nwm rnum inum)
+      (define gwmac (string-append "ca:fe:ca:fe:00:" (string-pad rnum 2 #\0)))
+      (define trsw (string-append "0x20000000000000" (string-pad rnum 2 #\0)))
+      (string-append "INSERT (" (string-join (list nwa nwm addr gwmac rnum inum trsw) ", ") ") INTO subnets;\n"))
+
+    (define (vals->ifalias rname iname inum)
+      (string-append "INSERT (" (string-join (list (string-append "\"" rname "\"") 
+                                                   (string-append "\"" iname "\"") 
+                                                   inum) ", ") ") INTO portAlias;\n"))
+        
+    (define (vals->routeralias rname rnum)
+      (string-append "INSERT (" (string-join (list (string-append "\"" rname "\"")                                                    
+                                                   rnum) ", ") ") INTO routerAlias;\n"))
+    
+    ; Need to assign an ID to the router and an ID to the interface
+    (define (ifacedef->tuples rname rnum ifindex i)      
+      (match i
+        [`(,name ,primaddr (,primnwa ,primnwm) ,secaddr (,secnw ,secnwm)) 
+         (define inum (number->string (+ 1 ifindex)))
+         (define prim (vals->subnet primaddr primnwa primnwm rnum inum))
+         (define sec (if secaddr (vals->subnet primaddr primnwa primnwm rnum inum) #f))                           
+         (define alias (vals->ifalias rname name inum))
+         (filter (lambda (x) x) (list prim sec alias))]
+        [else (pretty-display i) (error "ifacedef->tuple")]))
+        
+    (define (extract-hosts config hostidx)      
+      (define hostname (symbol->string (send (send config get-hostname) name)))
       (define interfaces (send config get-interfaces))
       (define interface-keys (hash-keys interfaces))
-      (printf "hostname: ~v~n" hostname)     
+      (printf "pre-processing hostname: ~v~n" hostname)     
       (define interface-defns (hash-map interfaces extract-ifs))
       (pretty-display interface-defns) 
-      )
-    
-    (for-each extract-hosts configurations)
+      
+      (define hostnum (number->string (+ hostidx 1)))
+      (define iftuples (for/list ([ifdef interface-defns] 
+                                    [ifindex (build-list (length interface-defns) values)])
+                           (ifacedef->tuples hostname hostnum ifindex ifdef)))
+      (define routertuple (vals->routeralias hostname hostnum)) 
+      (define tuples (string-append* (flatten (cons routertuple iftuples))))      
+      tuples)
+  
+    (define startupinserts (string-append* (for/list ([config configurations] [hostidx (build-list (length configurations) values)]) 
+                                             (extract-hosts config hostidx))))
+    (pretty-display startupinserts)
     
     ; TODO: On what? packet(p) won't give the nw fields!
     ; and ippacket won't give the ports. 
@@ -185,8 +193,8 @@
     ; FLOWLOG:
     (store (string-append "NEXT-HOP FRAGMENT: \n\n"
                           (sexpr-to-flowlog next-hop-fragment)
-                          ";\n\n"
-                          
+                          ";\n\n\nSTARTUP INSERTS:\n\n"
+                          startupinserts                          
                         )
            (make-path root-path "IOS.flg"))        
     
@@ -215,6 +223,7 @@
       (close-output-port port))))
 
 (require racket/string)
+(require (only-in srfi/13 string-pad))
 
 (define (simplify-sexpr sexpr)
   (match sexpr    
@@ -295,3 +304,36 @@
     [(? symbol? x) (symbol->string x)]    
     [x (pretty-display x) (raise "error with sexpr-to-flowlog")]))
 
+
+
+
+    
+   #|(define flattened-forward
+      `(and 
+        ; Pass ACLs (in and out)
+        (or ,@inboundacl) 
+        (or ,@outboundacl)
+        ; NAT
+        (or (and (or ,@insidenat) 
+                 (internalNATPort p.locSw p.locPt))
+            (and (or ,@outsidenat) 
+                 (externalNATPort p.locSw p.locPt)))
+        ; routing, switching
+        (or ,@localswitching-forward
+            (and ,@localswitching-pass                         
+                 (or ,@policyroute-forward
+                     (and ,@policyroute-route
+                          ,@networkswitching-forward)
+                     (and ,@policyroute-pass
+                          (or ,@staticroute-forward
+                              (and ,@staticroute-route
+                                   ,@networkswitching-forward)                              
+                              (and ,@staticroute-pass
+                                   (or ,@defaultpolicyroute-forward
+                                       (and ,@defaultpolicyroute-route
+                                            ,@networkswitching-forward)
+                                       ; Final option: Packet is dropped.
+                                       ; No final option here in actual program.
+                                       ; If no satisfying new, then nothing to do.
+                                       )))))))))
+    |#
