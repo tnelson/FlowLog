@@ -157,7 +157,7 @@ let rec trim_packet_from_body (body: formula): (string * formula) =
       (varstr, FTrue)
     | _ -> ("", body);;
 
-let validate_and_process_forward_clause (cl: clause): (clause * bool) =
+let validate_and_process_pkt_triggered_clause (cl: clause): (clause * bool) =
 	let newpkt = (match cl.head with
 		| FAtom("", "forward", [TVar(newpktname)]) -> newpktname
 		| _ -> "") in
@@ -165,11 +165,11 @@ let validate_and_process_forward_clause (cl: clause): (clause * bool) =
       let strong_safe_list = get_safe_terms trimmed in
       printf "\nValidating clause with body (trimmed) = %s\n%!" (string_of_formula trimmed);
       printf "Strong safe list: %s\n%!" (String.concat ", " (map string_of_term strong_safe_list));
-      let final_formula_maybe = validate_formula_for_compile strong_safe_list newpkt cl.body in
+      let final_formula_maybe = validate_formula_for_compile strong_safe_list newpkt trimmed in
       (match final_formula_maybe with
         (* forwarding clause, no weakening needed *)
         | None when newpkt <> "" ->
-          printf "Forwarding clause, no weakening needed.\n%!";
+          printf "Forwarding clause, no weakening needed. Fully compilable.\n%!";
           (cl, true)
         (* non-forwarding clause, no weakening needed *)
         | None ->

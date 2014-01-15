@@ -463,13 +463,13 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
                                        (acc_comp, acc_weaken, cl::acc_unweakened)
                                      else
                                      begin
-                                      let (newcl, can_compile) = validate_and_process_forward_clause cl in
+                                      let (newcl, fully_compiled) = validate_and_process_pkt_triggered_clause cl in
 
                                         (* fully compilable *)
-                                        if can_compile then
+                                        if fully_compiled then
                                            ({oldpkt=v; clause={head = cl.head; orig_rule = cl.orig_rule; body = t}} :: acc_comp, acc_weaken, acc_unweakened)
 
-                                        (* already weakened; needs storing for XSB *)
+                                        (* weakened; needs storing for both compiler and XSB *)
                                         else
                                          (acc_comp, {oldpkt=v; clause=newcl} :: acc_weaken, cl::acc_unweakened)
 
@@ -477,7 +477,11 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
                           ([],[],[]) simplified_clauses in
 
               printf "\n  Loaded AST. There were %d clauses, \n    %d of which were fully compilable forwarding clauses and\n    %d were weakened pkt-triggered clauses.\n    %d will be given, unweakened, to XSB.\n%!"
-                (length simplified_clauses) (length can_fully_compile_simplified) (length weakened_cannot_compile_pt_clauses) (length not_fully_compiled_clauses);
+                (length simplified_clauses)
+                (length can_fully_compile_simplified)
+                (length weakened_cannot_compile_pt_clauses)
+                (length not_fully_compiled_clauses);
+
               printf "DECLS: %s\n%!" (String.concat ",\n"(map string_of_declaration the_decls));
               printf "REACTS: %s\n%!" (String.concat ",\n"(map string_of_reactive the_reacts));
 
