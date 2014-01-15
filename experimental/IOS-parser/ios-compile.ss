@@ -30,6 +30,8 @@
 (require "ios.ss")
 (require "ios-parse.ss")
 
+(require (planet murphy/protobuf:1:1))
+
 (provide compile-configurations)
 
 (define-syntax combine-rules
@@ -123,7 +125,7 @@
       (define prim-addr (send prim-addr-obj text-address))
       (define sec-addr (if sec-addr-obj  
                            (send sec-addr-obj text-address) 
-                           (list #f #f)))
+                           #f))
       (define prim-netw `(,(send prim-netw-obj text-address),(send prim-netw-obj text-mask)))
       (define sec-netw (if sec-netw-obj 
                            `(,(send sec-netw-obj text-address),(send sec-netw-obj text-mask))
@@ -152,35 +154,74 @@
                                                    rnum) ", ") ") INTO routerAlias;\n"))
     
     ; Need to assign an ID to the router and an ID to the interface
-    (define (ifacedef->tuples rname rnum ifindex i)      
+    (define (ifacedef->tuples arouter rname rnum ifindex i)      
       (match i
-        [`(,name ,primaddr (,primnwa ,primnwm) ,secaddr (,secnw ,secnwm)) 
+        [`(,name ,primaddr (,primnwa ,primnwm) ,secaddr (,secnwa ,secnwm)) 
          (define inum (number->string (+ 1 ifindex)))
          (define prim (vals->subnet primaddr primnwa primnwm rnum inum))
          (define sec (if secaddr (vals->subnet primaddr primnwa primnwm rnum inum) #f))                           
          (define alias (vals->ifalias rname name inum))
-         (filter (lambda (x) x) (list prim sec alias))]
+         (define result (filter (lambda (x) x) (list prim sec alias)))
+         
+         ; generate protobufs as well
+         (define aninterf (msubnet ""))
+         ;(set-msubnet-name! aninterf name)         
+         ;(set-minterface-id! aninterf ifindex)
+         (set-msubnet-tr_dpid! aninterf (string-append "20000000000000" (string-pad (number->string ifindex) 2 #\0)))         
+         (set-msubnet-addr! aninterf primnwa)         
+         (set-msubnet-mask! aninterf (string->number primnwm))
+         (set-msubnet-gw! aninterf primaddr)
+         
+         (set-mrouter-subnets! arouter (cons aninterf (mrouter-subnets arouter) ))
+         
+         (when secaddr 
+           (printf "WARNING! Secondary interface detected. Please confirm that the primary and secondaries get different IDs.~n")
+           (define aninterf2 (msubnet ""))
+           ;(set-minterface-name! aninterf2 name)         
+           ;(set-minterface-id! aninterf2 ifindex)
+           (set-msubnet-tr_dpid! aninterf2 ifindex)         
+           (set-msubnet-addr! aninterf2 secnwa)         
+           (set-msubnet-mask! aninterf2 (string->number secnwm))
+           (set-msubnet-gw! aninterf2 secaddr)
+           (set-mrouter-subnets! arouter (cons aninterf2 (mrouter-subnets arouter) )))
+         
+         result]
         [else (pretty-display i) (error "ifacedef->tuple")]))
         
-    (define (extract-hosts config hostidx)      
+    (define (extract-hosts routers config hostidx)      
       (define hostname (symbol->string (send (send config get-hostname) name)))
       (define interfaces (send config get-interfaces))
       (define interface-keys (hash-keys interfaces))
       (printf "pre-processing hostname: ~v~n" hostname)     
       (define interface-defns (hash-map interfaces extract-ifs))
       (pretty-display interface-defns) 
-      
       (define hostnum (number->string (+ hostidx 1)))
+      
+      (define arouter (mrouter ""))
+      (set-mrouter-name! arouter hostname)
+      (set-mrouter-self_dpid! arouter (string-append "40000000000000" (string-pad hostnum 2 #\0)))
+      (set-mrouter-nat_dpid! arouter (string-append "10000000000000" (string-pad hostnum 2 #\0)))
+      
       (define iftuples (for/list ([ifdef interface-defns] 
                                     [ifindex (build-list (length interface-defns) values)])
-                           (ifacedef->tuples hostname hostnum ifindex ifdef)))
+                           (ifacedef->tuples arouter hostname hostnum ifindex ifdef)))
       (define routertuple (vals->routeralias hostname hostnum)) 
-      (define tuples (string-append* (flatten (cons routertuple iftuples))))      
+      (define tuples (string-append* (flatten (cons routertuple iftuples))))    
+      
+      (set-mrouters-routers! routers (cons arouter (mrouters-routers routers)))     
+      
       tuples)
   
+    (define routers (mrouters ""))
     (define startupinserts (string-append* (for/list ([config configurations] [hostidx (build-list (length configurations) values)]) 
-                                             (extract-hosts config hostidx))))
+                                             (extract-hosts routers config hostidx))))
     (pretty-display startupinserts)
+    
+    ; output the router message for this router
+    (call-with-output-file "test.out" #:exists 'replace
+      (lambda (out) 
+        (printf "Outputting protobufs spec for this router...~n")
+        (serialize routers out)))
     
     ; TODO: On what? packet(p) won't give the nw fields!
     ; and ippacket won't give the ports. 
@@ -210,6 +251,74 @@
     (store default-policy-route (make-path root-path "DefaultPolicyRoute.p"))
     
     ))
+
+(require (planet murphy/protobuf/syntax))
+
+
+
+;+message Subnet {
+; +  optional string addr    = 1;  // required
+; +  optional int32  mask    = 2;  // required
+; +  optional string gw      = 3;  // required
+; +  optional string tr_dpid = 4;  // required
+; +}
+; +
+    
+(define-message-type msubnet
+  ([required primitive:string addr 1]
+   [required primitive:int32 mask 2]
+   [required primitive:string gw 3]
+   [required primitive:string tr_dpid 4]))
+
+
+; +message Network {
+; +  optional string addr = 1;  // required
+; +  optional int32  mask = 2;  // required
+; +}    
+(define-message-type mnetwork
+  ([required primitive:string addr 1]
+   [required primitive:int32 mask 2]))
+
+
+; +
+; +message Peer {
+; +  optional string ip   = 1;  // required
+; +  optional int32  mask = 2;  // required
+; +  optional string mac  = 3;  // required
+; +
+; +  repeated Network networks = 4;
+; +}
+(define-message-type mpeer
+  ([required primitive:string ip 1]
+   [required primitive:int32 mask 2]
+   [required primitive:string mac 3]
+   [repeated mnetwork networks 4]))
+
+
+ ;+
+ ;+message Router {
+ ;+  optional string name      = 1;  // required
+ ;+  optional string self_dpid = 2;  // required
+ ;+  optional string nat_dpid  = 3;  // required
+ ;+
+ ;+  repeated Subnet subnets = 4;
+ ;+  repeated Peer peers = 5;
+ ;+}
+(define-message-type mrouter
+  ([required primitive:string name 1]
+   [required primitive:string self_dpid 2]
+   [required primitive:string nat_dpid 3]
+   [repeated msubnet subnets 4]
+   [repeated mpeer peers 5]))
+ 
+ ;+
+ ;+message Routers {
+ ;+  repeated Router routers = 1;
+ ;+}
+(define-message-type mrouters
+  ([repeated mrouter routers 1]))
+
+
 
 ;; string string -> path
 (define (make-path base file)
