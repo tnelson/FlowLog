@@ -366,7 +366,8 @@ let handle_all_and_port_together (oldpkt: string) (apred: pred) (acts: action_at
 
 exception ContradictionInPE of formula * formula;;
 
-(* If there is an FIn(_,_,_) in the top-level conjunction, it may need substitution with equalities produced in PE. *)
+(* Handle substitution of values in cases like (pkt.dlSrc = x, x = 5) and (pkt.dlSrc=pkt.dlDst, pkt.dlDst=5 *)
+(* Also, if there is an FIn(_,_,_) in the clause, it may need substitution with equalities produced in PE. *)
 let substitute_for_join (f: formula): formula =
   try
 
@@ -383,16 +384,22 @@ let substitute_for_join (f: formula): formula =
   (* gather assignments from the equality formulas
      detect duplicate or bad assignments *)
   let assignments = fold_left (fun acc subf -> match subf with
-                                  | FEquals((TVar(_) as v), (TConst(_) as c))
-                                  | FEquals((TConst(_) as c), (TVar(_) as v)) ->
 
-                                    (* why we DO NOT need to check *EQUALITIES* under negated subformulas:
-                                       a contradiction like (x=5 and y=6 and not (x=5 or y=6)
+                                  (* DIRECT equality assignment. this is post PE, so don't need an FNot condition *)
+                                  | FEquals((TVar(_) as v), (TConst(_) as c))
+                                  | FEquals((TConst(_) as c), (TVar(_) as v))
+                                  | FEquals((TField(_, _) as v), (TConst(_) as c))
+                                  | FEquals(TConst(_) as c, (TField(_, _) as v))  ->
+
+                                    (* we DO NOT need to check *EQUALITIES* under negated subformulas:
+                                       a contradiction like (x=5 and y=6 and not (x=5 or y=6))
                                        will be resolved after substitution:
                                        (5=5 and 6=6 and not (5=5 or 6=6)
                                        which is a contradiction.
-                                       *INs* buried under negation do need to be handled, but they will be caught
-                                     and turned to FFalse in substitution.  *)
+
+                                       *INs* buried under negation are handled in the same way. we are guaranteed that the addr and mask
+                                       of an IN are strongly-safe, so will always arrive at <X> in <const>/<const>, which can be handled
+                                       by NetCore. *)
 
                                     (* search any positive equalities for a contradiction to this assignment *)
                                     if (mem_assoc v acc) && (assoc v acc) <> c then
@@ -405,11 +412,6 @@ let substitute_for_join (f: formula): formula =
                                     else
                                       (v, c) :: acc
 
-                                  (* For now assume joins are only on variables, not fields.
-                                     TODO: if we add joins on virtual packet fields for composition, will need to store assigns here, too. *)
-                                  | FEquals((TField(_, _), TConst(_)))
-                                  | FEquals(TConst(_),(TField(_, _))) -> acc
-
                                   (* TODO: will also have to support equality between fields... *)
                                   | FEquals(TField(_,_), TField(_,_)) -> acc
 
@@ -420,7 +422,8 @@ let substitute_for_join (f: formula): formula =
     wait -- can all this be handled in substitute terms? *)
 
   (* substitute according to assignments. but don't freak out if result contains a 5=7, since may be part of negated subfmla
-     But also check for contradictory INs. *)
+     also check for contradictory INs.
+     + we will replace field-assignments at end of this function *)
   let result = substitute_terms ~report_inconsistency:false f assignments in
 
   if !global_verbose > 2 then
@@ -431,8 +434,11 @@ let substitute_for_join (f: formula): formula =
     printf "SUBS: %s\n%!" (string_of_formula result);
   end;
 
+  (* Re-add field assignments that we substituted out for safety: *)
+  let field_value_conj = filter_map (fun (v,c) -> match v with | TField(_, _) -> Some(FEquals(v, c)) | _ -> None) assignments in
+
   (* If there are still variables left in INs, they are free to vary arbitrarily, and so the compiler will ignore that IN. *)
-  result
+  FAnd(result, build_and field_value_conj)
 
   with | ContradictionInPE(_,_) -> if !global_verbose > 5 then printf "ContradictionInPE: \n%!"; FFalse;;
 
