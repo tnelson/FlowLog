@@ -1,6 +1,7 @@
 // Test safety check
 
 TABLE test(ipaddr);
+TABLE test2(ipaddr, ipaddr);
 
 ON ip_packet(p):
   // Implicitly safe since we're talking about tuples already in test.
@@ -34,7 +35,7 @@ DO forward(new) where test(new.nwDst) AND new.nwSrc=p.nwDst;
   // ref."
 
 // and what about in? this should compile:
-DO forward(new) where test(x, new.nwSrc) AND p.nwSrc in new.nwSrc/x;
+DO forward(new) where test2(x, new.nwSrc) AND p.nwSrc in new.nwSrc/x;
 // but this shouldnt
 DO forward(new) where test(x) AND p.nwSrc in p.nwDst/x;
 

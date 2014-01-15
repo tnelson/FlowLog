@@ -12,12 +12,7 @@ exception InvalidINUse of formula;;
 exception UsesUncompilableBuiltIns of formula;;
 exception IllegalFieldModification of formula;;
 exception NonOFTableField of formula;;
-
 exception NeedsStronglySafeTerm of term list;;
-
-exception IllegalAssignmentViaEquals of formula;;
-exception IllegalAtomMustBePositive of formula;;
-exception IllegalModToNewpkt of (term * term);;
 exception IllegalEquality of (term * term);;
 
 let legal_field_to_modify (fname: string): bool =
@@ -27,10 +22,11 @@ let compilable_field_to_test (fname: string): bool =
 (* (printf "cftt: %s %s %b\n%!" fname (String.concat "," legal_to_match_packet_fields) (mem fname legal_to_match_packet_fields));  *)
   mem fname legal_to_match_packet_fields;;
 
-let rec validate_formula_for_compile (strong_safe_list: term list) (newpkt: string) (f: formula) (innot: bool): unit =
+(* WEAKENING and VALIDATION *)
+let rec validate_formula_for_compile (strong_safe_list: term list) (newpkt: string) (f: formula): formula option =
 
     (* Can't modify or match on fields disallowed by OpenFlow *)
- 	  let check_legal_pkt_fields = function
+  let check_legal_pkt_fields = function
 							| TField(varname, fld)
                 (* newpkt: must be legal to modify *)
                 when varname = newpkt ->
@@ -43,40 +39,6 @@ let rec validate_formula_for_compile (strong_safe_list: term list) (newpkt: stri
       	 			| _ -> ()
       	 				in
 
-    (* use of negation on equality: ok if [pkt.x = 5], [new.pt = old.pt] *)
-(*)    let check_legal_negation (t1: term) (t2: term): unit =
-      let dangerous = (match (t1, t2) with
-          | (TField(v1, f1), TField(v2, f2)) ->
-            (f1 <> "locpt" || f2 <> "locpt")
-          | (TField(v1, f1), TConst(cstr)) -> v1 = newpkt
-          | _ -> false) in
-      (*(printf "check_legal_negation: %s %s %b %b\n%!" (string_of_term t1) (string_of_term t2) innot dangerous);*)
-      if (innot && dangerous) then raise (IllegalEquality(t1,t2))
-    in
-
-    let check_not_same_pkt (t1: term) (t2: term): unit =
-      match (t1, t2) with
-        | (TField(v, f), TField(v2, f2)) when v = v2 && f2 <> f ->
-              raise (IllegalEquality(t1,t2))
-        | _ -> ()
-    in
-
-
-    let check_same_field_if_newpkt (t1:term) (t2:term) : unit =
-    	match (t1, t2) with
-			   | (TField(var1, fld1), TField(var2, fld2))
-			     	when var1 = newpkt || var2 = newpkt ->
-			       	if fld1 <> fld2 then raise (IllegalAssignmentViaEquals f)
-      	 | (TField(var1, fld1), TVar(_))
-            when var1 = newpkt -> raise (IllegalAssignmentViaEquals f)
-      	 | (TVar(_), TField(var1, fld2))
-            when var1 = newpkt -> raise (IllegalAssignmentViaEquals f)
-      	 | (TField(var1, fld1), TConst(_)) -> ()
-      	 | (TConst(_), TField(var2, fld2)) -> ()
-      	 | _ -> ()
-      	 	in
-*)
-
   let check_one_strong_safe (tl: term list): unit =
     if for_all (fun t -> not (mem t strong_safe_list)) tl then
       raise (NeedsStronglySafeTerm(tl)) in
@@ -84,35 +46,40 @@ let rec validate_formula_for_compile (strong_safe_list: term list) (newpkt: stri
   let check_new_strong_safe (t: term): unit =
     match t with | TField(v, f) when v = newpkt -> check_one_strong_safe [t] | _ -> () in
 
-	match f with
-		| FTrue -> ()
-    | FFalse -> ()
-
-    | FAnd(f1, f2) ->
-      		 validate_formula_for_compile strong_safe_list newpkt f1 innot;
-      		 validate_formula_for_compile strong_safe_list newpkt f2 innot;
-    | FOr(f1, f2) ->
-      		 validate_formula_for_compile strong_safe_list newpkt f1 innot;
-      		 validate_formula_for_compile strong_safe_list newpkt f2 innot;
-    | FNot(f) -> validate_formula_for_compile strong_safe_list newpkt f (not innot);
+  (* To be folded over. Gather errors and new literals. If no errors, then not weakened at all. *)
+  let rec validate_literal (innot: bool) (accf, acce: formula list * exn list) (lit: formula): (formula list) * exn list =
+	  (match lit with
+		| FTrue -> (lit::accf, acce)
+    | FFalse -> (lit::accf, acce)
+    | FNot(f) -> validate_literal (not innot) (accf, acce) f ;
 
     | FIn(t,a,m) ->
-      check_legal_pkt_fields t;
-      check_one_strong_safe [a];
-      check_one_strong_safe [m];
-      (* Disallow new packet in range. *)
-      (match t with
-        | TField(tv, tf) when tv = newpkt -> raise (InvalidINUse f)
-        | _ -> ());
+      (try
+        check_legal_pkt_fields t;
+        check_one_strong_safe [a];
+        check_one_strong_safe [m];
+        (* Disallow new packet in range. *)
+        (match t with
+          | TField(tv, tf) when tv = newpkt -> raise (InvalidINUse f)
+          | _ -> ());
+        (lit::accf, acce) (* success *)
+      with
+        | e -> (accf, e::acce))
 
     | FEquals(t1, t2) ->
+      (try
         check_one_strong_safe [t1;t2];
         check_new_strong_safe t1;
         check_new_strong_safe t2;
     		check_legal_pkt_fields t1;
     		check_legal_pkt_fields t2;
 
+        (lit::accf, acce) (* success *)
+      with
+        | e -> (accf, e::acce))
+
     | FAtom(modname, relname, tlargs) ->
+      (try
           (* All fields legal for modification? *)
           iter check_legal_pkt_fields tlargs;
 
@@ -121,9 +88,38 @@ let rec validate_formula_for_compile (strong_safe_list: term list) (newpkt: stri
 
           (* Is this a built-in that can't be compiled? *)
           if Flowlog_Builtins.is_uncompilable_built_in relname then
-            raise (UsesUncompilableBuiltIns f);;
+            raise (UsesUncompilableBuiltIns f);
 
-(* todo: lots of code overlap in these functions. should unify *)
+          (lit::accf, acce) (* success *)
+      with
+        | e -> (accf, e::acce))
+    | _ -> failwith ("validate_literal did not expect:  "^(string_of_formula lit))) in
+
+  (* Validate and weaken (if needed) each literal *)
+  let literals = conj_to_list f in
+  let (newliterals, errors) = fold_left (validate_literal false) ([], []) literals in
+
+  if (length errors) = 0 then
+  begin
+    printf "clause can be compiled.\n%!";
+    None
+  end
+  else
+  begin
+    printf "clause CANNOT be compiled. weakened instead. reasons:\n%!";
+    iter (fun e -> match e with
+            | UsesUncompilableBuiltIns(_) -> if !global_verbose > 0 then printf "UsesUncompilableBuiltIns\n%!";
+            | IllegalFieldModification(_) -> if !global_verbose > 0 then printf "IllegalFieldModification\n%!";
+            | NeedsStronglySafeTerm(_) -> if !global_verbose > 0 then printf "NeedsStronglySafeTerm\n%!";
+            | NonOFTableField(_) -> if !global_verbose > 0 then printf "NonOFTableField\n%!";
+            | InvalidINUse(_) -> if !global_verbose > 0 then printf "InvalidINUse\n%!";
+            | IllegalEquality(_,_) -> if !global_verbose > 0 then printf "IllegalEquality\n%!"
+            | _ -> failwith "unexpected exception in errors")
+          errors;
+    printf "\n%!";
+    Some(build_and newliterals)
+  end;;
+
 (* removes the packet_in atom (since that's meaningless here).
    returns the var the old packet was bound to, and the trimmed fmla *)
 let rec trim_packet_from_body (body: formula): (string * formula) =
@@ -154,117 +150,15 @@ let rec trim_packet_from_body (body: formula): (string * formula) =
       (varstr, FTrue)
     | _ -> ("", body);;
 
-
-let validate_fwd_clause (cl: clause): unit =
-	match cl.head with
-		| FAtom("", "forward", [TVar(newpktname)]) ->
+let validate_and_process_forward_clause (cl: clause): (clause * bool) =
+	let newpkt = (match cl.head with
+		| FAtom("", "forward", [TVar(newpktname)]) -> newpktname
+		| _ -> "") in
       let (_, trimmed) = (trim_packet_from_body cl.body) in
       let strong_safe_list = get_safe_terms trimmed in
       printf "Validating clause with body (trimmed) = %s\n%!" (string_of_formula trimmed);
-      printf "SSL: %s\n%!" (String.concat ", " (map string_of_term strong_safe_list));
-			validate_formula_for_compile strong_safe_list newpktname cl.body false;
-      printf "Forward clause was valid.\n%!";
-		| _ -> failwith "validate_clause";;
-
-let can_compile_clause_to_fwd (cl: clause): bool =
-  let debug = true in
-  try
-    if is_forward_clause cl then
-    begin
-        validate_fwd_clause cl;
-        true
-    end
-    else
-      false
-  with (* catch only "expected" exceptions *)
-    | UsesUncompilableBuiltIns(_) -> if debug then printf "UsesUncompilableBuiltIns\n%!"; false
-    | IllegalFieldModification(_) -> if debug then printf "IllegalFieldModification\n%!"; false
-    | IllegalAssignmentViaEquals(_) -> if debug then printf "IllegalAssignmentViaEquals\n%!"; false
-    | IllegalAtomMustBePositive(_) -> if debug then printf "IllegalAtomMustBePositive\n%!"; false
-    | NonOFTableField(_) -> if debug then printf "NonOFTableField\n%!"; false
-    | IllegalModToNewpkt(_, _) -> if debug then printf "IllegalModToNewpkt\n%!"; false
-    | IllegalEquality(_,_) -> if debug then printf "IllegalEquality\n%!"; false;;
-
-
-(************ WEAKENING ************)
-
-(***************************************************************************************)
-
-(* Used to pre-filter controller notifications as much as possible *)
-let weaken_uncompilable_packet_triggered_clause (oldpkt: string) (cl: clause): clause =
-  (* for now, naive solution: remove offensive literals outright. easy to prove correctness
-    of goal: result is a fmla that is implied by the real body. *)
-    (* acc contains formula built so far, plus the variables seen *)
-      if !global_verbose >= 3 then
-        printf "   --- WEAKENING: Checking clause body in case need to weaken: %s\n%!" (string_of_formula cl.body);
-
-      (* 'seen' keeps track of the terms used in relational lits so far
-         TODO: once joins are fully functional, seen can be removed *)
-
-      let may_strip_literal (acc: formula * term list) (lit: formula): (formula * term list) =
-        let (fmlasofar, seen) = acc in
-
-        match lit with
-        | FTrue -> acc
-        | FFalse -> (FFalse, seen)
-        | FNot(FTrue) -> (FFalse, seen)
-        | FNot(FFalse) -> acc
-
-        (* pkt.x = pkt.y  <--- can't be done in OF 1.0. just remove. *)
-        | FEquals(TField(v, f), TField(v2, f2))
-        | FNot(FEquals(TField(v, f), TField(v2, f2))) when v = v2 && f2 <> f ->
-          begin
-            if !global_verbose >= 3 then
-              printf "Removing atom (pkt equality): %s\n%!" (string_of_formula lit);
-            acc end
-
-          (* weaken if referring to a non-table packet field (like ARP fields) *)
-        | FEquals(TField(_, fld), _)
-        | FNot(FEquals(TField(_, fld), _))
-        | FEquals(_, TField(_, fld))
-        | FNot(FEquals(_,TField(_, fld)))
-          when not (compilable_field_to_test fld) ->
-          begin
-            if !global_verbose >= 3 then
-              printf "Removing atom (not compilable; equality): %s\n%!" (string_of_formula lit);
-            acc end
-
-        | FAtom(_, relname, _)
-        | FNot(FAtom(_, relname, _)) when Flowlog_Builtins.is_uncompilable_built_in relname ->
-          begin
-            if !global_verbose >= 3 then
-              printf "Removing atom (not compilable built-in atomic): %s\n%!" (string_of_formula lit);
-            acc end
-
-        | FAtom(_,_,args)
-        | FNot(FAtom(_,_,args))
-          when exists (function | TField(_, fld) -> not (compilable_field_to_test fld) | _ -> false) args ->
-          begin
-            if !global_verbose >= 3 then
-              printf "Removing atom (not compilable; atomic): %s\n%!" (string_of_formula lit);
-            acc end
-
-        (* If this atom involves an already-seen variable not in tlargs, remove it *)
-        | FAtom (_, _, atomargs)
-        | FNot(FAtom (_, _, atomargs)) ->
-          if fmlasofar = FTrue then
-             (lit, (unique (seen @ atomargs)))
-          else
-            (FAnd(fmlasofar, lit), (unique (seen @ atomargs)))
-
-        | FOr(_, _) -> failwith "may_strip_literal: unsupported disjunction"
-
-        (* everything else, just build the conjunction *)
-        | _ ->
-          if fmlasofar = FTrue then (lit, seen)
-          else (FAnd(fmlasofar, lit), seen)
-        in
-
-      let literals = conj_to_list cl.body in
-        match literals with
-        | [] -> cl
-        | _ ->
-          let (final_formula, seen) = fold_left may_strip_literal (FTrue, []) literals in
-          (*printf "   --- Final body was:%s\n%!" (string_of_formula final_formula);*)
-          {head = cl.head; orig_rule = cl.orig_rule; body = final_formula};;
-
+      printf "Strong safe list: %s\n%!" (String.concat ", " (map string_of_term strong_safe_list));
+      let final_formula_maybe = validate_formula_for_compile strong_safe_list newpkt cl.body in
+      (match final_formula_maybe with
+        | None -> (cl, true)
+        | Some(final_formula) -> ({head = cl.head; orig_rule = cl.orig_rule; body = final_formula}, false));;

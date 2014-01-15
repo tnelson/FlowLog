@@ -461,11 +461,19 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
                                    let (v, t) = trim_packet_from_body cl.body in
                                      if v = "" then (* not packet-triggered *)
                                        (acc_comp, acc_weaken, cl::acc_unweakened)
-                                     else if can_compile_clause_to_fwd cl then (* fully compilable *)
-                                       ({oldpkt=v; clause={head = cl.head; orig_rule = cl.orig_rule; body = t}} :: acc_comp, acc_weaken, acc_unweakened)
-                                     else (* needs weakening AND needs storing for XSB *)
-                                       (acc_comp, {oldpkt=v; clause=weaken_uncompilable_packet_triggered_clause v
-                                                               {head = cl.head; orig_rule = cl.orig_rule; body = t}} :: acc_weaken, cl::acc_unweakened))
+                                     else
+                                     begin
+                                      let (newcl, can_compile) = validate_and_process_forward_clause cl in
+
+                                        (* fully compilable *)
+                                        if can_compile then
+                                           ({oldpkt=v; clause={head = cl.head; orig_rule = cl.orig_rule; body = t}} :: acc_comp, acc_weaken, acc_unweakened)
+
+                                        (* already weakened; needs storing for XSB *)
+                                        else
+                                         (acc_comp, {oldpkt=v; clause=newcl} :: acc_weaken, cl::acc_unweakened)
+
+                                     end)
                           ([],[],[]) simplified_clauses in
 
               printf "\n  Loaded AST. There were %d clauses, \n    %d of which were fully compilable forwarding clauses and\n    %d were weakened pkt-triggered clauses.\n    %d will be given, unweakened, to XSB.\n%!"
