@@ -10,8 +10,8 @@ open Printf
 
 exception InvalidINUse of formula;;
 exception UsesUncompilableBuiltIns of formula;;
-exception IllegalFieldModification of formula;;
-exception NonOFTableField of formula;;
+exception IllegalFieldModification of string;;
+exception NonOFTableField of string;;
 exception NeedsStronglySafeTerm of term list;;
 exception IllegalEquality of (term * term);;
 
@@ -31,16 +31,17 @@ let rec validate_formula_for_compile (strong_safe_list: term list) (newpkt: stri
                 (* newpkt: must be legal to modify *)
                 when varname = newpkt ->
       				   			if not (legal_field_to_modify fld) then
-      	 					   		raise (IllegalFieldModification f)
+                        raise (IllegalFieldModification fld)
               | TField(varname, fld) ->
                  (* any term: cannot compile if involves non-base fieldnames *)
                  if not (compilable_field_to_test fld) then
-                    raise (NonOFTableField f)
+                    raise (NonOFTableField fld)
       	 			| _ -> ()
       	 				in
 
+  (* A strongly safe term is a constant or in the list *)
   let check_one_strong_safe (tl: term list): unit =
-    if for_all (fun t -> not (mem t strong_safe_list)) tl then
+    if for_all (fun t -> match t with | TConst(_) -> false | _ -> not (mem t strong_safe_list)) tl then
       raise (NeedsStronglySafeTerm(tl)) in
 
   let check_new_strong_safe (t: term): unit =
@@ -65,7 +66,7 @@ let rec validate_formula_for_compile (strong_safe_list: term list) (newpkt: stri
         check_one_strong_safe [m];
         (* Disallow new packet in range. *)
         (match t with
-          | TField(tv, tf) when tv = newpkt -> raise (InvalidINUse f)
+          | TField(tv, tf) when tv = newpkt -> raise (InvalidINUse lit)
           | _ -> ());
         (lit::accf, acce) (* success *)
       with
@@ -120,12 +121,12 @@ let rec validate_formula_for_compile (strong_safe_list: term list) (newpkt: stri
   begin
     printf "clause CANNOT be compiled. weakened instead. reasons:\n%!";
     iter (fun e -> match e with
-            | UsesUncompilableBuiltIns(_) -> if !global_verbose > 0 then printf "UsesUncompilableBuiltIns\n%!";
-            | IllegalFieldModification(_) -> if !global_verbose > 0 then printf "IllegalFieldModification\n%!";
+            | UsesUncompilableBuiltIns(f) -> if !global_verbose > 0 then printf "UsesUncompilableBuiltIns: %s\n%!" (string_of_formula f);
+            | IllegalFieldModification(s) -> if !global_verbose > 0 then printf "IllegalFieldModification: %s\n%!" s;
             | NeedsStronglySafeTerm(tl) -> if !global_verbose > 0 then printf "NeedsStronglySafeTerm: %s\n%!" (String.concat "; " (map string_of_term tl));
-            | NonOFTableField(_) -> if !global_verbose > 0 then printf "NonOFTableField\n%!";
-            | InvalidINUse(_) -> if !global_verbose > 0 then printf "InvalidINUse\n%!";
-            | IllegalEquality(_,_) -> if !global_verbose > 0 then printf "IllegalEquality\n%!"
+            | NonOFTableField(s) -> if !global_verbose > 0 then printf "NonOFTableField: %s\n%!" s;
+            | InvalidINUse(f) -> if !global_verbose > 0 then printf "InvalidINUse: %s\n%!" (string_of_formula f);
+            | IllegalEquality(t1,t2) -> if !global_verbose > 0 then printf "IllegalEquality: %s = %s\n%!" (string_of_term t1) (string_of_term t2);
             | _ -> failwith "unexpected exception in errors")
           errors;
     printf "\n%!";
