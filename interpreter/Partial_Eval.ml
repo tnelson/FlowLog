@@ -105,6 +105,7 @@ let rec partial_evaluation (p: flowlog_program) (incpkt: string) (f: formula): f
               if !global_verbose > 2 then
                 printf "Reassembling an XSB equality for formula %s. incpkt=%s; tl=%s; tlargs_no_constants=%s\n%!"
                        (string_of_formula f) incpkt (String.concat "," (map string_of_term tl)) (String.concat "," (map string_of_term tlargs_no_constants));
+                       (* r_x_e has the duty of removing ANY variables, since they are universally bound under negation and guaranteed to have no joins. *)
               build_and (reassemble_xsb_equality incpkt tlargs_no_constants tl))
           xsbresults in
         let fresult = build_or disjuncts in

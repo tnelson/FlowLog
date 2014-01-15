@@ -88,17 +88,6 @@ let field_vars_in (tl: term list): string list =
     | TConst(_) -> None
     | TField(vname, _) -> Some vname) tl
 
-
-let is_ANY_term (t: term): bool =
-  match t with
-    | TVar(x) when (starts_with x "any") -> true
-    | _ -> false;;
-
-let is_variable_term (t: term): bool =
-  match t with
-    | TVar(x) -> true
-    | _ -> false;;
-
 let get_terms_to_prove_safe (p: flowlog_program) (cl: clause): term list =
   let on_context = Communication.get_on_context p cl in
   let must_be_safe = (match cl.head with

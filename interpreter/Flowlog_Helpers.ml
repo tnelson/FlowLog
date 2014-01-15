@@ -23,6 +23,7 @@ exception RelationHadMultipleDecls of string;;
 exception NoDefaultForField of string * string;;
 
 
+
   let string_of_term ?(verbose:printmode = Brief) (t: term): string =
     match t with
       | TConst(s) ->
@@ -62,6 +63,17 @@ let ends_with (str1 : string) (str2 : string) : bool =
 let starts_with (str1 : string) (str2 : string) : bool =
   if String.length str2 > String.length str1 then false
     else (String.sub str1 0 (String.length str2)) = str2;;
+
+let is_ANY_term (t: term): bool =
+  match t with
+    | TVar(x) when (starts_with x "any") -> true
+    | _ -> false;;
+
+let is_variable_term (t: term): bool =
+  match t with
+    | TVar(x) -> true
+    | _ -> false;;
+
 
 let construct_map (bindings: (string * string) list): (string StringMap.t) =
   fold_left (fun acc (bx, by) -> StringMap.add bx by acc) StringMap.empty bindings
@@ -165,7 +177,9 @@ let reassemble_xsb_equality (incpkt: string) (tlargs: term list) (tuple: term li
         | TVar(_), _ -> failwith "reassemble_xsb_equality: unconstrained variable"
         | TField(_, _), _ -> failwith "field def in xsb term returned"
         (* COMPILATION: free variable. Keep this assertion around in case it's needed. *)
-        | TConst(c), TVar(vname) -> FEquals(TVar(vname), TConst(c)) (*FTrue *)
+        | TConst(c), (TVar(vname) as avar) when not (is_ANY_term avar) -> FEquals(TVar(vname), TConst(c))
+        (* + ANY variables need elimination since they are bound universally under negation: *)
+        | TConst(c), TVar(vname) -> FTrue
 		    | _ -> FEquals(origterm, xsbterm))
     	 tlargs tuple;;
 
@@ -789,5 +803,3 @@ module PredSet  = Set.Make( struct type t = pred let compare = smart_compare_pre
             if (length new_proven) > (length proven) then gst_helper new_proven
             else proven in
         gst_helper immediates;;
-
-
