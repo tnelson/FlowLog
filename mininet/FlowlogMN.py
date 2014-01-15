@@ -3,7 +3,10 @@
 # Based on PaneDemo.py from PANE VM available at http://pane.cs.brown.edu
 
 import math
+import sys
 from collections import defaultdict
+
+from google.protobuf import text_format
 
 from optparse import OptionParser
 
@@ -16,6 +19,7 @@ from mininet.util import irange, customConstructor
 
 from FlowlogMNUtil import FlowlogTopo, OVSHtbQosSwitch, addDictOption, subnetStr
 
+import routers_pb2
 
 CONTROLLERDEF = 'remote'
 CONTROLLERS = { 'remote': RemoteController }
@@ -83,10 +87,12 @@ class FlowlogDemo(object):
         addDictOption(opts, CONTROLLERS, CONTROLLERDEF, 'controller')
         self.options, self.args = opts.parse_args()
 
-    def buildRouter(self, topo, r, subnets, peers):
-      router = topo.addSwitch(r['name'] + '-router', dpid=r['self-dpid'])
+    def buildRouter(self, topo, r):
+      r.name = r.name.encode('ascii', 'ignore')
 
-      nat = topo.addSwitch(r['name'] + '-nat', dpid=r['nat-dpid'])
+      router = topo.addSwitch(r.name + '-router', dpid=r.self_dpid)
+
+      nat = topo.addSwitch(r.name + '-nat', dpid=r.nat_dpid)
       topo.addLink(router, nat, **self.linkopts)
 
       # Add the dlDst translators for each subnet
@@ -94,16 +100,18 @@ class FlowlogDemo(object):
       # Then, we attach that translator to the subnet's "subnetRootSwitch";
       # if no such switch exists, we create it.
 
-      for (i, s) in enumerate(subnets):
-        translator = topo.addSwitch(r['name'] + '-t' + str(i + 1),
-                                    dpid=s['tr-dpid'])
+      for (i, s) in enumerate(r.subnets):
+        s.gw = s.gw.encode('ascii', 'ignore')
+
+        translator = topo.addSwitch(r.name + '-t' + str(i + 1),
+                                    dpid=s.tr_dpid)
         topo.addLink(router, translator, **self.linkopts)
 
-        srs = self.subnetRootSwitch[subnetStr(s['addr'], s['mask'])]
-        topo.addLink(translator, srs)
+        srs = self.subnetRootSwitch[subnetStr(s.addr, s.mask)]
+        topo.addLink(translator, srs, **self.linkopts)
 
         # if there's room for hosts, add an edge switch with some hosts!
-        if s['mask'] < 30:
+        if s.mask < 30:
           self.globalEdgeSwCount += 1
           edge_switch = topo.addSwitch('s' + str(self.globalEdgeSwCount))
           topo.addLink(srs, edge_switch)
@@ -111,65 +119,44 @@ class FlowlogDemo(object):
           for h in irange(1, self.numHostsPerSubnet):
             self.globalHostCount += 1
             name = "host%d" % self.globalHostCount
-            ip = self.nextSubnetHost(s['addr'], s['mask'], s['gw'])
+            ip = self.nextSubnetHost(s.addr, s.mask, s.gw)
 
-            host = topo.addHost(name, ip='%s/%d' % (ip, s['mask']),
-                                defaultRoute='dev %s-eth0 via %s' % (name, s['gw']))
+            host = topo.addHost(name, ip='%s/%d' % (ip, s.mask),
+                                defaultRoute='dev %s-eth0 via %s' % (name, s.gw))
             topo.addLink(host, edge_switch, **self.linkopts)
 
       # Finally, add hosts which represents our BGP peers
 
-      for p in peers:
+      for p in r.peers:
         self.globalPeerCount += 1
         name = "peer%d" % self.globalPeerCount
-        peer = topo.addHost(name, ip='%s/%d' % (p['ip'], p['mask']),
-                            mac=p['mac'])
+        peer = topo.addHost(name, ip='%s/%d' % (p.ip, p.mask),
+                            mac=p.mac)
         topo.addLink(router, peer)
 
-        self.networksToLaunch[name] = p['networks']
+        self.networksToLaunch[name] = p.networks
 
-
-    def buildTopo(self):
-
+    def buildTopo(self, routers):
       topo = FlowlogTopo()
       self.subnetRootSwitch = defaultdict(lambda: self.nextSubnetRootSwitch(topo))
 
-      # Create a network with a two subnets, each attached to the router.
-
-      router = {}
-      router['name'] = 'r1'
-      router['self-dpid'] = "1000000000000001" # (in hex)
-      router['nat-dpid'] = "4000000000000001"
-
-      subnets = []
-
-      s1 = {}
-      s1['addr'] = "10.0.1.0"
-      s1['mask'] = 24
-      s1['gw'] = "10.0.1.1"
-      s1['tr-dpid'] = "2000000000000001"
-      subnets.append(s1)
-
-      s2 = {}
-      s2['addr'] = "10.0.2.0"
-      s2['mask'] = 24
-      s2['gw'] = "10.0.2.1"
-      s2['tr-dpid'] = "2000000000000002"
-      subnets.append(s2)
-
-      peers = []
-
-      p1 = {}
-      p1['ip'] = '192.168.1.1'
-      p1['mask'] = 24
-      p1['mac'] = 'be:ef:be:ef:00:01'
-      p1['networks'] = [('8.0.0.0', 8), ('4.4.0.0', 16)]
-      peers.append(p1)
-
-
-      self.buildRouter(topo, router, subnets, peers)
+      for router in routers.routers:
+        self.buildRouter(topo, router)
 
       return topo
+
+    def readTextProtobuf(self):
+      routers = routers_pb2.Routers()
+
+      try:
+        f = open(sys.argv[1], "r")
+        text_format.Merge(f.read(), routers)
+        f.close()
+        return routers
+      except IndexError:
+        sys.exit("Error: must provide a routers protobuf as first argument.")
+      except IOError:
+        sys.exit(sys.argv[1] + ": Could not open protobuf file.")
 
     def launchNetwork(self, network, host_cmd, host_cmd_opts):
         network.start()
@@ -198,15 +185,16 @@ class FlowlogDemo(object):
     def launchHttpdOnInternets(self, network, node_name, networks):
         node = network.getNodeByName(node_name)
 
-        for (i, (ip, mask)) in enumerate(networks):
+        for (i, network) in enumerate(networks):
           # TODO(adf): add 'mask' as well. need to convert to dotted-quad
           node.cmd('ifconfig %s-eth0:%d %s' %
-                   (node_name, i+1, ip.rpartition('.')[0] + '.1'))
+                   (node_name, i+1, network.addr.rpartition('.')[0] + '.1'))
 
         node.cmd('python -mSimpleHTTPServer &')
 
     def runDemo(self, host_cmd='/usr/sbin/sshd', host_cmd_opts='-D'):
-        topo = self.buildTopo()
+        routers = self.readTextProtobuf()
+        topo = self.buildTopo(routers)
         controller = customConstructor(CONTROLLERS, self.options.controller)
         switch = customConstructor(SWITCHES, self.options.switch)
 
