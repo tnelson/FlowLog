@@ -2,7 +2,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Cisco IOS Policy Compilation
-;; Copyright (C) 2009-2010 Christopher Barratt & Brown University
+;; Copyright (C) 2009-2014 Christopher Barratt, Tim Nelson, Brown University
 ;; All rights reserved.
 ;;
 ;;  This file is part of Margrave.
@@ -31,6 +31,69 @@
 (require "ios-parse.ss")
 
 (require (planet murphy/protobuf:1:1))
+(require (planet murphy/protobuf/syntax))
+
+;+message Subnet {
+; +  optional string addr    = 1;  // required
+; +  optional int32  mask    = 2;  // required
+; +  optional string gw      = 3;  // required
+; +  optional string tr_dpid = 4;  // required
+; +}
+; +
+    
+(define-message-type msubnet
+  ([required primitive:string addr 1]
+   [required primitive:int32 mask 2]
+   [required primitive:string gw 3]
+   [required primitive:string tr_dpid 4]))
+
+
+; +message Network {
+; +  optional string addr = 1;  // required
+; +  optional int32  mask = 2;  // required
+; +}    
+(define-message-type mnetwork
+  ([required primitive:string addr 1]
+   [required primitive:int32 mask 2]))
+
+
+; +
+; +message Peer {
+; +  optional string ip   = 1;  // required
+; +  optional int32  mask = 2;  // required
+; +  optional string mac  = 3;  // required
+; +
+; +  repeated Network networks = 4;
+; +}
+(define-message-type mpeer
+  ([required primitive:string ip 1]
+   [required primitive:int32 mask 2]
+   [required primitive:string mac 3]
+   [repeated mnetwork networks 4]))
+
+
+ ;+
+ ;+message Router {
+ ;+  optional string name      = 1;  // required
+ ;+  optional string self_dpid = 2;  // required
+ ;+  optional string nat_dpid  = 3;  // required
+ ;+
+ ;+  repeated Subnet subnets = 4;
+ ;+  repeated Peer peers = 5;
+ ;+}
+(define-message-type mrouter
+  ([required primitive:string name 1]
+   [required primitive:string self_dpid 2]
+   [required primitive:string nat_dpid 3]
+   [repeated msubnet subnets 4]
+   [repeated mpeer peers 5]))
+ 
+ ;+
+ ;+message Routers {
+ ;+  repeated Router routers = 1;
+ ;+}
+(define-message-type mrouters
+  ([repeated mrouter routers 1]))
 
 (provide compile-configurations)
 
@@ -111,11 +174,6 @@
     ; For now, don't use NetworkSwitching or LocalSwitching.
     ; Instead, just feed the resulting program tuples in the subnets table.
     
-  
-;    (pretty-display next-hop-fragment)
-    
-    ; Mutation :-(    
-    
     (define (extract-ifs ifaceid iface)
       (define name (symbol->string (send iface text)))
       (define prim-addr-obj (send iface get-primary-address))
@@ -140,8 +198,8 @@
     ;INSERT (10.0.1.0, 24,   10.0.1.1, ca:fe:ca:fe:00:01, 0x1000000000000001, 2, 0x2000000000000001) INTO subnets;
     
     (define (vals->subnet addr nwa nwm rnum inum)
-      (define gwmac (string-append "ca:fe:ca:fe:00:" (string-pad rnum 2 #\0)))
-      (define trsw (string-append "0x20000000000000" (string-pad rnum 2 #\0)))
+      (define gwmac (string-append "ca:fe:ca:fe:00:" (string-pad inum 2 #\0)))
+      (define trsw (string-append "0x20000000000000" (string-pad inum 2 #\0)))
       (string-append "INSERT (" (string-join (list nwa nwm addr gwmac rnum inum trsw) ", ") ") INTO subnets;\n"))
 
     (define (vals->ifalias rname iname inum)
@@ -195,7 +253,8 @@
       (printf "pre-processing hostname: ~v~n" hostname)     
       (define interface-defns (hash-map interfaces extract-ifs))
       (pretty-display interface-defns) 
-      (define hostnum (number->string (+ hostidx 1)))
+      (define hostnum (string-append "0x10000000000000" (string-pad (number->string (+ hostidx 1)) 2 #\0)))
+      
       
       (define arouter (mrouter ""))
       (set-mrouter-name! arouter hostname)
@@ -218,9 +277,10 @@
     (pretty-display startupinserts)
     
     ; output the router message for this router
-    (call-with-output-file "test.out" #:exists 'replace
+    (call-with-output-file "IOS-pb.out" #:exists 'replace
       (lambda (out) 
         (printf "Outputting protobufs spec for this router...~n")
+        (printf "~v~n" routers)
         (serialize routers out)))
     
     ; TODO: On what? packet(p) won't give the nw fields!
@@ -232,10 +292,11 @@
     ; TODO: flags? no support in flowlog this iteration.
     
     ; FLOWLOG:
-    (store (string-append "NEXT-HOP FRAGMENT: \n\n"
+    (store (string-append "next hop fragment:\n"
                           (sexpr-to-flowlog next-hop-fragment)
-                          ";\n\n\nSTARTUP INSERTS:\n\n"
-                          startupinserts                          
+                          "\n\n"
+                          "ON startup(e):\n"
+                          startupinserts "\n"                         
                         )
            (make-path root-path "IOS.flg"))        
     
@@ -250,75 +311,11 @@
     (store policy-route (make-path root-path "PolicyRoute.p"))
     (store default-policy-route (make-path root-path "DefaultPolicyRoute.p"))
     
-    ))
-
-(require (planet murphy/protobuf/syntax))
-
-
-
-;+message Subnet {
-; +  optional string addr    = 1;  // required
-; +  optional int32  mask    = 2;  // required
-; +  optional string gw      = 3;  // required
-; +  optional string tr_dpid = 4;  // required
-; +}
-; +
+    ;(define x (mrouters "xyz"))
+    ;(call-with-input-file "test.out"
+    ;  (lambda (out) (deserialize x out)))
     
-(define-message-type msubnet
-  ([required primitive:string addr 1]
-   [required primitive:int32 mask 2]
-   [required primitive:string gw 3]
-   [required primitive:string tr_dpid 4]))
-
-
-; +message Network {
-; +  optional string addr = 1;  // required
-; +  optional int32  mask = 2;  // required
-; +}    
-(define-message-type mnetwork
-  ([required primitive:string addr 1]
-   [required primitive:int32 mask 2]))
-
-
-; +
-; +message Peer {
-; +  optional string ip   = 1;  // required
-; +  optional int32  mask = 2;  // required
-; +  optional string mac  = 3;  // required
-; +
-; +  repeated Network networks = 4;
-; +}
-(define-message-type mpeer
-  ([required primitive:string ip 1]
-   [required primitive:int32 mask 2]
-   [required primitive:string mac 3]
-   [repeated mnetwork networks 4]))
-
-
- ;+
- ;+message Router {
- ;+  optional string name      = 1;  // required
- ;+  optional string self_dpid = 2;  // required
- ;+  optional string nat_dpid  = 3;  // required
- ;+
- ;+  repeated Subnet subnets = 4;
- ;+  repeated Peer peers = 5;
- ;+}
-(define-message-type mrouter
-  ([required primitive:string name 1]
-   [required primitive:string self_dpid 2]
-   [required primitive:string nat_dpid 3]
-   [repeated msubnet subnets 4]
-   [repeated mpeer peers 5]))
- 
- ;+
- ;+message Routers {
- ;+  repeated Router routers = 1;
- ;+}
-(define-message-type mrouters
-  ([repeated mrouter routers 1]))
-
-
+    ))
 
 ;; string string -> path
 (define (make-path base file)
