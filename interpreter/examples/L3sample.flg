@@ -61,3 +61,10 @@ ON startup(ev):
   INSERT (192.168.1.10, 0x11, 10000) INTO seqpt;
 
   INSERT (192.168.1.10, ca:fe:ca:fe:00:00) INTO cached;
+
+  // Config to disable NAT on router, NAT, and translators:
+
+  INSERT (0x1000000000000001) INTO switches_without_mac_learning;
+  INSERT (0x2000000000000001) INTO switches_without_mac_learning;
+  INSERT (0x2000000000000002) INTO switches_without_mac_learning;
+  INSERT (0x4000000000000001) INTO switches_without_mac_learning;

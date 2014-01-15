@@ -2,17 +2,18 @@
  *
  * Primitive contents of "Mac_Learning.inc.flg"
  *
- * Copy-and-pasted from examples/Mac_Learning.flg
- *
  ******************************************************************************/
 
 TABLE learned(switchid, portid, macaddr);
+
+TABLE switches_without_mac_learning(switchid);
 
 /*
  * TODO: how should we create the syntax to indicate that MAC learning should
  * not be handle packets handled elsewhere? at the same time, it is the
  * forwarding module, so we may want it to handle traffic which doesn't enter
- * via packet_in anyway. Note that we *do* want to learn from the ARP traffic...
+ * via packet_in anyway. Note that we *do* want to learn from the ARP traffic,
+ * although we are ignoring it for now...
  *
  * TODO: Positioning of "pkt.dlTyp != 0x0806" is an open question -- Can we
  * achieve both of these goals?
@@ -34,13 +35,7 @@ ON packet(pkt) WHERE pkt.dlTyp != 0x0806 and // ARP
                      pkt.dlDst != 0x01005e0000fb and // mDNS IPv4 ethernet multicast
 
                                                      // TODO(adf): drop 802.1D bridge-local frames
-
-                                                         // TODO(adf): this has GOT to be come a table...
-                     pkt.locSw != 0x1000000000000001 and // dpid for our "router"
-                     pkt.locSw != 0x2000000000000001 and // dpids for our "translators"
-                     pkt.locSw != 0x2000000000000002 and // dpids for our "translators"
-                     pkt.locSw != 0x4000000000000001:    // dpid for "router$nat"
-
+                     not switches_without_mac_learning(pkt.locSw):
 
   // ***TODO*** Add these restrictions (which only exist for limiting to-controller traffic)
   // automatically. But not always easy! Naive learned/notlearned have some issues
