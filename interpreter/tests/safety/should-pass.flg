@@ -3,6 +3,42 @@
 TABLE test(ipaddr);
 
 ON ip_packet(p):
+  // Implicitly safe since we're talking about tuples already in test.
   DELETE (X) FROM test;
 
+  // new.nwDst is safe from appearing in test.
   DO forward(new) WHERE test(new.nwDst) AND p.nwSrc!=new.nwDst;
+  // In fact, this rule should compile.
+  // Doing so requires substitution of fields as if they were vars, without losing the associated constraints.
+  // Keeping in mind that this should also be compilable:
+  DO forward(new) WHERE test(new.nwDst) AND p.nwSrc=new.nwDst;
+  // if test has 5 and 6 in it, then we get two rows:
+  //new.nwDst = 5 AND p.nwSrc=5
+  //new.nwDst = 6 AND p.nwSrc=6
+  // same here:
+  DO forward(new) where test(new.nwDst) AND new.nwSrc=new.nwDst;
+
+  // Post-PE: "I see new.nwDst = 5, so substitute it out of ALL *OTHER* instances."
+  // (Note that this is diff. from *variables*, which get fully substituted out.)
+  // Alternatively, subs all instances out, then add conjunction of all assignments that we substituted.
+
+
+// But note that
+  DO forward(new) where p.nwSrc = p.nwDst;
+// still shouldn't compile. as well as ...?
+DO forward(new) where test(new.nwDst) AND new.nwSrc=p.nwDst;
+
+  // all terms are still SAFE, but needs something stronger for compilation
+  // Notion of "strong" safety---what is it? "this conj will have a fixed
+  // value for this field via PE, because it appears in a positive relational
+  // ref."
+
+// and what about in? this should compile:
+DO forward(new) where test(x, new.nwSrc) AND p.nwSrc in new.nwSrc/x;
+// but this shouldnt
+DO forward(new) where test(x) AND p.nwSrc in p.nwDst/x;
+
+  // More simply:
+  // This can be compiled, and requires less work on the part of the compiler.
+  // (But can't eliminate X, as we currently do, to pull it off.)
+  DO forward(new) WHERE test(x) AND p.nwSrc!=x AND new.nwDst=x;
