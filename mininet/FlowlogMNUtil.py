@@ -112,3 +112,8 @@ def addDictOption( opts, choicesDict, default, name, helpStr=None ):
                     type='string',
                     default = default,
                     help = helpStr )
+
+# created as a function to allow for any necessary
+# canonicalization in the future
+def subnetStr(ip_str, mask):
+  return ip_str + "/" + str(mask)
