@@ -39,7 +39,9 @@ class FlowlogDemo(object):
       self.subnetRootSwitch = None
       self.subnetHostLastIP = {}
       self.globalHostCount = 0
+      self.globalPeerCount = 0
       self.globalEdgeSwCount = 0
+      self.networksToLaunch = {}
 
       self.parseArgs()
       lg.setLogLevel('info')
@@ -81,7 +83,7 @@ class FlowlogDemo(object):
         addDictOption(opts, CONTROLLERS, CONTROLLERDEF, 'controller')
         self.options, self.args = opts.parse_args()
 
-    def buildRouter(self, topo, r, subnets):
+    def buildRouter(self, topo, r, subnets, peers):
       router = topo.addSwitch(r['name'] + '-router', dpid=r['self-dpid'])
 
       nat = topo.addSwitch(r['name'] + '-nat', dpid=r['nat-dpid'])
@@ -115,7 +117,16 @@ class FlowlogDemo(object):
                                 defaultRoute='dev %s-eth0 via %s' % (name, s['gw']))
             topo.addLink(host, edge_switch, **self.linkopts)
 
-      return router
+      # Finally, add hosts which represents our BGP peers
+
+      for p in peers:
+        self.globalPeerCount += 1
+        name = "peer%d" % self.globalPeerCount
+        peer = topo.addHost(name, ip='%s/%d' % (p['ip'], p['mask']),
+                            mac=p['mac'])
+        topo.addLink(router, peer)
+
+        self.networksToLaunch[name] = p['networks']
 
 
     def buildTopo(self):
@@ -146,12 +157,17 @@ class FlowlogDemo(object):
       s2['tr-dpid'] = "2000000000000002"
       subnets.append(s2)
 
-      r = self.buildRouter(topo, router, subnets)
+      peers = []
 
-      # Finally, add the host which represents our BGP peer
+      p1 = {}
+      p1['ip'] = '192.168.1.1'
+      p1['mask'] = 24
+      p1['mac'] = 'be:ef:be:ef:00:01'
+      p1['networks'] = [('8.0.0.0', 8), ('4.4.0.0', 16)]
+      peers.append(p1)
 
-      bgp_peer = topo.addHost('bgp_peer', ip='192.168.1.1/24', mac='be:ef:be:ef:00:01')
-      topo.addLink(r, bgp_peer)
+
+      self.buildRouter(topo, router, subnets, peers)
 
       return topo
 
@@ -182,7 +198,8 @@ class FlowlogDemo(object):
     def launchHttpdOnInternets(self, network, node_name, networks):
         node = network.getNodeByName(node_name)
 
-        for (i, ip) in enumerate(networks):
+        for (i, (ip, mask)) in enumerate(networks):
+          # TODO(adf): add 'mask' as well. need to convert to dotted-quad
           node.cmd('ifconfig %s-eth0:%d %s' %
                    (node_name, i+1, ip.rpartition('.')[0] + '.1'))
 
@@ -200,7 +217,8 @@ class FlowlogDemo(object):
 
         self.launchNetwork(network, host_cmd, host_cmd_opts)
 
-        self.launchHttpdOnInternets(network, 'bgp_peer', ['8.0.0.0', '4.4.0.0'])
+        for key in self.networksToLaunch:
+          self.launchHttpdOnInternets(network, key, self.networksToLaunch[key])
 
         self.demo(network)
         self.teardownNetwork(network, host_cmd)
