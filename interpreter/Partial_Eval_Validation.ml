@@ -11,11 +11,14 @@ open Printf
 exception InvalidINUse of formula;;
 exception UsesUncompilableBuiltIns of formula;;
 exception IllegalFieldModification of formula;;
+exception NonOFTableField of formula;;
+
+exception NeedsStronglySafeTerm of term list;;
+
 exception IllegalAssignmentViaEquals of formula;;
 exception IllegalAtomMustBePositive of formula;;
 exception IllegalModToNewpkt of (term * term);;
 exception IllegalEquality of (term * term);;
-exception NonTableField of formula;;
 
 let legal_field_to_modify (fname: string): bool =
 	mem fname legal_to_modify_packet_fields;;
@@ -24,8 +27,9 @@ let compilable_field_to_test (fname: string): bool =
 (* (printf "cftt: %s %s %b\n%!" fname (String.concat "," legal_to_match_packet_fields) (mem fname legal_to_match_packet_fields));  *)
   mem fname legal_to_match_packet_fields;;
 
-let rec forbidden_assignment_check (newpkt: string) (f: formula) (innot: bool): unit =
+let rec validate_formula_for_compile (strong_safe_list: term list) (newpkt: string) (f: formula) (innot: bool): unit =
 
+    (* Can't modify or match on fields disallowed by OpenFlow *)
  	  let check_legal_pkt_fields = function
 							| TField(varname, fld)
                 (* newpkt: must be legal to modify *)
@@ -35,11 +39,12 @@ let rec forbidden_assignment_check (newpkt: string) (f: formula) (innot: bool): 
               | TField(varname, fld) ->
                  (* any term: cannot compile if involves non-base fieldnames *)
                  if not (compilable_field_to_test fld) then
-                    raise (NonTableField f)
+                    raise (NonOFTableField f)
       	 			| _ -> ()
       	 				in
+
     (* use of negation on equality: ok if [pkt.x = 5], [new.pt = old.pt] *)
-    let check_legal_negation (t1: term) (t2: term): unit =
+(*)    let check_legal_negation (t1: term) (t2: term): unit =
       let dangerous = (match (t1, t2) with
           | (TField(v1, f1), TField(v2, f2)) ->
             (f1 <> "locpt" || f2 <> "locpt")
@@ -70,80 +75,53 @@ let rec forbidden_assignment_check (newpkt: string) (f: formula) (innot: bool): 
       	 | (TConst(_), TField(var2, fld2)) -> ()
       	 | _ -> ()
       	 	in
+*)
+
+  let check_one_strong_safe (tl: term list): unit =
+    if for_all (fun t -> not (mem t strong_safe_list)) tl then
+      raise (NeedsStronglySafeTerm(tl)) in
+
+  let check_new_strong_safe (t: term): unit =
+    match t with | TField(v, f) when v = newpkt -> check_one_strong_safe [t] | _ -> () in
 
 	match f with
 		| FTrue -> ()
     | FFalse -> ()
 
     | FAnd(f1, f2) ->
-      		 forbidden_assignment_check newpkt f1 innot;
-      		 forbidden_assignment_check newpkt f2 innot;
+      		 validate_formula_for_compile strong_safe_list newpkt f1 innot;
+      		 validate_formula_for_compile strong_safe_list newpkt f2 innot;
     | FOr(f1, f2) ->
-      		 forbidden_assignment_check newpkt f1 innot;
-      		 forbidden_assignment_check newpkt f2 innot;
-    | FNot(f) -> forbidden_assignment_check newpkt f (not innot);
+      		 validate_formula_for_compile strong_safe_list newpkt f1 innot;
+      		 validate_formula_for_compile strong_safe_list newpkt f2 innot;
+    | FNot(f) -> validate_formula_for_compile strong_safe_list newpkt f (not innot);
 
-    | FIn(t,_,_) ->
-      (* No need to check for legal negation *)
+    | FIn(t,a,m) ->
       check_legal_pkt_fields t;
-      (* But need to disallow "new" in range. *)
+      check_one_strong_safe [a];
+      check_one_strong_safe [m];
+      (* Disallow new packet in range. *)
       (match t with
         | TField(tv, tf) when tv = newpkt -> raise (InvalidINUse f)
         | _ -> ());
 
     | FEquals(t1, t2) ->
-        (* ALLOWED:
-        (1) equality: between new and old, same field. NOT negated
-        (2) equality: special case NOT(newpkt.locPt = pkt.locPt)
-        (3) equality: new = const
-        (4) equality: old = const *)
-        check_legal_negation t1 t2; (* if negated, must be special case *)
-    		check_legal_pkt_fields t1; (* not trying to set an unsettable field *)
+        check_one_strong_safe [t1;t2];
+        check_new_strong_safe t1;
+        check_new_strong_safe t2;
+    		check_legal_pkt_fields t1;
     		check_legal_pkt_fields t2;
-    		check_same_field_if_newpkt t1 t2; (* can't swap fields, etc. w/o controller *)
-        check_not_same_pkt t1 t2;
 
     | FAtom(modname, relname, tlargs) ->
+          (* All fields legal for modification? *)
+          iter check_legal_pkt_fields tlargs;
+
+          (* All newpkt fields need to be strongly safe *)
+          if innot then iter check_new_strong_safe tlargs;
+
           (* Is this a built-in that can't be compiled? *)
           if Flowlog_Builtins.is_uncompilable_built_in relname then
-            raise (UsesUncompilableBuiltIns f);
-
-      		(* new field must be legal for modification by openflow *)
-      		iter check_legal_pkt_fields tlargs;
-      		(* if involves a newpkt, must be positive *)
-      		if (innot && (ExtList.List.exists (function | TField(fvar, _) when fvar = newpkt -> true | _ -> false) tlargs)) then
-      			raise (IllegalAtomMustBePositive f);;
-
-let validate_fwd_clause (cl: clause): unit =
-  (*printf "Validating clause: %s\n%!" (string_of_clause cl);*)
-	match cl.head with
-		| FAtom("", "forward", [TVar(newpktname)]) ->
-      (*ignore (common_existential_check newpktname [] cl.body);  *)
-			forbidden_assignment_check newpktname cl.body false;
-      printf "Forward clause was valid.\n%!";
-		| _ -> failwith "validate_clause";;
-
-let can_compile_clause_to_fwd (cl: clause): bool =
-  let debug = true in
-  try
-    if is_forward_clause cl then
-    begin
-        validate_fwd_clause cl;
-        true
-    end
-    else
-      false
-  with (* catch only "expected" exceptions *)
-    | UsesUncompilableBuiltIns(_) -> if debug then printf "UsesUncompilableBuiltIns\n%!"; false
-    | IllegalFieldModification(_) -> if debug then printf "IllegalFieldModification\n%!"; false
-    | IllegalAssignmentViaEquals(_) -> if debug then printf "IllegalAssignmentViaEquals\n%!"; false
-    | IllegalAtomMustBePositive(_) -> if debug then printf "IllegalAtomMustBePositive\n%!"; false
-    | NonTableField(_) -> if debug then printf "NonTableField\n%!"; false
-    | IllegalModToNewpkt(_, _) -> if debug then printf "IllegalModToNewpkt\n%!"; false
-    | IllegalEquality(_,_) -> if debug then printf "IllegalEquality\n%!"; false;;
-
-
-(************ WEAKENING ************)
+            raise (UsesUncompilableBuiltIns f);;
 
 (* todo: lots of code overlap in these functions. should unify *)
 (* removes the packet_in atom (since that's meaningless here).
@@ -175,6 +153,40 @@ let rec trim_packet_from_body (body: formula): (string * formula) =
     | FAtom("", relname, [TVar(varstr)]) when (is_packet_in_table relname) ->
       (varstr, FTrue)
     | _ -> ("", body);;
+
+
+let validate_fwd_clause (cl: clause): unit =
+	match cl.head with
+		| FAtom("", "forward", [TVar(newpktname)]) ->
+      let (_, trimmed) = (trim_packet_from_body cl.body) in
+      let strong_safe_list = get_safe_terms trimmed in
+      printf "Validating clause with body (trimmed) = %s\n%!" (string_of_formula trimmed);
+      printf "SSL: %s\n%!" (String.concat ", " (map string_of_term strong_safe_list));
+			validate_formula_for_compile strong_safe_list newpktname cl.body false;
+      printf "Forward clause was valid.\n%!";
+		| _ -> failwith "validate_clause";;
+
+let can_compile_clause_to_fwd (cl: clause): bool =
+  let debug = true in
+  try
+    if is_forward_clause cl then
+    begin
+        validate_fwd_clause cl;
+        true
+    end
+    else
+      false
+  with (* catch only "expected" exceptions *)
+    | UsesUncompilableBuiltIns(_) -> if debug then printf "UsesUncompilableBuiltIns\n%!"; false
+    | IllegalFieldModification(_) -> if debug then printf "IllegalFieldModification\n%!"; false
+    | IllegalAssignmentViaEquals(_) -> if debug then printf "IllegalAssignmentViaEquals\n%!"; false
+    | IllegalAtomMustBePositive(_) -> if debug then printf "IllegalAtomMustBePositive\n%!"; false
+    | NonOFTableField(_) -> if debug then printf "NonOFTableField\n%!"; false
+    | IllegalModToNewpkt(_, _) -> if debug then printf "IllegalModToNewpkt\n%!"; false
+    | IllegalEquality(_,_) -> if debug then printf "IllegalEquality\n%!"; false;;
+
+
+(************ WEAKENING ************)
 
 (***************************************************************************************)
 

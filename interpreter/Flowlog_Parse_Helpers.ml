@@ -139,42 +139,13 @@ let safe_clause (p: flowlog_program) (cl: clause): unit =
       (* STEP 1: Discover what terms need to be proven safe. *)
       let must_be_safe = get_terms_to_prove_safe p cl in
 
-      (* STEP 2: discover what terms are proven safe *)
-      let get_safe_terms (body: formula): term list =
-        (* only keep positive atomic formulas *)
-        let atoms = filter_map (fun (s,a) -> if s = true then Some(a) else None) (get_atoms_with_sign body) in
-        let eqs = filter_map (fun (s,a) -> if s = true then Some(a) else None) (get_equalities body) in
-        (* Don't count IN as making something safe. new.nwSrc IN 10.0.0.0/8 is "safe" but not SAFE. *)
-        (*let ins = filter_map (fun s,a -> if s = true then Some(a) else None) get_ins body in*)
-
-        (* todo concern: what if the atom is a built-in predicate? is that still valid? *)
-        let get_immediate_safe_terms_from (f: formula): term list =
-          match f with | FAtom(_, _, tl) -> tl | FEquals(x, TConst(_)) | FEquals(TConst(_), x) -> [x] | _ -> [] in
-        let get_equal_deps (eq: formula): (term * term) list =
-          match eq with | FEquals(TConst(_), x) | FEquals(x, TConst(_)) -> [] | FEquals(t1, t2) -> [(t1,t2);(t2,t1)] | _ -> [] in
-
-        let immediates = unique (flatten (map get_immediate_safe_terms_from (atoms @ eqs))) in
-        let eqsteps = unique (flatten (map get_equal_deps eqs)) in
-
-        let rec gst_helper (proven: term list): term list =
-          let new_proven = unique (proven @
-                                   (* follow the dependencies discovered via equalities *)
-                                   (filter_map (fun (ante,cons) -> if mem ante proven then Some(cons) else None) eqsteps) @
-                                   (* Also: If TVar(x) is proven, then so too is TField(x, f) for any f. Check after the fact: *)
-                                   (filter_map (fun (ante,cons) ->
-                                      (match ante with
-                                        | TField(v, f) -> if mem (TVar(v)) proven then Some(cons) else None
-                                        | _ -> None)) eqsteps)
-                                    ) in
-            if (length new_proven) > (length proven) then gst_helper new_proven
-            else proven in
-        gst_helper immediates in
 
       (* each of these terms may be safe via a positive path of intermediate variables
          e.g. new.dlSrc = x, x = y, R(y). *)
 
-      (* STEP 3: are any terms that need to be proven safe, unsafe? *)
+      (* STEP 2: discover what terms are proven safe *)
       let proven_safe = (get_safe_terms cl.body) in
+        (* STEP 3: are any terms that need to be proven safe, unsafe? *)
         printf "PROVEN SAFE: %s\n%!" (String.concat ", " (map (string_of_term ~verbose:Verbose) proven_safe));
         iter (fun toprove ->
           if (not (mem toprove proven_safe) &&
