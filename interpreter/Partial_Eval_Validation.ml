@@ -51,8 +51,13 @@ let rec validate_formula_for_compile (strong_safe_list: term list) (newpkt: stri
 	  (match lit with
 		| FTrue -> (lit::accf, acce)
     | FFalse -> (lit::accf, acce)
-    | FNot(f) -> validate_literal (not innot) (accf, acce) f ;
-
+    | FNot(_) when innot -> failwith ("validate_literal had not-within-not: "^(string_of_formula lit))
+    | FNot(f) ->
+      let inacclits,inaccexns = validate_literal (not innot) (accf, acce) f in
+      if (length acce) < (length inaccexns) then
+        (accf, inaccexns)
+      else (* don't forget to negate the literal produced by subcall *)
+        (FNot(hd inacclits)::(tl inacclits), acce)
     | FIn(t,a,m) ->
       (try
         check_legal_pkt_fields t;
@@ -173,8 +178,8 @@ let validate_and_process_pkt_triggered_clause (cl: clause): (clause * bool) =
           (cl, true)
         (* non-forwarding clause, no weakening needed *)
         | None ->
-          printf "NON-forwarding clause, no weakening needed.\n%!";
-          (cl, false)
+          printf "NON-forwarding clause, no weakening needed (but trimmed).\n%!";
+          ({head = cl.head; orig_rule = cl.orig_rule; body = trimmed}, false)
         (* weakened *)
         | Some(final_formula) ->
           printf "Weakened (either forwarding or non-forwarding). New body: %s\n%!" (string_of_formula final_formula);

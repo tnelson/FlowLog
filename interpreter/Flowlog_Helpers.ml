@@ -485,6 +485,10 @@ let write_log (ln: string): unit =
   | None -> printf "Unable to write to log file.\n%!"
   | Some(out) -> fprintf out "%s\n%!" ln;;
 
+let write_log_and_print (ln: string): unit =
+  write_log ln;
+  printf "%s\n%!" ln;;
+
 let close_log (): unit =
   match !out_log with
   | Some(out) -> close_out out

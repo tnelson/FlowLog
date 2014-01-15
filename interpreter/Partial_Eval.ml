@@ -431,11 +431,13 @@ let substitute_for_join (f: formula): formula =
     printf "--- substitute_for_join ---\n%!";
     printf "FMLA: %s\n%!" (string_of_formula f);
     iter (fun (v, c) -> (printf "ASSN: %s -> %s\n%!" (string_of_term v) (string_of_term c))) assignments;
-    printf "SUBS: %s\n%!" (string_of_formula result);
+    printf "FMLA': %s\n%!" (string_of_formula result);
   end;
 
   (* Re-add field assignments that we substituted out for safety: *)
   let field_value_conj = filter_map (fun (v,c) -> match v with | TField(_, _) -> Some(FEquals(v, c)) | _ -> None) assignments in
+
+  if !global_verbose > 3 then printf "FIELD VALUE CONJ: %s\n%!" (string_of_formula (build_and field_value_conj));
 
   (* If there are still variables left in INs, they are free to vary arbitrarily, and so the compiler will ignore that IN. *)
   FAnd(result, build_and field_value_conj)
@@ -448,8 +450,8 @@ let substitute_for_join (f: formula): formula =
    and this reduce the clause to <false>. If the caller wants efficiency, it should pass only packet-triggered clauses. *)
 let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_handler option) (tcl: triggered_clause): (pred * action * srule) list =
     if !global_verbose > 4 then (match callback with
-      | None -> write_log (sprintf "\n--- Packet triggered clause to netcore (FULL COMPILE) on: \n%s\n%!" (string_of_triggered_clause tcl))
-      | Some(_) -> write_log (sprintf "\n--- Packet triggered clause to netcore (~CONTROLLER~) on: \n%s\n%!" (string_of_triggered_clause tcl)));
+      | None -> write_log_and_print (sprintf "\n--- Packet triggered clause to netcore (FULL COMPILE) on: \n%s\n%!" (string_of_triggered_clause tcl))
+      | Some(_) -> write_log_and_print (sprintf "\n--- Packet triggered clause to netcore (~CONTROLLER~) on: \n%s\n%!" (string_of_triggered_clause tcl)));
 
     match tcl.clause.head with
       | FAtom(_, _, headargs) ->

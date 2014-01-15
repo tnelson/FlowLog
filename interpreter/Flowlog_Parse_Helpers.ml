@@ -469,7 +469,7 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
                                         if fully_compiled then
                                            ({oldpkt=v; clause={head = cl.head; orig_rule = cl.orig_rule; body = t}} :: acc_comp, acc_weaken, acc_unweakened)
 
-                                        (* weakened; needs storing for both compiler and XSB *)
+                                        (* weakened; needs storing for both compiler and XSB. weakened version should have its trigger removed *)
                                         else
                                          (acc_comp, {oldpkt=v; clause=newcl} :: acc_weaken, cl::acc_unweakened)
 
