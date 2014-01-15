@@ -68,9 +68,16 @@ let rec validate_formula_for_compile (strong_safe_list: term list) (newpkt: stri
 
     | FEquals(t1, t2) ->
       (try
-        check_one_strong_safe [t1;t2];
-        check_new_strong_safe t1;
-        check_new_strong_safe t2;
+        (* p.locPt = new.locPt is the sole exception to strong safety requirement *)
+        (match t1,t2 with
+        | TField(v1,f1), TField(v2,f2) when (v1 = newpkt || v2 = newpkt) && f1 = "locpt" && f2 = "locpt" ->
+          ()
+        | _ ->
+          check_one_strong_safe [t1;t2];
+          check_new_strong_safe t1;
+          check_new_strong_safe t2);
+
+        (* Legal fields are required regardless *)
     		check_legal_pkt_fields t1;
     		check_legal_pkt_fields t2;
 
@@ -110,7 +117,7 @@ let rec validate_formula_for_compile (strong_safe_list: term list) (newpkt: stri
     iter (fun e -> match e with
             | UsesUncompilableBuiltIns(_) -> if !global_verbose > 0 then printf "UsesUncompilableBuiltIns\n%!";
             | IllegalFieldModification(_) -> if !global_verbose > 0 then printf "IllegalFieldModification\n%!";
-            | NeedsStronglySafeTerm(_) -> if !global_verbose > 0 then printf "NeedsStronglySafeTerm\n%!";
+            | NeedsStronglySafeTerm(tl) -> if !global_verbose > 0 then printf "NeedsStronglySafeTerm: %s\n%!" (String.concat "; " (map string_of_term tl));
             | NonOFTableField(_) -> if !global_verbose > 0 then printf "NonOFTableField\n%!";
             | InvalidINUse(_) -> if !global_verbose > 0 then printf "InvalidINUse\n%!";
             | IllegalEquality(_,_) -> if !global_verbose > 0 then printf "IllegalEquality\n%!"
@@ -156,9 +163,19 @@ let validate_and_process_forward_clause (cl: clause): (clause * bool) =
 		| _ -> "") in
       let (_, trimmed) = (trim_packet_from_body cl.body) in
       let strong_safe_list = get_safe_terms trimmed in
-      printf "Validating clause with body (trimmed) = %s\n%!" (string_of_formula trimmed);
+      printf "\nValidating clause with body (trimmed) = %s\n%!" (string_of_formula trimmed);
       printf "Strong safe list: %s\n%!" (String.concat ", " (map string_of_term strong_safe_list));
       let final_formula_maybe = validate_formula_for_compile strong_safe_list newpkt cl.body in
       (match final_formula_maybe with
-        | None -> (cl, true)
-        | Some(final_formula) -> ({head = cl.head; orig_rule = cl.orig_rule; body = final_formula}, false));;
+        (* forwarding clause, no weakening needed *)
+        | None when newpkt <> "" ->
+          printf "Forwarding clause, no weakening needed.\n%!";
+          (cl, true)
+        (* non-forwarding clause, no weakening needed *)
+        | None ->
+          printf "NON-forwarding clause, no weakening needed.\n%!";
+          (cl, false)
+        (* weakened *)
+        | Some(final_formula) ->
+          printf "Weakened (either forwarding or non-forwarding). New body: %s\n%!" (string_of_formula final_formula);
+          ({head = cl.head; orig_rule = cl.orig_rule; body = final_formula}, false));;
