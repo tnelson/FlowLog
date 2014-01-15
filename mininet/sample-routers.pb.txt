@@ -1,0 +1,35 @@
+routers {
+  name: "r1"
+  self_dpid: "1000000000000001"
+  nat_dpid: "4000000000000001"
+
+  subnets {
+    addr: "10.0.1.0"
+    mask: 24
+    gw: "10.0.1.1"
+    tr_dpid: "2000000000000001"
+  }
+
+  subnets {
+    addr: "10.0.2.0"
+    mask: 24
+    gw: "10.0.2.1"
+    tr_dpid: "2000000000000002"
+  }
+
+  peers {
+    ip: "192.168.1.1"
+    mask: 24
+    mac: "be:ef:be:ef:00:01"
+
+    networks {
+      addr: "8.0.0.0"
+      mask: 8
+    }
+
+    networks {
+      addr: "4.4.0.0"
+      mask: 16
+    }
+  }
+}

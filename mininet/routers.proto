@@ -1,0 +1,40 @@
+// Protocol Buffer describing the routers (and their associated subnets
+// and peers) for our Cisco IOS conversion.
+//
+// Author: Andrew Ferguson (adf@cs.brown.edu)
+//
+
+package flowlog;
+
+message Subnet {
+  optional string addr    = 1;  // required
+  optional int32  mask    = 2;  // required
+  optional string gw      = 3;  // required
+  optional string tr_dpid = 4;  // required
+}
+
+message Network {
+  optional string addr = 1;  // required
+  optional int32  mask = 2;  // required
+}
+
+message Peer {
+  optional string ip   = 1;  // required
+  optional int32  mask = 2;  // required
+  optional string mac  = 3;  // required
+
+  repeated Network networks = 4;
+}
+
+message Router {
+  optional string name      = 1;  // required
+  optional string self_dpid = 2;  // required
+  optional string nat_dpid  = 3;  // required
+
+  repeated Subnet subnets = 4;
+  repeated Peer peers = 5;
+}
+
+message Routers {
+  repeated Router routers = 1;
+}
