@@ -83,6 +83,7 @@ ON tcp_packet(pkt) WHERE ptassign(0x6, ip, pt, pkt.nwDst, pkt.tpDst):
     natconfig(pkt.locSw, new.locPt, pkt.locPt, pkt.nwDst) AND
     new.nwDst = ip AND new.tpDst = pt
     AND pkt.nwSrc != ip // <-- when publicPt = privatePt
+    TIMEOUT 120;
 
 ON udp_packet(pkt) WHERE ptassign(0x11, ip, pt, pkt.nwDst, pkt.tpDst):
   DO forward(new) WHERE
