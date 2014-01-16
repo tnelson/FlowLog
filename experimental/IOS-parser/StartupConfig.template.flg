@@ -1,0 +1,8 @@
+INCLUDE "examples/L3router.flg";
+INCLUDE "examples/Mac_Learning.inc.flg";
+
+TABLE routerAlias(string, switchid);
+TABLE portAlias(string, string, portid);
+
+ON startup(e):
+@startupinserts
