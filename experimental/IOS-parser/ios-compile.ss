@@ -277,7 +277,7 @@
     (pretty-display startupinserts)
     
     ; output the router message for this router
-    (call-with-output-file "IOS-pb.out" #:exists 'replace
+    (call-with-output-file "IOS.pb.bin" #:exists 'replace
       (lambda (out) 
         (printf "Outputting protobufs spec for this router...~n")
         (printf "~v~n" routers)

@@ -10,3 +10,8 @@ Surface_Lexer.ml
 Surface_Parser.ml
 Surface_Parser.mli
 *.pyc
+experimental/IOS-parser/**/*.p
+experimental/IOS-parser/**/*.flg
+experimental/IOS-parser/**/*.pb.bin
+experimental/IOS-parser/compiled/
+experimental/IOS-parser/ios2flowlog
