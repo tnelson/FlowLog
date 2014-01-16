@@ -1,0 +1,130 @@
+/*
+ * Basic functionality for routing to directly attached subnets.
+ *
+ * (description goes here)
+ *
+ * TODO:
+ *  - split out an "interfaces" relation which has (ip, mac, locsw, locpt)
+ *  - would be great if NAT were't explicitly included here
+ */
+
+INCLUDE "@|basename|/Arp_Cache.flg";
+INCLUDE "@|basename|/NATgeneric.flg";
+INCLUDE "@|basename|/L3external.flg";
+
+/*******************************************************************************
+ *
+ * Data Structures
+ *
+ ******************************************************************************/
+
+// Information about directly attached subnets
+//
+// Column values:
+// subnet addr, subnet mask, gw ip, gw mac, locSw, locpt, trSw
+TABLE subnets(ipaddr, int, ipaddr, macaddr, switchid, portid, switchid);
+
+// Table representing packets which router needs to send an ARP query for
+//
+// TODO(adf): how do we deliver this packet later???
+// TODO(adf): actually store the packet buffer, not just its nwdst
+TABLE router_queued(ipaddr);
+
+/*******************************************************************************
+ *
+ * L3 routing to directly attached subnets
+ *
+ * Only wrinkle is that we need to send packets to our NAT switch if they need
+ * to be un-NAT'd before processing. L3external.flg contains the rule which
+ * sends to the NAT for packets which need NATing before hitting external.
+ *
+ ******************************************************************************/
+
+// TODO(adf): need a table which ties "our" nat to this router
+
+ON ip_packet(pkt):
+  DO forward(new) WHERE
+    subnets(addr, mask, ANY, new.dlSrc, pkt.locSw, new.locPt, ANY)
+    and pkt.nwDst IN addr/mask
+    // exempt packets to the NAT
+    and NOT natconfig(ANY, ANY, ANY, pkt.nwDst);
+
+// on the router, send all NAT-destined traffic to the NAT
+ON ip_packet(pkt):
+  DO forward(new) WHERE
+    natconfig(ANY, ANY, ANY, pkt.nwDst)
+    and subnets(ANY, ANY, ANY, ANY, pkt.locSw, ANY, ANY) // TODO(adf): only apply to routers
+    and pkt.locPt != 1
+    and new.locPt = 1; // TODO(adf): should be magic NAT port?
+
+/*******************************************************************************
+ *
+ * Per-subnet translators: inbound path
+ *
+ * The inbound path is simple: just pass to the router, which is on port 1
+ *
+ ******************************************************************************/
+
+ON ip_packet(pkt):
+  DO forward(new) WHERE
+    subnets(ANY, ANY, ANY, pkt.dlDst, ANY, ANY, pkt.locSw)
+    and pkt.locPt != 1
+    and new.locPt = 1;
+
+/*******************************************************************************
+ *
+ * Per-subnet translators: outbound path
+ *
+ * Our goal here is to rewrite the destination MAC address (dlDst) based on the
+ * IP address. This mapping is obtained from ARP, so we first try to do the
+ * rewrite based on the ARP cache. If the ARP cache lacks a mapping, we store
+ * the packet, issue an ARP request, and later forward the packet once the ARP
+ * reply is received.
+ *
+ ******************************************************************************/
+
+// Default path: set dlDst based on ARP cache
+
+ON ip_packet(pkt):
+  DO forward(new) WHERE
+    subnets(addr, mask, gwip, ANY, ANY, ANY, pkt.locSw)
+    and pkt.nwDst IN addr/mask
+    and cached(pkt.nwDst, new.dlDst)
+    and pkt.nwDst != gwip
+    and pkt.locPt = 1
+    and new.locPt = 2;
+
+// Alternate path: send an ARP request for IPs we can't translate and queue the pkt
+
+ON ip_packet(pkt) WHERE subnets(addr, mask, gwip, gwmac, ANY, ANY, pkt.locSw)
+                        and pkt.nwDst IN addr/mask
+                        and not cached(pkt.nwDst, ANY)
+                        and pkt.dlDst != gwmac
+                        and pkt.nwDst != gwip
+                        and pkt.locPt = 1:
+
+  INSERT (pkt.nwDst) INTO router_queued;
+
+  DO emit_arp(new) WHERE
+    not router_queued(pkt.nwDst) and
+    new.locSw = pkt.locSw and
+    new.dlDst = ff:ff:ff:ff:ff:ff and
+    new.dlSrc = 00:00:ca:fe:ca:fe and // controller mac addr
+
+    new.arp_op = 1 and // ARP request
+    new.arp_tpa = pkt.nwDst and
+    new.arp_sha = 00:00:CA:FE:CA:FE and // Controller MAC
+    new.arp_spa = 10.10.10.1 and // Controller IP addr (10.10.10.1)
+
+    switch_has_port(new.locSw, new.locPt); // REQUIRED? this rule is not compiled TODO(adf): needed???
+
+
+// with the above physically wired translators, we are trying to achieve
+// sequential composition with what is, logically, this program:
+//
+//  ON ip_packet(pkt):
+//    DO forward(new) WHERE
+//      cached(pkt.nwDst, new.dlDst);
+//
+//  (on the outbound direction of the router). plus, issuing ARP requests
+//  for addresses we don't know how to translate

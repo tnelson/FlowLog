@@ -326,6 +326,8 @@ namespace-for-template)
     
     ; FLOWLOG:
 
+    ; First up, generate StartupConfig
+
     (define startup-vars (make-hash))
     (dict-set! startup-vars "basename" root-path)
     (dict-set! startup-vars "startupinserts" startupinserts)
@@ -335,15 +337,33 @@ namespace-for-template)
                           "\n\nexit acl:\n "
                           (sexpr-to-flowlog `(or ,@outboundacl))
                           "\n\n\n"
-                          (render-template "StartupConfig.template.flg" startup-vars))
+                          (render-template "templates/StartupConfig.template.flg" startup-vars))
            (make-path root-path "IOS.flg"))
+
+    ; generate L3external
 
     (define external-vars (make-hash))
     (dict-set! external-vars "nexthop-fragment" (sexpr-to-flowlog next-hop-fragment))
 
-    (store (render-template "L3external.template.flg" external-vars)
+    (store (render-template "templates/L3external.template.flg" external-vars)
            (make-path root-path "L3external.flg"))
-    
+
+    ; Finally, we copy the template files which just need their INCLUDE line set properly
+
+    (define basename-only (make-hash))
+    (dict-set! basename-only "basename" root-path)
+
+    (define (copy-with-basename filename)
+      (store (render-template (string-append "templates/" filename ".template.flg")
+                              basename-only)
+             (make-path root-path (string-append filename ".flg"))))
+
+    (copy-with-basename "Arp_Cache")
+    (copy-with-basename "L3router")
+    (copy-with-basename "Mac_Learning.inc")
+    (copy-with-basename "NATgeneric")
+    (copy-with-basename "NIB.inc")
+
     ; For debugging purposes:
     (store inboundacl (make-path root-path "InboundACL.p"))
     (store outboundacl (make-path root-path "OutboundACL.p"))

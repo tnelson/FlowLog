@@ -1,0 +1,165 @@
+/*
+ * Support for generic NAT functionality in the network
+ *
+ * - Flows can only originate on the private side of the NAT
+ *
+ * (description goes here)
+ *
+ * TODO:
+ *  - handle ICMP echo based on ICMP Query's "Identifier" field
+ *    see: http://tools.ietf.org/html/rfc3022 ("Traditional NAT")
+ *         http://tools.ietf.org/html/rfc5508 ("NAT for ICMP")
+ *  - how can we do UDP and TCP blocks without copy and paste?
+ *  - expand needs_nat to also allow for NAT-ing between internal subnets?
+ *
+ */
+
+/*******************************************************************************
+ *
+ * Configuration Data Structures
+ *
+ ******************************************************************************/
+
+// NAT configurations
+//
+// Column values:
+// NAT switch, private phyiscal port, public physical port, public IP
+TABLE natconfig(switchid, portid, portid, ipaddr);
+
+// Table of internal subnets which need NAT processing before going to external
+//
+// Column values:
+// private subnet addr, private subnet mask
+TABLE needs_nat(ipaddr, int);
+
+/*******************************************************************************
+ *
+ * Internal Data Structures
+ *
+ ******************************************************************************/
+
+// Port Assigntments
+//
+// Column values:
+// proto (TCP or UDP), private IP, private tp port, public IP, public tp port
+TABLE ptassign(int, ipaddr, int, ipaddr, int);
+
+// Last used port number by sequential increase (per-public IP & proto)
+//
+// Column values:
+// public IP, proto, port number
+TABLE seqpt(ipaddr, int, int);
+
+// Next port made available by reusing expired port (per-public IP & proto)
+//
+// Column values:
+// public IP, proto, port number
+TABLE reusept(ipaddr, int, int);
+
+/*******************************************************************************
+ *
+ * Traffic handling for existing flows
+ *
+ ******************************************************************************/
+
+// Outgoing traffic
+ON tcp_packet(pkt) WHERE ptassign(0x6, pkt.nwSrc, pkt.tpSrc, ip, pt) AND
+                         not natconfig(pkt.locSw, ANY, ANY, pkt.nwDst): // <-- when publicPt = privatePt
+  DO forward(new) WHERE
+    natconfig(pkt.locSw, pkt.locPt, new.locPt, ip) AND
+    new.nwSrc = ip AND new.tpSrc = pt
+    TIMEOUT 120;
+
+ON udp_packet(pkt) WHERE ptassign(0x11, pkt.nwSrc, pkt.tpSrc, ip, pt) AND
+                         not natconfig(pkt.locSw, ANY, ANY, pkt.nwDst): // <-- when publicPt = privatePt
+  DO forward(new) WHERE
+    natconfig(pkt.locSw, pkt.locPt, new.locPt, ip) AND
+    new.nwSrc = ip AND new.tpSrc = pt
+    TIMEOUT 120;
+
+// Returning traffic
+ON tcp_packet(pkt) WHERE ptassign(0x6, ip, pt, pkt.nwDst, pkt.tpDst):
+  DO forward(new) WHERE
+    natconfig(pkt.locSw, new.locPt, pkt.locPt, pkt.nwDst) AND
+    new.nwDst = ip AND new.tpDst = pt
+    AND pkt.nwSrc != ip // <-- when publicPt = privatePt
+    TIMEOUT 120;
+
+ON udp_packet(pkt) WHERE ptassign(0x11, ip, pt, pkt.nwDst, pkt.tpDst):
+  DO forward(new) WHERE
+    natconfig(pkt.locSw, new.locPt, pkt.locPt, pkt.nwDst) AND
+    new.nwDst = ip AND new.tpDst = pt
+    AND pkt.nwSrc != ip // <-- when publicPt = privatePt
+    TIMEOUT 120;
+
+/*******************************************************************************
+ *
+ * Traffic handling for new flows
+ *
+ * TODO(adf): how do we check if there's a value in reusept? it would be:
+ * (publicIP, pkt.nwProto, publicPt)
+ *
+ ******************************************************************************/
+
+ON tcp_packet(pkt) WHERE not ptassign(0x6, pkt.nwSrc, pkt.tpSrc, ANY, ANY) AND
+                         natconfig(pkt.locSw, pkt.locPt, publicLocPt, publicIP) AND // <-- when publicPt != privatePt
+                         not natconfig(pkt.locSw, ANY, ANY, pkt.nwDst) AND // <-- when publicPt = privatePt
+                         seqpt(publicIP, 0x6, x) AND add(x, 1, publicPt):
+
+  DO forward(new) WHERE
+    new.locPt = publicLocPt AND
+    new.nwSrc = publicIP AND
+    new.tpSrc = publicPt
+    TIMEOUT 120;
+
+  DELETE (publicIP, 0x6, ANY) FROM seqpt;
+
+  INSERT (publicIP, 0x6, publicPt) INTO seqpt;
+
+  INSERT (0x6, pkt.nwSrc, pkt.tpSrc, publicIP, publicPt) INTO ptassign;
+
+
+ON udp_packet(pkt) WHERE not ptassign(0x11, pkt.nwSrc, pkt.tpSrc, ANY, ANY) AND
+                         natconfig(pkt.locSw, pkt.locPt, publicLocPt, publicIP) AND // <-- when publicPt != privatePt
+                         not natconfig(pkt.locSw, ANY, ANY, pkt.nwDst) AND // <-- when publicPt = privatePt
+                         seqpt(publicIP, 0x11, x) AND add(x, 1, publicPt):
+
+  DO forward(new) WHERE
+    new.locPt = publicLocPt AND
+    new.nwSrc = publicIP AND
+    new.tpSrc = publicPt
+    TIMEOUT 120;
+
+  DELETE (publicIP, 0x11, ANY) FROM seqpt;
+
+  INSERT (publicIP, 0x11, publicPt) INTO seqpt;
+
+  INSERT (0x11, pkt.nwSrc, pkt.tpSrc, publicIP, publicPt) INTO ptassign;
+
+/*******************************************************************************
+ *
+ * Handling for "flow removed" events. These events occur when a NAT rule
+ * expires due to an Idle Timeout. When this happens, we need to remove the
+ * assignment from ptassign, and add it to reusept.
+ *
+ ******************************************************************************/
+
+// Outgoing direction -- flow match will have a private IP and private port as
+// the source pair
+ON flow_removed(fr) WHERE natconfig(fr.sw, fr.inPort, ANY, publicIP) and
+                          ptassign(fr.nwProto, fr.nwSrcAddr, fr.tpSrc, publicIP, publicPt)
+                          and fr.reason = "IdleTimeout":
+
+  DELETE (fr.nwProto, fr.nwSrcAddr, fr.tpSrc, publicIP, publicPt) FROM ptassign;
+
+  INSERT (publicIP, fr.nwProto, publicPt) INTO reusept;
+
+// Returning direction -- flow match will have a NAT's public IP and port as
+// the destination pair
+ON flow_removed(fr) WHERE natconfig(fr.sw, ANY, fr.inPort, fr.nwDstAddr) and
+                          ptassign(fr.nwProto, fr.nwSrcAddr, fr.tpSrc, publicIP, publicPt)
+                          and fr.reason = "IdleTimeout":
+
+  DELETE (fr.nwProto, ANY, ANY, fr.nwDstAddr, fr.tpDst) FROM ptassign;
+
+  INSERT (fr.nwDstAddr, fr.nwProto, fr.tpDst) INTO reusept;
