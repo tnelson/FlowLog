@@ -197,10 +197,12 @@
     ;// subnets(addr,  mask, gw ip,    gw mac,            locSw,            locpt, trSw)
     ;INSERT (10.0.1.0, 24,   10.0.1.1, ca:fe:ca:fe:00:01, 0x1000000000000001, 2, 0x2000000000000001) INTO subnets;
     
-    (define (vals->subnet addr nwa nwm rnum inum)
+    (define (vals->subnet addr nwa nwm rnum inum ptnum)
       (define gwmac (string-append "ca:fe:ca:fe:00:" (string-pad inum 2 #\0)))
       (define trsw (string-append "0x20000000000000" (string-pad inum 2 #\0)))
-      (string-append "INSERT (" (string-join (list nwa nwm addr gwmac rnum inum trsw) ", ") ") INTO subnets;\n"))
+      (string-append "INSERT (" (string-join (list nwa nwm addr gwmac rnum ptnum trsw) ", ") ") INTO subnets;\n"
+                     "INSERT (" (string-join (list addr gwmac) ", ") ") INTO cached; // auto\n"
+                     "INSERT (" trsw ") INTO switches_without_mac_learning; // auto\n"))
 
     (define (vals->ifalias rname iname inum)
       (string-append "INSERT (" (string-join (list (string-append "\"" rname "\"") 
@@ -209,15 +211,21 @@
         
     (define (vals->routeralias rname rnum)
       (string-append "INSERT (" (string-join (list (string-append "\"" rname "\"")                                                    
-                                                   rnum) ", ") ") INTO routerAlias;\n"))
+                                                   rnum) ", ") ") INTO routerAlias;\n"
+                     "INSERT (" rnum ") INTO switches_without_mac_learning; // auto\n"))
+
+    (define (vals->nat natnum)
+      (string-append "INSERT (0x" natnum ") INTO switches_without_mac_learning; // auto\n"))
     
     ; Need to assign an ID to the router and an ID to the interface
     (define (ifacedef->tuples arouter rname rnum ifindex i)      
       (match i
         [`(,name ,primaddr (,primnwa ,primnwm) ,secaddr (,secnwa ,secnwm)) 
          (define inum (number->string (+ 1 ifindex)))
-         (define prim (vals->subnet primaddr primnwa primnwm rnum inum))
-         (define sec (if secaddr (vals->subnet primaddr primnwa primnwm rnum inum) #f))                           
+         ; offset the port number on the router by 1, since 1 is reserved for the attached NAT switch
+         (define ptnum (number->string (+ 2 ifindex)))
+         (define prim (vals->subnet primaddr primnwa primnwm rnum inum ptnum))
+         (define sec (if secaddr (vals->subnet primaddr primnwa primnwm rnum inum ptnum) #f))
          (define alias (vals->ifalias rname name inum))
          (define result (filter (lambda (x) x) (list prim sec alias)))
          
@@ -265,7 +273,10 @@
                                     [ifindex (build-list (length interface-defns) values)])
                            (ifacedef->tuples arouter hostname hostnum ifindex ifdef)))
       (define routertuple (vals->routeralias hostname hostnum)) 
-      (define tuples (string-append* (flatten (cons routertuple iftuples))))    
+      (define natinfo (vals->nat (mrouter-nat_dpid arouter)))
+      (define tuples (string-append* (flatten (cons routertuple (cons iftuples natinfo)))))
+      ; finally, reverse since subnets are attached in the order they appear in the protobuf
+      (set-mrouter-subnets! arouter (reverse (mrouter-subnets arouter)))
       
       (set-mrouters-routers! routers (cons arouter (mrouters-routers routers)))     
       
@@ -295,6 +306,10 @@
     (store (string-append "next hop fragment:\n"
                           (sexpr-to-flowlog next-hop-fragment)
                           "\n\n"
+                          "INCLUDE \"examples/L3router.flg\";\n"
+                          "INCLUDE \"examples/Mac_Learning.inc.flg\";\n\n"
+                          "TABLE routerAlias(string, switchid);\n"
+                          "TABLE portAlias(string, string, portid);\n\n"
                           "ON startup(e):\n"
                           startupinserts "\n"                         
                         )
