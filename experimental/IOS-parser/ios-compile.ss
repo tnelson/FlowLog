@@ -258,8 +258,8 @@
       
       (define arouter (mrouter ""))
       (set-mrouter-name! arouter hostname)
-      (set-mrouter-self_dpid! arouter (string-append "40000000000000" (string-pad hostnum 2 #\0)))
-      (set-mrouter-nat_dpid! arouter (string-append "10000000000000" (string-pad hostnum 2 #\0)))
+      (set-mrouter-self_dpid! arouter (string-append "10000000000000" (string-pad hostnum 2 #\0)))
+      (set-mrouter-nat_dpid! arouter (string-append "40000000000000" (string-pad hostnum 2 #\0)))
       
       (define iftuples (for/list ([ifdef interface-defns] 
                                     [ifindex (build-list (length interface-defns) values)])
