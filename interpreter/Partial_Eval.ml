@@ -105,6 +105,7 @@ let rec partial_evaluation (p: flowlog_program) (incpkt: string) (f: formula): f
               if !global_verbose > 2 then
                 printf "Reassembling an XSB equality for formula %s. incpkt=%s; tl=%s; tlargs_no_constants=%s\n%!"
                        (string_of_formula f) incpkt (String.concat "," (map string_of_term tl)) (String.concat "," (map string_of_term tlargs_no_constants));
+                       (* r_x_e has the duty of removing ANY variables, since they are universally bound under negation and guaranteed to have no joins. *)
               build_and (reassemble_xsb_equality incpkt tlargs_no_constants tl))
           xsbresults in
         let fresult = build_or disjuncts in
@@ -366,7 +367,25 @@ let handle_all_and_port_together (oldpkt: string) (apred: pred) (acts: action_at
 
 exception ContradictionInPE of formula * formula;;
 
-(* If there is an FIn(_,_,_) in the top-level conjunction, it may need substitution with equalities produced in PE. *)
+(* dltyps, then nwprotos, then the rest *)
+let dltyp_first (f1: formula) (f2: formula): int =
+  match f1 with
+    | FEquals(TField(_, "dltyp"), TConst(_))
+    | FEquals(TConst(_), TField(_, "dltyp")) ->
+      -1 (* f1 is smaller *)
+    | FEquals(TField(_, "nwproto"), TConst(_))
+    | FEquals(TConst(_), TField(_, "nwproto")) ->
+      (match f2 with
+        | FEquals(TField(_, "dltyp"), TConst(_))
+        | FEquals(TConst(_), TField(_, "dltyp")) ->
+          1 (* f2 is smaller *)
+        | _ ->
+         -1) (* f1 is smaller *)
+    | _ -> 0;; (* whichever *)
+
+
+(* Handle substitution of values in cases like (pkt.dlSrc = x, x = 5) and (pkt.dlSrc=pkt.dlDst, pkt.dlDst=5 *)
+(* Also, if there is an FIn(_,_,_) in the clause, it may need substitution with equalities produced in PE. *)
 let substitute_for_join (f: formula): formula =
   try
 
@@ -383,16 +402,22 @@ let substitute_for_join (f: formula): formula =
   (* gather assignments from the equality formulas
      detect duplicate or bad assignments *)
   let assignments = fold_left (fun acc subf -> match subf with
-                                  | FEquals((TVar(_) as v), (TConst(_) as c))
-                                  | FEquals((TConst(_) as c), (TVar(_) as v)) ->
 
-                                    (* why we DO NOT need to check *EQUALITIES* under negated subformulas:
-                                       a contradiction like (x=5 and y=6 and not (x=5 or y=6)
+                                  (* DIRECT equality assignment. this is post PE, so don't need an FNot condition *)
+                                  | FEquals((TVar(_) as v), (TConst(_) as c))
+                                  | FEquals((TConst(_) as c), (TVar(_) as v))
+                                  | FEquals((TField(_, _) as v), (TConst(_) as c))
+                                  | FEquals(TConst(_) as c, (TField(_, _) as v))  ->
+
+                                    (* we DO NOT need to check *EQUALITIES* under negated subformulas:
+                                       a contradiction like (x=5 and y=6 and not (x=5 or y=6))
                                        will be resolved after substitution:
                                        (5=5 and 6=6 and not (5=5 or 6=6)
                                        which is a contradiction.
-                                       *INs* buried under negation do need to be handled, but they will be caught
-                                     and turned to FFalse in substitution.  *)
+
+                                       *INs* buried under negation are handled in the same way. we are guaranteed that the addr and mask
+                                       of an IN are strongly-safe, so will always arrive at <X> in <const>/<const>, which can be handled
+                                       by NetCore. *)
 
                                     (* search any positive equalities for a contradiction to this assignment *)
                                     if (mem_assoc v acc) && (assoc v acc) <> c then
@@ -405,11 +430,6 @@ let substitute_for_join (f: formula): formula =
                                     else
                                       (v, c) :: acc
 
-                                  (* For now assume joins are only on variables, not fields.
-                                     TODO: if we add joins on virtual packet fields for composition, will need to store assigns here, too. *)
-                                  | FEquals((TField(_, _), TConst(_)))
-                                  | FEquals(TConst(_),(TField(_, _))) -> acc
-
                                   (* TODO: will also have to support equality between fields... *)
                                   | FEquals(TField(_,_), TField(_,_)) -> acc
 
@@ -420,21 +440,35 @@ let substitute_for_join (f: formula): formula =
     wait -- can all this be handled in substitute terms? *)
 
   (* substitute according to assignments. but don't freak out if result contains a 5=7, since may be part of negated subfmla
-     But also check for contradictory INs. *)
-  let result = substitute_terms ~report_inconsistency:false f assignments in
+     also check for contradictory INs.
+     + we will replace field-assignments at end of this function *)
+  let substituted = substitute_terms ~report_inconsistency:false f assignments in
 
   if !global_verbose > 2 then
   begin
     printf "--- substitute_for_join ---\n%!";
     printf "FMLA: %s\n%!" (string_of_formula f);
     iter (fun (v, c) -> (printf "ASSN: %s -> %s\n%!" (string_of_term v) (string_of_term c))) assignments;
-    printf "SUBS: %s\n%!" (string_of_formula result);
+    printf "FMLA': %s\n%!" (string_of_formula substituted);
   end;
 
-  (* If there are still variables left in INs, they are free to vary arbitrarily, and so the compiler will ignore that IN. *)
-  result
+  (* Re-add field assignments that we substituted out for safety: *)
+  let field_value_conj = filter_map (fun (v,c) -> match v with | TField(_, _) -> Some(FEquals(v, c)) | _ -> None) assignments in
 
+  if !global_verbose > 3 then printf "FIELD VALUE CONJ: %s\n%!" (string_of_formula (build_and field_value_conj));
+
+  (* ~~~ASSUMPTION~~~
+     ON blocks guard all field references within their scope: if a tpSrc field is used (even only within a negated subfmla),
+     the on block must positively guard with dlTyp and nwProto in the same clause. This fact allows us to merely sort below,
+     rather than checking and inserting into every partially-evaluated subformula inside negations. *)
+
+  (* If there are still variables left in INs, they are free to vary arbitrarily, and so the compiler will ignore that IN. *)
+  (* Also we need to make sure that DlTyp comes first, then NwProto, then other fields *)
+  let result = sort ~cmp:dltyp_first (field_value_conj @ (conj_to_list substituted)) in
+    build_and result
   with | ContradictionInPE(_,_) -> if !global_verbose > 5 then printf "ContradictionInPE: \n%!"; FFalse;;
+
+
 
 
 (* Side effect: reads current state in XSB *)
@@ -442,8 +476,8 @@ let substitute_for_join (f: formula): formula =
    and this reduce the clause to <false>. If the caller wants efficiency, it should pass only packet-triggered clauses. *)
 let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_handler option) (tcl: triggered_clause): (pred * action * srule) list =
     if !global_verbose > 4 then (match callback with
-      | None -> write_log (sprintf "\n--- Packet triggered clause to netcore (FULL COMPILE) on: \n%s\n%!" (string_of_triggered_clause tcl))
-      | Some(_) -> write_log (sprintf "\n--- Packet triggered clause to netcore (~CONTROLLER~) on: \n%s\n%!" (string_of_triggered_clause tcl)));
+      | None -> write_log_and_print (sprintf "\n--- Packet triggered clause to netcore (FULL COMPILE) on: \n%s\n%!" (string_of_triggered_clause tcl))
+      | Some(_) -> write_log_and_print (sprintf "\n--- Packet triggered clause to netcore (~CONTROLLER~) on: \n%s\n%!" (string_of_triggered_clause tcl)));
 
     match tcl.clause.head with
       | FAtom(_, _, headargs) ->

@@ -88,17 +88,6 @@ let field_vars_in (tl: term list): string list =
     | TConst(_) -> None
     | TField(vname, _) -> Some vname) tl
 
-
-let is_ANY_term (t: term): bool =
-  match t with
-    | TVar(x) when (starts_with x "any") -> true
-    | _ -> false;;
-
-let is_variable_term (t: term): bool =
-  match t with
-    | TVar(x) -> true
-    | _ -> false;;
-
 let get_terms_to_prove_safe (p: flowlog_program) (cl: clause): term list =
   let on_context = Communication.get_on_context p cl in
   let must_be_safe = (match cl.head with
@@ -139,42 +128,13 @@ let safe_clause (p: flowlog_program) (cl: clause): unit =
       (* STEP 1: Discover what terms need to be proven safe. *)
       let must_be_safe = get_terms_to_prove_safe p cl in
 
-      (* STEP 2: discover what terms are proven safe *)
-      let get_safe_terms (body: formula): term list =
-        (* only keep positive atomic formulas *)
-        let atoms = filter_map (fun (s,a) -> if s = true then Some(a) else None) (get_atoms_with_sign body) in
-        let eqs = filter_map (fun (s,a) -> if s = true then Some(a) else None) (get_equalities body) in
-        (* Don't count IN as making something safe. new.nwSrc IN 10.0.0.0/8 is "safe" but not SAFE. *)
-        (*let ins = filter_map (fun s,a -> if s = true then Some(a) else None) get_ins body in*)
-
-        (* todo concern: what if the atom is a built-in predicate? is that still valid? *)
-        let get_immediate_safe_terms_from (f: formula): term list =
-          match f with | FAtom(_, _, tl) -> tl | FEquals(x, TConst(_)) | FEquals(TConst(_), x) -> [x] | _ -> [] in
-        let get_equal_deps (eq: formula): (term * term) list =
-          match eq with | FEquals(TConst(_), x) | FEquals(x, TConst(_)) -> [] | FEquals(t1, t2) -> [(t1,t2);(t2,t1)] | _ -> [] in
-
-        let immediates = unique (flatten (map get_immediate_safe_terms_from (atoms @ eqs))) in
-        let eqsteps = unique (flatten (map get_equal_deps eqs)) in
-
-        let rec gst_helper (proven: term list): term list =
-          let new_proven = unique (proven @
-                                   (* follow the dependencies discovered via equalities *)
-                                   (filter_map (fun (ante,cons) -> if mem ante proven then Some(cons) else None) eqsteps) @
-                                   (* Also: If TVar(x) is proven, then so too is TField(x, f) for any f. Check after the fact: *)
-                                   (filter_map (fun (ante,cons) ->
-                                      (match ante with
-                                        | TField(v, f) -> if mem (TVar(v)) proven then Some(cons) else None
-                                        | _ -> None)) eqsteps)
-                                    ) in
-            if (length new_proven) > (length proven) then gst_helper new_proven
-            else proven in
-        gst_helper immediates in
 
       (* each of these terms may be safe via a positive path of intermediate variables
          e.g. new.dlSrc = x, x = y, R(y). *)
 
-      (* STEP 3: are any terms that need to be proven safe, unsafe? *)
+      (* STEP 2: discover what terms are proven safe *)
       let proven_safe = (get_safe_terms cl.body) in
+        (* STEP 3: are any terms that need to be proven safe, unsafe? *)
         printf "PROVEN SAFE: %s\n%!" (String.concat ", " (map (string_of_term ~verbose:Verbose) proven_safe));
         iter (fun toprove ->
           if (not (mem toprove proven_safe) &&
@@ -490,15 +450,27 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
                                    let (v, t) = trim_packet_from_body cl.body in
                                      if v = "" then (* not packet-triggered *)
                                        (acc_comp, acc_weaken, cl::acc_unweakened)
-                                     else if can_compile_clause_to_fwd cl then (* fully compilable *)
-                                       ({oldpkt=v; clause={head = cl.head; orig_rule = cl.orig_rule; body = t}} :: acc_comp, acc_weaken, acc_unweakened)
-                                     else (* needs weakening AND needs storing for XSB *)
-                                       (acc_comp, {oldpkt=v; clause=weaken_uncompilable_packet_triggered_clause v
-                                                               {head = cl.head; orig_rule = cl.orig_rule; body = t}} :: acc_weaken, cl::acc_unweakened))
+                                     else
+                                     begin
+                                      let (newcl, fully_compiled) = validate_and_process_pkt_triggered_clause cl in
+
+                                        (* fully compilable *)
+                                        if fully_compiled then
+                                           ({oldpkt=v; clause={head = cl.head; orig_rule = cl.orig_rule; body = t}} :: acc_comp, acc_weaken, acc_unweakened)
+
+                                        (* weakened; needs storing for both compiler and XSB. weakened version should have its trigger removed *)
+                                        else
+                                         (acc_comp, {oldpkt=v; clause=newcl} :: acc_weaken, cl::acc_unweakened)
+
+                                     end)
                           ([],[],[]) simplified_clauses in
 
               printf "\n  Loaded AST. There were %d clauses, \n    %d of which were fully compilable forwarding clauses and\n    %d were weakened pkt-triggered clauses.\n    %d will be given, unweakened, to XSB.\n%!"
-                (length simplified_clauses) (length can_fully_compile_simplified) (length weakened_cannot_compile_pt_clauses) (length not_fully_compiled_clauses);
+                (length simplified_clauses)
+                (length can_fully_compile_simplified)
+                (length weakened_cannot_compile_pt_clauses)
+                (length not_fully_compiled_clauses);
+
               printf "DECLS: %s\n%!" (String.concat ",\n"(map string_of_declaration the_decls));
               printf "REACTS: %s\n%!" (String.concat ",\n"(map string_of_reactive the_reacts));
 

@@ -23,6 +23,7 @@ exception RelationHadMultipleDecls of string;;
 exception NoDefaultForField of string * string;;
 
 
+
   let string_of_term ?(verbose:printmode = Brief) (t: term): string =
     match t with
       | TConst(s) ->
@@ -62,6 +63,17 @@ let ends_with (str1 : string) (str2 : string) : bool =
 let starts_with (str1 : string) (str2 : string) : bool =
   if String.length str2 > String.length str1 then false
     else (String.sub str1 0 (String.length str2)) = str2;;
+
+let is_ANY_term (t: term): bool =
+  match t with
+    | TVar(x) when (starts_with x "any") -> true
+    | _ -> false;;
+
+let is_variable_term (t: term): bool =
+  match t with
+    | TVar(x) -> true
+    | _ -> false;;
+
 
 let construct_map (bindings: (string * string) list): (string StringMap.t) =
   fold_left (fun acc (bx, by) -> StringMap.add bx by acc) StringMap.empty bindings
@@ -165,7 +177,9 @@ let reassemble_xsb_equality (incpkt: string) (tlargs: term list) (tuple: term li
         | TVar(_), _ -> failwith "reassemble_xsb_equality: unconstrained variable"
         | TField(_, _), _ -> failwith "field def in xsb term returned"
         (* COMPILATION: free variable. Keep this assertion around in case it's needed. *)
-        | TConst(c), TVar(vname) -> FEquals(TVar(vname), TConst(c)) (*FTrue *)
+        | TConst(c), (TVar(vname) as avar) when not (is_ANY_term avar) -> FEquals(TVar(vname), TConst(c))
+        (* + ANY variables need elimination since they are bound universally under negation: *)
+        | TConst(c), TVar(vname) -> FTrue
 		    | _ -> FEquals(origterm, xsbterm))
     	 tlargs tuple;;
 
@@ -485,6 +499,10 @@ let write_log (ln: string): unit =
   | None -> printf "Unable to write to log file.\n%!"
   | Some(out) -> fprintf out "%s\n%!" ln;;
 
+let write_log_and_print (ln: string): unit =
+  write_log ln;
+  printf "%s\n%!" ln;;
+
 let close_log (): unit =
   match !out_log with
   | Some(out) -> close_out out
@@ -754,3 +772,34 @@ module PredSet  = Set.Make( struct type t = pred let compare = smart_compare_pre
 
   let string_of_triggered_clause ?(verbose: bool = false) (cl: triggered_clause): string =
     "TRIGGER: "^cl.oldpkt^" "^(string_of_clause cl.clause);;
+
+      (* if the body contains no triggering atom, safety is called "strong safety" *)
+      let get_safe_terms (body: formula): term list =
+        (* only keep positive atomic formulas *)
+        let atoms = filter_map (fun (s,a) -> if s = true then Some(a) else None) (get_atoms_with_sign body) in
+        let eqs = filter_map (fun (s,a) -> if s = true then Some(a) else None) (get_equalities body) in
+        (* Don't count IN as making something safe. new.nwSrc IN 10.0.0.0/8 is "safe" but not SAFE. *)
+        (*let ins = filter_map (fun s,a -> if s = true then Some(a) else None) get_ins body in*)
+
+        (* todo concern: what if the atom is a built-in predicate? is that still valid? *)
+        let get_immediate_safe_terms_from (f: formula): term list =
+          match f with | FAtom(_, _, tl) -> tl | FEquals(x, TConst(_)) | FEquals(TConst(_), x) -> [x] | _ -> [] in
+        let get_equal_deps (eq: formula): (term * term) list =
+          match eq with | FEquals(TConst(_), x) | FEquals(x, TConst(_)) -> [] | FEquals(t1, t2) -> [(t1,t2);(t2,t1)] | _ -> [] in
+
+        let immediates = unique (flatten (map get_immediate_safe_terms_from (atoms @ eqs))) in
+        let eqsteps = unique (flatten (map get_equal_deps eqs)) in
+
+        let rec gst_helper (proven: term list): term list =
+          let new_proven = unique (proven @
+                                   (* follow the dependencies discovered via equalities *)
+                                   (filter_map (fun (ante,cons) -> if mem ante proven then Some(cons) else None) eqsteps) @
+                                   (* Also: If TVar(x) is proven, then so too is TField(x, f) for any f. Check after the fact: *)
+                                   (filter_map (fun (ante,cons) ->
+                                      (match ante with
+                                        | TField(v, f) -> if mem (TVar(v)) proven then Some(cons) else None
+                                        | _ -> None)) eqsteps)
+                                    ) in
+            if (length new_proven) > (length proven) then gst_helper new_proven
+            else proven in
+        gst_helper immediates;;
