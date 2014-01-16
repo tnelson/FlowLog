@@ -145,13 +145,17 @@ class FlowlogDemo(object):
 
       return topo
 
-    def readTextProtobuf(self):
+    def readProtobuf(self):
       routers = routers_pb2.Routers()
 
       try:
         f = open(sys.argv[1], "r")
-        text_format.Merge(f.read(), routers)
+        s = f.read()
         f.close()
+        try: # try text format first
+          text_format.Merge(s, routers)
+        except text_format.ParseError:
+          routers.ParseFromString(s)
         return routers
       except IndexError:
         sys.exit("Error: must provide a routers protobuf as first argument.")
@@ -193,7 +197,7 @@ class FlowlogDemo(object):
         node.cmd('python -mSimpleHTTPServer &')
 
     def runDemo(self, host_cmd='/usr/sbin/sshd', host_cmd_opts='-D'):
-        routers = self.readTextProtobuf()
+        routers = self.readProtobuf()
         topo = self.buildTopo(routers)
         controller = customConstructor(CONTROLLERS, self.options.controller)
         switch = customConstructor(SWITCHES, self.options.switch)
