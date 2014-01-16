@@ -306,6 +306,11 @@
     (store (string-append "next hop fragment:\n"
                           (sexpr-to-flowlog next-hop-fragment)
                           "\n\n"
+                          "entrance acl:\n "
+                          (sexpr-to-flowlog `(or ,@inboundacl))
+                          "\n\nexit acl:\n "
+                          (sexpr-to-flowlog `(or ,@outboundacl))
+                          "\n\n\n"
                           "INCLUDE \"examples/L3router.flg\";\n"
                           "INCLUDE \"examples/Mac_Learning.inc.flg\";\n\n"
                           "TABLE routerAlias(string, switchid);\n"
@@ -377,11 +382,19 @@
                 (equal? arg2 'Port))
             'true]
            [else sexpr])]   
-        
-    [`(,(? symbol? predname) ,args ...)      
+
+    ; deal with protocol names: expand to dltyp and nwproto fields
+    [`(prot-TCP protocol)
+     `(and (= p.dlTyp 0x800) (= p.nwProto 0x6))]
+    [`(prot-UDP protocol)
+     `(and (= p.dlTyp 0x800) (= p.nwProto 0x17))]
+    [`(prot-IP protocol)
+     `(= p.dlTyp 0x800)]
+
+    [`(,(? symbol? predname) ,args ...)
      sexpr] 
     ; implicit and:
-    [(list args ...) (simplify-sexpr `(and ,@args))]    
+    [(list args ...) (simplify-sexpr `(and ,@args))]
     [(? string? x) x]
     [(? symbol? x) 
      ; Midway I realized that we could just turn "src-addr-in"
