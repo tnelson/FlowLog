@@ -225,7 +225,7 @@
          (define aninterf (msubnet ""))
          ;(set-msubnet-name! aninterf name)         
          ;(set-minterface-id! aninterf ifindex)
-         (set-msubnet-tr_dpid! aninterf (string-append "20000000000000" (string-pad (number->string ifindex) 2 #\0)))         
+         (set-msubnet-tr_dpid! aninterf (string-append "20000000000000" (string-pad (number->string (+ ifindex 1)) 2 #\0)))
          (set-msubnet-addr! aninterf primnwa)         
          (set-msubnet-mask! aninterf (string->number primnwm))
          (set-msubnet-gw! aninterf primaddr)
