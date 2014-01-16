@@ -367,6 +367,23 @@ let handle_all_and_port_together (oldpkt: string) (apred: pred) (acts: action_at
 
 exception ContradictionInPE of formula * formula;;
 
+(* dltyps, then nwprotos, then the rest *)
+let dltyp_first (f1: formula) (f2: formula): int =
+  match f1 with
+    | FEquals(TField(_, "dltyp"), TConst(_))
+    | FEquals(TConst(_), TField(_, "dltyp")) ->
+      -1 (* f1 is smaller *)
+    | FEquals(TField(_, "nwproto"), TConst(_))
+    | FEquals(TConst(_), TField(_, "nwproto")) ->
+      (match f2 with
+        | FEquals(TField(_, "dltyp"), TConst(_))
+        | FEquals(TConst(_), TField(_, "dltyp")) ->
+          1 (* f2 is smaller *)
+        | _ ->
+         -1) (* f1 is smaller *)
+    | _ -> 0;; (* whichever *)
+
+
 (* Handle substitution of values in cases like (pkt.dlSrc = x, x = 5) and (pkt.dlSrc=pkt.dlDst, pkt.dlDst=5 *)
 (* Also, if there is an FIn(_,_,_) in the clause, it may need substitution with equalities produced in PE. *)
 let substitute_for_join (f: formula): formula =
@@ -425,14 +442,14 @@ let substitute_for_join (f: formula): formula =
   (* substitute according to assignments. but don't freak out if result contains a 5=7, since may be part of negated subfmla
      also check for contradictory INs.
      + we will replace field-assignments at end of this function *)
-  let result = substitute_terms ~report_inconsistency:false f assignments in
+  let substituted = substitute_terms ~report_inconsistency:false f assignments in
 
   if !global_verbose > 2 then
   begin
     printf "--- substitute_for_join ---\n%!";
     printf "FMLA: %s\n%!" (string_of_formula f);
     iter (fun (v, c) -> (printf "ASSN: %s -> %s\n%!" (string_of_term v) (string_of_term c))) assignments;
-    printf "FMLA': %s\n%!" (string_of_formula result);
+    printf "FMLA': %s\n%!" (string_of_formula substituted);
   end;
 
   (* Re-add field assignments that we substituted out for safety: *)
@@ -440,10 +457,18 @@ let substitute_for_join (f: formula): formula =
 
   if !global_verbose > 3 then printf "FIELD VALUE CONJ: %s\n%!" (string_of_formula (build_and field_value_conj));
 
-  (* If there are still variables left in INs, they are free to vary arbitrarily, and so the compiler will ignore that IN. *)
-  FAnd(result, build_and field_value_conj)
+  (* ~~~ASSUMPTION~~~
+     ON blocks guard all field references within their scope: if a tpSrc field is used (even only within a negated subfmla),
+     the on block must positively guard with dlTyp and nwProto in the same clause. This fact allows us to merely sort below,
+     rather than checking and inserting into every partially-evaluated subformula inside negations. *)
 
+  (* If there are still variables left in INs, they are free to vary arbitrarily, and so the compiler will ignore that IN. *)
+  (* Also we need to make sure that DlTyp comes first, then NwProto, then other fields *)
+  let result = sort ~cmp:dltyp_first (field_value_conj @ (conj_to_list substituted)) in
+    build_and result
   with | ContradictionInPE(_,_) -> if !global_verbose > 5 then printf "ContradictionInPE: \n%!"; FFalse;;
+
+
 
 
 (* Side effect: reads current state in XSB *)
