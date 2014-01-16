@@ -38,11 +38,11 @@ ON ip_packet(pkt):
   DO forward(new) WHERE
 
     // generic nexthop IP selection
-    routes(addr, mask, nexthop)
-    and pkt.nwDst IN addr/mask
+    // routes(addr, mask, nexthop)
+    // and pkt.nwDst IN addr/mask
 
     // templated nexthop IP selection
-    // @nexthop-fragment
+    @nexthop-fragment
 
     and subnets(nexthop_subnet, nexthop_mask, ANY, new.dlSrc, pkt.locSw, new.locPt, ANY)
     and nexthop IN nexthop_subnet/nexthop_mask

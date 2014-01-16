@@ -280,9 +280,9 @@ namespace-for-template)
       (define hostname (symbol->string (send (send config get-hostname) name)))
       (define interfaces (send config get-interfaces))
       (define interface-keys (hash-keys interfaces))
-      (printf "pre-processing hostname: ~v~n" hostname)     
+      ;(printf "pre-processing hostname: ~v~n" hostname) ; DEBUG
       (define interface-defns (hash-map interfaces extract-ifs))
-      (pretty-display interface-defns) 
+      ;(pretty-display interface-defns) ; DEBUG
       (define hostnum (string-append "0x10000000000000" (string-pad (number->string (+ hostidx 1)) 2 #\0)))
       
       
@@ -307,13 +307,13 @@ namespace-for-template)
     (define routers (mrouters ""))
     (define startupinserts (string-append* (for/list ([config configurations] [hostidx (build-list (length configurations) values)]) 
                                              (extract-hosts routers config hostidx))))
-    (pretty-display startupinserts)
+    ;(pretty-display startupinserts) ; DEBUG
     
     ; output the router message for this router
     (call-with-output-file (make-path root-path "IOS.pb.bin") #:exists 'replace
       (lambda (out) 
-        (printf "Outputting protobufs spec for this router...~n")
-        (printf "~v~n" routers)
+        ;(printf "Outputting protobufs spec for this router...~n") ; DEBUG
+        ;(printf "~v~n" routers) ; DEBUG
         (serialize routers out)))
     
     ; TODO: On what? packet(p) won't give the nw fields!
@@ -326,19 +326,23 @@ namespace-for-template)
     
     ; FLOWLOG:
 
-    (define template-vars (make-hash))
-    (dict-set! template-vars "startupinserts" startupinserts)
+    (define startup-vars (make-hash))
+    (dict-set! startup-vars "basename" root-path)
+    (dict-set! startup-vars "startupinserts" startupinserts)
 
-    (store (string-append "next hop fragment:\n"
-                          (sexpr-to-flowlog next-hop-fragment)
-                          "\n\n"
-                          "entrance acl:\n "
+    (store (string-append "entrance acl:\n "
                           (sexpr-to-flowlog `(or ,@inboundacl))
                           "\n\nexit acl:\n "
                           (sexpr-to-flowlog `(or ,@outboundacl))
                           "\n\n\n"
-                          (render-template "StartupConfig.template.flg" template-vars))
-           (make-path root-path "IOS.flg"))        
+                          (render-template "StartupConfig.template.flg" startup-vars))
+           (make-path root-path "IOS.flg"))
+
+    (define external-vars (make-hash))
+    (dict-set! external-vars "nexthop-fragment" (sexpr-to-flowlog next-hop-fragment))
+
+    (store (render-template "L3external.template.flg" external-vars)
+           (make-path root-path "L3external.flg"))
     
     ; For debugging purposes:
     (store inboundacl (make-path root-path "InboundACL.p"))
@@ -420,10 +424,10 @@ namespace-for-template)
      ; Midway I realized that we could just turn "src-addr-in"
      ; into "p.nwSrc" here, rather than bit-by-bit in IOS.ss.     
      ; So some will already be converted, some won't.
-     (cond [(equal? x 'src-addr-in) "p.nwSrc"]
-           [(equal? x 'src-port-in) "p.tpSrc"]
-           [(equal? x 'dest-addr-in) "p.nwDst"]
-           [(equal? x 'dest-port-in) "p.tpDst"]
+     (cond [(equal? x 'src-addr-in) "pkt.nwSrc"]
+           [(equal? x 'src-port-in) "pkt.tpSrc"]
+           [(equal? x 'dest-addr-in) "pkt.nwDst"]
+           [(equal? x 'dest-port-in) "pkt.tpDst"]
            [(equal? x 'src-addr-out) "new.nwSrc"]
            [(equal? x 'src-port-out) "new.tpSrc"]
            [(equal? x 'dest-addr-out) "new.nwDst"]
