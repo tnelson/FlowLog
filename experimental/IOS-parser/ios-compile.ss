@@ -27,8 +27,11 @@
 (require scheme/file)
 (require scheme/pretty)
 (require racket/match)
+(require racket/dict)
 (require "ios.ss")
 (require "ios-parse.ss")
+
+(require web-server/templates)
 
 (require (planet murphy/protobuf:1:1))
 (require (planet murphy/protobuf/syntax))
@@ -103,6 +106,25 @@
      (apply append (map (λ (configuration)
                           (send configuration accessor))
                         configurations))]))
+
+;; Takes a filename of a template and a Racket dictionary and fills in the values of the fields
+(define (render-template filename dict)
+  (define namespace-for-template (make-empty-namespace))
+  (namespace-attach-module (current-namespace) 'web-server/templates
+namespace-for-template)
+  (hash-map dict
+    (lambda (key value)
+      (define name-of-identifier (string->symbol key))
+      (namespace-set-variable-value!
+        name-of-identifier
+        value
+        #f
+        namespace-for-template)))
+  (parameterize [(current-namespace namespace-for-template)]
+    (namespace-require 'web-server/templates))
+  (define to-eval #`(include-template #,(datum->syntax
+#'render-template filename)))
+  (eval to-eval namespace-for-template))
 
 ;; string (listof string) boolean -> void
 ;; pass filename only if there is more than one configuration to do
@@ -303,6 +325,10 @@
     ; TODO: flags? no support in flowlog this iteration.
     
     ; FLOWLOG:
+
+    (define template-vars (make-hash))
+    (dict-set! template-vars "startupinserts" startupinserts)
+
     (store (string-append "next hop fragment:\n"
                           (sexpr-to-flowlog next-hop-fragment)
                           "\n\n"
@@ -311,13 +337,7 @@
                           "\n\nexit acl:\n "
                           (sexpr-to-flowlog `(or ,@outboundacl))
                           "\n\n\n"
-                          "INCLUDE \"examples/L3router.flg\";\n"
-                          "INCLUDE \"examples/Mac_Learning.inc.flg\";\n\n"
-                          "TABLE routerAlias(string, switchid);\n"
-                          "TABLE portAlias(string, string, portid);\n\n"
-                          "ON startup(e):\n"
-                          startupinserts "\n"                         
-                        )
+                          (render-template "StartupConfig.template.flg" template-vars))
            (make-path root-path "IOS.flg"))        
     
     ; For debugging purposes:
