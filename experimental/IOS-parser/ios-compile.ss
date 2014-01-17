@@ -188,13 +188,13 @@ namespace-for-template)
       (string-append "INSERT (0x" natnum ") INTO switches_without_mac_learning; // auto\n"))
 
     (define startup-vars (make-hash))
-    (define external-vars (make-hash))
-    (dict-set! external-vars "needs-nat-disj" "")
+    (define router-vars (make-hash))
+    (dict-set! router-vars "needs-nat-disj" "")
     
     (define (vals->needs-nat nwa nwm)
       (cond [nwa
-             (dict-set! external-vars "needs-nat-disj" (string-append (sexpr-to-flowlog `(= pkt.nwSrc ,(string-append nwa "/" nwm)) #f) 
-                                                                      (dict-ref external-vars "needs-nat-disj")))
+             (dict-set! router-vars "needs-nat-disj" (string-append (sexpr-to-flowlog `(= pkt.nwSrc ,(string-append nwa "/" nwm)) #f)
+                                                                      (dict-ref router-vars "needs-nat-disj")))
              (string-append "INSERT (" nwa ", " nwm ") INTO needs_nat;\n")]
             [else ""]))
 
@@ -360,12 +360,16 @@ namespace-for-template)
     (store (render-template "templates/StartupConfig.template.flg" startup-vars)
            (make-path root-path "IOS.flg"))
 
-    ; generate L3external
+    ; generate L3external and L3router
 
-    (dict-set! external-vars "nexthop-fragment" (sexpr-to-flowlog next-hop-fragment #f))
+    (dict-set! router-vars "basename" root-path)
+    (dict-set! router-vars "nexthop-fragment" (sexpr-to-flowlog next-hop-fragment #f))
 
-    (store (render-template "templates/L3external.template.flg" external-vars)
+    (store (render-template "templates/L3external.template.flg" router-vars)
            (make-path root-path "L3external.flg"))
+
+    (store (render-template "templates/L3router.template.flg" router-vars)
+           (make-path root-path "L3router.flg"))
 
     ; Finally, we copy the template files which just need their INCLUDE line set properly
 
@@ -378,7 +382,6 @@ namespace-for-template)
              (make-path root-path (string-append filename ".flg"))))
 
     (copy-with-basename "Arp_Cache")
-    (copy-with-basename "L3router")
     (copy-with-basename "Mac_Learning.inc")
     (copy-with-basename "NATgeneric")
     (copy-with-basename "NIB.inc")

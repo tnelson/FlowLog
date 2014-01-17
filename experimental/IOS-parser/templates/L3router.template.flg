@@ -35,17 +35,19 @@ TABLE router_queued(ipaddr);
  * L3 routing to directly attached subnets
  *
  * Only wrinkle is that we need to send packets to our NAT switch if they need
- * to be un-NAT'd before processing. L3external.flg contains the rule which
- * sends to the NAT for packets which need NATing before hitting external.
+ * to be un-NAT'd before processing, plus the rule to send packets to the NAT
+ * if their source says they need it.
  *
  ******************************************************************************/
 
-// TODO(adf): need a table which ties "our" nat to this router
+// TODO(adf): need a table which ties "our" nat to this router?
 
 ON ip_packet(pkt):
   DO forward(new) WHERE
     subnets(addr, mask, ANY, new.dlSrc, pkt.locSw, new.locPt, ANY)
     and pkt.nwDst IN addr/mask
+    // exempt packets which need NAT
+    and NOT @needs-nat-disj
     // exempt packets to the NAT
     and NOT natconfig(ANY, ANY, ANY, pkt.nwDst);
 
@@ -56,6 +58,18 @@ ON ip_packet(pkt):
     and subnets(ANY, ANY, ANY, ANY, pkt.locSw, ANY, ANY) // TODO(adf): only apply to routers
     and pkt.locPt != 1
     and new.locPt = 1; // TODO(adf): should be magic NAT port?
+
+// packets destined whose source says they need NATing
+
+ON ip_packet(pkt):
+  DO forward(new) WHERE
+    subnets(ANY, ANY, ANY, ANY, pkt.locSw, ANY, ANY) // TODO(adf): only apply to routers
+
+    and @needs-nat-disj
+    //and needs_nat(needs_nat_subnet, needs_nat_mask) // TODO(adf): should this be router-specific?
+    //and (pkt.nwSrc IN needs_nat_subnet/needs_nat_mask)
+
+    and new.locPt = 1; // TODO(adf): make magic NAT port configurable?
 
 /*******************************************************************************
  *

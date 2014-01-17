@@ -53,17 +53,3 @@ ON ip_packet(pkt):
     //and needs_nat(needs_nat_subnet, needs_nat_mask)
     //and NOT (pkt.nwSrc IN needs_nat_subnet/needs_nat_mask)
     ;
-
-// packets destined to outside whose source says they need NATing
-
-ON ip_packet(pkt):
-  DO forward(new) WHERE
-    routes(addr, mask, nexthop)
-    and pkt.nwDst IN addr/mask
-
-    and subnets(ANY, ANY, ANY, ANY, pkt.locSw, ANY, ANY) // TODO(adf): only apply to routers
-
-    and needs_nat(needs_nat_subnet, needs_nat_mask) // TODO(adf): should this be router-specific?
-    and (pkt.nwSrc IN needs_nat_subnet/needs_nat_mask)
-
-    and new.locPt = 1; // TODO(adf): make magic NAT port configurable?
