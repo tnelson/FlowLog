@@ -3,11 +3,9 @@ INCLUDE "@|basename|/Mac_Learning.inc.flg";
 
 TABLE routerAlias(string, switchid);
 TABLE portAlias(string, string, portid);
-TABLE switches_without_mac_learning(switchid);
-TABLE cached(ipaddr, macaddr);
+TABLE aclDPID(switchid);
 
-// declared already in L3router.flg
-//TABLE subnets(ipaddr, int, ipaddr, macaddr, switchid, portid, switchid);
+// cached, switches_without_mac_learning, subnets: declared in INCLUDED files
 
 ///////////////////////////
 // ACLs
