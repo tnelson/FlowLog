@@ -276,10 +276,11 @@ namespace-for-template)
                                               (vals->needs-nat secnwa secnwm))
                                empty))
          
-         (define hostaclnum (string-append "0x3" (string-pad (number->string ridx) 2 #\0) "00000000000" (string-pad ptnum 2 #\0)))       
+         (define hostaclnum (string-append "3" (string-pad (number->string ridx) 2 #\0) "00000000000" (string-pad ptnum 2 #\0)))
          (define (vals->ifacldefn ridx iidx rname iname)           
-           (string-append "INSERT (" hostaclnum ") INTO aclDPID;\n"
-                          "INSERT (\"" (symbol->string (build-acl-name rname iname)) "\"," hostaclnum ") INTO routerAlias;\n"))
+           (string-append "INSERT (0x" hostaclnum ") INTO aclDPID;\n"
+                          "INSERT (0x" hostaclnum ") INTO switches_without_mac_learning; // auto\n"
+                          "INSERT (\"" (symbol->string (build-acl-name rname iname)) "\", 0x" hostaclnum ") INTO routerAlias;\n"))
                  
          ; For this particular type of nat (source list overload dynamic):
          ; For each private interface (nat = inside), and each public interface (nat = outside)
@@ -323,8 +324,6 @@ namespace-for-template)
            (set-msubnet-addr! aninterf2 secnwa)         
            (set-msubnet-mask! aninterf2 (string->number secnwm))
            (set-msubnet-gw! aninterf2 secaddr)
-           ;(define hostaclnum2 (string-append "0x3" (string-pad (number->string ridx) 2 #\0) "00000000000" (string-pad ptnum 2 #\0)))
-           (define hostaclnum2 "???")
            (set-msubnet-acl_dpid! aninterf2 hostaclnum)
            (set-mrouter-subnets! arouter (cons aninterf2 (mrouter-subnets arouter) )))
          
