@@ -277,7 +277,7 @@ namespace-for-template)
          
          ; TODO(tn)
          (define (vals->ifacldefn ridx iidx rname iname)
-           (define hostaclnum (string-append "0x3" (string-pad (number->string ridx) 2 #\0) "000000000000" (string-pad iidx 2 #\0)))
+           (define hostaclnum (string-append "0x3" (string-pad (number->string ridx) 2 #\0) "00000000000" (string-pad iidx 2 #\0)))
            (string-append "INSERT (" hostaclnum ") INTO aclDPID;\n"
                           "INSERT (\"" (symbol->string (build-acl-name rname iname)) "\"," hostaclnum ") INTO routerAlias;\n"))
          
