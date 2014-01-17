@@ -551,10 +551,12 @@ namespace-for-template)
     ; equality or IN:
     [`(= ,arg1 ,arg2)      
      (define s1 (sexpr-to-flowlog-helper arg1))
-     (define s2 (sexpr-to-flowlog-helper arg2))
-     (if (regexp-match #rx"^[0-9\\.]+/" s1)
-         (string-append s2 " IN " s1)
-         (string-append "(" s1 " = " s2 ")"))]    
+     (define s2 (sexpr-to-flowlog-helper arg2))     
+     (cond [(regexp-match #rx"^[0-9\\.]+/" s1)
+            (string-append s2 " IN " s1)]
+           [(regexp-match #rx"^[0-9\\.]+/" s2)
+            (string-append s1 " IN " s2)]
+           [else (string-append "(" s1 " = " s2 ")")])]    
     ; table reference
     ; (this needs to come after concrete keywords like RULE, and, =, etc.)
     [`(,(? symbol? predname) ,args ...)      
