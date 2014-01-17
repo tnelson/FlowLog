@@ -229,7 +229,9 @@ namespace-for-template)
                  (match ifdef2 
                    [`(,name2 ,primaddr2 (,primnwa2 ,primnwm2) ,secaddr2 (,secnwa2 ,secnwm2) ,nat-side2)                    
                     (if (and nat-side2 (equal? nat-side2 'outside))
-                        (string-append "INSERT (0x" nat-dpid "," "1" "," "1" "," primaddr2 ") INTO natconfig;\n")
+                        (string-append "INSERT (0x" nat-dpid "," "1" "," "1" "," primaddr2 ") INTO natconfig;\n"
+                                       "INSERT (" primaddr2 ", 0x6, 10000) INTO seqpt; // auto \n"
+                                       "INSERT (" primaddr2 ", 0x11, 10000) INTO seqpt; // auto \n")
                         "")]))
                empty))
          
