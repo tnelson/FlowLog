@@ -165,9 +165,11 @@ namespace-for-template)
     ;// subnets(addr,  mask, gw ip,    gw mac,            locSw,            locpt, trSw)
     ;INSERT (10.0.1.0, 24,   10.0.1.1, ca:fe:ca:fe:00:01, 0x1000000000000001, 2, 0x2000000000000001) INTO subnets;
     
-    (define (vals->subnet addr nwa nwm rnum inum ptnum)
+    (define (make-tr-dpid ridx inum ox)
+      (string-append (if ox "0x" "") "2" (string-pad (number->string ridx) 2 #\0) "00000000000" (string-pad inum 2 #\0)))         
+
+    (define (vals->subnet addr nwa nwm rnum inum ptnum trsw)
       (define gwmac (string-append "ca:fe:ca:fe:00:" (string-pad inum 2 #\0)))
-      (define trsw (string-append "0x20000000000000" (string-pad inum 2 #\0)))
       (string-append "INSERT (" (string-join (list nwa nwm addr gwmac rnum ptnum trsw) ", ") ") INTO subnets;\n"
                      "INSERT (" (string-join (list addr gwmac) ", ") ") INTO cached; // auto\n"
                      "INSERT (" trsw ") INTO switches_without_mac_learning; // auto\n"))
@@ -204,13 +206,18 @@ namespace-for-template)
          (define inum (number->string (+ 1 ifindex)))
          ; offset the port number on the router by 1, since 1 is reserved for the attached NAT switch
          (define ptnum (number->string (+ 2 ifindex)))
-         (define prim (vals->subnet primaddr primnwa primnwm rnum inum ptnum))
-         (define sec (if secaddr (vals->subnet primaddr primnwa primnwm rnum inum ptnum) #f))
+         (define trsw (make-tr-dpid ridx inum #t))
+         ;(printf "ridx=~v; rnum=~v; ifindex=~v; rname=~v;~n" ridx rnum ifindex rname) ; DEBUG
+         
+         ; TODO: if secondary, need to increment tr_dpid
+         (define prim (vals->subnet primaddr primnwa primnwm rnum inum ptnum trsw))
+         (define sec (if secaddr (vals->subnet primaddr primnwa primnwm rnum inum ptnum trsw) #f))
          (define alias (vals->ifalias rname name inum))
          (define needs-nat (if (and nat-side (equal? nat-side 'inside))
                                (string-append (vals->needs-nat primnwa primnwm) 
                                               (vals->needs-nat secnwa secnwm))
                                empty))
+                  
          
          (define hostaclnum (string-append "3" (string-pad (number->string ridx) 2 #\0) "00000000000" (string-pad ptnum 2 #\0)))
          (define (vals->ifacldefn ridx iidx rname iname)           
@@ -244,7 +251,8 @@ namespace-for-template)
          (define aninterf (subnet ""))
          ;(set-subnet-name! aninterf name)
          ;(set-minterface-id! aninterf ifindex)
-         (set-subnet-tr-dpid! aninterf (string-append "20000000000000" (string-pad (number->string (+ ifindex 1)) 2 #\0)))
+                  
+         (set-subnet-tr-dpid! aninterf (make-tr-dpid ridx (number->string (+ ifindex 1)) #f))
          (set-subnet-acl-dpid! aninterf hostaclnum)
          (set-subnet-addr! aninterf primnwa)
          (set-subnet-mask! aninterf (string->number primnwm))
@@ -266,7 +274,7 @@ namespace-for-template)
          
          result]
         [else (pretty-display i) (error "ifacedef->tuple")]))
-        
+
     ;;;;;;;;;;;;;;;;;;;
     (define (extract-hosts routers-msg config hostidx)
       (define hostname (symbol->string (send (send config get-hostname) name)))
