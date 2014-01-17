@@ -9,39 +9,41 @@ TABLE subnets(ipaddr, int, ipaddr, macaddr, switchid, portid, switchid);
 
 ///////////////////////////
 // ACLs
+// on the ACL switches, port 1 faces toward the subnet 
+//                      port 2 faces toward the router.
 ///////////////////////////
 
-ON tcp_packet(pkt) WHERE <<TODO: incoming on translation switch>>:
+ON tcp_packet(pkt) WHERE pkt.locPt = 1 AND aclDPID(pkt.locSw):
   DO forward(new) WHERE
   @inboundacl-tcp
-  AND new.locPt = <<TODO: next port on translation switch>>;
+  AND new.locPt = 2;
 
-ON udp_packet(pkt) WHERE <<TODO: incoming on translation switch>>:
+ON udp_packet(pkt) WHERE pkt.locPt = 1 AND aclDPID(pkt.locSw):
   DO forward(new) WHERE
   @inboundacl-udp
-  AND new.locPt = <<TODO: next port on translation switch>>;
+  AND new.locPt = 2;
 
-ON ip_packet(pkt) WHERE <<TODO: incoming on translation switch>>:
+ON ip_packet(pkt) WHERE pkt.locPt = 1 AND aclDPID(pkt.locSw):
   DO forward(new) WHERE
   @inboundacl-ip
-  AND new.locPt = <<TODO: next port on translation switch>>;
+  AND new.locPt = 2;
 
 ///////////////////////////
 
-ON tcp_packet(pkt) WHERE <<TODO:outgoing on translation switch>>:
+ON tcp_packet(pkt) WHERE pkt.locPt = 2 AND aclDPID(pkt.locSw):
   DO forward(new) WHERE
   @outboundacl-tcp
-  AND new.locPt = <<TODO: next port on translation switch>>;
+  AND new.locPt = 1;
 
-ON udp_packet(pkt) WHERE <<TODO: outgoing on translation switch>>:
+ON udp_packet(pkt) WHERE pkt.locPt = 2 AND aclDPID(pkt.locSw):
   DO forward(new) WHERE
   @outboundacl-udp
-  AND new.locPt = <<TODO: next port on translation switch>>;
+  AND new.locPt = 1;
 
-ON ip_packet(pkt) WHERE <<TODO: outgoing on translation switch>>:
+ON ip_packet(pkt) WHERE pkt.locPt = 2 AND aclDPID(pkt.locSw):
   DO forward(new) WHERE
   @outboundacl-ip
-  AND new.locPt = <<TODO: next port on translation switch>>;
+  AND new.locPt = 1;
 
 
 

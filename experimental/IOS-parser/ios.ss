@@ -902,7 +902,7 @@
         (name hostname interf)
         (decision)
         `(,@additional-conditions
-          (= ,src-addr-in ,(if (equal? rule-type 'outacl) 'new.nwsrc 'pkt.nwsrc)))
+          (= ,src-addr-in ,(if (equal? rule-type 'outacl) 'pkt.nwsrc 'pkt.nwsrc))) ; <-- change back if ACLs get merged into router switch
         rule-type))
     
     ;; symbol symbol string (listof (listof symbol)) -> rule%
@@ -971,8 +971,8 @@
         (name hostname interf)
         (decision)
         `(,@additional-conditions
-          (= ,src-addr-in ,(if (equal? rule-type 'outacl) 'new.nwsrc 'pkt.nwsrc)) 
-          (= ,dest-addr-in ,(if (equal? rule-type 'outacl) 'new.nwdst 'pkt.nwdst)))
+          (= ,src-addr-in ,(if (equal? rule-type 'outacl) 'pkt.nwsrc 'pkt.nwsrc)) 
+          (= ,dest-addr-in ,(if (equal? rule-type 'outacl) 'pkt.nwdst 'pkt.nwdst)))
         rule-type))
     
     ;; symbol symbol string (listof (listof symbol)) -> rule%
@@ -3337,27 +3337,34 @@
                                 peer-endpoint)))
           default-ACL-permit)))
     
+    (define/public (build-acl-name hostname interf)
+      (string->symbol (string-append (symbol->string hostname) "-" (symbol->string interf) "-acl")))
+    
     ;; -> (listof rule%)
     ;;   Returns a list of the rules that describe inbound ACL policies
     (define/public (inbound-ACL-rules)
       (flatten (append*
-                (hash-map interfaces
-                          (λ (name interf)
-                            (send (hash-ref ACLs (get-field inbound-ACL-ID interf))
-                                  rules
-                                  (send hostname name)
-                                  (send interf text)
-                                  `((routerAlias ,(wrapq hostname) pkt.locsw)
-                                    (portAlias ,(wrapq hostname) ,(wrapq interf) pkt.locpt))
-                                  'acl)))
-                (list (if default-ACL-permit
-                          (list (make-object rule%
-                                  'default-ACE
-                                  'permit
-                                  `((routerAlias ,(wrapq hostname) pkt.locsw))
-                                  'acl))
-                          '())))))
-    
+                 (hash-map interfaces
+                           (λ (name interf)
+                             (send (hash-ref ACLs (get-field inbound-ACL-ID interf))
+                                   rules
+                                   (send hostname name)
+                                   (send interf text)
+                                   `((routerAlias ,(wrapq (build-acl-name (send hostname name) (send interf text))) pkt.locsw)
+                                     ;(portAlias ,(wrapq hostname) ,(wrapq interf) pkt.locpt)
+                                     )
+                                   'acl)))
+                 (list (if default-ACL-permit
+                           ; create a default permit rule for *all* hostname-interface-acl switches
+                           (hash-map interfaces 
+                                     (λ (name interf)
+                                       (make-object rule%
+                                         'default-ACE
+                                         'permit
+                                         `((routerAlias ,(wrapq (build-acl-name (send hostname name) (send interf text))) pkt.locsw))
+                                         'acl)))
+                                     '())))))
+      
     ;; -> (listof rule%)
     ;;   Returns a list of the rules that describe outbound ACL policies
     (define/public (outbound-ACL-rules)
@@ -3368,17 +3375,21 @@
                                   rules
                                   (send hostname name)
                                   (send interf text)
-                                  `((routerAlias ,(wrapq hostname) new.locsw)
-                                    (portAlias ,(wrapq hostname) ,(wrapq interf) new.locpt))
+                                  `((routerAlias ,(wrapq (build-acl-name (send hostname name) (send interf text))) pkt.locsw)
+                                   ; (portAlias ,(wrapq hostname) ,(wrapq interf) new.locpt)
+                                    )
                                   'outacl)))
-                (list (if default-ACL-permit
-                          (list (make-object rule%
-                                  'default-ACE
-                                  'permit
-                                  `((routerAlias ,(wrapq hostname) new.locsw))
-                                  'outacl))
-                          '())))))
-    
+                 (list (if default-ACL-permit
+                           ; create a default permit rule for *all* hostname-interface-acl switches
+                           (hash-map interfaces 
+                                     (λ (name interf)
+                                       (make-object rule%
+                                         'default-ACE
+                                         'permit
+                                         `((routerAlias ,(wrapq (build-acl-name (send hostname name) (send interf text))) pkt.locsw))
+                                         'outacl)))
+                                     '())))))
+      
     ;; symbol -> (listof interface%)
     ;;   Returns a list of interfaces on the given side of the NAT
     (define (NAT-interfaces side)

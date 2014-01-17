@@ -240,7 +240,7 @@ namespace-for-template)
                                                    (string-append "\"" iname "\"") 
                                                    inum) ", ") ") INTO portAlias;\n"))
         
-    (define (vals->routeralias rname rnum)
+    (define (vals->routertuples rname rnum)
       (string-append "INSERT (" (string-join (list (string-append "\"" rname "\"")                                                    
                                                    rnum) ", ") ") INTO routerAlias;\n"
                      "INSERT (" rnum ") INTO switches_without_mac_learning; // auto\n"))
@@ -274,7 +274,19 @@ namespace-for-template)
                                (string-append (vals->needs-nat primnwa primnwm) 
                                               (vals->needs-nat secnwa secnwm))
                                empty))
-         (define result (filter (lambda (x) x) (list prim sec alias needs-nat)))
+         
+         ; TODO(tn)
+         (define (vals->ifacldefn rnum inum)
+           "")
+         ; (define hostaclnum (string-append "0x30000000000000" (string-pad (number->string (+ hostidx 1)) 2 #\0)))
+         ;"INSERT (" raclnum ") INTO aclDPID;\n"
+         
+         ; TODO(tn): also need to populate routerAlias for these new ACL tables
+         
+         (define acldefn (vals->ifacldefn rnum inum))
+         (define result (filter (lambda (x) x) (list prim sec alias needs-nat acldefn)))
+         
+           
          
          ; generate protobufs as well
          (define aninterf (msubnet ""))
@@ -285,7 +297,7 @@ namespace-for-template)
          (set-msubnet-mask! aninterf (string->number primnwm))
          (set-msubnet-gw! aninterf primaddr)
          
-         (set-mrouter-subnets! arouter (cons aninterf (mrouter-subnets arouter) ))
+         (set-mrouter-subnets! arouter (cons aninterf (mrouter-subnets arouter) ))          
          
          (when secaddr 
            (printf "WARNING! Secondary interface detected. Please confirm that the primary and secondaries get different IDs.~n")
@@ -309,7 +321,7 @@ namespace-for-template)
       ;(printf "pre-processing hostname: ~v~n" hostname) ; DEBUG
       (define interface-defns (hash-map interfaces extract-ifs))
       ;(pretty-display interface-defns) ; DEBUG
-      (define hostnum (string-append "0x10000000000000" (string-pad (number->string (+ hostidx 1)) 2 #\0)))
+      (define hostnum (string-append "0x10000000000000" (string-pad (number->string (+ hostidx 1)) 2 #\0)))      
 
       (define static-NAT (send config get-static-NAT))
       (define dynamic-NAT (send config get-dynamic-NAT))
@@ -317,12 +329,12 @@ namespace-for-template)
       (define arouter (mrouter ""))
       (set-mrouter-name! arouter hostname)
       (set-mrouter-self_dpid! arouter (string-append "10000000000000" (string-pad hostnum 2 #\0)))
-      (set-mrouter-nat_dpid! arouter (string-append "40000000000000" (string-pad hostnum 2 #\0)))
+      (set-mrouter-nat_dpid! arouter (string-append "40000000000000" (string-pad hostnum 2 #\0)))      
       
       (define iftuples (for/list ([ifdef interface-defns] 
                                     [ifindex (build-list (length interface-defns) values)])
                            (ifacedef->tuples arouter hostname hostnum ifindex ifdef)))
-      (define routertuple (vals->routeralias hostname hostnum)) 
+      (define routertuple (vals->routertuples hostname hostnum)) 
       (define natinfo (vals->nat (mrouter-nat_dpid arouter)))
       (define tuples (string-append* (flatten (cons routertuple (cons iftuples natinfo)))))
       ; finally, reverse since subnets are attached in the order they appear in the protobuf
