@@ -5,7 +5,9 @@ TABLE routerAlias(string, switchid);
 TABLE portAlias(string, string, portid);
 TABLE switches_without_mac_learning(switchid);
 TABLE cached(ipaddr, macaddr);
-TABLE subnets(ipaddr, int, ipaddr, macaddr, switchid, portid, switchid);
+
+// declared already in L3router.flg
+//TABLE subnets(ipaddr, int, ipaddr, macaddr, switchid, portid, switchid);
 
 ///////////////////////////
 // ACLs
