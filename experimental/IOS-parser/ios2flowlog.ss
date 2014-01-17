@@ -18,9 +18,9 @@
  #:program "ios2flowlog"
  #:once-each
  ("--default-permit" "Use a default permit ACL"
-                     (set! default-permit 'true))
+                     (set! default-permit #t))
  ("--default-deny" "Use a default deny ACL [default]"
-                   (set! default-permit 'false))
+                   (set! default-permit #f))
  ("--path" input "Directory path to IOS files [default: .]"
            (set! path input))
  #:args files

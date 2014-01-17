@@ -12,28 +12,34 @@ TABLE subnets(ipaddr, int, ipaddr, macaddr, switchid, portid, switchid);
 ///////////////////////////
 
 ON tcp_packet(pkt) WHERE <<TODO: incoming on translation switch>>:
+  DO forward(new) WHERE
   @inboundacl-tcp
   AND new.locPt = <<TODO: next port on translation switch>>;
 
 ON udp_packet(pkt) WHERE <<TODO: incoming on translation switch>>:
+  DO forward(new) WHERE
   @inboundacl-udp
   AND new.locPt = <<TODO: next port on translation switch>>;
 
 ON ip_packet(pkt) WHERE <<TODO: incoming on translation switch>>:
+  DO forward(new) WHERE
   @inboundacl-ip
   AND new.locPt = <<TODO: next port on translation switch>>;
 
 ///////////////////////////
 
 ON tcp_packet(pkt) WHERE <<TODO:outgoing on translation switch>>:
+  DO forward(new) WHERE
   @outboundacl-tcp
   AND new.locPt = <<TODO: next port on translation switch>>;
 
 ON udp_packet(pkt) WHERE <<TODO: outgoing on translation switch>>:
+  DO forward(new) WHERE
   @outboundacl-udp
   AND new.locPt = <<TODO: next port on translation switch>>;
 
 ON ip_packet(pkt) WHERE <<TODO: outgoing on translation switch>>:
+  DO forward(new) WHERE
   @outboundacl-ip
   AND new.locPt = <<TODO: next port on translation switch>>;
 
