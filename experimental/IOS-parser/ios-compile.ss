@@ -344,12 +344,12 @@ namespace-for-template)
     (dict-set! startup-vars "startupinserts" startupinserts)
     
     ; IP rules to the IP block. Will also apply to TCP packets. So don't duplicate!
-    (dict-set! startup-vars "inboundacl-tcp" (sexpr-to-flowlog `(or ,@inboundacl-tcp)))
-    (dict-set! startup-vars "inboundacl-udp" (sexpr-to-flowlog `(or ,@inboundacl-udp)))
-    (dict-set! startup-vars "inboundacl-ip" (sexpr-to-flowlog `(or ,@inboundacl-ip)))
-    (dict-set! startup-vars "outboundacl-tcp" (sexpr-to-flowlog `(or ,@outboundacl-tcp)))
-    (dict-set! startup-vars "outboundacl-udp" (sexpr-to-flowlog `(or ,@outboundacl-udp)))
-    (dict-set! startup-vars "outboundacl-ip" (sexpr-to-flowlog `(or ,@outboundacl-ip)))        
+    (dict-set! startup-vars "inboundacl-tcp" (sexpr-to-flowlog `(or ,@inboundacl-tcp) #t))
+    (dict-set! startup-vars "inboundacl-udp" (sexpr-to-flowlog `(or ,@inboundacl-udp) #t))
+    (dict-set! startup-vars "inboundacl-ip" (sexpr-to-flowlog `(or ,@inboundacl-ip) #t))
+    (dict-set! startup-vars "outboundacl-tcp" (sexpr-to-flowlog `(or ,@outboundacl-tcp) #t))
+    (dict-set! startup-vars "outboundacl-udp" (sexpr-to-flowlog `(or ,@outboundacl-udp) #t))
+    (dict-set! startup-vars "outboundacl-ip" (sexpr-to-flowlog `(or ,@outboundacl-ip) #t))        
     
     ;(dict-set! startup-vars "insidenat" insidenat)
     ;(dict-set! startup-vars "outsidenat" outsidenat)    
@@ -361,7 +361,7 @@ namespace-for-template)
     ; generate L3external
 
     (define external-vars (make-hash))
-    (dict-set! external-vars "nexthop-fragment" (sexpr-to-flowlog next-hop-fragment))
+    (dict-set! external-vars "nexthop-fragment" (sexpr-to-flowlog next-hop-fragment #f))
 
     (store (render-template "templates/L3external.template.flg" external-vars)
            (make-path root-path "L3external.flg"))
@@ -413,27 +413,27 @@ namespace-for-template)
 (require racket/string)
 (require (only-in srfi/13 string-pad))
 
-(define (simplify-sexpr sexpr positive)
+(define (simplify-sexpr sexpr positive scrubdltyp)
   (match sexpr    
     [`(or ,args ...)
-     (define newargs (remove-duplicates (filter (lambda (a) (not (equal? a 'false))) (map (lambda (x) (simplify-sexpr x positive)) args))))
+     (define newargs (remove-duplicates (filter (lambda (a) (not (equal? a 'false))) (map (lambda (x) (simplify-sexpr x positive scrubdltyp)) args))))
      (cond [(member 'true newargs) 'true]
            [(empty? newargs) 'false]
            [(equal? (length newargs) 1) (first newargs)]
            [else `(or ,@newargs)])]
     [`(and ,args ...) 
-     (define newargs (remove-duplicates (filter (lambda (a) (not (equal? a 'true))) (map (lambda (x) (simplify-sexpr x positive)) args))))
+     (define newargs (remove-duplicates (filter (lambda (a) (not (equal? a 'true))) (map (lambda (x) (simplify-sexpr x positive scrubdltyp)) args))))
      (cond [(member 'false newargs) 'false]
            [(empty? newargs) 'true]
            [(equal? (length newargs) 1) (first newargs)]
            [else `(and ,@newargs)])]
     [`(not ,arg) 
-     (define newarg (simplify-sexpr arg (not positive)))
+     (define newarg (simplify-sexpr arg (not positive) scrubdltyp))
      (match newarg 
        [`(not ,arg2) arg2]
        [x `(not ,x)])]
     [`(RULE ,linenum ,decision ,varargs ,pred) 
-     (define newpred (simplify-sexpr pred positive))     
+     (define newpred (simplify-sexpr pred positive scrubdltyp))     
      `(RULE ,linenum ,decision ,varargs ,newpred)]
     ; equality or IN:
     [`(= ,arg1 ,arg2)      
@@ -447,17 +447,17 @@ namespace-for-template)
 
     ; deal with protocol names: expand to dltyp and nwproto fields
     [`(prot-TCP protocol)
-     (if positive 'true `(and (= p.dlTyp 0x800) (= p.nwProto 0x6)))]
+     (if (and scrubdltyp positive) 'true `(and (= p.dlTyp 0x800) (= p.nwProto 0x6)))]
     [`(prot-UDP protocol)
      ; 17 dec, 11 hex
-     (if positive 'true `(and (= p.dlTyp 0x800) (= p.nwProto 0x11)))]
+     (if (and scrubdltyp positive) 'true `(and (= p.dlTyp 0x800) (= p.nwProto 0x11)))]
     [`(prot-IP protocol)
-     (if positive 'true `(= p.dlTyp 0x800))]
+     (if (and scrubdltyp positive) 'true `(= p.dlTyp 0x800))]
 
     [`(,(? symbol? predname) ,args ...)
      sexpr] 
     ; implicit and:
-    [(list args ...) (simplify-sexpr `(and ,@args) positive)]
+    [(list args ...) (simplify-sexpr `(and ,@args) positive scrubdltyp)]
     [(? string? x) x]
     [(? symbol? x) 
      ; Midway I realized that we could just turn "src-addr-in"
@@ -476,32 +476,32 @@ namespace-for-template)
 
 (define debug-include-comments #f)
 
-(define (sexpr-to-flowlog sexpr)
-  (sexpr-to-flowlog-helper (simplify-sexpr sexpr #t)))
+(define (sexpr-to-flowlog sexpr scrubdltyp)
+  (sexpr-to-flowlog-helper (simplify-sexpr sexpr #t scrubdltyp)))
 
 (define (sexpr-to-flowlog-helper simplified)   
   ;(display "sexpr-to-flowlog >>>")
   ;(pretty-display simplified)
   (match simplified    
     ; concatenate strings for each arg, use "OR" as separator    
-    [`(or ,args ...) (string-append "( " (string-join (map sexpr-to-flowlog (remove-duplicates args)) " \nOR\n ") " )")]
-    [`(and ,args ...) (string-append "( " (string-join (map sexpr-to-flowlog (remove-duplicates args)) " AND ")" )")]
-    [`(not ,arg) (string-append "NOT " (sexpr-to-flowlog arg))]
+    [`(or ,args ...) (string-append "( " (string-join (map sexpr-to-flowlog-helper (remove-duplicates args)) " \nOR\n ") " )")]
+    [`(and ,args ...) (string-append "( " (string-join (map sexpr-to-flowlog-helper (remove-duplicates args)) " AND ")" )")]
+    [`(not ,arg) (string-append "NOT " (sexpr-to-flowlog-helper arg))]
     [`(RULE ,linenum ,decision ,varargs ,pred) (string-append (if debug-include-comments 
                                                                   (string-append "\n// " (symbol->string linenum) "\n")
                                                                   "") 
-                                                              (sexpr-to-flowlog pred))]
+                                                              (sexpr-to-flowlog-helper pred))]
     ; equality or IN:
     [`(= ,arg1 ,arg2)      
-     (define s1 (sexpr-to-flowlog arg1))
-     (define s2 (sexpr-to-flowlog arg2))
+     (define s1 (sexpr-to-flowlog-helper arg1))
+     (define s2 (sexpr-to-flowlog-helper arg2))
      (if (regexp-match #rx"^[0-9\\.]+/" s1)
          (string-append s2 " IN " s1)
          (string-append "(" s1 " = " s2 ")"))]    
     ; table reference
     ; (this needs to come after concrete keywords like RULE, and, =, etc.)
     [`(,(? symbol? predname) ,args ...)      
-     (string-append (symbol->string predname) "( " (string-join (map sexpr-to-flowlog args) ", ")" )")] 
+     (string-append (symbol->string predname) "( " (string-join (map sexpr-to-flowlog-helper args) ", ")" )")] 
     [(? string? x) x]
     [(? symbol? x) (symbol->string x)]    
-    [x (pretty-display x) (raise "error with sexpr-to-flowlog")]))
+    [x (pretty-display x) (raise "error with sexpr-to-flowlog-helper")]))
