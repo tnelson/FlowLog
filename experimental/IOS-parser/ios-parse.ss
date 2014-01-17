@@ -66,11 +66,19 @@
 
 ;; string -> (listof any)
 (define (tokenize-line line)
-  (map (lambda (token)
-         (if (regexp-match #px"^\\d+$" token)
-             (string->number token)
-             (string->symbol token)))
-       (regexp-split #rx" +" (string-trim line))))
+  ; If the line is blank, pretend there is a comment character there. 
+  ; This will terminate the current block, rather than crashing the parser.
+  ; TODO: If someone has a comment or blank line mid-block, this code will fail, possibly silently.
+  (cond [(equal? line "") 
+         '(!)]
+        ; End of file: assume end keyword is present
+        [(equal? line eof) 
+         '(end)]
+        [else (map (lambda (token)
+                     (if (regexp-match #px"^\\d+$" token)
+                         (string->number token)
+                         (string->symbol token)))
+                   (regexp-split #rx" +" (string-trim line)))]))
 
 ;; symbol -> boolean
 (define (single-address? sym)
