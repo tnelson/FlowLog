@@ -78,6 +78,13 @@
 (provide policy)
 (provide TCP-flags)
 (provide string-capitalize)
+(provide build-acl-name)
+
+(define (build-acl-name hostname interf)
+  (define hostnamestr (if (symbol? hostname) (symbol->string hostname) hostname))
+  (define interfstr (if (symbol? interf) (symbol->string interf) interf))
+  (string->symbol (string-append hostnamestr "-" interfstr "-acl")))
+
 
 (define (wrapq sym) 
   (string->symbol (string-append "\"" (cond [(symbol? sym) 
@@ -3336,10 +3343,7 @@
                                 set-peer-endpoint
                                 peer-endpoint)))
           default-ACL-permit)))
-    
-    (define/public (build-acl-name hostname interf)
-      (string->symbol (string-append (symbol->string hostname) "-" (symbol->string interf) "-acl")))
-    
+       
     ;; -> (listof rule%)
     ;;   Returns a list of the rules that describe inbound ACL policies
     (define/public (inbound-ACL-rules)

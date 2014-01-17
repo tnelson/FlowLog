@@ -261,7 +261,7 @@ namespace-for-template)
 
     ;;;;;;;;;;;;;;;;;;;
     ; Need to assign an ID to the router and an ID to the interface
-    (define (ifacedef->tuples arouter rname rnum ifindex i)      
+    (define (ifacedef->tuples arouter rname rnum ifindex i ridx)      
       (match i
         [`(,name ,primaddr (,primnwa ,primnwm) ,secaddr (,secnwa ,secnwm) ,nat-side) 
          (define inum (number->string (+ 1 ifindex)))
@@ -276,14 +276,12 @@ namespace-for-template)
                                empty))
          
          ; TODO(tn)
-         (define (vals->ifacldefn rnum inum)
-           "")
-         ; (define hostaclnum (string-append "0x30000000000000" (string-pad (number->string (+ hostidx 1)) 2 #\0)))
-         ;"INSERT (" raclnum ") INTO aclDPID;\n"
+         (define (vals->ifacldefn ridx iidx rname iname)
+           (define hostaclnum (string-append "0x3" (string-pad (number->string ridx) 2 #\0) "000000000000" (string-pad iidx 2 #\0)))
+           (string-append "INSERT (" hostaclnum ") INTO aclDPID;\n"
+                          "INSERT (\"" (symbol->string (build-acl-name rname iname)) "\"," hostaclnum ") INTO routerAlias;\n"))
          
-         ; TODO(tn): also need to populate routerAlias for these new ACL tables
-         
-         (define acldefn (vals->ifacldefn rnum inum))
+         (define acldefn (vals->ifacldefn ridx ptnum rname name))
          (define result (filter (lambda (x) x) (list prim sec alias needs-nat acldefn)))
          
            
@@ -333,7 +331,7 @@ namespace-for-template)
       
       (define iftuples (for/list ([ifdef interface-defns] 
                                     [ifindex (build-list (length interface-defns) values)])
-                           (ifacedef->tuples arouter hostname hostnum ifindex ifdef)))
+                           (ifacedef->tuples arouter hostname hostnum ifindex ifdef (+ hostidx 1))))
       (define routertuple (vals->routertuples hostname hostnum)) 
       (define natinfo (vals->nat (mrouter-nat_dpid arouter)))
       (define tuples (string-append* (flatten (cons routertuple (cons iftuples natinfo)))))
