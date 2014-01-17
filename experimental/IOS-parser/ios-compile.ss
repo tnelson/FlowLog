@@ -227,10 +227,9 @@ namespace-for-template)
                (for/list ([ifdef2 interface-defns]
                           [ifindex2 (build-list (length interface-defns) values)])                 
                  (match ifdef2 
-                   [`(,name2 ,primaddr2 (,primnwa2 ,primnwm2) ,secaddr2 (,secnwa2 ,secnwm2) ,nat-side2)
-                    (define ptnum2 (number->string (+ 2 ifindex2)))
+                   [`(,name2 ,primaddr2 (,primnwa2 ,primnwm2) ,secaddr2 (,secnwa2 ,secnwm2) ,nat-side2)                    
                     (if (and nat-side2 (equal? nat-side2 'outside))
-                        (string-append "INSERT (" nat-dpid "," ptnum "," ptnum2 "," primaddr2 ") INTO natconfig;\n")
+                        (string-append "INSERT (0x" nat-dpid "," "1" "," "1" "," primaddr2 ") INTO natconfig;\n")
                         "")]))
                empty))
          
