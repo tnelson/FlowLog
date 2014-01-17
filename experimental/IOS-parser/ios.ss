@@ -1510,12 +1510,16 @@
     (inherit augmented-name)
     (inherit name)
     
+    (define/public (supported-flowlog)
+      ; we support source list overload NAT
+      overload)
+    
     ; todo: add to other nat objects
     ; todo: how to get the other interface?
     ; todo: other types of nat may need different info (e.g. pool nat won't need a *single* public ip)
-    (define/public (make-natconfig-tuple routerid public-ip)
-      (unless overload (error "source-list-NAT%: non-overload not supported"))
-      (string-append "INSERT (" routerid "," interface-ID "," "XXX" "," public-ip ") INTO natconfig;"))
+    ;(define/public (make-natconfig-tuple routerid public-ip)
+    ;  (unless overload (error "source-list-NAT%: non-overload not supported"))
+    ;  (string-append "INSERT (" routerid "," interface-ID "," "XXX" "," public-ip ") INTO natconfig;"))
 
     ;; symbol symbol (hashtable symbol route-map%) (hashtable symbol ACL%) (hashtable symbol interface%)
     ;; (listof (listof symbol)) -> (listof rule%)
@@ -1634,6 +1638,9 @@
     (inherit augmented-name)
     (inherit name)
     
+    (define/public (supported-flowlog)      
+      #f)
+    
     ;; symbol symbol (hashtable symbol route-map%) (hashtable symbol ACL%) (hashtable symbol interface%)
     ;; (listof (listof symbol)) -> (listof rule%)
     ;;   Returns a list of rules for the forward direction for this NAT
@@ -1739,6 +1746,9 @@
     (inherit augmented-name)
     (inherit name)
     
+    (define/public (supported-flowlog)      
+      #f)
+
     ;; symbol symbol (hashtable symbol route-map%) (hashtable symbol ACL%) (hashtable symbol interface%)
     ;; (listof (listof symbol)) -> (listof rule%)
     ;;   Returns a list of rules for the forward direction for this NAT
@@ -1835,7 +1845,10 @@
     
     (inherit augmented-name)
     (inherit name)
-    
+
+    (define/public (supported-flowlog)
+      #f)
+        
     ;; symbol symbol (hashtable symbol route-map%) (hashtable symbol ACL%) (hashtable symbol interface%)
     ;; (listof (listof symbol)) -> (listof rule%)
     ;;   Returns a list of rules for the forward direction for this NAT
@@ -1928,6 +1941,9 @@
     (inherit augmented-name)
     (inherit name)
     
+    (define/public (supported-flowlog)
+      #f)
+    
     ;; symbol symbol (hashtable symbol route-map%) (hashtable symbol ACL%) (hashtable symbol interface%)
     ;; (listof (listof symbol)) -> (listof rule%)
     ;;   Returns a list of rules for the forward direction for this NAT
@@ -1983,6 +1999,9 @@
     
     (inherit augmented-name)
     (inherit name)
+
+    (define/public (supported-flowlog)      
+      #f)    
     
     ;; symbol symbol (hashtable symbol route-map%) (hashtable symbol ACL%) (hashtable symbol interface%)
     ;; (listof (listof symbol)) -> (listof rule%)
@@ -2045,7 +2064,10 @@
     
     (inherit augmented-name)
     (inherit name)
-    
+
+    (define/public (supported-flowlog)      
+      #f)
+
     ;; symbol symbol (hashtable symbol route-map%) (hashtable symbol ACL%) (hashtable symbol interface%)
     ;; (listof (listof symbol)) -> (listof rule%)
     ;;   Returns a list of rules for the forward direction for this NAT
@@ -2108,7 +2130,10 @@
     
     (inherit augmented-name)
     (inherit name)
-    
+
+    (define/public (supported-flowlog)    
+      #f)
+        
     ;; symbol symbol (hashtable symbol route-map%) (hashtable symbol ACL%) (hashtable symbol interface%)
     ;; (listof (listof symbol)) -> (listof rule%)
     ;;   Returns a list of rules for the forward direction for this NAT
@@ -2164,6 +2189,9 @@
     
     (inherit augmented-name)
     (inherit name)
+    
+    (define/public (supported-flowlog)    
+      #f)
     
     ;; symbol symbol (hashtable symbol route-map%) (hashtable symbol ACL%) (hashtable symbol interface%)
     ;; (listof (listof symbol)) -> (listof rule%)
@@ -2227,6 +2255,9 @@
     (inherit augmented-name)
     (inherit name)
     
+    (define/public (supported-flowlog)    
+      #f)    
+    
     ;; symbol symbol (hashtable symbol route-map%) (hashtable symbol ACL%) (hashtable symbol interface%)
     ;; (listof (listof symbol)) -> (listof rule%)
     ;;   Returns a list of rules for the forward direction for this NAT
@@ -2288,6 +2319,9 @@
     
     (inherit augmented-name)
     (inherit name)
+    
+    (define/public (supported-flowlog)    
+      #f)        
     
     ;; symbol symbol (hashtable symbol route-map%) (hashtable symbol ACL%) (hashtable symbol interface%)
     ;; (listof (listof symbol)) -> (listof rule%)
@@ -2379,6 +2413,9 @@
     
     (inherit augmented-name)
     (inherit name)
+    
+    (define/public (supported-flowlog)    
+      #f)        
     
     ;; symbol symbol (hashtable symbol route-map%) (hashtable symbol ACL%) (hashtable symbol interface%)
     ;; (listof (listof symbol)) -> (listof rule%)

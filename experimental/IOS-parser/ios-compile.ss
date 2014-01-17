@@ -261,7 +261,7 @@ namespace-for-template)
 
     ;;;;;;;;;;;;;;;;;;;
     ; Need to assign an ID to the router and an ID to the interface
-    (define (ifacedef->tuples arouter rname rnum ifindex i ridx)      
+    (define (ifacedef->tuples arouter interface-defns router-nat-dpid rname rnum ifindex i ridx)      
       (match i
         [`(,name ,primaddr (,primnwa ,primnwm) ,secaddr (,secnwa ,secnwm) ,nat-side) 
          (define inum (number->string (+ 1 ifindex)))
@@ -274,17 +274,32 @@ namespace-for-template)
                                (string-append (vals->needs-nat primnwa primnwm) 
                                               (vals->needs-nat secnwa secnwm))
                                empty))
-         
-         ; TODO(tn)
+                  
          (define (vals->ifacldefn ridx iidx rname iname)
            (define hostaclnum (string-append "0x3" (string-pad (number->string ridx) 2 #\0) "00000000000" (string-pad iidx 2 #\0)))
            (string-append "INSERT (" hostaclnum ") INTO aclDPID;\n"
                           "INSERT (\"" (symbol->string (build-acl-name rname iname)) "\"," hostaclnum ") INTO routerAlias;\n"))
+                 
+         ; For this particular type of nat (source list overload dynamic):
+         ; For each private interface (nat = inside), and each public interface (nat = outside)
+         ; insert a row into natconfig
+         ;; TODO(tn)+TODO(adf): more kinds of NAT?
+         (define (if-pair->natconfig)
+           (if (and nat-side (equal? nat-side 'inside))                                                                                      
+               (for/list ([ifdef2 interface-defns]
+                          [ifindex2 (build-list (length interface-defns) values)])                 
+                 (match ifdef2 
+                   [`(,name2 ,primaddr2 (,primnwa2 ,primnwm2) ,secaddr2 (,secnwa2 ,secnwm2) ,nat-side2)
+                    (define ptnum2 (number->string (+ 2 ifindex2)))
+                    (if (and nat-side2 (equal? nat-side2 'outside))
+                        (string-append "INSERT (" router-nat-dpid "," ptnum "," ptnum2 "," primaddr2 ") INTO natconfig;\n")
+                        "")]))
+               empty))
          
          (define acldefn (vals->ifacldefn ridx ptnum rname name))
-         (define result (filter (lambda (x) x) (list prim sec alias needs-nat acldefn)))
-         
-           
+         (define natconfigs (if-pair->natconfig))
+                           
+         (define result (filter (lambda (x) x) (list prim sec alias needs-nat acldefn natconfigs)))
          
          ; generate protobufs as well
          (define aninterf (msubnet ""))
@@ -323,15 +338,22 @@ namespace-for-template)
 
       (define static-NAT (send config get-static-NAT))
       (define dynamic-NAT (send config get-dynamic-NAT))
+      (for-each (lambda (anat) (unless (send anat supported-flowlog)
+                                 (error (format "unsupported NAT: ~v: ~v" (send anat name (string->symbol hostname) "") (send anat direction)))))
+                (append static-NAT dynamic-NAT))
 
       (define arouter (mrouter ""))
       (set-mrouter-name! arouter hostname)
       (set-mrouter-self_dpid! arouter (string-append "10000000000000" (string-pad hostnum 2 #\0)))
-      (set-mrouter-nat_dpid! arouter (string-append "40000000000000" (string-pad hostnum 2 #\0)))      
+      (define router-nat-dpid (string-append "40000000000000" (string-pad hostnum 2 #\0)))
+      (set-mrouter-nat_dpid! arouter router-nat-dpid)            
       
       (define iftuples (for/list ([ifdef interface-defns] 
-                                    [ifindex (build-list (length interface-defns) values)])
-                           (ifacedef->tuples arouter hostname hostnum ifindex ifdef (+ hostidx 1))))
+                                  [ifindex (build-list (length interface-defns) values)])                         
+                          (ifacedef->tuples arouter interface-defns router-nat-dpid hostname hostnum ifindex ifdef (+ hostidx 1))))           
+      
+      ; TODO(tn)+TODO(adf): secondary subnets on interfaces with nat?
+      
       (define routertuple (vals->routertuples hostname hostnum)) 
       (define natinfo (vals->nat (mrouter-nat_dpid arouter)))
       (define tuples (string-append* (flatten (cons routertuple (cons iftuples natinfo)))))
