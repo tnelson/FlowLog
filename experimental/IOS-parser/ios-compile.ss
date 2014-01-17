@@ -413,27 +413,27 @@ namespace-for-template)
 (require racket/string)
 (require (only-in srfi/13 string-pad))
 
-(define (simplify-sexpr sexpr)
+(define (simplify-sexpr sexpr positive)
   (match sexpr    
     [`(or ,args ...)
-     (define newargs (remove-duplicates (filter (lambda (a) (not (equal? a 'false))) (map simplify-sexpr args))))
+     (define newargs (remove-duplicates (filter (lambda (a) (not (equal? a 'false))) (map (lambda (x) (simplify-sexpr x positive)) args))))
      (cond [(member 'true newargs) 'true]
            [(empty? newargs) 'false]
            [(equal? (length newargs) 1) (first newargs)]
            [else `(or ,@newargs)])]
     [`(and ,args ...) 
-     (define newargs (remove-duplicates (filter (lambda (a) (not (equal? a 'true))) (map simplify-sexpr args))))
+     (define newargs (remove-duplicates (filter (lambda (a) (not (equal? a 'true))) (map (lambda (x) (simplify-sexpr x positive)) args))))
      (cond [(member 'false newargs) 'false]
            [(empty? newargs) 'true]
            [(equal? (length newargs) 1) (first newargs)]
            [else `(and ,@newargs)])]
     [`(not ,arg) 
-     (define newarg (simplify-sexpr arg))
+     (define newarg (simplify-sexpr arg (not positive)))
      (match newarg 
        [`(not ,arg2) arg2]
        [x `(not ,x)])]
     [`(RULE ,linenum ,decision ,varargs ,pred) 
-     (define newpred (simplify-sexpr pred))     
+     (define newpred (simplify-sexpr pred positive))     
      `(RULE ,linenum ,decision ,varargs ,newpred)]
     ; equality or IN:
     [`(= ,arg1 ,arg2)      
@@ -447,17 +447,17 @@ namespace-for-template)
 
     ; deal with protocol names: expand to dltyp and nwproto fields
     [`(prot-TCP protocol)
-     `(and (= p.dlTyp 0x800) (= p.nwProto 0x6))]
+     (if positive 'true `(and (= p.dlTyp 0x800) (= p.nwProto 0x6)))]
     [`(prot-UDP protocol)
      ; 17 dec, 11 hex
-     `(and (= p.dlTyp 0x800) (= p.nwProto 0x11))]
+     (if positive 'true `(and (= p.dlTyp 0x800) (= p.nwProto 0x11)))]
     [`(prot-IP protocol)
-     `(= p.dlTyp 0x800)]
+     (if positive 'true `(= p.dlTyp 0x800))]
 
     [`(,(? symbol? predname) ,args ...)
      sexpr] 
     ; implicit and:
-    [(list args ...) (simplify-sexpr `(and ,@args))]
+    [(list args ...) (simplify-sexpr `(and ,@args) positive)]
     [(? string? x) x]
     [(? symbol? x) 
      ; Midway I realized that we could just turn "src-addr-in"
@@ -477,7 +477,7 @@ namespace-for-template)
 (define debug-include-comments #f)
 
 (define (sexpr-to-flowlog sexpr)
-  (sexpr-to-flowlog-helper (simplify-sexpr sexpr)))
+  (sexpr-to-flowlog-helper (simplify-sexpr sexpr #t)))
 
 (define (sexpr-to-flowlog-helper simplified)   
   ;(display "sexpr-to-flowlog >>>")
