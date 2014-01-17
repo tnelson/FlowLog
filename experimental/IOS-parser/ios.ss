@@ -700,6 +700,17 @@
     (define/public (get-nat-side)
       NAT-side)
     
+    (define/public (pretty-print)
+      (string-append (symbol->string name) " "
+                     "primary addr: " (send (get-primary-address) text-address) " "
+                     "primary nw: " (send (get-primary-network) text-address) "/"
+                     (send (get-primary-network) text-mask) " "
+                     "nat side: " (format "~v" NAT-side) " "
+                     "inbound acl id: " (format "~v" inbound-ACL-ID) " "
+                     "outbound acl id: " (format "~v" outbound-ACL-ID) " "
+                     ;(get-secondary-address)
+                     ;(get-secondary-network)
+                     ))
     
     ;; -> symbol
     ;;   Returns the name for this interface
