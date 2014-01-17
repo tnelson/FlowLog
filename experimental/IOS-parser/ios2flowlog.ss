@@ -12,7 +12,7 @@
 (require "ios-compile.ss")
 
 (define path ".")
-(define default-permit 'false)
+(define default-permit #f)
 
 (command-line
  #:program "ios2flowlog"
