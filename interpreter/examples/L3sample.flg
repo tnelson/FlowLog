@@ -18,6 +18,7 @@
  */
 
 INCLUDE "examples/L3router.flg";
+INCLUDE "examples/ACLsample.flg";
 INCLUDE "examples/Mac_Learning.inc.flg";
 
 
@@ -68,3 +69,5 @@ ON startup(ev):
   INSERT (0x2000000000000001) INTO switches_without_mac_learning;
   INSERT (0x2000000000000002) INTO switches_without_mac_learning;
   INSERT (0x4000000000000001) INTO switches_without_mac_learning;
+  INSERT (0x5000000000000001) INTO switches_without_mac_learning;
+  INSERT (0x5000000000000002) INTO switches_without_mac_learning;

@@ -1,0 +1,22 @@
+/*
+ * Basic functionality for ACL tables.
+ *
+ * (description goes here)
+ *
+ */
+
+ON ip_packet(pkt) WHERE pkt.locSw = 0x5000000000000001 and pkt.locPt = 1:
+  DO forward(new) WHERE
+    new.locPt = 2;
+
+ON ip_packet(pkt) WHERE pkt.locSw = 0x5000000000000001 and pkt.locPt = 2:
+  DO forward(new) WHERE
+    new.locPt = 1;
+
+ON ip_packet(pkt) WHERE pkt.locSw = 0x5000000000000002 and pkt.locPt = 1:
+  DO forward(new) WHERE
+    new.locPt = 2;
+
+ON ip_packet(pkt) WHERE pkt.locSw = 0x5000000000000002 and pkt.locPt = 2:
+  DO forward(new) WHERE
+    new.locPt = 1;

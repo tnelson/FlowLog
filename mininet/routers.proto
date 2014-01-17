@@ -7,10 +7,11 @@
 package flowlog;
 
 message Subnet {
-  optional string addr    = 1;  // required
-  optional int32  mask    = 2;  // required
-  optional string gw      = 3;  // required
-  optional string tr_dpid = 4;  // required
+  optional string addr     = 1;  // required
+  optional int32  mask     = 2;  // required
+  optional string gw       = 3;  // required
+  optional string tr_dpid  = 4;  // required
+  optional string acl_dpid = 5;  // required
 }
 
 message Network {

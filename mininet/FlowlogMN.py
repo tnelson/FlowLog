@@ -97,7 +97,8 @@ class FlowlogDemo(object):
 
       # Add the dlDst translators for each subnet
       # The router is attached to each subnet first via a dlDst translator.
-      # Then, we attach that translator to the subnet's "subnetRootSwitch";
+      # The translator is then attached to an ACL table.
+      # Then, we attach that ACL table to the subnet's "subnetRootSwitch";
       # if no such switch exists, we create it.
 
       for (i, s) in enumerate(r.subnets):
@@ -107,8 +108,12 @@ class FlowlogDemo(object):
                                     dpid=s.tr_dpid)
         topo.addLink(router, translator, **self.linkopts)
 
+        acl_table = topo.addSwitch(r.name + '-a' + str(i + 1),
+                                   dpid=s.acl_dpid)
+        topo.addLink(translator, acl_table, **self.linkopts)
+
         srs = self.subnetRootSwitch[subnetStr(s.addr, s.mask)]
-        topo.addLink(translator, srs, **self.linkopts)
+        topo.addLink(acl_table, srs, **self.linkopts)
 
         # if there's room for hosts, add an edge switch with some hosts!
         if s.mask < 30:
