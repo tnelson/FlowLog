@@ -145,7 +145,7 @@ namespace-for-template)
     
     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
     ;; Decorrelate and produce rule sets for appropriate policy decisions
-    
+
     (define inboundacl (assoc2 'permit (policy '(permit) (combine-rules configurations inbound-ACL-rules))))
     (define outboundacl (assoc2 'permit (policy '(permit) (combine-rules configurations outbound-ACL-rules))))
     
@@ -208,7 +208,9 @@ namespace-for-template)
       (define prim-addr-obj (send iface get-primary-address))
       (define sec-addr-obj (send iface get-secondary-address))
       (define prim-netw-obj (send iface get-primary-network))
-      (define sec-netw-obj (send iface get-secondary-network))      
+      (define sec-netw-obj (send iface get-secondary-network))
+      (define nat-side (send iface get-nat-side))
+
       (define prim-addr (send prim-addr-obj text-address))
       (define sec-addr (if sec-addr-obj  
                            (send sec-addr-obj text-address) 
@@ -221,7 +223,7 @@ namespace-for-template)
       (unless (equal? (symbol->string ifaceid) name) (error "extract-ifs"))
       `(,name 
         ,prim-addr ,prim-netw
-        ,sec-addr ,sec-netw ))
+        ,sec-addr ,sec-netw ,nat-side))
 
     ;// subnets(addr,  mask, gw ip,    gw mac,            locSw,            locpt, trSw)
     ;INSERT (10.0.1.0, 24,   10.0.1.1, ca:fe:ca:fe:00:01, 0x1000000000000001, 2, 0x2000000000000001) INTO subnets;
@@ -245,18 +247,34 @@ namespace-for-template)
 
     (define (vals->nat natnum)
       (string-append "INSERT (0x" natnum ") INTO switches_without_mac_learning; // auto\n"))
+
+    (define startup-vars (make-hash))
+    (define external-vars (make-hash))
+    (dict-set! external-vars "needs-nat-disj" "")
     
+    (define (vals->needs-nat nwa nwm)
+      (cond [nwa
+             (dict-set! external-vars "needs-nat-disj" (string-append (sexpr-to-flowlog `(= pkt.nwSrc ,(string-append nwa "/" nwm)) #f) 
+                                                                      (dict-ref external-vars "needs-nat-disj")))
+             (string-append "INSERT (" nwa ", " nwm ") INTO needs_nat;\n")]
+            [else ""]))
+
+    ;;;;;;;;;;;;;;;;;;;
     ; Need to assign an ID to the router and an ID to the interface
     (define (ifacedef->tuples arouter rname rnum ifindex i)      
       (match i
-        [`(,name ,primaddr (,primnwa ,primnwm) ,secaddr (,secnwa ,secnwm)) 
+        [`(,name ,primaddr (,primnwa ,primnwm) ,secaddr (,secnwa ,secnwm) ,nat-side) 
          (define inum (number->string (+ 1 ifindex)))
          ; offset the port number on the router by 1, since 1 is reserved for the attached NAT switch
          (define ptnum (number->string (+ 2 ifindex)))
          (define prim (vals->subnet primaddr primnwa primnwm rnum inum ptnum))
          (define sec (if secaddr (vals->subnet primaddr primnwa primnwm rnum inum ptnum) #f))
          (define alias (vals->ifalias rname name inum))
-         (define result (filter (lambda (x) x) (list prim sec alias)))
+         (define needs-nat (if (and nat-side (equal? nat-side 'inside))
+                               (string-append (vals->needs-nat primnwa primnwm) 
+                                              (vals->needs-nat secnwa secnwm))
+                               empty))
+         (define result (filter (lambda (x) x) (list prim sec alias needs-nat)))
          
          ; generate protobufs as well
          (define aninterf (msubnet ""))
@@ -283,6 +301,7 @@ namespace-for-template)
          result]
         [else (pretty-display i) (error "ifacedef->tuple")]))
         
+    ;;;;;;;;;;;;;;;;;;;
     (define (extract-hosts routers config hostidx)      
       (define hostname (symbol->string (send (send config get-hostname) name)))
       (define interfaces (send config get-interfaces))
@@ -291,8 +310,10 @@ namespace-for-template)
       (define interface-defns (hash-map interfaces extract-ifs))
       ;(pretty-display interface-defns) ; DEBUG
       (define hostnum (string-append "0x10000000000000" (string-pad (number->string (+ hostidx 1)) 2 #\0)))
-      
-      
+
+      (define static-NAT (send config get-static-NAT))
+      (define dynamic-NAT (send config get-dynamic-NAT))
+
       (define arouter (mrouter ""))
       (set-mrouter-name! arouter hostname)
       (set-mrouter-self_dpid! arouter (string-append "10000000000000" (string-pad hostnum 2 #\0)))
@@ -339,7 +360,7 @@ namespace-for-template)
 
     ; First up, generate StartupConfig
 
-    (define startup-vars (make-hash))
+   
     (dict-set! startup-vars "basename" root-path)
     (dict-set! startup-vars "startupinserts" startupinserts)
     
@@ -349,8 +370,8 @@ namespace-for-template)
     (dict-set! startup-vars "inboundacl-ip" (sexpr-to-flowlog `(or ,@inboundacl-ip) #t))
     (dict-set! startup-vars "outboundacl-tcp" (sexpr-to-flowlog `(or ,@outboundacl-tcp) #t))
     (dict-set! startup-vars "outboundacl-udp" (sexpr-to-flowlog `(or ,@outboundacl-udp) #t))
-    (dict-set! startup-vars "outboundacl-ip" (sexpr-to-flowlog `(or ,@outboundacl-ip) #t))        
-    
+    (dict-set! startup-vars "outboundacl-ip" (sexpr-to-flowlog `(or ,@outboundacl-ip) #t))
+
     ;(dict-set! startup-vars "insidenat" insidenat)
     ;(dict-set! startup-vars "outsidenat" outsidenat)    
     
@@ -360,7 +381,6 @@ namespace-for-template)
 
     ; generate L3external
 
-    (define external-vars (make-hash))
     (dict-set! external-vars "nexthop-fragment" (sexpr-to-flowlog next-hop-fragment #f))
 
     (store (render-template "templates/L3external.template.flg" external-vars)

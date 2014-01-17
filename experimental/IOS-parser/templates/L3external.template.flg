@@ -49,8 +49,10 @@ ON ip_packet(pkt):
     and cached(nexthop, new.dlDst) // MAC addr of nexthop IP
 
     // don't route packets which need NAT'ing
-    and needs_nat(needs_nat_subnet, needs_nat_mask)
-    and NOT (pkt.nwSrc IN needs_nat_subnet/needs_nat_mask);
+    and NOT @needs-nat-disj
+    //and needs_nat(needs_nat_subnet, needs_nat_mask)
+    //and NOT (pkt.nwSrc IN needs_nat_subnet/needs_nat_mask)
+    ;
 
 // packets destined to outside whose source says they need NATing
 
