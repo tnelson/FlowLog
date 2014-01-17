@@ -435,25 +435,25 @@ namespace-for-template)
                 (equal? arg1 'Port)
                 (equal? arg2 'Port))
             'true]
-           [else sexpr])]   
+           [else `(= ,(simplify-sexpr arg1 positive scrubdltyp) ,(simplify-sexpr arg2 positive scrubdltyp))])]   
 
     ; deal with protocol names: expand to dltyp and nwproto fields
     [`(prot-TCP protocol)
-     (if (and scrubdltyp positive) 'true `(and (= p.dlTyp 0x800) (= p.nwProto 0x6)))]
+     (if (and scrubdltyp positive) 'true `(and (= pkt.dlTyp 0x800) (= pkt.nwProto 0x6)))]
     [`(prot-UDP protocol)
      ; 17 dec, 11 hex
-     (if (and scrubdltyp positive) 'true `(and (= p.dlTyp 0x800) (= p.nwProto 0x11)))]
+     (if (and scrubdltyp positive) 'true `(and (= pkt.dlTyp 0x800) (= pkt.nwProto 0x11)))]
     [`(prot-IP protocol)
-     (if (and scrubdltyp positive) 'true `(= p.dlTyp 0x800))]
+     (if (and scrubdltyp positive) 'true `(= pkt.dlTyp 0x800))]
 
     [`(,(? symbol? predname) ,args ...)
-     sexpr] 
+     `(,predname ,@(map (lambda (x) (simplify-sexpr x positive scrubdltyp)) args))] 
     ; implicit and:
     [(list args ...) (simplify-sexpr `(and ,@args) positive scrubdltyp)]
     [(? string? x) x]
     [(? symbol? x) 
      ; Midway I realized that we could just turn "src-addr-in"
-     ; into "p.nwSrc" here, rather than bit-by-bit in IOS.ss.     
+     ; into "pkt.nwSrc" here, rather than bit-by-bit in IOS.ss.     
      ; So some will already be converted, some won't.
      (cond [(equal? x 'src-addr-in) "pkt.nwSrc"]
            [(equal? x 'src-port-in) "pkt.tpSrc"]
