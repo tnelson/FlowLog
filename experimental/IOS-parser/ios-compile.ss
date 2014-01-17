@@ -149,6 +149,13 @@ namespace-for-template)
     (define inboundacl (assoc2 'permit (policy '(permit) (combine-rules configurations inbound-ACL-rules))))
     (define outboundacl (assoc2 'permit (policy '(permit) (combine-rules configurations outbound-ACL-rules))))
     
+    (define inboundacl-tcp (filter (lambda (arule) (equal? 'tcp (get-proto-for-rule arule))) inboundacl))        
+    (define inboundacl-udp (filter (lambda (arule) (equal? 'udp (get-proto-for-rule arule))) inboundacl))
+    (define inboundacl-ip (filter (lambda (arule) (equal? 'ip (get-proto-for-rule arule))) inboundacl))
+    (define outboundacl-tcp (filter (lambda (arule) (equal? 'tcp (get-proto-for-rule arule))) outboundacl))
+    (define outboundacl-udp (filter (lambda (arule) (equal? 'udp (get-proto-for-rule arule))) outboundacl))
+    (define outboundacl-ip (filter (lambda (arule) (equal? 'ip (get-proto-for-rule arule))) outboundacl))           
+
     (define insidenat (assoc2 'translate (policy '(translate) (combine-rules configurations inside-NAT-rules))))
     (define outsidenat (assoc2 'translate (policy '(translate) (combine-rules configurations outside-NAT-rules))))
     
@@ -306,8 +313,12 @@ namespace-for-template)
   
     (define routers (mrouters ""))
     (define startupinserts (string-append* (for/list ([config configurations] [hostidx (build-list (length configurations) values)]) 
+                                             
                                              (extract-hosts routers config hostidx))))
     ;(pretty-display startupinserts) ; DEBUG
+    
+    ;(printf "~v~n" (send config get-dynamic-NAT))
+    
     
     ; output the router message for this router
     (call-with-output-file (make-path root-path "IOS.pb.bin") #:exists 'replace
@@ -331,13 +342,20 @@ namespace-for-template)
     (define startup-vars (make-hash))
     (dict-set! startup-vars "basename" root-path)
     (dict-set! startup-vars "startupinserts" startupinserts)
-
-    (store (string-append "entrance acl:\n "
-                          (sexpr-to-flowlog `(or ,@inboundacl))
-                          "\n\nexit acl:\n "
-                          (sexpr-to-flowlog `(or ,@outboundacl))
-                          "\n\n\n"
-                          (render-template "templates/StartupConfig.template.flg" startup-vars))
+    
+    ; IP rules to the IP block. Will also apply to TCP packets. So don't duplicate!
+    (dict-set! startup-vars "inboundacl-tcp" (sexpr-to-flowlog `(or ,@inboundacl-tcp)))
+    (dict-set! startup-vars "inboundacl-udp" (sexpr-to-flowlog `(or ,@inboundacl-udp)))
+    (dict-set! startup-vars "inboundacl-ip" (sexpr-to-flowlog `(or ,@inboundacl-ip)))
+    (dict-set! startup-vars "outboundacl-tcp" (sexpr-to-flowlog `(or ,@outboundacl-tcp)))
+    (dict-set! startup-vars "outboundacl-udp" (sexpr-to-flowlog `(or ,@outboundacl-udp)))
+    (dict-set! startup-vars "outboundacl-ip" (sexpr-to-flowlog `(or ,@outboundacl-ip)))        
+    
+    ;(dict-set! startup-vars "insidenat" insidenat)
+    ;(dict-set! startup-vars "outsidenat" outsidenat)    
+    
+    
+    (store (render-template "templates/StartupConfig.template.flg" startup-vars)
            (make-path root-path "IOS.flg"))
 
     ; generate L3external
@@ -431,7 +449,8 @@ namespace-for-template)
     [`(prot-TCP protocol)
      `(and (= p.dlTyp 0x800) (= p.nwProto 0x6))]
     [`(prot-UDP protocol)
-     `(and (= p.dlTyp 0x800) (= p.nwProto 0x17))]
+     ; 17 dec, 11 hex
+     `(and (= p.dlTyp 0x800) (= p.nwProto 0x11))]
     [`(prot-IP protocol)
      `(= p.dlTyp 0x800)]
 
@@ -455,6 +474,8 @@ namespace-for-template)
            [else (symbol->string x)])]    
     [x (pretty-display x) (raise "error with simplify-sexpr")]))
 
+(define debug-include-comments #f)
+
 (define (sexpr-to-flowlog sexpr)
   (sexpr-to-flowlog-helper (simplify-sexpr sexpr)))
 
@@ -466,7 +487,10 @@ namespace-for-template)
     [`(or ,args ...) (string-append "( " (string-join (map sexpr-to-flowlog (remove-duplicates args)) " \nOR\n ") " )")]
     [`(and ,args ...) (string-append "( " (string-join (map sexpr-to-flowlog (remove-duplicates args)) " AND ")" )")]
     [`(not ,arg) (string-append "NOT " (sexpr-to-flowlog arg))]
-    [`(RULE ,linenum ,decision ,varargs ,pred) (string-append "\n// " (symbol->string linenum) "\n" (sexpr-to-flowlog pred))]
+    [`(RULE ,linenum ,decision ,varargs ,pred) (string-append (if debug-include-comments 
+                                                                  (string-append "\n// " (symbol->string linenum) "\n")
+                                                                  "") 
+                                                              (sexpr-to-flowlog pred))]
     ; equality or IN:
     [`(= ,arg1 ,arg2)      
      (define s1 (sexpr-to-flowlog arg1))
@@ -481,37 +505,3 @@ namespace-for-template)
     [(? string? x) x]
     [(? symbol? x) (symbol->string x)]    
     [x (pretty-display x) (raise "error with sexpr-to-flowlog")]))
-
-
-
-
-    
-   #|(define flattened-forward
-      `(and 
-        ; Pass ACLs (in and out)
-        (or ,@inboundacl) 
-        (or ,@outboundacl)
-        ; NAT
-        (or (and (or ,@insidenat) 
-                 (internalNATPort p.locSw p.locPt))
-            (and (or ,@outsidenat) 
-                 (externalNATPort p.locSw p.locPt)))
-        ; routing, switching
-        (or ,@localswitching-forward
-            (and ,@localswitching-pass                         
-                 (or ,@policyroute-forward
-                     (and ,@policyroute-route
-                          ,@networkswitching-forward)
-                     (and ,@policyroute-pass
-                          (or ,@staticroute-forward
-                              (and ,@staticroute-route
-                                   ,@networkswitching-forward)                              
-                              (and ,@staticroute-pass
-                                   (or ,@defaultpolicyroute-forward
-                                       (and ,@defaultpolicyroute-route
-                                            ,@networkswitching-forward)
-                                       ; Final option: Packet is dropped.
-                                       ; No final option here in actual program.
-                                       ; If no satisfying new, then nothing to do.
-                                       )))))))))
-    |#

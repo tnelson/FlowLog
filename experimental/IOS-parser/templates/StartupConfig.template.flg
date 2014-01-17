@@ -3,6 +3,45 @@ INCLUDE "@|basename|/Mac_Learning.inc.flg";
 
 TABLE routerAlias(string, switchid);
 TABLE portAlias(string, string, portid);
+TABLE switches_without_mac_learning(switchid);
+TABLE cached(ipaddr, macaddr);
+TABLE subnets(ipaddr, int, ipaddr, macaddr, switchid, portid, switchid);
+
+///////////////////////////
+// ACLs
+///////////////////////////
+
+ON tcp_packet(pkt) WHERE <<TODO: incoming on translation switch>>:
+  @inboundacl-tcp
+  AND new.locPt = <<TODO: next port on translation switch>>;
+
+ON udp_packet(pkt) WHERE <<TODO: incoming on translation switch>>:
+  @inboundacl-udp
+  AND new.locPt = <<TODO: next port on translation switch>>;
+
+ON ip_packet(pkt) WHERE <<TODO: incoming on translation switch>>:
+  @inboundacl-ip
+  AND new.locPt = <<TODO: next port on translation switch>>;
+
+///////////////////////////
+
+ON tcp_packet(pkt) WHERE <<TODO:outgoing on translation switch>>:
+  @outboundacl-tcp
+  AND new.locPt = <<TODO: next port on translation switch>>;
+
+ON udp_packet(pkt) WHERE <<TODO: outgoing on translation switch>>:
+  @outboundacl-udp
+  AND new.locPt = <<TODO: next port on translation switch>>;
+
+ON ip_packet(pkt) WHERE <<TODO: outgoing on translation switch>>:
+  @outboundacl-ip
+  AND new.locPt = <<TODO: next port on translation switch>>;
+
+
+
+///////////////////////////
+// Startup values
+///////////////////////////
 
 ON startup(e):
 @startupinserts
