@@ -30,74 +30,10 @@
 (require racket/dict)
 (require "ios.ss")
 (require "ios-parse.ss")
+(require "routers.rkt")
 
 (require web-server/templates)
-
 (require (planet murphy/protobuf:1:1))
-(require (planet murphy/protobuf/syntax))
-
-;+message Subnet {
-; +  optional string addr    = 1;  // required
-; +  optional int32  mask    = 2;  // required
-; +  optional string gw      = 3;  // required
-; +  optional string tr_dpid = 4;  // required
-; +}
-; +
-    
-(define-message-type msubnet
-  ([required primitive:string addr 1]
-   [required primitive:int32 mask 2]
-   [required primitive:string gw 3]
-   [required primitive:string tr_dpid 4]
-   [required primitive:string acl_dpid 5]))
-
-
-; +message Network {
-; +  optional string addr = 1;  // required
-; +  optional int32  mask = 2;  // required
-; +}    
-(define-message-type mnetwork
-  ([required primitive:string addr 1]
-   [required primitive:int32 mask 2]))
-
-
-; +
-; +message Peer {
-; +  optional string ip   = 1;  // required
-; +  optional int32  mask = 2;  // required
-; +  optional string mac  = 3;  // required
-; +
-; +  repeated Network networks = 4;
-; +}
-(define-message-type mpeer
-  ([required primitive:string ip 1]
-   [required primitive:int32 mask 2]
-   [required primitive:string mac 3]
-   [repeated mnetwork networks 4]))
-
-
- ;+
- ;+message Router {
- ;+  optional string name      = 1;  // required
- ;+  optional string self_dpid = 2;  // required
- ;+  optional string nat_dpid  = 3;  // required
- ;+
- ;+  repeated Subnet subnets = 4;
- ;+  repeated Peer peers = 5;
- ;+}
-(define-message-type mrouter
-  ([required primitive:string name 1]
-   [required primitive:string self_dpid 2]
-   [required primitive:string nat_dpid 3]
-   [repeated msubnet subnets 4]
-   [repeated mpeer peers 5]))
- 
- ;+
- ;+message Routers {
- ;+  repeated Router routers = 1;
- ;+}
-(define-message-type mrouters
-  ([repeated mrouter routers 1]))
 
 (provide compile-configurations)
 
@@ -262,7 +198,7 @@ namespace-for-template)
 
     ;;;;;;;;;;;;;;;;;;;
     ; Need to assign an ID to the router and an ID to the interface
-    (define (ifacedef->tuples arouter interface-defns router-nat-dpid rname rnum ifindex i ridx)      
+    (define (ifacedef->tuples arouter interface-defns nat-dpid rname rnum ifindex i ridx)
       (match i
         [`(,name ,primaddr (,primnwa ,primnwm) ,secaddr (,secnwa ,secnwm) ,nat-side) 
          (define inum (number->string (+ 1 ifindex)))
@@ -294,7 +230,7 @@ namespace-for-template)
                    [`(,name2 ,primaddr2 (,primnwa2 ,primnwm2) ,secaddr2 (,secnwa2 ,secnwm2) ,nat-side2)
                     (define ptnum2 (number->string (+ 2 ifindex2)))
                     (if (and nat-side2 (equal? nat-side2 'outside))
-                        (string-append "INSERT (" router-nat-dpid "," ptnum "," ptnum2 "," primaddr2 ") INTO natconfig;\n")
+                        (string-append "INSERT (" nat-dpid "," ptnum "," ptnum2 "," primaddr2 ") INTO natconfig;\n")
                         "")]))
                empty))
          
@@ -304,34 +240,34 @@ namespace-for-template)
          (define result (filter (lambda (x) x) (list prim sec alias needs-nat acldefn natconfigs)))
          
          ; generate protobufs as well
-         (define aninterf (msubnet ""))
-         ;(set-msubnet-name! aninterf name)         
+         (define aninterf (subnet ""))
+         ;(set-subnet-name! aninterf name)
          ;(set-minterface-id! aninterf ifindex)
-         (set-msubnet-tr_dpid! aninterf (string-append "20000000000000" (string-pad (number->string (+ ifindex 1)) 2 #\0)))
-         (set-msubnet-acl_dpid! aninterf hostaclnum)
-         (set-msubnet-addr! aninterf primnwa)         
-         (set-msubnet-mask! aninterf (string->number primnwm))
-         (set-msubnet-gw! aninterf primaddr)
+         (set-subnet-tr-dpid! aninterf (string-append "20000000000000" (string-pad (number->string (+ ifindex 1)) 2 #\0)))
+         (set-subnet-acl-dpid! aninterf hostaclnum)
+         (set-subnet-addr! aninterf primnwa)
+         (set-subnet-mask! aninterf (string->number primnwm))
+         (set-subnet-gw! aninterf primaddr)
          
-         (set-mrouter-subnets! arouter (cons aninterf (mrouter-subnets arouter) ))          
+         (set-router-subnets! arouter (cons aninterf (router-subnets arouter) ))
          
          (when secaddr 
            (printf "WARNING! Secondary interface detected. Please confirm that the primary and secondaries get different IDs.~n")
-           (define aninterf2 (msubnet ""))
+           (define aninterf2 (subnet ""))
            ;(set-minterface-name! aninterf2 name)         
            ;(set-minterface-id! aninterf2 ifindex)
-           (set-msubnet-tr_dpid! aninterf2 ifindex)         
-           (set-msubnet-addr! aninterf2 secnwa)         
-           (set-msubnet-mask! aninterf2 (string->number secnwm))
-           (set-msubnet-gw! aninterf2 secaddr)
-           (set-msubnet-acl_dpid! aninterf2 hostaclnum)
-           (set-mrouter-subnets! arouter (cons aninterf2 (mrouter-subnets arouter) )))
+           (set-subnet-tr-dpid! aninterf2 ifindex)
+           (set-subnet-addr! aninterf2 secnwa)
+           (set-subnet-mask! aninterf2 (string->number secnwm))
+           (set-subnet-gw! aninterf2 secaddr)
+           (set-subnet-acl-dpid! aninterf2 hostaclnum)
+           (set-router-subnets! arouter (cons aninterf2 (router-subnets arouter) )))
          
          result]
         [else (pretty-display i) (error "ifacedef->tuple")]))
         
     ;;;;;;;;;;;;;;;;;;;
-    (define (extract-hosts routers config hostidx)      
+    (define (extract-hosts routers-msg config hostidx)
       (define hostname (symbol->string (send (send config get-hostname) name)))
       (define interfaces (send config get-interfaces))
       (define interface-keys (hash-keys interfaces))
@@ -346,32 +282,32 @@ namespace-for-template)
                                  (error (format "unsupported NAT: ~v: ~v" (send anat name (string->symbol hostname) "") (send anat direction)))))
                 (append static-NAT dynamic-NAT))
 
-      (define arouter (mrouter ""))
-      (set-mrouter-name! arouter hostname)
-      (set-mrouter-self_dpid! arouter (string-append "10000000000000" (string-pad hostnum 2 #\0)))
-      (define router-nat-dpid (string-append "40000000000000" (string-pad hostnum 2 #\0)))
-      (set-mrouter-nat_dpid! arouter router-nat-dpid)            
+      (define arouter (router ""))
+      (set-router-name! arouter hostname)
+      (set-router-self-dpid! arouter (string-append "10000000000000" (string-pad hostnum 2 #\0)))
+      (define nat-dpid (string-append "40000000000000" (string-pad hostnum 2 #\0)))
+      (set-router-nat-dpid! arouter nat-dpid)
       
       (define iftuples (for/list ([ifdef interface-defns] 
                                   [ifindex (build-list (length interface-defns) values)])                         
-                          (ifacedef->tuples arouter interface-defns router-nat-dpid hostname hostnum ifindex ifdef (+ hostidx 1))))           
+                          (ifacedef->tuples arouter interface-defns nat-dpid hostname hostnum ifindex ifdef (+ hostidx 1))))
       
       ; TODO(tn)+TODO(adf): secondary subnets on interfaces with nat?
       
       (define routertuple (vals->routertuples hostname hostnum)) 
-      (define natinfo (vals->nat (mrouter-nat_dpid arouter)))
+      (define natinfo (vals->nat (router-nat-dpid arouter)))
       (define tuples (string-append* (flatten (cons routertuple (cons iftuples natinfo)))))
       ; finally, reverse since subnets are attached in the order they appear in the protobuf
-      (set-mrouter-subnets! arouter (reverse (mrouter-subnets arouter)))
+      (set-router-subnets! arouter (reverse (router-subnets arouter)))
       
-      (set-mrouters-routers! routers (cons arouter (mrouters-routers routers)))     
+      (set-routers-routers! routers-msg (cons arouter (routers-routers routers-msg)))
       
       tuples)
   
-    (define routers (mrouters ""))
+    (define routers-msg (routers ""))
     (define startupinserts (string-append* (for/list ([config configurations] [hostidx (build-list (length configurations) values)]) 
                                              
-                                             (extract-hosts routers config hostidx))))
+                                             (extract-hosts routers-msg config hostidx))))
     ;(pretty-display startupinserts) ; DEBUG
     
     ;(printf "~v~n" (send config get-dynamic-NAT))
@@ -382,7 +318,7 @@ namespace-for-template)
       (lambda (out) 
         ;(printf "Outputting protobufs spec for this router...~n") ; DEBUG
         ;(printf "~v~n" routers) ; DEBUG
-        (serialize routers out)))
+        (serialize routers-msg out)))
     
     ; TODO: On what? packet(p) won't give the nw fields!
     ; and ippacket won't give the ports. 
@@ -449,7 +385,7 @@ namespace-for-template)
     (store policy-route (make-path root-path "PolicyRoute.p"))
     (store default-policy-route (make-path root-path "DefaultPolicyRoute.p"))
     
-    ;(define x (mrouters "xyz"))
+    ;(define x (routers "xyz"))
     ;(call-with-input-file "test.out"
     ;  (lambda (out) (deserialize x out)))
     
