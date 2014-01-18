@@ -163,13 +163,13 @@ namespace-for-template)
         ,sec-addr ,sec-netw ,nat-side))
 
     ;// subnets(addr,  mask, gw ip,    gw mac,            locSw,            locpt, trSw)
-    ;INSERT (10.0.1.0, 24,   10.0.1.1, ca:fe:ca:fe:00:01, 0x1000000000000001, 2, 0x2000000000000001) INTO subnets;
+    ;INSERT (10.0.1.0, 24,   10.0.1.1, ca:fe:00:01:00:01, 0x1000000000000001, 2, 0x2000000000000001) INTO subnets;
     
     (define (make-tr-dpid ridx inum ox)
       (string-append (if ox "0x" "") "2" (string-pad (number->string ridx) 2 #\0) "00000000000" (string-pad inum 2 #\0)))         
 
-    (define (vals->subnet addr nwa nwm rnum inum ptnum trsw)
-      (define gwmac (string-append "ca:fe:ca:fe:00:" (string-pad inum 2 #\0)))
+    (define (vals->subnet addr nwa nwm rnum inum ptnum trsw ridx)
+      (define gwmac (string-append "ca:fe:00:" (string-pad (number->string ridx) 2 #\0) ":00:" (string-pad inum 2 #\0)))
       (string-append "INSERT (" (string-join (list nwa nwm addr gwmac rnum ptnum trsw) ", ") ") INTO subnets;\n"
                      "INSERT (" (string-join (list addr gwmac) ", ") ") INTO cached; // auto\n"
                      "INSERT (" trsw ") INTO switches_without_mac_learning; // auto\n"))
@@ -210,8 +210,8 @@ namespace-for-template)
          ;(printf "ridx=~v; rnum=~v; ifindex=~v; rname=~v;~n" ridx rnum ifindex rname) ; DEBUG
          
          ; TODO: if secondary, need to increment tr_dpid
-         (define prim (vals->subnet primaddr primnwa primnwm rnum inum ptnum trsw))
-         (define sec (if secaddr (vals->subnet primaddr primnwa primnwm rnum inum ptnum trsw) #f))
+         (define prim (vals->subnet primaddr primnwa primnwm rnum inum ptnum trsw ridx))
+         (define sec (if secaddr (vals->subnet primaddr primnwa primnwm rnum inum ptnum trsw ridx) #f))
          (define alias (vals->ifalias rname name inum))
          (define needs-nat (if (and nat-side (equal? nat-side 'inside))
                                (string-append (vals->needs-nat primnwa primnwm) 
