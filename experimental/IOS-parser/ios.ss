@@ -342,9 +342,28 @@
     (super-make-object)
     ))
 
-
+; See linked RFC below to add more
 (define assoc-port-aliases
-  '((netbios-ss 139)))
+  '((netbios-ss 139)
+    (netbios-ns 137)
+    (netbios-dgm 138)
+    (smtp 25)
+    (telnet 23)
+    (ident 113)
+    (sunrpc 111)
+    (lpd 151)
+    (tftp 69)
+    (snmp 161) ; RFC linked from Cisco suggests 162 is "snmptrap" (http://www.ietf.org/rfc/rfc1700.txt?number=1700)
+    (www 80)
+    (ftp 21)
+    (whois 43)
+    (domain 53)
+    (finger 79)
+    (time 37)
+    (cmd 514) ; remote commands (http://www.cisco.com/en/US/products/sw/secursw/ps1018/products_tech_note09186a00800a5b9a.shtml)
+    (syslog 514)
+    (ftp-data 20)
+    (nntp 119)))
 
 ;; port% : number
 ;;   Represents a TCP/UDP port
