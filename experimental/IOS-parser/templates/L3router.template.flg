@@ -30,6 +30,12 @@ TABLE subnets(ipaddr, int, ipaddr, macaddr, switchid, portid, switchid);
 // TODO(adf): actually store the packet buffer, not just its nwdst
 TABLE router_queued(ipaddr);
 
+// Table matching routers with their NATs
+//
+// Column values:
+// router locSw, NAT locSw
+TABLE router_nat(switchid, switchid);
+
 /*******************************************************************************
  *
  * L3 routing to directly attached subnets
@@ -49,12 +55,13 @@ ON ip_packet(pkt):
     // exempt packets which need NAT
     and NOT @needs-nat-disj
     // exempt packets to the NAT
-    and NOT natconfig(ANY, ANY, ANY, pkt.nwDst);
+    and NOT (natconfig(natid, ANY, ANY, pkt.nwDst) and router_nat(pkt.locSw, natid));
 
 // on the router, send all NAT-destined traffic to the NAT
 ON ip_packet(pkt):
   DO forward(new) WHERE
-    natconfig(ANY, ANY, ANY, pkt.nwDst)
+    natconfig(natid, ANY, ANY, pkt.nwDst)
+    and router_nat(pkt.locSw, natid)
     and subnets(ANY, ANY, ANY, ANY, pkt.locSw, ANY, ANY) // TODO(adf): only apply to routers
     and pkt.locPt != 1
     and new.locPt = 1; // TODO(adf): should be magic NAT port?

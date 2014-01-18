@@ -184,8 +184,9 @@ namespace-for-template)
                                                    rnum) ", ") ") INTO routerAlias;\n"
                      "INSERT (" rnum ") INTO switches_without_mac_learning; // auto\n"))
 
-    (define (vals->nat natnum)
-      (string-append "INSERT (0x" natnum ") INTO switches_without_mac_learning; // auto\n"))
+    (define (vals->nat nat-dpid rnum)
+      (string-append "INSERT (0x" nat-dpid ") INTO switches_without_mac_learning; // auto\n"
+                     "INSERT (" rnum ", 0x" nat-dpid ") INTO router_nat;\n"))
 
     (define startup-vars (make-hash))
     (define router-vars (make-hash))
@@ -304,7 +305,7 @@ namespace-for-template)
       ; TODO(tn)+TODO(adf): secondary subnets on interfaces with nat?
       
       (define routertuple (vals->routertuples hostname hostnum)) 
-      (define natinfo (vals->nat (router-nat-dpid arouter)))
+      (define natinfo (vals->nat (router-nat-dpid arouter) hostnum))
       (define tuples (string-append* (flatten (cons routertuple (cons iftuples natinfo)))))
       ; finally, reverse since subnets are attached in the order they appear in the protobuf
       (set-router-subnets! arouter (reverse (router-subnets arouter)))
