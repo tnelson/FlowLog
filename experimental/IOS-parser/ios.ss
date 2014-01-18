@@ -78,6 +78,7 @@
 (provide policy)
 (provide TCP-flags)
 (provide string-capitalize)
+(provide string-uncapitalize)
 (provide build-acl-name)
 
 (define (build-acl-name hostname interf)
@@ -4002,7 +4003,7 @@
       [`(RULE ,n ,dec ,argvars ,conds)              
        `(RULE ,n ,dec ,argvars ,(filter (lambda (f) 
                                           (define result (no-conflicted-proto proto f))
-                                          (when (not result) (printf "removing conflict in ~v~n" arule))
+                                          (when (not result) (printf "had proto ~v; removing conflict in ~v~n" proto f))
                                           result) conds))] ; TODO: concern that conds needs flattening
       [else (error "remove-protocol-conflicts")]))
 

@@ -127,7 +127,8 @@
                        `(,(send sec-netw-obj text-address),(send sec-netw-obj text-mask))
                        (list #f #f)))
   
-  (unless (equal? (symbol->string ifaceid) name) (error "extract-ifs"))
+  (unless (equal? (string-uncapitalize (symbol->string ifaceid)) name)
+    (error (format "extract-ifs: ~v vs. ~v" (symbol->string ifaceid) name)))
   `(,name 
     ,prim-addr ,prim-netw
     ,sec-addr ,sec-netw ,nat-side))
