@@ -190,7 +190,8 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (define (ifvals->needs-nat nn-for-router rnum rname nwa nwm)
   (cond [nwa
-         (dict-set! nn-for-router rnum (cons `(= pkt.nwSrc ,(string-append nwa "/" nwm))
+         (dict-set! nn-for-router rnum (cons `(and (= pkt.nwSrc ,(string-append nwa "/" nwm))
+                                                   (not (= pkt.nwDst ,(string-append nwa "/" nwm))))
                                              (dict-ref nn-for-router rnum)))
          (string-append "INSERT (" rnum ", " nwa ", " nwm ") INTO needs_nat;\n")]
         [else ""]))
