@@ -23,6 +23,9 @@
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+; DEBUG NOTE(tn);
+; (hash-map (send y get-ACLs) (lambda (id acl) `(,id ,(map (lambda (ace) (send ace pretty-print)) (send acl get-ACEs)))))
+
 (require scheme/list)
 (require scheme/class)
 (require srfi/13)
@@ -392,6 +395,17 @@
   (if (not (empty? line-tokens))
       (case (first line-tokens)
         [(eq) (parse-access-list-TCP/UDP5 line
+                                          name
+                                          disposition
+                                          prot
+                                          src-addr
+                                          src-port
+                                          dest-addr
+                                          (make-object port% (second line-tokens))
+                                          (drop line-tokens 2)
+                                          config)]
+        ; Approximate gt by treating it as eq:
+        [(gt) (parse-access-list-TCP/UDP5 line
                                           name
                                           disposition
                                           prot

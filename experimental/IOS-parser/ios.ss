@@ -215,6 +215,8 @@
     ;; The host address
     (define host (dotted-octet->number symbolic-address))
     
+    (define/public (pretty-print) (text))
+    
     ;; -> symbol
     ;;   Returns a symbol in in ip-A.B.C.D form
     (define/public (text)
@@ -270,6 +272,8 @@
     
     ;; The network mask
     (define network-mask (canonical-mask symbolic-mask wildcard))
+    
+    (define/public (pretty-print) (text))
     
     ;; -> symbol
     ;;   Returns a symbol in ip-A.B.C.D/ip-E.F.G.H form
@@ -338,6 +342,10 @@
     (super-make-object)
     ))
 
+
+(define assoc-port-aliases
+  '((netbios-ss 139)))
+
 ;; port% : number
 ;;   Represents a TCP/UDP port
 (define port%
@@ -346,7 +354,14 @@
     (super-make-object)
     
     ;; The port
-    (define port numeric-port)
+    ; Take table of aliases/services into account first
+    (define port (let ([cached (assoc numeric-port assoc-port-aliases)])
+                   (if cached (second cached) numeric-port)))
+    
+    (unless (number? port)
+      (error (format "port created with undefined non-numeric alias: ~v" port)))
+    
+    (define/public (pretty-print) (text))
     
     ;; -> symbol    
     (define/public (text)
@@ -396,6 +411,8 @@
     
     ;; The ending port number
     (define end-port end-numeric-port)
+    
+    (define/public (pretty-print) (text))
     
     ;; -> symbol
     ;;   Returns a symbol in the form ports-M-N
@@ -906,10 +923,13 @@
     (init line-number permit source-addr)
     (super-make-object line-number permit source-addr)
     
-    (inherit-field src-addr-in)
+    (inherit-field src-addr-in line-no)
     (inherit decision)
     (inherit name)
     (inherit extended-name)
+            
+    (define/public (pretty-print)
+      (format "standard ACE: ~v ~v ~v" line-no (decision) (send src-addr-in pretty-print)))
     
     ;; symbol symbol (listof (listof symbol)) -> rule%
     ;;   Returns a rule that represents this ACE
@@ -977,10 +997,14 @@
     (init-field dest-addr-in)
     (super-make-object line-number permit source-addr)
     
-    (inherit-field src-addr-in)
+    (inherit-field src-addr-in line-no)
     (inherit decision)
     (inherit name)
     (inherit extended-name)
+    
+    (define/public (pretty-print)
+      (format "extended ACE IP: ~v ~v ~v ~v" line-no (decision) (send src-addr-in pretty-print)  
+              (send dest-addr-in pretty-print)))
     
     ;; symbol symbol (listof (listof symbol)) -> rule%
     ;;   Returns a rule that represents this ACE
@@ -1048,11 +1072,15 @@
     (init-field msg dest-addr-in)
     (super-make-object line-number permit source-addr)
     
-    (inherit-field src-addr-in)
+    (inherit-field src-addr-in line-no)
     (inherit decision)
     (inherit name)
     (inherit extended-name)
     
+    (define/public (pretty-print)
+      (format "extended ACE ICMP: ~v ~v ~v ~v ~v" 
+              line-no (decision) (send src-addr-in pretty-print) 
+              (send dest-addr-in pretty-print) msg))
     
     ;; NOTE ON ICMP MESSAGES
     ; These are now modeled in the PayloadAndFlags variable (paf). 
@@ -1134,10 +1162,15 @@
     (init-field prot src-port-in dest-addr-in dest-port-in)
     (super-make-object line-number permit source-addr)
     
-    (inherit-field src-addr-in)
+    (inherit-field src-addr-in line-no)
     (inherit decision)
     (inherit name)
     (inherit extended-name)
+    
+    (define/public (pretty-print)
+      (format "extended ACE TCP/UDP: ~v ~v ~v:~v ~v:~v ~v" 
+              line-no (decision) (send src-addr-in pretty-print) (send src-port-in pretty-print)  
+              (send dest-addr-in pretty-print) (send dest-port-in pretty-print) prot))
     
     ;; symbol symbol (listof (listof symbol)) -> rule%
     ;;   Returns a rule that represents this ACE
@@ -1218,6 +1251,7 @@
   (class* extended-ACE-TCP/UDP% (ACE<%>)
     (init line-number permit source-addr source-port dest-addr dest-port)
     (init-field flags)
+    (inherit decision)
     (super-make-object line-number permit source-addr 'Prot-TCP source-port dest-addr dest-port)
     
     (inherit-field src-addr-in)
@@ -1225,6 +1259,13 @@
     (inherit-field prot)
     (inherit-field dest-addr-in)
     (inherit-field dest-port-in)      
+    (inherit-field line-no)
+    
+    (define/override (pretty-print)
+      (format "extended ACE TCP/flags: ~v ~v ~v:~v ~v:~v ~v ~v"
+              line-no (decision)  (send src-addr-in pretty-print) (send src-port-in pretty-print)  
+              (send dest-addr-in pretty-print) (send dest-port-in pretty-print) prot flags))
+
     
     (define flag-conditions (map (λ (flag)
                                    `(,flag paf))
@@ -1255,9 +1296,16 @@
     (inherit-field prot)
     (inherit-field dest-addr-in)
     (inherit-field dest-port-in)
+    (inherit-field line-no)
     (inherit decision)
     (inherit name)
     (inherit extended-name)
+    
+    (define/override (pretty-print)
+      (format "extended reflexive ACE TCP/UDP: ~v ~v ~v:~v ~v:~v ~v (~v)" 
+              line-no (decision) (send src-addr-in pretty-print) (send src-port-in pretty-print)  
+              (send dest-addr-in pretty-print) (send dest-port-in pretty-print) prot ACL-name ))
+
     
     ;; symbol symbol (listof (listof symbol)) -> rule%
     ;;   Returns a rule that represents this ACE
@@ -1287,6 +1335,9 @@
   (class* object% ()
     (init-field ACEs)
     (super-make-object)
+    
+    (define/public (get-ACEs) 
+      ACEs)
     
     ;; ACE<%> -> ACL%
     (define/public (insert-ACE ace)
@@ -2920,6 +2971,9 @@
       dynamic-NAT)
     (define/public (get-static-NAT)
       static-NAT)
+    
+    (define/public (get-ACLs)
+      ACLs)
     
     ;; hostname% -> IOS-config%
     (define/public (set-hostname name)
