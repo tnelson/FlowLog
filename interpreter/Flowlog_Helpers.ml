@@ -400,7 +400,7 @@ let nwport_to_string (n: Int32.t): string = Int32.to_string n
 let tpport_of_int_string (s: string): int = int_of_string s
 let tpport_to_int_string (n: int): string = string_of_int n
 
-
+let hex_str_to_int_string (s: string): string = Int64.to_string (Int64.of_string s);;
 
 (*************************************************************)
  (* improve this when we have more than strings running around

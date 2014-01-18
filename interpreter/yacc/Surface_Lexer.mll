@@ -70,12 +70,15 @@ rule token = parse
 
   | "any" { any_counter := !any_counter+1; NAME("any"^(string_of_int !any_counter)) }
 
+  (* Every numeric string not in standard decimal format gets converted here. *)
   | ['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9'] as dotted_ip
     { NUMBER(nwaddr_to_int_string (Packet.ip_of_string dotted_ip))}
   | ['0'-'9''a'-'f']?['0'-'9''a'-'f']":"['0'-'9''a'-'f']?['0'-'9''a'-'f']":"['0'-'9''a'-'f']?['0'-'9''a'-'f']":"
     ['0'-'9''a'-'f']?['0'-'9''a'-'f']":"['0'-'9''a'-'f']?['0'-'9''a'-'f']":"['0'-'9''a'-'f']?['0'-'9''a'-'f'] as mac
     { NUMBER(macaddr_to_int_string (Packet.mac_of_string mac))}
-  | ['0'-'9']+ | '0''x'(['0'-'9''a'-'f']+) as number
+  | '0''x'['0'-'9''a'-'f']+ as hexnum
+    { NUMBER(hex_str_to_int_string hexnum)}
+  | ['0'-'9']+ as number
     { NUMBER(number) }
 
   | ['a'-'z''A'-'Z''_''0'-'9']+ as name { NAME(name) }

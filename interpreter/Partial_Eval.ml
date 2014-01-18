@@ -425,7 +425,8 @@ let substitute_for_join (f: formula): formula =
                                     (* search any positive equalities for a contradiction to this assignment *)
                                     if (mem_assoc v acc) && (assoc v acc) <> c then
                                     begin
-                                      (*printf "contradiction in PE: %s %s %s\n%!" (string_of_term v) (string_of_term (assoc v acc)) (string_of_term c);*)
+                                      (*write_log (sprintf "contradiction in PE (subfmla=%s):\n v=%s had=%s got=%s\n%!"
+                                        (string_of_formula subf) (string_of_term v) (string_of_term (assoc v acc)) (string_of_term c));*)
                                       (* Without this exception, we will try to substitute below and end up with, e.g. FEquals(5,7) *)
                                       raise (ContradictionInPE(subf, (FEquals(v,c))))
                                       (* failwith ("contradictory assignment to "^(string_of_term v)^": "^(string_of_term (assoc v acc))^" versus"^(string_of_term c))*)
