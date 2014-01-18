@@ -35,6 +35,10 @@
 (require web-server/templates)
 (require (planet murphy/protobuf:1:1))
 
+(require "ios-flowlog-helpers.rkt")
+(require racket/string)
+(require (only-in srfi/13 string-pad))
+
 (provide compile-configurations)
 
 (define-syntax combine-rules
@@ -138,55 +142,8 @@ namespace-for-template)
     
     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
     ; For now, don't use NetworkSwitching or LocalSwitching.
-    ; Instead, just feed the resulting program tuples in the subnets table.
-    
-    (define (extract-ifs ifaceid iface)
-      (define name (symbol->string (send iface text)))
-      (define prim-addr-obj (send iface get-primary-address))
-      (define sec-addr-obj (send iface get-secondary-address))
-      (define prim-netw-obj (send iface get-primary-network))
-      (define sec-netw-obj (send iface get-secondary-network))
-      (define nat-side (send iface get-nat-side))
-
-      (define prim-addr (send prim-addr-obj text-address))
-      (define sec-addr (if sec-addr-obj  
-                           (send sec-addr-obj text-address) 
-                           #f))
-      (define prim-netw `(,(send prim-netw-obj text-address),(send prim-netw-obj text-mask)))
-      (define sec-netw (if sec-netw-obj 
-                           `(,(send sec-netw-obj text-address),(send sec-netw-obj text-mask))
-                           (list #f #f)))
-      
-      (unless (equal? (symbol->string ifaceid) name) (error "extract-ifs"))
-      `(,name 
-        ,prim-addr ,prim-netw
-        ,sec-addr ,sec-netw ,nat-side))
-
-    ;// subnets(addr,  mask, gw ip,    gw mac,            locSw,            locpt, trSw)
-    ;INSERT (10.0.1.0, 24,   10.0.1.1, ca:fe:00:01:00:01, 0x1000000000000001, 2, 0x2000000000000001) INTO subnets;
-    
-    (define (make-tr-dpid ridx inum ox)
-      (string-append (if ox "0x" "") "2" (string-pad (number->string ridx) 2 #\0) "00000000000" (string-pad inum 2 #\0)))         
-
-    (define (vals->subnet addr nwa nwm rnum inum ptnum trsw ridx)
-      (define gwmac (string-append "ca:fe:00:" (string-pad (number->string ridx) 2 #\0) ":00:" (string-pad inum 2 #\0)))
-      (string-append "INSERT (" (string-join (list nwa nwm addr gwmac rnum ptnum trsw) ", ") ") INTO subnets;\n"
-                     "INSERT (" (string-join (list addr gwmac) ", ") ") INTO cached; // auto\n"
-                     "INSERT (" trsw ") INTO switches_without_mac_learning; // auto\n"))
-
-    (define (vals->ifalias rname iname inum)
-      (string-append "INSERT (" (string-join (list (string-append "\"" rname "\"") 
-                                                   (string-append "\"" iname "\"") 
-                                                   inum) ", ") ") INTO portAlias;\n"))
-        
-    (define (vals->routertuples rname rnum)
-      (string-append "INSERT (" (string-join (list (string-append "\"" rname "\"")                                                    
-                                                   rnum) ", ") ") INTO routerAlias;\n"
-                     "INSERT (" rnum ") INTO switches_without_mac_learning; // auto\n"))
-
-    (define (vals->nat nat-dpid rnum)
-      (string-append "INSERT (0x" nat-dpid ") INTO switches_without_mac_learning; // auto\n"
-                     "INSERT (" rnum ", 0x" nat-dpid ") INTO router_nat;\n"))
+    ; Instead, just feed the resulting program tuples in the subnets table.        
+   
 
     (define startup-vars (make-hash))
     (define router-vars (make-hash))
@@ -208,8 +165,11 @@ namespace-for-template)
          ; offset the port number on the router by 1, since 1 is reserved for the attached NAT switch
          (define ptnum (number->string (+ 2 ifindex)))
          (define trsw (make-tr-dpid ridx inum #t))
+         (define hostaclnum (string-append "3" (string-pad (number->string ridx) 2 #\0) "00000000000" (string-pad ptnum 2 #\0)))
          ;(printf "ridx=~v; rnum=~v; ifindex=~v; rname=~v;~n" ridx rnum ifindex rname) ; DEBUG
          
+         ;;;;;;;;;;;;;;;;         
+         ; Produce tuples
          ; TODO: if secondary, need to increment tr_dpid
          (define prim (vals->subnet primaddr primnwa primnwm rnum inum ptnum trsw ridx))
          (define sec (if secaddr (vals->subnet primaddr primnwa primnwm rnum inum ptnum trsw ridx) #f))
@@ -217,41 +177,14 @@ namespace-for-template)
          (define needs-nat (if (and nat-side (equal? nat-side 'inside))
                                (string-append (vals->needs-nat primnwa primnwm) 
                                               (vals->needs-nat secnwa secnwm))
-                               empty))
-                  
+                               empty))                                            
+         (define acldefn (vals->ifacldefn hostaclnum ridx ptnum rname name))
+         (define natconfigs (if-pair->natconfig interface-defns nat-side nat-dpid))                                    
+         ;;;;;;;;;;;;;;;;;
          
-         (define hostaclnum (string-append "3" (string-pad (number->string ridx) 2 #\0) "00000000000" (string-pad ptnum 2 #\0)))
-         (define (vals->ifacldefn ridx iidx rname iname)           
-           (string-append "INSERT (0x" hostaclnum ") INTO aclDPID;\n"
-                          "INSERT (0x" hostaclnum ") INTO switches_without_mac_learning; // auto\n"
-                          "INSERT (\"" (symbol->string (build-acl-name rname iname)) "\", 0x" hostaclnum ") INTO routerAlias;\n"))
-                 
-         ; For this particular type of nat (source list overload dynamic):
-         ; For each private interface (nat = inside), and each public interface (nat = outside)
-         ; insert a row into natconfig
-         ;; TODO(tn)+TODO(adf): more kinds of NAT?
-         (define (if-pair->natconfig)
-           (if (and nat-side (equal? nat-side 'inside))                                                                                      
-               (for/list ([ifdef2 interface-defns]
-                          [ifindex2 (build-list (length interface-defns) values)])                 
-                 (match ifdef2 
-                   [`(,name2 ,primaddr2 (,primnwa2 ,primnwm2) ,secaddr2 (,secnwa2 ,secnwm2) ,nat-side2)                    
-                    (if (and nat-side2 (equal? nat-side2 'outside))
-                        (string-append "INSERT (0x" nat-dpid "," "1" "," "1" "," primaddr2 ") INTO natconfig;\n"
-                                       "INSERT (" primaddr2 ", 0x6, 10000) INTO seqpt; // auto \n"
-                                       "INSERT (" primaddr2 ", 0x11, 10000) INTO seqpt; // auto \n")
-                        "")]))
-               empty))
-         
-         (define acldefn (vals->ifacldefn ridx ptnum rname name))
-         (define natconfigs (if-pair->natconfig))
-                           
-         (define result (filter (lambda (x) x) (list prim sec alias needs-nat acldefn natconfigs)))
-         
+         ;;;;;;;;;;;;;;;;;
          ; generate protobufs as well
          (define aninterf (subnet ""))
-         ;(set-subnet-name! aninterf name)
-         ;(set-minterface-id! aninterf ifindex)
                   
          (set-subnet-tr-dpid! aninterf (make-tr-dpid ridx (number->string (+ ifindex 1)) #f))
          (set-subnet-acl-dpid! aninterf hostaclnum)
@@ -261,19 +194,21 @@ namespace-for-template)
          
          (set-router-subnets! arouter (cons aninterf (router-subnets arouter) ))
          
+         ; Deal with secondary subnet, if there is one
          (when secaddr 
            (printf "WARNING! Secondary interface detected. Please confirm that the primary and secondaries get different IDs.~n")
            (define aninterf2 (subnet ""))
-           ;(set-minterface-name! aninterf2 name)         
-           ;(set-minterface-id! aninterf2 ifindex)
            (set-subnet-tr-dpid! aninterf2 ifindex)
            (set-subnet-addr! aninterf2 secnwa)
            (set-subnet-mask! aninterf2 (string->number secnwm))
            (set-subnet-gw! aninterf2 secaddr)
            (set-subnet-acl-dpid! aninterf2 hostaclnum)
            (set-router-subnets! arouter (cons aninterf2 (router-subnets arouter) )))
+         ;;;;;;;;;;;;;;;;;
          
-         result]
+         ; Finally, return the result tuples (protobuf changes are side-effects)
+         ; Keep the tuples that are non-#f
+         (filter (lambda (x) x) (list prim sec alias needs-nat acldefn natconfigs))]
         [else (pretty-display i) (error "ifacedef->tuple")]))
 
     ;;;;;;;;;;;;;;;;;;;
@@ -285,67 +220,50 @@ namespace-for-template)
       (define interface-defns (hash-map interfaces extract-ifs))
       ;(pretty-display interface-defns) ; DEBUG
       (define hostnum (string-append "0x10000000000000" (string-pad (number->string (+ hostidx 1)) 2 #\0)))      
-
-      (define static-NAT (send config get-static-NAT))
+      (define nat-dpid (string-append "40000000000000" (string-pad hostnum 2 #\0)))
+      
+      ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+      ; Confirm that no unsupported NAT variety appears
+      (define static-NAT (send config get-static-NAT)) 
       (define dynamic-NAT (send config get-dynamic-NAT))
       (for-each (lambda (anat) (unless (send anat supported-flowlog)
                                  (error (format "unsupported NAT: ~v: ~v" (send anat name (string->symbol hostname) "") (send anat direction)))))
                 (append static-NAT dynamic-NAT))
+      ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
       (define arouter (router ""))
       (set-router-name! arouter hostname)
-      (set-router-self-dpid! arouter (string-append "10000000000000" (string-pad hostnum 2 #\0)))
-      (define nat-dpid (string-append "40000000000000" (string-pad hostnum 2 #\0)))
+      (set-router-self-dpid! arouter (string-append "10000000000000" (string-pad hostnum 2 #\0)))            
       (set-router-nat-dpid! arouter nat-dpid)
       
       (define iftuples (for/list ([ifdef interface-defns] 
                                   [ifindex (build-list (length interface-defns) values)])                         
                           (ifacedef->tuples arouter interface-defns nat-dpid hostname hostnum ifindex ifdef (+ hostidx 1))))
-      
-      ; TODO(tn)+TODO(adf): secondary subnets on interfaces with nat?
-      
       (define routertuple (vals->routertuples hostname hostnum)) 
-      (define natinfo (vals->nat (router-nat-dpid arouter) hostnum))
-      (define tuples (string-append* (flatten (cons routertuple (cons iftuples natinfo)))))
-      ; finally, reverse since subnets are attached in the order they appear in the protobuf
-      (set-router-subnets! arouter (reverse (router-subnets arouter)))
+      (define natinfo (vals->nat (router-nat-dpid arouter) hostnum))      
       
+      ; TODO(tn)+TODO(adf): secondary subnets on interfaces with nat?      
+      
+      ; finally, reverse since subnets are attached in the order they appear in the protobuf
+      (set-router-subnets! arouter (reverse (router-subnets arouter)))      
       (set-routers-routers! routers-msg (cons arouter (routers-routers routers-msg)))
       
-      tuples)
+      ; Return the gathered tuples. protobufs changes are side-effects
+      (string-append* (flatten (cons routertuple (cons iftuples natinfo)))))
   
     (define routers-msg (routers ""))
     (define startupinserts (string-append* (for/list ([config configurations] [hostidx (build-list (length configurations) values)]) 
                                              
                                              (extract-hosts routers-msg config hostidx))))
-    ;(pretty-display startupinserts) ; DEBUG
-    
-    ;(printf "~v~n" (send config get-dynamic-NAT))
-    
-    
+            
     ; output the router message for this router
     (call-with-output-file (make-path root-path "IOS.pb.bin") #:exists 'replace
       (lambda (out) 
-        ;(printf "Outputting protobufs spec for this router...~n") ; DEBUG
-        ;(printf "~v~n" routers) ; DEBUG
         (serialize routers-msg out)))
-    
-    ; TODO: On what? packet(p) won't give the nw fields!
-    ; and ippacket won't give the ports. 
-    ; Do we need to separate out by TCP/UDP etc?
-    
-    ; TODO: protocols currently "prot-ICMP" etc.
-    ; TODO: different kinds of NAT
-    ; TODO: flags? no support in flowlog this iteration.
-    
-    ; FLOWLOG:
-
-    ; First up, generate StartupConfig
-
-   
+            
+    ; First up, generate StartupConfig   
     (dict-set! startup-vars "basename" root-path)
-    (dict-set! startup-vars "startupinserts" startupinserts)
-    
+    (dict-set! startup-vars "startupinserts" startupinserts)    
     ; IP rules to the IP block. Will also apply to TCP packets. So don't duplicate!
     (dict-set! startup-vars "inboundacl-tcp" (sexpr-to-flowlog `(or ,@inboundacl-tcp) #t))
     (dict-set! startup-vars "inboundacl-udp" (sexpr-to-flowlog `(or ,@inboundacl-udp) #t))
@@ -353,10 +271,6 @@ namespace-for-template)
     (dict-set! startup-vars "outboundacl-tcp" (sexpr-to-flowlog `(or ,@outboundacl-tcp) #t))
     (dict-set! startup-vars "outboundacl-udp" (sexpr-to-flowlog `(or ,@outboundacl-udp) #t))
     (dict-set! startup-vars "outboundacl-ip" (sexpr-to-flowlog `(or ,@outboundacl-ip) #t))
-
-    ;(dict-set! startup-vars "insidenat" insidenat)
-    ;(dict-set! startup-vars "outsidenat" outsidenat)    
-    
     
     (store (render-template "templates/StartupConfig.template.flg" startup-vars)
            (make-path root-path "IOS.flg"))
@@ -398,13 +312,7 @@ namespace-for-template)
     (store network-switch (make-path root-path "NetworkSwitching.p"))
     (store static-route (make-path root-path "StaticRoute.p"))
     (store policy-route (make-path root-path "PolicyRoute.p"))
-    (store default-policy-route (make-path root-path "DefaultPolicyRoute.p"))
-    
-    ;(define x (routers "xyz"))
-    ;(call-with-input-file "test.out"
-    ;  (lambda (out) (deserialize x out)))
-    
-    ))
+    (store default-policy-route (make-path root-path "DefaultPolicyRoute.p"))))
 
 ;; string string -> path
 (define (make-path base file)
@@ -416,9 +324,6 @@ namespace-for-template)
     (let [(port (open-output-file path #:mode 'text #:exists 'replace))]
       (pretty-display contents port)  ; FLOWLOG changed to pretty-display from pretty-print
       (close-output-port port))))
-
-(require racket/string)
-(require (only-in srfi/13 string-pad))
 
 (define (simplify-sexpr sexpr positive scrubdltyp)
   (match sexpr    

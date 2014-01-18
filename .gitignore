@@ -16,3 +16,4 @@ experimental/IOS-parser/**/*.flg
 experimental/IOS-parser/**/*.pb.bin
 experimental/IOS-parser/compiled/
 experimental/IOS-parser/ios2flowlog
+*.bak
