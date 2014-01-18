@@ -53,3 +53,27 @@ ON ip_packet(pkt):
     //and needs_nat(needs_nat_subnet, needs_nat_mask)
     //and NOT (pkt.nwSrc IN needs_nat_subnet/needs_nat_mask)
     ;
+
+/*******************************************************************************
+ *
+ * Per-subnet translators: outbound path to nexthop MAC addr where destination
+ * MAC address is already set.
+ *
+ ******************************************************************************/
+
+ON ip_packet(pkt):
+  DO forward(new) WHERE
+
+    // TODO(adf): generic nexthop-related code
+
+    // templated nexthop IP selection
+
+    @nexthop-fragment-for-tr
+
+    and subnets(nexthop_subnet, nexthop_mask, ANY, gwmac, router, ANY, pkt.locSw)
+    and nexthop IN nexthop_subnet/nexthop_mask
+    and cached(nexthop, pkt.dlDst)
+    and pkt.dlSrc = gwmac
+    and pkt.nwDst != nexthop // this case is handled by internal routing
+    and pkt.locPt = 1
+    and new.locPt = 2;

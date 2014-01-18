@@ -3475,7 +3475,7 @@
                                    rules
                                    (send hostname name)
                                    (send interf text)
-                                   `((routerAlias ,(wrapq (build-acl-name (send hostname name) (send interf text))) pkt.locsw)
+                                   `((routerAlias ,(wrapq (build-acl-name (send hostname name) (send interf text))) pkt.locSw)
                                      ;(portAlias ,(wrapq hostname) ,(wrapq interf) pkt.locpt)
                                      )
                                    'acl)))
@@ -3486,7 +3486,7 @@
                                        (make-object rule%
                                          'default-ACE
                                          'permit
-                                         `((routerAlias ,(wrapq (build-acl-name (send hostname name) (send interf text))) pkt.locsw))
+                                         `((routerAlias ,(wrapq (build-acl-name (send hostname name) (send interf text))) pkt.locSw))
                                          'acl)))
                                      '())))))
       
@@ -3500,7 +3500,7 @@
                                   rules
                                   (send hostname name)
                                   (send interf text)
-                                  `((routerAlias ,(wrapq (build-acl-name (send hostname name) (send interf text))) pkt.locsw)
+                                  `((routerAlias ,(wrapq (build-acl-name (send hostname name) (send interf text))) pkt.locSw)
                                    ; (portAlias ,(wrapq hostname) ,(wrapq interf) new.locpt)
                                     )
                                   'outacl)))
@@ -3511,7 +3511,7 @@
                                        (make-object rule%
                                          'default-ACE
                                          'permit
-                                         `((routerAlias ,(wrapq (build-acl-name (send hostname name) (send interf text))) pkt.locsw))
+                                         `((routerAlias ,(wrapq (build-acl-name (send hostname name) (send interf text))) pkt.locSw))
                                          'outacl)))
                                      '())))))
       
@@ -3702,7 +3702,7 @@
                 (send route
                       rules
                       (send hostname name)
-                      `((routerAlias ,(wrapq hostname) pkt.locsw))))
+                      `((routerAlias ,(wrapq hostname) pkt.locSw))))
               static-routes))
         (list (make-default-routing-rule hostname 'staticroute)))))
     
@@ -3726,7 +3726,7 @@
                                   (send hostname name)
                                   (send interf text)
                                   ACLs
-                                  `((routerAlias ,(wrapq hostname) pkt.locsw)
+                                  `((routerAlias ,(wrapq hostname) pkt.locSw)
                                     (portAlias ,(wrapq hostname) ,(wrapq interf) pkt.locpt))
                                   'policyroute
                                  ))
@@ -3748,7 +3748,7 @@
                                   (send hostname name)
                                   (send interf text)
                                   ACLs
-                                  `((routerAlias ,(wrapq hostname) pkt.locsw)
+                                  `((routerAlias ,(wrapq hostname) pkt.locSw)
                                     (portAlias ,(wrapq hostname) ,(wrapq interf) pkt.locpt))))
                           (get-ordered-maps (get-field policy-route-map-ID interf) route-maps)))))
         (list (make-default-routing-rule hostname 'defaultpolicyroute)))))
@@ -3766,7 +3766,7 @@
                                  (send hostname name)
                                  (send interf text)
                                  ACLs
-                                 `((routerAlias ,(wrapq hostname) pkt.locsw)
+                                 `((routerAlias ,(wrapq hostname) pkt.locSw)
                                    (portAlias ,(wrapq hostname) ,(wrapq interf) new.locpt))))
                          (get-ordered-maps (get-field crypto-map-ID interf) crypto-maps)))))))
     ))

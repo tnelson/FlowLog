@@ -364,6 +364,8 @@ namespace-for-template)
 
     (dict-set! router-vars "basename" root-path)
     (dict-set! router-vars "nexthop-fragment" (sexpr-to-flowlog next-hop-fragment #f))
+    (dict-set! router-vars "nexthop-fragment-for-tr" (string-replace (sexpr-to-flowlog next-hop-fragment #f)
+                                                                     "pkt.locSw" "router"))
 
     (store (render-template "templates/L3external.template.flg" router-vars)
            (make-path root-path "L3external.flg"))
