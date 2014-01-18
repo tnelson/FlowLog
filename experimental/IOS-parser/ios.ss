@@ -3964,48 +3964,25 @@
       [(list) empty]
       [(cons `(RULE ,n ,dec ,argvars ,conds) remaining)
        ;(printf "~a ~a ~a ~a~n~n" dec conds prevdenies (length remaining))
-       (if (not (equal? dec goaldec)) 
-           (decorrelate remaining (cons conds prevs) goaldec)
-           (cons `(RULE ,n ,dec ,argvars (and ,@conds ,@(map (lambda (aprev) `(not (and ,@aprev))) prevs))) 
-                 (decorrelate remaining prevs goaldec)))]))
-  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;    
+       (define proto (get-proto-for-formulas conds))
+       (cond [(not (equal? dec goaldec)) 
+              (decorrelate remaining (cons conds prevs) goaldec)]
+             [else 
+              (define filtered-prevs 
+                (filter-map (lambda (aprev) 
+                              (define aprev-proto (get-proto-for-rule aprev)) 
+                              (if (safe-proto proto aprev-proto)
+                                  `(not (and ,@aprev))
+                                  #f)) prevs))
+              (cons `(RULE ,n ,dec ,argvars (and ,@conds ,@filtered-prevs))
+                    (decorrelate remaining prevs goaldec))])]))
 
-  
-  (define (safe-field proto a)
-    (match a 
-      ; Check for port fields used outside of TCP/UDP
-      ['p.tpSrc (or (equal? proto 'tcp) (equal? proto 'udp))]
-      ['p.tpDst (or (equal? proto 'tcp) (equal? proto 'udp))]  
-      ['src-port-in (or (equal? proto 'tcp) (equal? proto 'udp))]
-      ['dest-port-in (or (equal? proto 'tcp) (equal? proto 'udp))]              
-      [(? symbol? x) #t]
-      [else (error (format "safe-field ~v" a))]))
-  
-  (define (no-conflicted-proto proto f)
-    ; f is a subcondition of the rule; negations will come from decorrelations
-    (match f
-      [`(not (and ,subconds ...)) 
-      ; (printf "checking conflicts vs ~v: ~v~n" proto subconds)
-       (andmap (lambda (subf) (match subf 
-                                [`(prot-TCP ,x) (equal? proto 'tcp)]
-                                [`(prot-UDP ,x) (equal? proto 'udp)]
-                                [`(prot-IP ,x) (equal? proto 'ip)] 
-                                ; invalid field names?
-                                [`(= ,arg1 ,arg2) (and (safe-field proto arg1) (safe-field proto arg2))]
-                                [`(,(? symbol? predname) ,args ...) (andmap (lambda (a) (safe-field proto a)) args)]
-                                [else #t])) subconds)]
-      [else #t]))
-  
-  
-  (define (remove-protocol-conflicts arule)
-    (define proto (get-proto-for-rule arule))
-    (match arule
-      [`(RULE ,n ,dec ,argvars ,conds)              
-       `(RULE ,n ,dec ,argvars ,(filter (lambda (f) 
-                                          (define result (no-conflicted-proto proto f))
-                                          (when (not result) (printf "had proto ~v; removing conflict in ~v~n" proto f))
-                                          result) conds))] ; TODO: concern that conds needs flattening
-      [else (error "remove-protocol-conflicts")]))
+  (define (safe-proto fproto negproto)
+    (cond [(equal? fproto negproto) #t]
+          [(and (equal? fproto 'tcp) (equal? negproto 'ip)) #t]
+          [(and (equal? fproto 'udp) (equal? negproto 'ip)) #t]          
+          [else #f]))
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;    
 
   (define fragments (map (λ (rule)
                      (send rule text)) rules))
@@ -4016,7 +3993,7 @@
 
   (map (lambda (dec-wanted)
          (define decorred (decorrelate fragments empty dec-wanted))         
-         `(,dec-wanted ,(map remove-protocol-conflicts decorred)))
+         `(,dec-wanted ,decorred))
       decs-wanted)  
   )
 
@@ -4037,18 +4014,25 @@
     [(list args ...) (append* (map get-proto-formulas args))]
     [else empty]))
 
-(define (get-proto-for-rule arule)        
-  (define protoformulas (match arule
-                          [`(RULE ,n ,dec ,argvars ,conds)
-                           (get-proto-formulas `(and ,conds))]))
-  ; (printf "protoformulas: ~v~n" protoformulas)       
+(define (get-proto-for-formulas fmlas) 
+  (define protoformulas (get-proto-formulas fmlas))
   (cond [(> (length protoformulas) 1) (error "get-proto-for-rule")]
         [(< (length protoformulas) 1) 'ip]
         [else (define margrave-sym (first (first protoformulas)))              
               (define result (cond 
                                [(equal? margrave-sym 'prot-TCP) 'tcp] ; beware: case sensitive
                                [(equal? margrave-sym 'prot-UDP) 'udp]
-                               [(equal? margrave-sym 'prot-IP) 'ip]
+                               [(equal? margrave-sym 'prot-IP) 'ip]                               
                                [else      'ip]))
               ;(printf "result: ~v~n" result)
               result]))
+
+
+(define (get-proto-for-rule arule)        
+   (match arule
+     [`(RULE ,n ,dec ,argvars ,conds)
+      (get-proto-for-formulas `(and ,conds))]
+     [(list args ...) 
+      (get-proto-for-formulas `(and ,args))]))
+  
+  
