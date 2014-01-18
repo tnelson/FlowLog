@@ -214,7 +214,10 @@ module Xsb = struct
 		let fstr = (xsb_of_formula ~mode:XsbAddUnderscoreVars f) in
 		    (* printf "%s\n(%s, %s, fail).\n%!" (string_of_formula f) fstr (String.concat "," varoutfrags);*)
 		    (* The setof construct wrapped around the formula prevents duplicate results *)
-			sprintf "(setof(t, %s, _), %s, fail)." fstr (String.concat "," varoutfrags);;
+			if (length varoutfrags) > 0 then
+              sprintf "(setof(t, %s, _), %s, fail)." fstr (String.concat "," varoutfrags)
+            else
+              sprintf "%s." fstr;;
 
 	(* Takes a string query (thing with semicolon answers),
 	 and the number of variables involved.

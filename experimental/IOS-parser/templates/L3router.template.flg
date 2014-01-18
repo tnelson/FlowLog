@@ -54,8 +54,9 @@ ON ip_packet(pkt):
     and pkt.nwDst IN addr/mask
     // exempt packets which need NAT
     and NOT @needs-nat-disj
-    // exempt packets to the NAT
-    and NOT (natconfig(natid, ANY, ANY, pkt.nwDst) and router_nat(pkt.locSw, natid));
+    // exempt packets to the NAT (note positive use of router_nat since 1-1 between 0x1... and 0x4...)
+    and router_nat(pkt.locSw, natid)
+    and NOT natconfig(natid, ANY, ANY, pkt.nwDst);
 
 // on the router, send all NAT-destined traffic to the NAT
 ON ip_packet(pkt):
