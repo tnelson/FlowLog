@@ -30,7 +30,7 @@ TABLE natconfig(switchid, portid, portid, ipaddr);
 //
 // Column values:
 // private subnet addr, private subnet mask
-TABLE needs_nat(ipaddr, int);
+TABLE needs_nat(switchid, ipaddr, int);
 
 /*******************************************************************************
  *

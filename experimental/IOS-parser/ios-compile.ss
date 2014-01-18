@@ -147,15 +147,9 @@ namespace-for-template)
 
     (define startup-vars (make-hash))
     (define router-vars (make-hash))
+    (define nn-for-router (make-hash))    
     (dict-set! router-vars "needs-nat-disj" "")
     
-    (define (vals->needs-nat nwa nwm)
-      (cond [nwa
-             (dict-set! router-vars "needs-nat-disj" (string-append (sexpr-to-flowlog `(= pkt.nwSrc ,(string-append nwa "/" nwm)) #f)
-                                                                      (dict-ref router-vars "needs-nat-disj")))
-             (string-append "INSERT (" nwa ", " nwm ") INTO needs_nat;\n")]
-            [else ""]))
-
     ;;;;;;;;;;;;;;;;;;;
     ; Need to assign an ID to the router and an ID to the interface
     (define (ifacedef->tuples arouter interface-defns nat-dpid rname rnum ifindex i ridx)
@@ -173,11 +167,12 @@ namespace-for-template)
          ; TODO: if secondary, need to increment tr_dpid
          (define prim (vals->subnet primaddr primnwa primnwm rnum inum ptnum trsw ridx))
          (define sec (if secaddr (vals->subnet primaddr primnwa primnwm rnum inum ptnum trsw ridx) #f))
-         (define alias (vals->ifalias rname name inum))
+         (define alias (vals->ifalias rname name inum))         
          (define needs-nat (if (and nat-side (equal? nat-side 'inside))
-                               (string-append (vals->needs-nat primnwa primnwm) 
-                                              (vals->needs-nat secnwa secnwm))
-                               empty))                                            
+                               (string-append (ifvals->needs-nat nn-for-router rnum rname primnwa primnwm) 
+                                              (ifvals->needs-nat nn-for-router rnum rname secnwa secnwm))
+                               empty))                 
+         (dict-set! router-vars "needs-nat-disj" (build-needs-nat-from-hash nn-for-router))
          (define acldefn (vals->ifacldefn hostaclnum ridx ptnum rname name))
          (define natconfigs (if-pair->natconfig interface-defns nat-side nat-dpid))                                    
          ;;;;;;;;;;;;;;;;;
@@ -221,7 +216,8 @@ namespace-for-template)
       ;(pretty-display interface-defns) ; DEBUG
       (define hostnum (string-append "0x10000000000000" (string-pad (number->string (+ hostidx 1)) 2 #\0)))      
       (define nat-dpid (string-append "40000000000000" (string-pad hostnum 2 #\0)))
-      
+      ; Prepare this list of needs-nat expressions
+      (dict-set! nn-for-router hostnum empty)
       ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
       ; Confirm that no unsupported NAT variety appears
       (define static-NAT (send config get-static-NAT)) 
@@ -324,98 +320,3 @@ namespace-for-template)
     (let [(port (open-output-file path #:mode 'text #:exists 'replace))]
       (pretty-display contents port)  ; FLOWLOG changed to pretty-display from pretty-print
       (close-output-port port))))
-
-(define (simplify-sexpr sexpr positive scrubdltyp)
-  (match sexpr    
-    [`(or ,args ...)
-     (define newargs (remove-duplicates (filter (lambda (a) (not (equal? a 'false))) (map (lambda (x) (simplify-sexpr x positive scrubdltyp)) args))))
-     (cond [(member 'true newargs) 'true]
-           [(empty? newargs) 'false]
-           [(equal? (length newargs) 1) (first newargs)]
-           [else `(or ,@newargs)])]
-    [`(and ,args ...) 
-     (define newargs (remove-duplicates (filter (lambda (a) (not (equal? a 'true))) (map (lambda (x) (simplify-sexpr x positive scrubdltyp)) args))))
-     (cond [(member 'false newargs) 'false]
-           [(empty? newargs) 'true]
-           [(equal? (length newargs) 1) (first newargs)]
-           [else `(and ,@newargs)])]
-    [`(not ,arg) 
-     (define newarg (simplify-sexpr arg (not positive) scrubdltyp))
-     (match newarg 
-       [`(not ,arg2) arg2]
-       [x `(not ,x)])]
-    [`(RULE ,linenum ,decision ,varargs ,pred) 
-     (define newpred (simplify-sexpr pred positive scrubdltyp))     
-     `(RULE ,linenum ,decision ,varargs ,newpred)]
-    ; equality or IN:
-    [`(= ,arg1 ,arg2)      
-     ; The IOS compiler produces "empty" assertions sometimes. deal with them
-     (cond [(or (equal? arg1 'IPAddress)
-                (equal? arg2 'IPAddress)
-                (equal? arg1 'Port)
-                (equal? arg2 'Port))
-            'true]
-           [else `(= ,(simplify-sexpr arg1 positive scrubdltyp) ,(simplify-sexpr arg2 positive scrubdltyp))])]   
-
-    ; deal with protocol names: expand to dltyp and nwproto fields
-    [`(prot-TCP protocol)
-     (if (and scrubdltyp positive) 'true `(and (= pkt.dlTyp 0x800) (= pkt.nwProto 0x6)))]
-    [`(prot-UDP protocol)
-     ; 17 dec, 11 hex
-     (if (and scrubdltyp positive) 'true `(and (= pkt.dlTyp 0x800) (= pkt.nwProto 0x11)))]
-    [`(prot-IP protocol)
-     (if (and scrubdltyp positive) 'true `(= pkt.dlTyp 0x800))]
-
-    [`(,(? symbol? predname) ,args ...)
-     `(,predname ,@(map (lambda (x) (simplify-sexpr x positive scrubdltyp)) args))] 
-    ; implicit and:
-    [(list args ...) (simplify-sexpr `(and ,@args) positive scrubdltyp)]
-    [(? string? x) x]
-    [(? symbol? x) 
-     ; Midway I realized that we could just turn "src-addr-in"
-     ; into "pkt.nwSrc" here, rather than bit-by-bit in IOS.ss.     
-     ; So some will already be converted, some won't.
-     (cond [(equal? x 'src-addr-in) "pkt.nwSrc"]
-           [(equal? x 'src-port-in) "pkt.tpSrc"]
-           [(equal? x 'dest-addr-in) "pkt.nwDst"]
-           [(equal? x 'dest-port-in) "pkt.tpDst"]
-           [(equal? x 'src-addr-out) "new.nwSrc"]
-           [(equal? x 'src-port-out) "new.tpSrc"]
-           [(equal? x 'dest-addr-out) "new.nwDst"]
-           [(equal? x 'dest-port-out) "new.tpDst"]           
-           [else (symbol->string x)])]    
-    [x (pretty-display x) (raise "error with simplify-sexpr")]))
-
-(define debug-include-comments #f)
-
-(define (sexpr-to-flowlog sexpr scrubdltyp)
-  (sexpr-to-flowlog-helper (simplify-sexpr sexpr #t scrubdltyp)))
-
-(define (sexpr-to-flowlog-helper simplified)   
-  ;(display "sexpr-to-flowlog >>>")
-  ;(pretty-display simplified)
-  (match simplified    
-    ; concatenate strings for each arg, use "OR" as separator    
-    [`(or ,args ...) (string-append "( " (string-join (map sexpr-to-flowlog-helper (remove-duplicates args)) " \nOR\n ") " )")]
-    [`(and ,args ...) (string-append "( " (string-join (map sexpr-to-flowlog-helper (remove-duplicates args)) " AND ")" )")]
-    [`(not ,arg) (string-append "NOT " (sexpr-to-flowlog-helper arg))]
-    [`(RULE ,linenum ,decision ,varargs ,pred) (string-append (if debug-include-comments 
-                                                                  (string-append "\n// " (symbol->string linenum) "\n")
-                                                                  "") 
-                                                              (sexpr-to-flowlog-helper pred))]
-    ; equality or IN:
-    [`(= ,arg1 ,arg2)      
-     (define s1 (sexpr-to-flowlog-helper arg1))
-     (define s2 (sexpr-to-flowlog-helper arg2))     
-     (cond [(regexp-match #rx"^[0-9\\.]+/" s1)
-            (string-append s2 " IN " s1)]
-           [(regexp-match #rx"^[0-9\\.]+/" s2)
-            (string-append s1 " IN " s2)]
-           [else (string-append "(" s1 " = " s2 ")")])]    
-    ; table reference
-    ; (this needs to come after concrete keywords like RULE, and, =, etc.)
-    [`(,(? symbol? predname) ,args ...)      
-     (string-append (symbol->string predname) "( " (string-join (map sexpr-to-flowlog-helper args) ", ")" )")] 
-    [(? string? x) x]
-    [(? symbol? x) (symbol->string x)]    
-    [x (pretty-display x) (raise "error with sexpr-to-flowlog-helper")]))
