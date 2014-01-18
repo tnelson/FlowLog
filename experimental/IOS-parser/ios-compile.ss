@@ -144,12 +144,14 @@ namespace-for-template)
     ; For now, don't use NetworkSwitching or LocalSwitching.
     ; Instead, just feed the resulting program tuples in the subnets table.        
    
-
+    ; Dictionaries for protobufs -> mininet
     (define startup-vars (make-hash))
     (define router-vars (make-hash))
-    (define nn-for-router (make-hash))    
     (dict-set! router-vars "needs-nat-disj" "")
-    
+    ; Helper dictionaries for formula construction
+    (define nn-for-router (make-hash))    
+    (define dst-local-subnet-for-router (make-hash))
+        
     ;;;;;;;;;;;;;;;;;;;
     ; Need to assign an ID to the router and an ID to the interface
     (define (ifacedef->tuples arouter interface-defns nat-dpid rname rnum ifindex i ridx)
@@ -168,14 +170,27 @@ namespace-for-template)
          (define prim (vals->subnet primaddr primnwa primnwm rnum inum ptnum trsw ridx))
          (define sec (if secaddr (vals->subnet primaddr primnwa primnwm rnum inum ptnum trsw ridx) #f))
          (define alias (vals->ifalias rname name inum))         
+         
+         ; local subnets
+         (dict-set! dst-local-subnet-for-router rnum 
+                    (cons `(= pkt.nwDst ,(string-append primnwa "/" primnwm))
+                          (dict-ref dst-local-subnet-for-router rnum)))
+         (when sec
+           (dict-set! dst-local-subnet-for-router rnum
+                      (cons `(= pkt.nwDst ,(string-append secnwa "/" secnwm))
+                            (dict-ref dst-local-subnet-for-router rnum))))
+         
+         ; needs nat?
          (define needs-nat (if (and nat-side (equal? nat-side 'inside))
                                (string-append (ifvals->needs-nat nn-for-router rnum rname primnwa primnwm) 
                                               (ifvals->needs-nat nn-for-router rnum rname secnwa secnwm))
                                empty))                 
-         (dict-set! router-vars "needs-nat-disj" (build-needs-nat-from-hash nn-for-router))
+         
          (define acldefn (vals->ifacldefn hostaclnum ridx ptnum rname name))
          (define natconfigs (if-pair->natconfig interface-defns nat-side nat-dpid))                                    
          ;;;;;;;;;;;;;;;;;
+                           
+         ;(printf "dst local: ~v~n~v~n" dst-local-subnet-for-router) ; DEBUG
          
          ;;;;;;;;;;;;;;;;;
          ; generate protobufs as well
@@ -218,6 +233,7 @@ namespace-for-template)
       (define nat-dpid (string-append "40000000000000" (string-pad hostnum 2 #\0)))
       ; Prepare this list of needs-nat expressions
       (dict-set! nn-for-router hostnum empty)
+      (dict-set! dst-local-subnet-for-router hostnum empty)
       ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
       ; Confirm that no unsupported NAT variety appears
       (define static-NAT (send config get-static-NAT)) 
@@ -243,7 +259,7 @@ namespace-for-template)
       ; finally, reverse since subnets are attached in the order they appear in the protobuf
       (set-router-subnets! arouter (reverse (router-subnets arouter)))      
       (set-routers-routers! routers-msg (cons arouter (routers-routers routers-msg)))
-      
+
       ; Return the gathered tuples. protobufs changes are side-effects
       (string-append* (flatten (cons routertuple (cons iftuples natinfo)))))
   
@@ -277,6 +293,9 @@ namespace-for-template)
     (dict-set! router-vars "nexthop-fragment" (sexpr-to-flowlog next-hop-fragment #f))
     (dict-set! router-vars "nexthop-fragment-for-tr" (string-replace (sexpr-to-flowlog next-hop-fragment #f)
                                                                      "pkt.locSw" "router"))
+    
+    (dict-set! router-vars "needs-nat-disj" (build-per-router-fmla-from-hash nn-for-router))         
+    (dict-set! router-vars "dst-local-subnet" (build-per-router-fmla-from-hash dst-local-subnet-for-router))
 
     (store (render-template "templates/L3external.template.flg" router-vars)
            (make-path root-path "L3external.flg"))

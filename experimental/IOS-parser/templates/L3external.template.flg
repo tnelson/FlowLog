@@ -43,6 +43,9 @@ ON ip_packet(pkt):
 
     // templated nexthop IP selection
     @nexthop-fragment
+    AND
+    // not in a local subnet for this router
+    NOT (@dst-local-subnet)
 
     and subnets(nexthop_subnet, nexthop_mask, ANY, new.dlSrc, pkt.locSw, new.locPt, ANY)
     and nexthop IN nexthop_subnet/nexthop_mask

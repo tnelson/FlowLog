@@ -198,8 +198,8 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Construct the needs-nat template formula per router
 ; IMPORTANT: this assumes current location is at x-router, not x-nat (hence the use of rnum)
-(define (build-needs-nat-for-router rnum nnlst)
+(define (build-per-router-fmla-for-router rnum nnlst)
   `(and (= pkt.locSw ,rnum) (or ,@nnlst)))
-(define (build-needs-nat-from-hash nn-for-router)
-  (define fmla `(or ,@(hash-map nn-for-router build-needs-nat-for-router))) 
+(define (build-per-router-fmla-from-hash nn-for-router)
+  (define fmla `(or ,@(hash-map nn-for-router build-per-router-fmla-for-router))) 
   (sexpr-to-flowlog fmla #f))
