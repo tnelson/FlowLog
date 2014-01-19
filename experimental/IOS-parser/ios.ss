@@ -3476,7 +3476,7 @@
                                    rules
                                    (send hostname name)
                                    (send interf text)
-                                   `((routerAlias ,(wrapq (build-acl-name (send hostname name) (send interf text))) pkt.locSw)
+                                   `((aclAlias ,(wrapq (build-acl-name (send hostname name) (send interf text))) pkt.locSw pkt.locPt new.locPt)
                                      ;(portAlias ,(wrapq hostname) ,(wrapq interf) pkt.locpt)
                                      )
                                    'acl)))
@@ -3487,7 +3487,7 @@
                                        (make-object rule%
                                          'default-ACE
                                          'permit
-                                         `((routerAlias ,(wrapq (build-acl-name (send hostname name) (send interf text))) pkt.locSw))
+                                         `((aclAlias ,(wrapq (build-acl-name (send hostname name) (send interf text))) pkt.locSw pkt.locPt new.locPt))
                                          'acl)))
                                      '())))))
       
@@ -3501,7 +3501,7 @@
                                   rules
                                   (send hostname name)
                                   (send interf text)
-                                  `((routerAlias ,(wrapq (build-acl-name (send hostname name) (send interf text))) pkt.locSw)
+                                  `((aclAlias ,(wrapq (build-acl-name (send hostname name) (send interf text))) pkt.locSw new.locPt pkt.locPt)
                                    ; (portAlias ,(wrapq hostname) ,(wrapq interf) new.locpt)
                                     )
                                   'outacl)))
@@ -3512,7 +3512,7 @@
                                        (make-object rule%
                                          'default-ACE
                                          'permit
-                                         `((routerAlias ,(wrapq (build-acl-name (send hostname name) (send interf text))) pkt.locSw))
+                                         `((aclAlias ,(wrapq (build-acl-name (send hostname name) (send interf text))) pkt.locSw new.locPt pkt.locPt))
                                          'outacl)))
                                      '())))))
       

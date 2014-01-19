@@ -154,23 +154,22 @@ namespace-for-template)
         
     ;;;;;;;;;;;;;;;;;;;
     ; Need to assign an ID to the router and an ID to the interface
-    (define (ifacedef->tuples arouter interface-defns nat-dpid rname rnum ifindex i ridx)
+    (define (ifacedef->tuples arouter interface-defns nat-dpid rname rnum ifindex i ridx acl-dpid)
       (match i
         [`(,name ,primaddr (,primnwa ,primnwm) ,secaddr (,secnwa ,secnwm) ,nat-side) 
          (define inum (number->string (+ 1 ifindex)))
          ; offset the port number on the router by 1, since 1 is reserved for the attached NAT switch
          (define ptnum (number->string (+ 2 ifindex)))
-         (define trsw (make-tr-dpid ridx inum #t))
-         (define hostaclnum (string-append "3" (string-pad (number->string ridx) 2 #\0) "00000000000" (string-pad ptnum 2 #\0)))
+
          ;(printf "ridx=~v; rnum=~v; ifindex=~v; rname=~v;~n" ridx rnum ifindex rname) ; DEBUG
-         
+
          ;;;;;;;;;;;;;;;;         
          ; Produce tuples
          ; TODO: if secondary, need to increment tr_dpid
-         (define prim (vals->subnet primaddr primnwa primnwm rnum inum ptnum trsw ridx))
-         (define sec (if secaddr (vals->subnet primaddr primnwa primnwm rnum inum ptnum trsw ridx) #f))
+         (define prim (vals->subnet primaddr primnwa primnwm rnum inum ptnum ridx))
+         (define sec (if secaddr (vals->subnet primaddr primnwa primnwm rnum inum ptnum ridx) #f))
          (define alias (vals->ifalias rname name inum))         
-         
+
          ; local subnets
          (dict-set! dst-local-subnet-for-router rnum 
                     (cons `(= pkt.nwDst ,(string-append primnwa "/" primnwm))
@@ -179,43 +178,41 @@ namespace-for-template)
            (dict-set! dst-local-subnet-for-router rnum
                       (cons `(= pkt.nwDst ,(string-append secnwa "/" secnwm))
                             (dict-ref dst-local-subnet-for-router rnum))))
-         
+
          ; needs nat?
          (define needs-nat (if (and nat-side (equal? nat-side 'inside))
                                (string-append (ifvals->needs-nat nn-for-router rnum rname primnwa primnwm) 
                                               (ifvals->needs-nat nn-for-router rnum rname secnwa secnwm))
                                empty))                 
-         
-         (define acldefn (vals->ifacldefn hostaclnum ridx ptnum rname name))
+
+         (define acldefn (vals->ifacldefn acl-dpid ifindex rname name))
          (define natconfigs (if-pair->natconfig interface-defns nat-side nat-dpid))                                    
          ;;;;;;;;;;;;;;;;;
-                           
+
          ;(printf "dst local: ~v~n~v~n" dst-local-subnet-for-router) ; DEBUG
-         
+
          ;;;;;;;;;;;;;;;;;
          ; generate protobufs as well
          (define aninterf (subnet ""))
-                  
-         (set-subnet-tr-dpid! aninterf (make-tr-dpid ridx (number->string (+ ifindex 1)) #f))
-         (set-subnet-acl-dpid! aninterf hostaclnum)
+
          (set-subnet-addr! aninterf primnwa)
          (set-subnet-mask! aninterf (string->number primnwm))
          (set-subnet-gw! aninterf primaddr)
-         
+
          (set-router-subnets! arouter (cons aninterf (router-subnets arouter) ))
-         
+
          ; Deal with secondary subnet, if there is one
          (when secaddr 
            (printf "WARNING! Secondary interface detected. Please confirm that the primary and secondaries get different IDs.~n")
            (define aninterf2 (subnet ""))
-           (set-subnet-tr-dpid! aninterf2 ifindex)
+
            (set-subnet-addr! aninterf2 secnwa)
            (set-subnet-mask! aninterf2 (string->number secnwm))
            (set-subnet-gw! aninterf2 secaddr)
-           (set-subnet-acl-dpid! aninterf2 hostaclnum)
+
            (set-router-subnets! arouter (cons aninterf2 (router-subnets arouter) )))
          ;;;;;;;;;;;;;;;;;
-         
+
          ; Finally, return the result tuples (protobuf changes are side-effects)
          ; Keep the tuples that are non-#f
          (filter (lambda (x) x) (list prim sec alias needs-nat acldefn natconfigs))]
@@ -229,8 +226,11 @@ namespace-for-template)
       ;(printf "pre-processing hostname: ~v~n" hostname) ; DEBUG
       (define interface-defns (hash-map interfaces extract-ifs))
       ;(pretty-display interface-defns) ; DEBUG
-      (define hostnum (string-append "0x10000000000000" (string-pad (number->string (+ hostidx 1)) 2 #\0)))      
+      (define hostnum (string-append "0x10000000000000" (string-pad (number->string (+ hostidx 1)) 2 #\0)))
+      (define self-dpid (string-append "10000000000000" (string-pad hostnum 2 #\0))) ; TODO(adf): cleanup
       (define nat-dpid (string-append "40000000000000" (string-pad hostnum 2 #\0)))
+      (define tr-dpid (string-append "20000000000000" (string-pad hostnum 2 #\0)))
+      (define acl-dpid (string-append "50000000000000" (string-pad hostnum 2 #\0)))
       ; Prepare this list of needs-nat expressions
       (dict-set! nn-for-router hostnum empty)
       (dict-set! dst-local-subnet-for-router hostnum empty)
@@ -245,14 +245,18 @@ namespace-for-template)
 
       (define arouter (router ""))
       (set-router-name! arouter hostname)
-      (set-router-self-dpid! arouter (string-append "10000000000000" (string-pad hostnum 2 #\0)))            
+      (set-router-self-dpid! arouter self-dpid)
       (set-router-nat-dpid! arouter nat-dpid)
+      (set-router-tr-dpid! arouter tr-dpid)
+      (set-router-acl-dpid! arouter acl-dpid)
       
       (define iftuples (for/list ([ifdef interface-defns] 
                                   [ifindex (build-list (length interface-defns) values)])                         
-                          (ifacedef->tuples arouter interface-defns nat-dpid hostname hostnum ifindex ifdef (+ hostidx 1))))
+                          (ifacedef->tuples arouter interface-defns nat-dpid hostname hostnum ifindex ifdef (+ hostidx 1) acl-dpid)))
       (define routertuple (vals->routertuples hostname hostnum)) 
       (define natinfo (vals->nat (router-nat-dpid arouter) hostnum))      
+      (define trinfo (vals->tr (router-tr-dpid arouter) hostnum))
+      (define aclinfo (vals->acl (router-acl-dpid arouter) hostnum))
       
       ; TODO(tn)+TODO(adf): secondary subnets on interfaces with nat?      
       
@@ -261,9 +265,10 @@ namespace-for-template)
       (set-routers-routers! routers-msg (cons arouter (routers-routers routers-msg)))
 
       ; Return the gathered tuples. protobufs changes are side-effects
-      (string-append* (flatten (cons routertuple (cons iftuples natinfo)))))
+      (string-append* (flatten (cons routertuple (cons iftuples (cons natinfo (cons trinfo aclinfo)))))))
   
     (define routers-msg (routers ""))
+    (set-routers-subnet-base-dpid! routers-msg "3000000000000000")
     (define startupinserts (string-append* (for/list ([config configurations] [hostidx (build-list (length configurations) values)]) 
                                              
                                              (extract-hosts routers-msg config hostidx))))
@@ -275,7 +280,8 @@ namespace-for-template)
             
     ; First up, generate StartupConfig   
     (dict-set! startup-vars "basename" root-path)
-    (dict-set! startup-vars "startupinserts" startupinserts)    
+    (dict-set! startup-vars "startupinserts" startupinserts)
+    (dict-set! startup-vars "routerportmap" "") ; TODO(adf): XXX
     ; IP rules to the IP block. Will also apply to TCP packets. So don't duplicate!
     (dict-set! startup-vars "inboundacl-tcp" (sexpr-to-flowlog `(or ,@inboundacl-tcp) #t))
     (dict-set! startup-vars "inboundacl-udp" (sexpr-to-flowlog `(or ,@inboundacl-udp) #t))

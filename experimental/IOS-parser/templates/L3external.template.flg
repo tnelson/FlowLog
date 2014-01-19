@@ -68,8 +68,8 @@ ON ip_packet(pkt):
   DO forward(new) WHERE
 
     // generic nexthop IP selection
-    routes(addr, mask, nexthop)
-    and pkt.nwDst IN addr/mask
+    // routes(addr, mask, nexthop)
+    // and pkt.nwDst IN addr/mask
 
     // templated nexthop IP selection
 

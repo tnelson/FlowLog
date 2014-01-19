@@ -6,9 +6,7 @@
  subnet
  ((optional primitive:string addr 1)
   (optional primitive:int32 mask 2)
-  (optional primitive:string gw 3)
-  (optional primitive:string tr-dpid 4)
-  (optional primitive:string acl-dpid 5)))
+  (optional primitive:string gw 3)))
 (define-message-type
  network
  ((optional primitive:string addr 1) (optional primitive:int32 mask 2)))
@@ -23,8 +21,13 @@
  ((optional primitive:string name 1)
   (optional primitive:string self-dpid 2)
   (optional primitive:string nat-dpid 3)
+  (optional primitive:string tr-dpid 6)
+  (optional primitive:string acl-dpid 7)
   (repeated struct:subnet subnets 4)
   (repeated struct:peer peers 5)))
-(define-message-type routers ((repeated struct:router routers 1)))
+(define-message-type
+ routers
+ ((repeated struct:router routers 1)
+  (optional primitive:string subnet-base-dpid 2)))
 
 (provide (all-defined-out))

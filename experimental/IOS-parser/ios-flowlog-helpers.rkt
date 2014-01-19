@@ -137,14 +137,10 @@
 ; Functions to produce startup insert tuples
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(define (make-tr-dpid ridx inum ox)
-  (string-append (if ox "0x" "") "2" (string-pad (number->string ridx) 2 #\0) "00000000000" (string-pad inum 2 #\0)))         
-
-(define (vals->subnet addr nwa nwm rnum inum ptnum trsw ridx)
+(define (vals->subnet addr nwa nwm rnum inum ptnum ridx)
   (define gwmac (string-append "ca:fe:00:" (string-pad (number->string ridx) 2 #\0) ":00:" (string-pad inum 2 #\0)))
-  (string-append "INSERT (" (string-join (list nwa nwm addr gwmac rnum ptnum trsw) ", ") ") INTO subnets;\n"
-                 "INSERT (" (string-join (list addr gwmac) ", ") ") INTO cached; // auto\n"
-                 "INSERT (" trsw ") INTO switches_without_mac_learning; // auto\n"))
+  (string-append "INSERT (" (string-join (list nwa nwm addr gwmac rnum ptnum) ", ") ") INTO subnets;\n"
+                 "INSERT (" (string-join (list addr gwmac) ", ") ") INTO cached; // auto\n"))
 
 (define (vals->ifalias rname iname inum)
   (string-append "INSERT (" (string-join (list (string-append "\"" rname "\"") 
@@ -158,12 +154,27 @@
 
 (define (vals->nat nat-dpid rnum)
   (string-append "INSERT (0x" nat-dpid ") INTO switches_without_mac_learning; // auto\n"
+                 "INSERT (0x" nat-dpid ") INTO switches_without_arp; // auto\n"
                  "INSERT (" rnum ", 0x" nat-dpid ") INTO router_nat;\n"))
 
-(define (vals->ifacldefn hostaclnum ridx iidx rname iname)           
-  (string-append "INSERT (0x" hostaclnum ") INTO aclDPID;\n"
-                 "INSERT (0x" hostaclnum ") INTO switches_without_mac_learning; // auto\n"
-                 "INSERT (\"" (symbol->string (build-acl-name rname iname)) "\", 0x" hostaclnum ") INTO routerAlias;\n"))
+(define (vals->tr tr-dpid rnum)
+  (string-append "INSERT (0x" tr-dpid ") INTO switches_without_mac_learning; // auto\n"
+                 "INSERT (0x" tr-dpid ") INTO switches_without_arp; // auto\n"
+                 "INSERT (" rnum ", 0x" tr-dpid ") INTO router_tr;\n"))
+
+(define (vals->acl acl-dpid rnum)
+  (string-append "INSERT (0x" acl-dpid ") INTO switches_without_mac_learning; // auto\n"
+                 "INSERT (0x" acl-dpid ") INTO switches_without_arp; // auto\n"
+                 "INSERT (" rnum ", 0x" acl-dpid ") INTO router_acl;\n"))
+
+; index is the 0-indexed count of this interface (i.e., index + 2 is the port on the "router")
+; so the host of the ACL table will be: 2 * index + 1   (as OpenFlow ports are 1-indexed)
+; and the router side of the ACL table will be: 2 * index + 2
+(define (vals->ifacldefn acl-dpid index rname iname)
+  (define alias-str (symbol->string (build-acl-name rname iname)))
+  (define hside-pt (number->string (+ (* 2 index) 1)))
+  (define rside-pt (number->string (+ (* 2 index) 2)))
+  (string-append "INSERT (\"" alias-str "\", 0x" acl-dpid ", " hside-pt ", " rside-pt ") INTO aclAlias;\n"))
 
 ; For this particular type of nat (source list overload dynamic):
 ; For each private interface (nat = inside), and each public interface (nat = outside)

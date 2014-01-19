@@ -3,7 +3,9 @@ INCLUDE "@|basename|/Mac_Learning.inc.flg";
 
 TABLE routerAlias(string, switchid);
 TABLE portAlias(string, string, portid);
-TABLE aclDPID(switchid);
+
+// maps "<router_name>-<intf_name>" -> (ACL switch, host side, router side)
+TABLE aclAlias(string, switchid, portid, portid);
 
 // cached, switches_without_mac_learning, subnets: declared in INCLUDED files
 
@@ -19,41 +21,41 @@ TABLE router_portmap(portid, portid, portid);
 
 ///////////////////////////
 // ACLs
-// on the ACL switches, port 2 faces toward the subnet
-//                      port 1 faces toward the router.
+// on the ACL switches, port (2 * N - 1) faces toward subnet N
+//                      port (2 * N) faces toward the router.
 ///////////////////////////
 
-ON tcp_packet(pkt) WHERE pkt.locPt = 2 AND aclDPID(pkt.locSw):
+ON tcp_packet(pkt) WHERE aclAlias(ANY, pkt.locSw, ANY, ANY):
   DO forward(new) WHERE
   @inboundacl-tcp
-  AND new.locPt = 1;
+  ;
 
-ON udp_packet(pkt) WHERE pkt.locPt = 2 AND aclDPID(pkt.locSw):
+ON udp_packet(pkt) WHERE aclAlias(ANY, pkt.locSw, ANY, ANY):
   DO forward(new) WHERE
   @inboundacl-udp
-  AND new.locPt = 1;
+  ;
 
-ON ip_packet(pkt) WHERE pkt.locPt = 2 AND aclDPID(pkt.locSw):
+ON ip_packet(pkt) WHERE aclAlias(ANY, pkt.locSw, ANY, ANY):
   DO forward(new) WHERE
   @inboundacl-ip
-  AND new.locPt = 1;
+  ;
 
 ///////////////////////////
 
-ON tcp_packet(pkt) WHERE pkt.locPt = 1 AND aclDPID(pkt.locSw):
+ON tcp_packet(pkt) WHERE aclAlias(ANY, pkt.locSw, ANY, ANY):
   DO forward(new) WHERE
   @outboundacl-tcp
-  AND new.locPt = 2;
+  ;
 
-ON udp_packet(pkt) WHERE pkt.locPt = 1 AND aclDPID(pkt.locSw):
+ON udp_packet(pkt) WHERE aclAlias(ANY, pkt.locSw, ANY, ANY):
   DO forward(new) WHERE
   @outboundacl-udp
-  AND new.locPt = 2;
+  ;
 
-ON ip_packet(pkt) WHERE pkt.locPt = 1 AND aclDPID(pkt.locSw):
+ON ip_packet(pkt) WHERE aclAlias(ANY, pkt.locSw, ANY, ANY):
   DO forward(new) WHERE
   @outboundacl-ip
-  AND new.locPt = 2;
+  ;
 
 
 
@@ -65,3 +67,11 @@ ON ip_packet(pkt) WHERE pkt.locPt = 1 AND aclDPID(pkt.locSw):
 
 ON startup(e):
 @startupinserts
+
+  //  LOL. MATH.
+@routerportmap
+
+  // 3 interfaces ought to be enough for anybody, right?
+  INSERT (2, 1, 2) INTO router_portmap;
+  INSERT (3, 3, 4) INTO router_portmap;
+  INSERT (4, 5, 6) INTO router_portmap;
