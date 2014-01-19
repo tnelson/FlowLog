@@ -10,7 +10,8 @@
  *    see: http://tools.ietf.org/html/rfc3022 ("Traditional NAT")
  *         http://tools.ietf.org/html/rfc5508 ("NAT for ICMP")
  *  - how can we do UDP and TCP blocks without copy and paste?
- *  - expand needs_nat to also allow for NAT-ing between internal subnets?
+ *  - expand needs_nat to explicitly do NAT-ing between internal subnets?
+ *    for now, we have made that the default behaviour.
  *
  */
 
@@ -29,7 +30,7 @@ TABLE natconfig(switchid, portid, portid, ipaddr);
 // Table of internal subnets which need NAT processing before going to external
 //
 // Column values:
-// private subnet addr, private subnet mask
+// router DPID, private subnet addr, private subnet mask
 TABLE needs_nat(switchid, ipaddr, int);
 
 /*******************************************************************************

@@ -21,8 +21,8 @@ INCLUDE "@|basename|/L3external.flg";
 // Information about directly attached subnets
 //
 // Column values:
-// subnet addr, subnet mask, gw ip, gw mac, locSw, locpt, trSw
-TABLE subnets(ipaddr, int, ipaddr, macaddr, switchid, portid, switchid);
+// subnet addr, subnet mask, gw ip, gw mac, locSw, locpt
+TABLE subnets(ipaddr, int, ipaddr, macaddr, switchid, portid);
 
 // Table representing packets which router needs to send an ARP query for
 //
@@ -36,6 +36,18 @@ TABLE router_queued(ipaddr);
 // router locSw, NAT locSw
 TABLE router_nat(switchid, switchid);
 
+// Table matching routers with their translation switches
+//
+// Column values:
+// router locSw, translator locSw
+TABLE router_tr(switchid, switchid);
+
+// Table matching routers with their ACL switches
+//
+// Column values:
+// router locSw, acl locSw
+TABLE router_acl(switchid, switchid);
+
 /*******************************************************************************
  *
  * L3 routing to directly attached subnets
@@ -46,15 +58,13 @@ TABLE router_nat(switchid, switchid);
  *
  ******************************************************************************/
 
-// TODO(adf): need a table which ties "our" nat to this router?
-
 ON ip_packet(pkt):
   DO forward(new) WHERE
-    subnets(addr, mask, ANY, new.dlSrc, pkt.locSw, new.locPt, ANY)
+    subnets(addr, mask, ANY, new.dlSrc, pkt.locSw, new.locPt)
     and pkt.nwDst IN addr/mask
     // exempt packets which need NAT
     and NOT @needs-nat-disj
-    // exempt packets to the NAT (note positive use of router_nat since 1-1 between 0x1... and 0x4...)
+    // exempt packets to the NAT (note positive use of router_nat since 1-1 between rtr & nat)
     and router_nat(pkt.locSw, natid)
     and NOT natconfig(natid, ANY, ANY, pkt.nwDst);
 
@@ -63,15 +73,15 @@ ON ip_packet(pkt):
   DO forward(new) WHERE
     natconfig(natid, ANY, ANY, pkt.nwDst)
     and router_nat(pkt.locSw, natid)
-    and subnets(ANY, ANY, ANY, ANY, pkt.locSw, ANY, ANY) // TODO(adf): only apply to routers
+    and subnets(ANY, ANY, ANY, ANY, pkt.locSw, ANY) // TODO(adf): make a smaller relation?
     and pkt.locPt != 1
-    and new.locPt = 1; // TODO(adf): should be magic NAT port?
+    and new.locPt = 1; // TODO(adf): make magic NAT port configurable?
 
 // packets destined whose source says they need NATing
 
 ON ip_packet(pkt):
   DO forward(new) WHERE
-    subnets(ANY, ANY, ANY, ANY, pkt.locSw, ANY, ANY) // TODO(adf): only apply to routers
+    subnets(ANY, ANY, ANY, ANY, pkt.locSw, ANY) // TODO(adf): make a smaller relation?
 
     and @needs-nat-disj
     //and needs_nat(needs_nat_subnet, needs_nat_mask) // TODO(adf): should this be router-specific?
@@ -79,19 +89,21 @@ ON ip_packet(pkt):
 
     and new.locPt = 1; // TODO(adf): make magic NAT port configurable?
 
+
 /*******************************************************************************
  *
  * Per-subnet translators: inbound path
  *
- * The inbound path is simple: just pass to the router, which is on port 1
+ * The inbound path is simple: just pass from port 2N-1 to port 2N for every
+ * subnet N. Note that subnet N is attached to port N+1 on the router.
  *
  ******************************************************************************/
 
 ON ip_packet(pkt):
   DO forward(new) WHERE
-    subnets(ANY, ANY, ANY, pkt.dlDst, ANY, ANY, pkt.locSw)
-    and pkt.locPt != 1
-    and new.locPt = 1;
+    subnets(ANY, ANY, ANY, pkt.dlDst, router, rport)
+    and router_tr(router, pkt.locSw)
+    and router_portmap(rport, pkt.locPt, new.locPt); // host -> router
 
 /*******************************************************************************
  *
@@ -105,31 +117,34 @@ ON ip_packet(pkt):
  *
  ******************************************************************************/
 
-// Default path: set dlDst based on ARP cache
+// Default path: set dlDst based on ARP cache and send to subnet N (port 2N).
+// we receive from port 2N-1. note that subnet N is at port N+1 on the router.
 
 ON ip_packet(pkt):
   DO forward(new) WHERE
-    subnets(addr, mask, gwip, ANY, ANY, ANY, pkt.locSw)
+    subnets(addr, mask, gwip, ANY, router, rport)
+    and router_tr(router, pkt.locSw)
     and pkt.nwDst IN addr/mask
     and cached(pkt.nwDst, new.dlDst)
     and pkt.nwDst != gwip
-    and pkt.locPt = 1
-    and new.locPt = 2;
+    and router_portmap(rport, new.locPt, pkt.locPt); // router -> host
 
 // Alternate path: send an ARP request for IPs we can't translate and queue the pkt
 
-ON ip_packet(pkt) WHERE subnets(addr, mask, gwip, gwmac, ANY, ANY, pkt.locSw)
+ON ip_packet(pkt) WHERE subnets(addr, mask, gwip, gwmac, router, rport)
+                        and router_tr(router, pkt.locSw)
                         and pkt.nwDst IN addr/mask
                         and not cached(pkt.nwDst, ANY)
                         and pkt.dlDst != gwmac
                         and pkt.nwDst != gwip
-                        and pkt.locPt = 1:
+                        and router_portmap(rport, hside, pkt.locPt): // any router side
 
   INSERT (pkt.nwDst) INTO router_queued;
 
   DO emit_arp(new) WHERE
     not router_queued(pkt.nwDst) and
-    new.locSw = pkt.locSw and
+    router_acl(router, new.locSw) and
+    new.locPt = hside and
     new.dlDst = ff:ff:ff:ff:ff:ff and
     new.dlSrc = 00:00:ca:fe:ca:fe and // controller mac addr
 

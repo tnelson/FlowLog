@@ -8,8 +8,8 @@
  *
  * The router is identified by DPID 0x1000000000000001
  *
- * The first subnet is 10.0.1.0/24 (gw 10.0.1.1), attached to port 1
- * The second is 10.0.2.0/24 (gw 10.0.2.1), attached to port 2
+ * The first subnet is 10.0.1.0/24 (gw 10.0.1.1), attached to port 2
+ * The second is 10.0.2.0/24 (gw 10.0.2.1), attached to port 3
  *
  * Each subnet has a "translator switch" which represents the flow table
  * between the router and the root ("Layer 2") switch of the subnet. The
@@ -21,6 +21,27 @@ INCLUDE "examples/L3router.flg";
 INCLUDE "examples/ACLsample.flg";
 INCLUDE "examples/Mac_Learning.inc.flg";
 
+TABLE routerAlias(string, switchid);
+TABLE portAlias(string, string, portid);
+TABLE aclDPID(switchid);
+
+// cached, switches_without_mac_learning, subnets: declared in INCLUDED files
+
+// Maps subnet number -> (host side, router side)
+//
+// TODO(tn): to be replaced with:
+//
+// router_portmap(rp, hside, rside) =
+//    math_mult(2, tmp, rside) and math_sub(rport, 1, tmp)
+//    and math_sub(rside, 1, hside)
+//
+TABLE router_portmap(portid, portid, portid);
+
+/*******************************************************************************
+ *
+ * Startup values
+ *
+ ******************************************************************************/
 
 ON startup(ev):
 
@@ -28,20 +49,25 @@ ON startup(ev):
 
   // remember: ports 1 is reserved for NAT (at the moment)
 
-  // subnets(addr,  mask, gw ip,    gw mac,            locSw,            locpt, trSw)
-  INSERT (10.0.1.0, 24,   10.0.1.1, ca:fe:ca:fe:00:01, 0x1000000000000001, 2, 0x2000000000000001) INTO subnets;
-  INSERT (10.0.2.0, 24,   10.0.2.1, ca:fe:ca:fe:00:02, 0x1000000000000001, 3, 0x2000000000000002) INTO subnets;
+  // subnets(addr,  mask, gw ip,    gw mac,            locSw,            locpt)
+  INSERT (10.0.1.0, 24,   10.0.1.1, ca:fe:00:01:00:01, 0x1000000000000001, 2) INTO subnets;
+  INSERT (10.0.2.0, 24,   10.0.2.1, ca:fe:00:01:00:02, 0x1000000000000001, 3) INTO subnets;
+
+  INSERT (0x1000000000000001, 0x2000000000000001) INTO router_tr;  // auto
+  INSERT (0x1000000000000001, 0x4000000000000001) INTO router_nat; // auto
+  INSERT (0x1000000000000001, 0x5000000000000001) INTO router_acl; // auto
 
   // for ARP cache. TODO(adf): should be derived from above automatically!
-  INSERT (10.0.1.1, ca:fe:ca:fe:00:01) INTO cached; // 10.0.1.1/24 gw mac addr
-  INSERT (10.0.2.1, ca:fe:ca:fe:00:02) INTO cached; // 10.0.2.1/24 gw mac addr
+  INSERT (10.0.1.1, ca:fe:00:01:00:01) INTO cached; // 10.0.1.1/24 gw mac addr
+  INSERT (10.0.2.1, ca:fe:00:01:00:02) INTO cached; // 10.0.2.1/24 gw mac addr
 
   // Config for External Subnets
 
   // TODO(adf): should not advertise this subnet, probably. maybe break out an "interfaces" table?
   // then, local subnets will be those where nexthop is in "interfaces"
-  INSERT (192.168.1.0, 24, 192.168.1.2, be:ef:be:ef:00:00, 0x1000000000000001, 4, 0x2000000000000000) INTO subnets;
+  INSERT (192.168.1.0, 24, 192.168.1.2, be:ef:be:ef:00:00, 0x1000000000000001, 4) INTO subnets;
   INSERT (192.168.1.1, be:ef:be:ef:00:01) INTO cached; // BGP peer TODO(adf): should get from ARP!
+  INSERT (192.168.1.2, be:ef:be:ef:00:00) INTO cached;
 
   INSERT (8.0.0.0, 8, 192.168.1.1) INTO routes;
   INSERT (4.4.0.0, 16, 192.168.1.1) INTO routes;
@@ -54,20 +80,29 @@ ON startup(ev):
   INSERT (0x4000000000000001, 1, 1, 192.168.1.10) INTO natconfig;
 
   // [policy] which internal subnets need to be nat'd
-  INSERT (10.0.1.0, 24) INTO needs_nat;
+  INSERT (0x1000000000000001, 10.0.1.0, 24) INTO needs_nat;
   // INSERT (10.0.2.0, 24) INTO needs_nat; TODO(tn): BUG HERE!!!
 
   // TODO(adf): NATgeneric.flg should have these automatically based on natconfig
   INSERT (192.168.1.10, 0x6, 10000) INTO seqpt;
   INSERT (192.168.1.10, 0x11, 10000) INTO seqpt;
 
-  INSERT (192.168.1.10, ca:fe:ca:fe:00:00) INTO cached;
+  INSERT (192.168.1.10, ca:fe:00:01:00:00) INTO cached;
 
-  // Config to disable NAT on router, NAT, and translators:
+  // Config to disable MAC learning on router, translators, NAT, and ACLs:
 
   INSERT (0x1000000000000001) INTO switches_without_mac_learning;
   INSERT (0x2000000000000001) INTO switches_without_mac_learning;
-  INSERT (0x2000000000000002) INTO switches_without_mac_learning;
   INSERT (0x4000000000000001) INTO switches_without_mac_learning;
   INSERT (0x5000000000000001) INTO switches_without_mac_learning;
-  INSERT (0x5000000000000002) INTO switches_without_mac_learning;
+
+  // Config to disable ARP on translators, NAT, and ACLs:
+
+  INSERT (0x2000000000000001) INTO switches_without_arp;
+  INSERT (0x4000000000000001) INTO switches_without_arp;
+  INSERT (0x5000000000000001) INTO switches_without_arp;
+
+  //  LOL. MATH.
+
+  INSERT (2, 1, 2) INTO router_portmap;
+  INSERT (3, 3, 4) INTO router_portmap;

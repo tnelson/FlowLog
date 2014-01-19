@@ -47,7 +47,7 @@ ON ip_packet(pkt):
     // not in a local subnet for this router
     NOT (@dst-local-subnet)
 
-    and subnets(nexthop_subnet, nexthop_mask, ANY, new.dlSrc, pkt.locSw, new.locPt, ANY)
+    and subnets(nexthop_subnet, nexthop_mask, ANY, new.dlSrc, pkt.locSw, new.locPt)
     and nexthop IN nexthop_subnet/nexthop_mask
     and cached(nexthop, new.dlDst) // MAC addr of nexthop IP
 
@@ -67,16 +67,18 @@ ON ip_packet(pkt):
 ON ip_packet(pkt):
   DO forward(new) WHERE
 
-    // TODO(adf): generic nexthop-related code
+    // generic nexthop IP selection
+    routes(addr, mask, nexthop)
+    and pkt.nwDst IN addr/mask
 
     // templated nexthop IP selection
 
     @nexthop-fragment-for-tr
 
-    and subnets(nexthop_subnet, nexthop_mask, ANY, gwmac, router, ANY, pkt.locSw)
+    and subnets(nexthop_subnet, nexthop_mask, ANY, gwmac, router, rport)
+    and router_tr(router, pkt.locSw)
     and nexthop IN nexthop_subnet/nexthop_mask
     and cached(nexthop, pkt.dlDst)
     and pkt.dlSrc = gwmac
     and pkt.nwDst != nexthop // this case is handled by internal routing
-    and pkt.locPt = 1
-    and new.locPt = 2;
+    and router_portmap(rport, new.locPt, pkt.locPt); // router -> host

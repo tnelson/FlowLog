@@ -16,6 +16,8 @@
 
 INCLUDE "examples/NIB.inc.flg";
 
+TABLE switches_without_arp(switchid);
+
 /*******************************************************************************
  *
  * Data Structures
@@ -38,7 +40,8 @@ TABLE queued(ipaddr, macaddr, ipaddr, switchid, portid);
  *
  ******************************************************************************/
 
-ON arp_packet(request) WHERE request.dlSrc = 00:00:ca:fe:ca:fe: // Controller MAC
+ON arp_packet(request) WHERE request.dlSrc = 00:00:ca:fe:ca:fe // Controller MAC
+                             and not switches_without_arp(request.locSw):
    DO forward(new) WHERE
      new.locPt != request.locPt;
 
@@ -49,7 +52,8 @@ ON arp_packet(request) WHERE request.dlSrc = 00:00:ca:fe:ca:fe: // Controller MA
  ******************************************************************************/
 
 ON arp_packet(request) WHERE request.arp_op = 1 AND
-                                request.dlSrc != 00:00:ca:fe:ca:fe: // Controller MAC
+                             request.dlSrc != 00:00:ca:fe:ca:fe // Controller MAC
+                             and not switches_without_arp(request.locSw):
 
   //
   // If we have a hardware addr cached for the target protocol addr,
@@ -156,7 +160,8 @@ check cachedImmediateReply for 2 but 1 Event, 2 State
  ******************************************************************************/
 
 ON arp_packet(reply) WHERE reply.arp_op = 2 AND
-                           reply.dlSrc != 00:00:ca:fe:ca:fe:
+                           reply.dlSrc != 00:00:ca:fe:ca:fe
+                           and not switches_without_arp(reply.locSw):
 
   //
   // Learn from replies

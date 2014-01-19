@@ -10,8 +10,6 @@ message Subnet {
   optional string addr     = 1;  // required
   optional int32  mask     = 2;  // required
   optional string gw       = 3;  // required
-  optional string tr_dpid  = 4;  // required
-  optional string acl_dpid = 5;  // required
 }
 
 message Network {
@@ -31,6 +29,8 @@ message Router {
   optional string name      = 1;  // required
   optional string self_dpid = 2;  // required
   optional string nat_dpid  = 3;  // required
+  optional string tr_dpid   = 6;  // required
+  optional string acl_dpid  = 7;  // required
 
   repeated Subnet subnets = 4;
   repeated Peer peers = 5;
@@ -38,4 +38,6 @@ message Router {
 
 message Routers {
   repeated Router routers = 1;
+
+  optional string subnet_base_dpid = 2;  // required
 }

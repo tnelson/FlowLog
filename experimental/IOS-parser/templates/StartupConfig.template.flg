@@ -7,6 +7,16 @@ TABLE aclDPID(switchid);
 
 // cached, switches_without_mac_learning, subnets: declared in INCLUDED files
 
+// Maps subnet number -> (host side, router side)
+//
+// TODO(tn): to be replaced with:
+//
+// router_portmap(rp, host, rside) =
+//    math_mult(2, tmp, rside) and math_sub(rport, 1, tmp)
+//    and math_sub(rside, 1, host)
+//
+TABLE router_portmap(portid, portid, portid);
+
 ///////////////////////////
 // ACLs
 // on the ACL switches, port 2 faces toward the subnet
@@ -47,9 +57,11 @@ ON ip_packet(pkt) WHERE pkt.locPt = 1 AND aclDPID(pkt.locSw):
 
 
 
-///////////////////////////
-// Startup values
-///////////////////////////
+/*******************************************************************************
+ *
+ * Startup values
+ *
+ ******************************************************************************/
 
 ON startup(e):
 @startupinserts
