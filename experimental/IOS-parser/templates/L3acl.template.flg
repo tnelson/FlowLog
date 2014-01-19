@@ -1,0 +1,47 @@
+/*
+ * Layer 3 ACL tables.
+ *
+ * (description goes here)
+ *
+ */
+
+// maps "<router_name>-<intf_name>" -> (ACL switch, host side, router side)
+TABLE aclAlias(string, switchid, portid, portid);
+
+///////////////////////////
+// ACLs
+// on the ACL switches, port (2 * N - 1) faces toward subnet N
+//                      port (2 * N) faces toward the router.
+///////////////////////////
+
+ON tcp_packet(pkt) WHERE aclAlias(ANY, pkt.locSw, ANY, ANY):
+  DO forward(new) WHERE
+  @inboundacl-tcp
+  ;
+
+ON udp_packet(pkt) WHERE aclAlias(ANY, pkt.locSw, ANY, ANY):
+  DO forward(new) WHERE
+  @inboundacl-udp
+  ;
+
+ON ip_packet(pkt) WHERE aclAlias(ANY, pkt.locSw, ANY, ANY):
+  DO forward(new) WHERE
+  @inboundacl-ip
+  ;
+
+///////////////////////////
+
+ON tcp_packet(pkt) WHERE aclAlias(ANY, pkt.locSw, ANY, ANY):
+  DO forward(new) WHERE
+  @outboundacl-tcp
+  ;
+
+ON udp_packet(pkt) WHERE aclAlias(ANY, pkt.locSw, ANY, ANY):
+  DO forward(new) WHERE
+  @outboundacl-udp
+  ;
+
+ON ip_packet(pkt) WHERE aclAlias(ANY, pkt.locSw, ANY, ANY):
+  DO forward(new) WHERE
+  @outboundacl-ip
+  ;

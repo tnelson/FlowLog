@@ -1,11 +1,9 @@
 INCLUDE "@|basename|/L3router.flg";
+INCLUDE "@|basename|/L3acl.flg";
 INCLUDE "@|basename|/Mac_Learning.inc.flg";
 
 TABLE routerAlias(string, switchid);
 TABLE portAlias(string, string, portid);
-
-// maps "<router_name>-<intf_name>" -> (ACL switch, host side, router side)
-TABLE aclAlias(string, switchid, portid, portid);
 
 // cached, switches_without_mac_learning, subnets: declared in INCLUDED files
 
@@ -18,46 +16,6 @@ TABLE aclAlias(string, switchid, portid, portid);
 //    and math_sub(rside, 1, host)
 //
 TABLE router_portmap(portid, portid, portid);
-
-///////////////////////////
-// ACLs
-// on the ACL switches, port (2 * N - 1) faces toward subnet N
-//                      port (2 * N) faces toward the router.
-///////////////////////////
-
-ON tcp_packet(pkt) WHERE aclAlias(ANY, pkt.locSw, ANY, ANY):
-  DO forward(new) WHERE
-  @inboundacl-tcp
-  ;
-
-ON udp_packet(pkt) WHERE aclAlias(ANY, pkt.locSw, ANY, ANY):
-  DO forward(new) WHERE
-  @inboundacl-udp
-  ;
-
-ON ip_packet(pkt) WHERE aclAlias(ANY, pkt.locSw, ANY, ANY):
-  DO forward(new) WHERE
-  @inboundacl-ip
-  ;
-
-///////////////////////////
-
-ON tcp_packet(pkt) WHERE aclAlias(ANY, pkt.locSw, ANY, ANY):
-  DO forward(new) WHERE
-  @outboundacl-tcp
-  ;
-
-ON udp_packet(pkt) WHERE aclAlias(ANY, pkt.locSw, ANY, ANY):
-  DO forward(new) WHERE
-  @outboundacl-udp
-  ;
-
-ON ip_packet(pkt) WHERE aclAlias(ANY, pkt.locSw, ANY, ANY):
-  DO forward(new) WHERE
-  @outboundacl-ip
-  ;
-
-
 
 /*******************************************************************************
  *

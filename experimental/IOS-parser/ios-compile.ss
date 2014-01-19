@@ -147,6 +147,7 @@ namespace-for-template)
     ; Dictionaries for protobufs -> mininet
     (define startup-vars (make-hash))
     (define router-vars (make-hash))
+    (define acl-vars (make-hash))
     (dict-set! router-vars "needs-nat-disj" "")
     ; Helper dictionaries for formula construction
     (define nn-for-router (make-hash))    
@@ -282,13 +283,6 @@ namespace-for-template)
     (dict-set! startup-vars "basename" root-path)
     (dict-set! startup-vars "startupinserts" startupinserts)
     (dict-set! startup-vars "routerportmap" "") ; TODO(adf): XXX
-    ; IP rules to the IP block. Will also apply to TCP packets. So don't duplicate!
-    (dict-set! startup-vars "inboundacl-tcp" (sexpr-to-flowlog `(or ,@inboundacl-tcp) #t))
-    (dict-set! startup-vars "inboundacl-udp" (sexpr-to-flowlog `(or ,@inboundacl-udp) #t))
-    (dict-set! startup-vars "inboundacl-ip" (sexpr-to-flowlog `(or ,@inboundacl-ip) #t))
-    (dict-set! startup-vars "outboundacl-tcp" (sexpr-to-flowlog `(or ,@outboundacl-tcp) #t))
-    (dict-set! startup-vars "outboundacl-udp" (sexpr-to-flowlog `(or ,@outboundacl-udp) #t))
-    (dict-set! startup-vars "outboundacl-ip" (sexpr-to-flowlog `(or ,@outboundacl-ip) #t))
     
     (store (render-template "templates/StartupConfig.template.flg" startup-vars)
            (make-path root-path "IOS.flg"))
@@ -308,6 +302,18 @@ namespace-for-template)
 
     (store (render-template "templates/L3router.template.flg" router-vars)
            (make-path root-path "L3router.flg"))
+
+    ; generate L3acl
+    ; IP rules to the IP block. Will also apply to TCP packets. So don't duplicate!
+    (dict-set! acl-vars "inboundacl-tcp" (sexpr-to-flowlog `(or ,@inboundacl-tcp) #t))
+    (dict-set! acl-vars "inboundacl-udp" (sexpr-to-flowlog `(or ,@inboundacl-udp) #t))
+    (dict-set! acl-vars "inboundacl-ip" (sexpr-to-flowlog `(or ,@inboundacl-ip) #t))
+    (dict-set! acl-vars "outboundacl-tcp" (sexpr-to-flowlog `(or ,@outboundacl-tcp) #t))
+    (dict-set! acl-vars "outboundacl-udp" (sexpr-to-flowlog `(or ,@outboundacl-udp) #t))
+    (dict-set! acl-vars "outboundacl-ip" (sexpr-to-flowlog `(or ,@outboundacl-ip) #t))
+
+    (store (render-template "templates/L3acl.template.flg" acl-vars)
+           (make-path root-path "L3acl.flg"))
 
     ; Finally, we copy the template files which just need their INCLUDE line set properly
 
