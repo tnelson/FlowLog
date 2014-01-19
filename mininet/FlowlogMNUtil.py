@@ -9,11 +9,6 @@ from mininet.node import Controller, OVSSwitch
 from mininet.topo import Topo
 
 
-class FlowlogTopo(Topo):
-    def __init__(self, **opts):
-        super(FlowlogTopo, self).__init__(opts)
-
-
 class OVSBaseQosSwitch( OVSSwitch ):
     """A version of OVSSwitch which you can use with both TCIntf and OVS's QoS
        support. Note: this particular class is an abstract base class for

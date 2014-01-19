@@ -17,7 +17,7 @@ from mininet.node import Node, UserSwitch, RemoteController, CPULimitedHost
 from mininet.link import TCLink
 from mininet.util import irange, customConstructor
 
-from FlowlogMNUtil import FlowlogTopo, OVSHtbQosSwitch, addDictOption, subnetStr
+from FlowlogMNUtil import OVSHtbQosSwitch, addDictOption, subnetStr
 
 import routers_pb2
 
@@ -51,11 +51,11 @@ class FlowlogDemo(object):
       lg.setLogLevel('info')
       self.runDemo()
 
-    def nextSubnetRootSwitch(self, topo):
+    def nextSubnetRootSwitch(self, network):
       num = len(self.subnetRootSwitch) + 1
       dpid = 0x3000000000000000 + num # TODO(adf): make configurable
 
-      return topo.addSwitch('rs' + str(num), dpid=hex(dpid)[2:]) # 0x is implicit
+      return network.addSwitch('rs' + str(num), dpid=hex(dpid)[2:]) # 0x is implicit
 
     # TODO(adf): this needs a LOT more error checking:
     #
@@ -87,13 +87,13 @@ class FlowlogDemo(object):
         addDictOption(opts, CONTROLLERS, CONTROLLERDEF, 'controller')
         self.options, self.args = opts.parse_args()
 
-    def buildRouter(self, topo, r):
+    def buildRouter(self, network, r):
       r.name = r.name.encode('ascii', 'ignore')
 
-      router = topo.addSwitch(r.name + '-router', dpid=r.self_dpid)
+      router = network.addSwitch(r.name + '-router', dpid=r.self_dpid)
 
-      nat = topo.addSwitch(r.name + '-nat', dpid=r.nat_dpid)
-      topo.addLink(router, nat, **self.linkopts)
+      nat = network.addSwitch(r.name + '-nat', dpid=r.nat_dpid)
+      network.addLink(router, nat, **self.linkopts)
 
       # Add the dlDst translators for each subnet
       # The router is attached to each subnet first via a dlDst translator.
@@ -104,51 +104,48 @@ class FlowlogDemo(object):
       for (i, s) in enumerate(r.subnets):
         s.gw = s.gw.encode('ascii', 'ignore')
 
-        translator = topo.addSwitch(r.name + '-t' + str(i + 1),
-                                    dpid=s.tr_dpid)
-        topo.addLink(router, translator, **self.linkopts)
+        translator = network.addSwitch(r.name + '-t' + str(i + 1),
+                                       dpid=s.tr_dpid)
+        network.addLink(router, translator, **self.linkopts)
 
-        acl_table = topo.addSwitch(r.name + '-a' + str(i + 1),
-                                   dpid=s.acl_dpid)
-        topo.addLink(translator, acl_table, **self.linkopts)
+        acl_table = network.addSwitch(r.name + '-a' + str(i + 1),
+                                      dpid=s.acl_dpid)
+        network.addLink(translator, acl_table, **self.linkopts)
 
         srs = self.subnetRootSwitch[subnetStr(s.addr, s.mask)]
-        topo.addLink(acl_table, srs, **self.linkopts)
+        network.addLink(acl_table, srs, **self.linkopts)
 
         # if there's room for hosts, add an edge switch with some hosts!
         if s.mask < 30:
           self.globalEdgeSwCount += 1
-          edge_switch = topo.addSwitch('s' + str(self.globalEdgeSwCount))
-          topo.addLink(srs, edge_switch)
+          edge_switch = network.addSwitch('s' + str(self.globalEdgeSwCount))
+          network.addLink(srs, edge_switch)
 
           for h in irange(1, self.numHostsPerSubnet):
             self.globalHostCount += 1
             name = "host%d" % self.globalHostCount
             ip = self.nextSubnetHost(s.addr, s.mask, s.gw)
 
-            host = topo.addHost(name, ip='%s/%d' % (ip, s.mask),
-                                defaultRoute='dev %s-eth0 via %s' % (name, s.gw))
-            topo.addLink(host, edge_switch, **self.linkopts)
+            host = network.addHost(name, ip='%s/%d' % (ip, s.mask),
+                                   defaultRoute='dev %s-eth0 via %s' % (name, s.gw))
+            network.addLink(host, edge_switch, **self.linkopts)
 
       # Finally, add hosts which represents our BGP peers
 
       for p in r.peers:
         self.globalPeerCount += 1
         name = "peer%d" % self.globalPeerCount
-        peer = topo.addHost(name, ip='%s/%d' % (p.ip, p.mask),
-                            mac=p.mac)
-        topo.addLink(router, peer)
+        peer = network.addHost(name, ip='%s/%d' % (p.ip, p.mask),
+                               mac=p.mac)
+        network.addLink(router, peer)
 
         self.networksToLaunch[name] = p.networks
 
-    def buildTopo(self, routers):
-      topo = FlowlogTopo()
-      self.subnetRootSwitch = defaultdict(lambda: self.nextSubnetRootSwitch(topo))
+    def buildNetwork(self, network, routers):
+      self.subnetRootSwitch = defaultdict(lambda: self.nextSubnetRootSwitch(network))
 
       for router in routers.routers:
-        self.buildRouter(topo, router)
-
-      return topo
+        self.buildRouter(network, router)
 
     def readProtobuf(self):
       routers = routers_pb2.Routers()
@@ -203,14 +200,17 @@ class FlowlogDemo(object):
 
     def runDemo(self, host_cmd='/usr/sbin/sshd', host_cmd_opts='-D'):
         routers = self.readProtobuf()
-        topo = self.buildTopo(routers)
+
         controller = customConstructor(CONTROLLERS, self.options.controller)
         switch = customConstructor(SWITCHES, self.options.switch)
 
-        network = Mininet(topo, controller=controller, #link=TCLink, # disable for testing
+        network = Mininet(controller=controller, #link=TCLink, # disable for testing
                           # host=CPULimitedHost, # seems better without this
-                          switch=switch, ipBase='10.0.0.0/24',
+                          switch=switch,
                           autoSetMacs=True)
+
+        network.addController('flowlog')
+        self.buildNetwork(network, routers)
 
         self.launchNetwork(network, host_cmd, host_cmd_opts)
 
