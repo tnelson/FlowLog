@@ -37,7 +37,7 @@ class FlowlogDemo(object):
 
     def __init__(self):
       # 15 Mbps bandwidth and 2 ms delay on each link
-      #self.linkopts = dict(bw=15, delay='2ms', loss=0, use_htb=True) disabled for testing
+      #self.linkopts = dict(bw=15, delay='2ms', loss=0, use_htb=True) # disabled for testing
       self.linkopts = dict()
       self.numHostsPerSubnet = 2
 
@@ -135,7 +135,7 @@ class FlowlogDemo(object):
         if s.mask < 30 and self.options.create_edge:
           self.globalEdgeSwCount += 1
           edge_switch = network.addSwitch('s' + str(self.globalEdgeSwCount))
-          network.addLink(srs, edge_switch)
+          network.addLink(srs, edge_switch, **self.linkopts)
 
           for h in irange(1, self.numHostsPerSubnet):
             self.globalHostCount += 1
@@ -153,7 +153,7 @@ class FlowlogDemo(object):
         name = "peer%d" % self.globalPeerCount
         peer = network.addHost(name, ip='%s/%d' % (p.ip, p.mask),
                                mac=p.mac)
-        network.addLink(router, peer)
+        network.addLink(router, peer, **self.linkopts)
 
         self.networksToLaunch[name] = p.networks
 
@@ -221,7 +221,7 @@ class FlowlogDemo(object):
         controller = customConstructor(CONTROLLERS, self.options.controller)
         switch = customConstructor(SWITCHES, self.options.switch)
 
-        network = Mininet(controller=controller, #link=TCLink, # disable for testing
+        network = Mininet(controller=controller, link=TCLink,
                           # host=CPULimitedHost, # seems better without this
                           switch=switch,
                           autoSetMacs=True)
