@@ -45,3 +45,9 @@ ON ip_packet(pkt) WHERE aclAlias(ANY, pkt.locSw, ANY, ANY):
   DO forward(new) WHERE
   @outboundacl-ip
   ;
+
+////////////////////////////////////////////////////
+// If there are reflexive ACL inserts, they go here:
+TABLE reflexiveACL(string, ipaddr, tpport, nwproto, ipaddr, tpport);
+@reflexive-inserts-tcp
+@reflexive-inserts-udp

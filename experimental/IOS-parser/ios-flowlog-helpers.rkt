@@ -44,12 +44,12 @@
            [else `(= ,(simplify-sexpr arg1 positive scrubdltyp) ,(simplify-sexpr arg2 positive scrubdltyp))])]   
 
     ; deal with protocol names: expand to dltyp and nwproto fields
-    [`(prot-TCP protocol)
+    [`(prot-TCP ,protocolvar)
      (if (and scrubdltyp positive) 'true `(and (= pkt.dlTyp 0x800) (= pkt.nwProto 0x6)))]
-    [`(prot-UDP protocol)
+    [`(prot-UDP ,protocolvar)
      ; 17 dec, 11 hex
      (if (and scrubdltyp positive) 'true `(and (= pkt.dlTyp 0x800) (= pkt.nwProto 0x11)))]
-    [`(prot-IP protocol)
+    [`(prot-IP ,protocolvar)
      (if (and scrubdltyp positive) 'true `(= pkt.dlTyp 0x800))]
 
     [`(,(? symbol? predname) ,args ...)
@@ -77,6 +77,18 @@
 (define (sexpr-to-flowlog sexpr scrubdltyp)
   (sexpr-to-flowlog-helper (simplify-sexpr sexpr #t scrubdltyp)))
 
+(define (reflexive-rule-to-flowlog sexpr)
+  (match (simplify-sexpr sexpr #t #t)
+    [`(RULE ,linenum insert ,reflexname ,pred)
+     (string-append (if debug-include-comments 
+                        (string-append "\n// " (symbol->string linenum) "\n")
+                        "") 
+                    " INSERT (" (symbol->string reflexname) 
+                    ", pkt.nwSrc, pkt.tpSrc, pkt.nwProto, pkt.nwDst, pkt.tpDst) INTO reflexiveACL WHERE \n"                                                           
+                    (sexpr-to-flowlog-helper pred)
+                    ";\n")]))
+  
+
 (define (sexpr-to-flowlog-helper simplified)   
   ;(display "sexpr-to-flowlog >>>")
   ;(pretty-display simplified)
@@ -85,12 +97,6 @@
     [`(or ,args ...) (string-append "( " (string-join (map sexpr-to-flowlog-helper (remove-duplicates args)) " \nOR\n ") " )")]
     [`(and ,args ...) (string-append "( " (string-join (map sexpr-to-flowlog-helper (remove-duplicates args)) " AND ")" )")]
     [`(not ,arg) (string-append "NOT " (sexpr-to-flowlog-helper arg))]
-    [`(RULE ,linenum insert ,varargs ,pred) (string-append (if debug-include-comments 
-                                                                  (string-append "\n// " (symbol->string linenum) "\n")
-                                                                  "") 
-                                                           " INSERT (pkt.nwSrc, pkt.tpSrc, pkt.nwProto, pkt.nwDst, pkt.tpDst) INTO reflexiveACL WHERE \n"                                                           
-                                                              (sexpr-to-flowlog-helper pred)
-                                                              "\n;")]
     [`(RULE ,linenum ,decision ,varargs ,pred) (string-append (if debug-include-comments 
                                                                   (string-append "\n// " (symbol->string linenum) "\n")
                                                                   "") 

@@ -660,7 +660,7 @@
     ;; (listof any) -> (listof any)
     ;;   Converts all the atoms in a list to their textual form while
     ;;   preserving the list's structure
-    (define/private (textualize atoms)
+    (define/public (textualize atoms)
       (map (λ (value)
              (cond [(list? value) (textualize value)]
                    [(is-a? value atom<%>) (send value text)]
@@ -672,11 +672,21 @@
 ;;   Represents a Margrave rule with custom predicates
 (define rule/predicates%
   (class* rule% ()
-    (init name decision)
+    (init-field n d)
+    ;(init-field name decision)
+    ;(init name decision)
     (init-field predicates)
-    (init conditions)
+    (init-field conds)    
     (init-field arg-variable-list)
-    (super-make-object name decision conditions arg-variable-list)
+    (inherit textualize)
+    (super-make-object n d conds arg-variable-list)
+    
+    ;; -> (listof any)
+    ;;   Returns a symbol for this rule
+    (define/override (text)
+      `(RULE ,n ,d ,(wrapq (first predicates)) ,(textualize conds)))
+    ;:- ,@(textualize conditions)))         
+
     
     ;; -> (listof symbol)
     ;;   Returns a list of the predicate names that this rule contains
@@ -1336,12 +1346,12 @@
         (name hostname interf)
         (decision)
         ;(list (connection-predicate))
-        (list 'reflexiveACL)
+        (list ACL-name)
         `(,@additional-conditions         
           (reflexiveACL ,(wrapq (reflexive-list-name)) pkt.nwSrc pkt.tpSrc pkt.nwProto pkt.nwDst pkt.tpDst)
           ; ??? TODO: are these restrictions even needed?
           (= ,src-addr-in src-addr-in)
-          (= ,prot pkt.nwProto)
+          (,prot pkt.nwProto)
           (= ,src-port-in src-port-in)
           (= ,dest-addr-in pkt.nwDst)
           (= ,dest-port-in pkt.tpDst))
@@ -1352,10 +1362,10 @@
       (make-object rule/predicates%
         (name hostname interf)
         'insert
-        (list 'reflexiveACL)
+        (list ACL-name)
         `(,@additional-conditions                             
           (= ,src-addr-in src-addr-in)
-          (= ,prot pkt.nwProto)
+          ( ,prot pkt.nwProto)
           (= ,src-port-in src-port-in)
           (= ,dest-addr-in pkt.nwDst)
           (= ,dest-port-in pkt.tpDst))
@@ -3545,7 +3555,8 @@
                                      (send ace build-insert-rule ;; NOT rule
                                            (send hostname name)
                                            (send interf text)
-                                           `((aclAlias ,(wrapq (build-acl-name (send hostname name) (send interf text))) pkt.locSw pkt.locPt new.locPt)))]
+                                           ;`((aclAlias ,(wrapq (build-acl-name (send hostname name) (send interf text))) pkt.locSw pkt.locPt new.locPt)))]
+                                           `((aclAlias ,(wrapq (build-acl-name (send hostname name) (send interf text))) pkt.locSw pkt.locPt ANY)))]
                                     [else empty])))
                          ) (send insertacl get-ACEs))))))
     

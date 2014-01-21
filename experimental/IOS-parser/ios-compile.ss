@@ -91,6 +91,8 @@ namespace-for-template)
     (define outboundacl (assoc2 'permit (policy '(permit) (combine-rules configurations outbound-ACL-rules))))
     
     (define reflexive-inserts (assoc2 'insert (policy '(insert) (combine-rules configurations reflexive-insert-rules))))
+    (define reflexive-tcp (filter (lambda (arule) (equal? 'tcp (get-proto-for-rule arule))) reflexive-inserts))
+    (define reflexive-udp (filter (lambda (arule) (equal? 'udp (get-proto-for-rule arule))) reflexive-inserts))
     
     (define inboundacl-tcp (filter (lambda (arule) (equal? 'tcp (get-proto-for-rule arule))) inboundacl))        
     (define inboundacl-udp (filter (lambda (arule) (equal? 'udp (get-proto-for-rule arule))) inboundacl))
@@ -314,6 +316,15 @@ namespace-for-template)
     (dict-set! acl-vars "outboundacl-udp" (sexpr-to-flowlog `(or ,@outboundacl-udp) #t))
     (dict-set! acl-vars "outboundacl-ip" (sexpr-to-flowlog `(or ,@outboundacl-ip) #t))
 
+    (dict-set! acl-vars "reflexive-inserts-tcp" "")
+    (dict-set! acl-vars "reflexive-inserts-udp" "")
+    (define reflexive-insert-tcp-texts (map reflexive-rule-to-flowlog reflexive-tcp))    
+    (define reflexive-insert-udp-texts (map reflexive-rule-to-flowlog reflexive-udp)) 
+    (unless (empty? reflexive-insert-tcp-texts)
+      (dict-set! acl-vars "reflexive-inserts-tcp" (string-append* (cons "ON tcp_packet(pkt): \n" reflexive-insert-tcp-texts))))
+    (unless (empty? reflexive-insert-udp-texts)
+      (dict-set! acl-vars "reflexive-inserts-udp" (string-append* (cons "ON udp_packet(pkt): \n" reflexive-insert-udp-texts))))
+    
     (store (render-template "templates/L3acl.template.flg" acl-vars)
            (make-path root-path "L3acl.flg"))
 
