@@ -20,6 +20,11 @@ let remote_cache: (term list list* float) FmlaMap.t ref = ref FmlaMap.empty;;
 (* action_atom list = atom *)
 let fwd_actions = ref [];;
 
+(* Now that we added the suppress_new_policy parameter of respond_to_notification,
+   we need to make sure that if there are changes waiting, a new policy will be issued,
+   even if those changes were caused by an event that suppressed new policy generation. *)
+let modifications_since_last_policy = ref [];;
+
 (* Push function for packet stream. Used to emit rather than forward. *)
 (* Not sure why the input can be option. *)
 let emit_push: ((NetCore_Types.switchId * NetCore_Types.portId * OpenFlow0x01_Core.payload) option -> unit) option ref = ref None;;
@@ -877,7 +882,7 @@ let respond_to_notification (p: flowlog_program) ?(suppress_new_policy: bool = f
        TODO: not as smart as it could be: we aren't checking whether this stuff actually *changes the state*,
              just whether facts are being asserted/retracted. *)
     let modifications = map atom_to_relname (to_assert @ (subtract to_retract to_assert)) in
-
+    modifications_since_last_policy := modifications @ !modifications_since_last_policy;
    (* Now that all the queries are completed, actually do stuff. *)
 
    (**********************************************************)
@@ -898,10 +903,13 @@ let respond_to_notification (p: flowlog_program) ?(suppress_new_policy: bool = f
    (* Don't recreate a policy if there are no state changes! *)
    (* Don't recreate a policy if suppress_new_policy is set. *)
    if not suppress_new_policy then
+   begin
     (match !policy_recreation_thunk with
-      | Some(t) when (length modifications) > 0 -> t();
+      | Some(t) when (length !modifications_since_last_policy) > 0 -> t();
       | Some(t) -> (); (* we have a thunk, but no updates are necessary *)
-      | None -> ())
+      | None -> ());
+    modifications_since_last_policy := [];
+   end
    else if !global_verbose >= 1 then
      printf "~~ Suppressing new policy generation. ~~\n%!";
    (**********************************************************)
