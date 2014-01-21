@@ -822,7 +822,9 @@ let get_local_tables_triggered (p: flowlog_program) (sign: bool) (notif: event):
     possibly_triggered;;
 
 (* Returns list of names of tables that have been modified *)
-let respond_to_notification (p: flowlog_program) (notif: event): string list =
+(* DO NOT PASS suppress_new_policy = true unless it is safe to do so! It was added to prevent a single switch registration from
+   rebuilding the policy once for each new port. *)
+let respond_to_notification (p: flowlog_program) ?(suppress_new_policy: bool = false) (notif: event): string list =
   try
       write_log "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<";
       write_log (sprintf "<<< incoming: %s" (string_of_event p notif));
@@ -894,10 +896,14 @@ let respond_to_notification (p: flowlog_program) (notif: event): string list =
    (**********************************************************)
    (* UPDATE POLICY ON SWITCHES  (use the NEW state)         *)
    (* Don't recreate a policy if there are no state changes! *)
+   (* Don't recreate a policy if suppress_new_policy is set. *)
+   if not suppress_new_policy then
     (match !policy_recreation_thunk with
       | Some(t) when (length modifications) > 0 -> t();
       | Some(t) -> (); (* we have a thunk, but no updates are necessary *)
-      | None -> ());
+      | None -> ())
+   else if !global_verbose >= 1 then
+     printf "~~ Suppressing new policy generation. ~~\n%!";
    (**********************************************************)
 
    (**********************************************************)
@@ -939,6 +945,7 @@ let make_policy_stream (p: flowlog_program)
   let (policies, push) = Lwt_stream.create () in
 
     let rec switch_event_handler (swev: switchEvent): unit =
+      let startt = Unix.gettimeofday() in
       match swev with
       | SwitchUp(sw, feats) ->
         let sw_string = Int64.to_string sw in
@@ -950,9 +957,20 @@ let make_policy_stream (p: flowlog_program)
                                           ("pt", (nwport_to_string portid))]}
             else None)
             feats.ports in
-        printf "SWITCH 0x%Lx connected. Flowlog events triggered: %s\n%!" sw (String.concat ", " (map (string_of_event p) notifs));
-        List.iter (fun notif -> ignore (respond_to_notification p notif)) notifs;
-
+        if (length notifs) < 1 then
+        begin
+          printf "SWITCH 0x%Lx connected, but did not report any ports.\n%!" sw;
+        end
+        else
+        begin
+          printf "SWITCH 0x%Lx connected. Flowlog events triggered: %s\n%!" sw (String.concat ", " (map (string_of_event p) notifs));
+          (* Avoid re-computing policy for every port on the switch: *)
+          List.iter (fun notif -> ignore (respond_to_notification p ~suppress_new_policy:true notif)) (tl notifs);
+          (* Only recompute policy on the last (first) port: *)
+          ignore (respond_to_notification p (hd notifs));
+          if !global_verbose >= 1 then
+            printf "Total time to process all switch-up events: %fs.\n%!" (Unix.gettimeofday() -. startt);
+        end;
       | SwitchDown(swid) ->
         let sw_string = Int64.to_string swid in
         let notif = {typeid="switch_down"; values=construct_map [("sw", sw_string)]} in
