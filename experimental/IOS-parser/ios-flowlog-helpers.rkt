@@ -85,6 +85,12 @@
     [`(or ,args ...) (string-append "( " (string-join (map sexpr-to-flowlog-helper (remove-duplicates args)) " \nOR\n ") " )")]
     [`(and ,args ...) (string-append "( " (string-join (map sexpr-to-flowlog-helper (remove-duplicates args)) " AND ")" )")]
     [`(not ,arg) (string-append "NOT " (sexpr-to-flowlog-helper arg))]
+    [`(RULE ,linenum insert ,varargs ,pred) (string-append (if debug-include-comments 
+                                                                  (string-append "\n// " (symbol->string linenum) "\n")
+                                                                  "") 
+                                                           " INSERT (pkt.nwSrc, pkt.tpSrc, pkt.nwProto, pkt.nwDst, pkt.tpDst) INTO reflexiveACL WHERE \n"                                                           
+                                                              (sexpr-to-flowlog-helper pred)
+                                                              "\n;")]
     [`(RULE ,linenum ,decision ,varargs ,pred) (string-append (if debug-include-comments 
                                                                   (string-append "\n// " (symbol->string linenum) "\n")
                                                                   "") 

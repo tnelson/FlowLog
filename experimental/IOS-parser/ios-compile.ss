@@ -90,6 +90,8 @@ namespace-for-template)
     (define inboundacl (assoc2 'permit (policy '(permit) (combine-rules configurations inbound-ACL-rules))))
     (define outboundacl (assoc2 'permit (policy '(permit) (combine-rules configurations outbound-ACL-rules))))
     
+    (define reflexive-inserts (assoc2 'insert (policy '(insert) (combine-rules configurations reflexive-insert-rules))))
+    
     (define inboundacl-tcp (filter (lambda (arule) (equal? 'tcp (get-proto-for-rule arule))) inboundacl))        
     (define inboundacl-udp (filter (lambda (arule) (equal? 'udp (get-proto-for-rule arule))) inboundacl))
     (define inboundacl-ip (filter (lambda (arule) (equal? 'ip (get-proto-for-rule arule))) inboundacl))
@@ -333,6 +335,7 @@ namespace-for-template)
     ; For debugging purposes:
     (store inboundacl (make-path root-path "InboundACL.p"))
     (store outboundacl (make-path root-path "OutboundACL.p"))
+    (store reflexive-inserts (make-path root-path "ReflexiveDebug.p"))
     (store insidenat (make-path root-path "InsideNAT.p"))
     (store outsidenat (make-path root-path "OutsideNAT.p"))
     (store local-switch (make-path root-path "LocalSwitching.p"))

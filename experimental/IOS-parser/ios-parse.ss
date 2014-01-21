@@ -824,28 +824,49 @@
 
 ;; number symbol symbol symbol address<%> port<%> address<%> port<%> symbol (listof any) IOS-config% -> IOS-config%
 (define (parse-ip-named-access-list7 line name disposition protocol src-addr src-port dest-addr dest-port reflect-name line-tokens config)
-  (send (send config
-              insert-ACE
-              name
-              (make-object extended-ACE-TCP/UDP%
-                line
-                (eqv? disposition 'permit)
-                src-addr
-                (string->symbol (string-append "prot-" (string-upcase (symbol->string protocol))))
-                src-port
-                dest-addr
-                dest-port))
-        insert-ACE
-        reflect-name
-        (make-object extended-reflexive-ACE-TCP/UDP%
-          line
-          (eqv? disposition 'permit)
-          dest-addr
-          (string->symbol (string-append "prot-" (string-upcase (symbol->string protocol))))
-          src-port
-          src-addr
-          dest-port
-          reflect-name)))
+  (define added-outgoing
+    (send config
+          insert-ACE
+          name
+          (make-object extended-ACE-TCP/UDP%
+            line
+            (eqv? disposition 'permit)
+            src-addr
+            (string->symbol (string-append "prot-" (string-upcase (symbol->string protocol))))
+            src-port
+            dest-addr
+            dest-port)))
+  (define added-incoming-too
+    (send added-outgoing
+     insert-ACE
+     reflect-name
+     (make-object extended-reflexive-ACE-TCP/UDP%
+       line
+       (eqv? disposition 'permit)
+       dest-addr
+       (string->symbol (string-append "prot-" (string-upcase (symbol->string protocol))))
+       src-port
+       src-addr
+       dest-port
+       reflect-name
+       name)))
+  ; TODO(tn) above: why does only the address get reversed? 
+  
+  ;(class* extended-ACE-TCP/UDP% (ACE<%>)
+;    (init line-number permit source-addr protocol source-port dest-addr dest-port)
+  (send added-incoming-too
+     insert-insert-ACE
+     reflect-name
+     (make-object extended-reflexive-ACE-TCP/UDP%
+       line
+       (eqv? disposition 'permit)
+       src-addr
+       (string->symbol (string-append "prot-" (string-upcase (symbol->string protocol))))
+       src-port
+       dest-addr
+       dest-port
+       reflect-name
+       name)))
 
 ;; number symbol symbol address<%> port<%> address<%> port<%> (listof any) IOS-config% -> IOS-config%
 (define (parse-ip-named-access-list8 line name disposition src-addr src-port dest-addr dest-port line-tokens config)

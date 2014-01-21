@@ -582,6 +582,8 @@
             [(equal? rule-type 'nat) ; inside and outside 
              '(p)]
             
+            [(equal? rule-type 'reflexive-insert) '(p)]
+            
             [(equal? rule-type 'encrypt)              
              '(nexthop)]
             
@@ -1308,7 +1310,7 @@
 (define extended-reflexive-ACE-TCP/UDP%
   (class* extended-ACE-TCP/UDP% (ACE<%>)
     (init line-number permit source-addr protocol source-port dest-addr dest-port)
-    (init-field ACL-name)
+    (init-field ACL-name trigger-ACL-ID)
     (super-make-object line-number permit source-addr protocol source-port dest-addr dest-port)
     
     (inherit-field src-addr-in)
@@ -1333,9 +1335,11 @@
       (make-object rule/predicates%
         (name hostname interf)
         (decision)
-        (list (connection-predicate))
+        ;(list (connection-predicate))
+        (list 'reflexiveACL)
         `(,@additional-conditions         
-          (,(connection-predicate) pkt.nwSrc pkt.tpSrc pkt.nwProto pkt.nwDst pkt.tpDst)
+          (reflexiveACL ,(wrapq (reflexive-list-name)) pkt.nwSrc pkt.tpSrc pkt.nwProto pkt.nwDst pkt.tpDst)
+          ; ??? TODO: are these restrictions even needed?
           (= ,src-addr-in src-addr-in)
           (= ,prot pkt.nwProto)
           (= ,src-port-in src-port-in)
@@ -1343,10 +1347,24 @@
           (= ,dest-port-in pkt.tpDst))
         rule-type))
     
+    ; Call in specially constructed forward-facing rule
+    (define/public (build-insert-rule hostname interf additional-conditions)
+      (make-object rule/predicates%
+        (name hostname interf)
+        'insert
+        (list 'reflexiveACL)
+        `(,@additional-conditions                             
+          (= ,src-addr-in src-addr-in)
+          (= ,prot pkt.nwProto)
+          (= ,src-port-in src-port-in)
+          (= ,dest-addr-in pkt.nwDst)
+          (= ,dest-port-in pkt.tpDst))
+        'reflexive-insert))
+    
     ;; -> symbol
     ;;   Returns the name of the connection predicate for this rule
-    (define/private (connection-predicate)
-      (string->symbol (string-append "connection-" (symbol->string ACL-name))))
+    (define/private (reflexive-list-name)
+      (string->symbol (string-append (symbol->string ACL-name))))
     ))
 
 ;; ACL% : (listof ACE<%>)
@@ -2970,6 +2988,7 @@
     (init-field hostname
                 interfaces
                 ACLs
+                insert-ACLs
                 static-NAT
                 dynamic-NAT
                 static-routes
@@ -2994,6 +3013,8 @@
     
     (define/public (get-ACLs)
       ACLs)
+    (define/public (get-insert-ACLs)
+      insert-ACLs)
     
     ;; hostname% -> IOS-config%
     (define/public (set-hostname name)
@@ -3001,6 +3022,7 @@
         name
         interfaces
         ACLs
+        insert-ACLs
         static-NAT
         dynamic-NAT
         static-routes
@@ -3023,6 +3045,7 @@
                         address
                         network))
         ACLs
+        insert-ACLs
         static-NAT
         dynamic-NAT
         static-routes
@@ -3045,6 +3068,7 @@
                         address
                         network))
         ACLs
+        insert-ACLs
         static-NAT
         dynamic-NAT
         static-routes
@@ -3067,6 +3091,7 @@
                         ACL-ID
                         inbound))
         ACLs
+        insert-ACLs
         static-NAT
         dynamic-NAT
         static-routes
@@ -3088,6 +3113,7 @@
                         set-NAT-side
                         side))
         ACLs
+        insert-ACLs
         static-NAT
         dynamic-NAT
         static-routes
@@ -3109,6 +3135,7 @@
                         set-policy-route-map-ID
                         ID))
         ACLs
+        insert-ACLs
         static-NAT
         dynamic-NAT
         static-routes
@@ -3130,6 +3157,7 @@
                         set-crypto-map-ID
                         ID))
         ACLs
+        insert-ACLs
         static-NAT
         dynamic-NAT
         static-routes
@@ -3151,6 +3179,29 @@
                   (send (hash-ref ACLs ACL-ID make-empty-ACL)
                         insert-ACE
                         ACE))
+        insert-ACLs
+        static-NAT
+        dynamic-NAT
+        static-routes
+        route-maps
+        networks
+        neighbors
+        endpoints
+        crypto-maps
+        default-ACL-permit))
+    
+        ;; symbol ACE<%> -> IOS-config%
+    ;;   Inserts an ACE into an ACL
+    (define/public (insert-insert-ACE ACL-ID ACE)
+      (make-object IOS-config%
+        hostname
+        interfaces
+        ACLs
+        (hash-set insert-ACLs
+                  ACL-ID
+                  (send (hash-ref insert-ACLs ACL-ID make-empty-ACL)
+                        insert-ACE
+                        ACE))        
         static-NAT
         dynamic-NAT
         static-routes
@@ -3172,6 +3223,7 @@
                   (send (hash-ref ACLs ACL-ID make-empty-ACL)
                         insert-ACL
                         (hash-ref ACLs reflexive-ACL-ID make-empty-ACL)))
+        insert-ACLs
         static-NAT
         dynamic-NAT
         static-routes
@@ -3189,6 +3241,7 @@
         hostname
         interfaces
         ACLs
+        insert-ACLs
         (append static-NAT (list translation))
         dynamic-NAT
         static-routes
@@ -3206,6 +3259,7 @@
         hostname
         interfaces
         ACLs
+        insert-ACLs
         static-NAT
         (append dynamic-NAT (list translation))
         static-routes
@@ -3223,6 +3277,7 @@
         hostname
         interfaces
         ACLs
+        insert-ACLs
         static-NAT
         dynamic-NAT
         (append static-routes (list route))
@@ -3242,6 +3297,7 @@
           hostname
           interfaces
           ACLs
+          insert-ACLs
           static-NAT
           dynamic-NAT
           static-routes
@@ -3268,6 +3324,7 @@
           hostname
           interfaces
           ACLs
+          insert-ACLs
           static-NAT
           dynamic-NAT
           static-routes
@@ -3294,6 +3351,7 @@
           hostname
           interfaces
           ACLs
+          insert-ACLs
           static-NAT
           dynamic-NAT
           static-routes
@@ -3320,6 +3378,7 @@
           hostname
           interfaces
           ACLs
+          insert-ACLs
           static-NAT
           dynamic-NAT
           static-routes
@@ -3344,6 +3403,7 @@
         hostname
         interfaces
         ACLs
+        insert-ACLs
         static-NAT
         dynamic-NAT
         static-routes
@@ -3361,6 +3421,7 @@
         hostname
         interfaces
         ACLs
+        insert-ACLs
         static-NAT
         dynamic-NAT
         static-routes
@@ -3378,6 +3439,7 @@
         hostname
         interfaces
         ACLs
+        insert-ACLs
         static-NAT
         dynamic-NAT
         static-routes
@@ -3397,6 +3459,7 @@
           hostname
           interfaces
           ACLs
+          insert-ACLs
           static-NAT
           dynamic-NAT
           static-routes
@@ -3423,6 +3486,7 @@
           hostname
           interfaces
           ACLs
+          insert-ACLs
           static-NAT
           dynamic-NAT
           static-routes
@@ -3449,6 +3513,7 @@
           hostname
           interfaces
           ACLs
+          insert-ACLs
           static-NAT
           dynamic-NAT
           static-routes
@@ -3466,6 +3531,24 @@
                                 peer-endpoint)))
           default-ACL-permit)))
        
+    (define/public (reflexive-insert-rules) 
+      (flatten (hash-map insert-ACLs
+                ; this is an ACL guaranteed to have only reflexive ACEs in it
+                (λ (aclname insertacl)
+                  (map (λ (ace) 
+                         (hash-map interfaces 
+                            ; for each interface, does that interface have an in ACL matching the trigger ID for this reflexive list?
+                            (λ (ifname interf)
+                              
+                              ;(printf "~v vs ~v~n" (get-field inbound-ACL-ID interf) (get-field trigger-ACL-ID ace))
+                              (cond [(equal? (get-field inbound-ACL-ID interf) (get-field trigger-ACL-ID ace))
+                                     (send ace build-insert-rule ;; NOT rule
+                                           (send hostname name)
+                                           (send interf text)
+                                           `((aclAlias ,(wrapq (build-acl-name (send hostname name) (send interf text))) pkt.locSw pkt.locPt new.locPt)))]
+                                    [else empty])))
+                         ) (send insertacl get-ACEs))))))
+    
     ;; -> (listof rule%)
     ;;   Returns a list of the rules that describe inbound ACL policies
     (define/public (inbound-ACL-rules)
@@ -3778,7 +3861,8 @@
   (make-object IOS-config%
     (make-object hostname% 'Router)
     (make-immutable-hash '())
-    (make-immutable-hash (list (cons 'default default-ACL)))
+    (make-immutable-hash (list (cons 'default default-ACL))) ; ACLs
+    (make-immutable-hash '()) ;insert-ACLs
     '()
     '()
     '()
