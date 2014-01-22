@@ -14,6 +14,7 @@ open Partial_Eval_Validation
 open Xsb_Communication
 
 exception SyntaxAnyInPlus of formula;;
+exception HexConstantSurvived of string;;
 exception SyntaxUnsafe of term;;
 
 (* Thanks to Jon Harrop on caml-list *)
@@ -154,6 +155,9 @@ let well_formed_rule (p: flowlog_program) (r: srule): unit =
     (* This may be called for a term in the head OR in the body.*)
     let well_formed_term (headrelname: string) (headterms: term list) (inrelname: string) (inargname: string) (t: term): unit =
       match t with
+      | TConst(cval) when (starts_with cval "0x") ->
+        (* kludge guard to deal with fact that values inside TConsts are strings, not integers.*)
+        raise (HexConstantSurvived cval)
       | TConst(cval) -> () (* constant is always OK *)
 
       | TVar(vname) ->

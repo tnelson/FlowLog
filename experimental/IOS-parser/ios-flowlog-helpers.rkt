@@ -86,6 +86,8 @@
                     " INSERT (" (symbol->string reflexname) 
                     ", pkt.nwSrc, pkt.tpSrc, pkt.nwProto, pkt.nwDst, pkt.tpDst) INTO reflexiveACL WHERE \n"                                                           
                     (sexpr-to-flowlog-helper pred)
+                    ; don't make all packets go to ctrler
+                    "AND not reflexiveACL(" (symbol->string reflexname) ", pkt.nwSrc, pkt.tpSrc, pkt.nwProto, pkt.nwDst, pkt.tpDst)"
                     ";\n")]))
   
 

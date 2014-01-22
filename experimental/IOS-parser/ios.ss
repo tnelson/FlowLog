@@ -1348,7 +1348,8 @@
         ;(list (connection-predicate))
         (list ACL-name)
         `(,@additional-conditions         
-          (reflexiveACL ,(wrapq (reflexive-list-name)) pkt.nwSrc pkt.tpSrc pkt.nwProto pkt.nwDst pkt.tpDst)
+          ; Reversed order in relation, since this is for return traffic via "evaluate"
+          (reflexiveACL ,(wrapq (reflexive-list-name)) pkt.nwDst pkt.tpDst pkt.nwProto pkt.nwSrc pkt.tpSrc)
           ; ??? TODO: are these restrictions even needed?
           (= ,src-addr-in src-addr-in)
           (,prot pkt.nwProto)

@@ -50,50 +50,50 @@ let packet_flavors = [
     fields = [("locsw", "switchid"); ("locpt", "portid"); ("dlsrc", "macaddr"); ("dldst", "macaddr"); ("dltyp", "ethtyp")]};
 
    {label = "arp"; superflavor = Some "packet";
-    build_condition = (fun vname -> FEquals(TField(vname, "dltyp"), TConst("0x0806")));
+    build_condition = (fun vname -> FEquals(TField(vname, "dltyp"), TConst(hex_str_to_int_string "0x0806")));
     fields = [("arp_op", "int"); ("arp_spa", "ipaddr"); ("arp_sha", "macaddr"); ("arp_tpa", "ipaddr"); ("arp_tha", "macaddr")]};
 
    {label = "ip"; superflavor = Some "packet";
-    build_condition = (fun vname -> FEquals(TField(vname, "dltyp"), TConst("0x0800")));
+    build_condition = (fun vname -> FEquals(TField(vname, "dltyp"), TConst(hex_str_to_int_string "0x0800")));
     fields = [("nwsrc", "ipaddr"); ("nwdst", "ipaddr"); ("nwproto", "int")]};  (* missing: frag, tos, chksum, ident, ...*)
 
   (* {label = "ipv6"; superflavor = Some "packet";
-    build_condition = (fun vname -> FEquals(TField(vname, "dltyp"), TConst("0x86DD")));
+    build_condition = (fun vname -> FEquals(TField(vname, "dltyp"), TConst(hex_str_to_int_string "0x86DD")));
     fields = ["omgwtfbbq"]}; *)
 
   (* {label = "8021x"; superflavor = Some "packet";
-    build_condition = (fun vname -> FEquals(TField(vname, "dltyp"), TConst("0x888E")));
+    build_condition = (fun vname -> FEquals(TField(vname, "dltyp"), TConst(hex_str_to_int_string "0x888E")));
     fields = ["omgwtfbbq"]}; *)
 
   (* {label = "lldp"; superflavor = None;
-    build_condition = (fun vname -> FEquals(TField(vname, "dltyp"), TConst("0x88CC")));
+    build_condition = (fun vname -> FEquals(TField(vname, "dltyp"), TConst(hex_str_to_int_string "0x88CC")));
     fields = ["omgwtfbbq"]}; *)
 
    {label = "tcp"; superflavor = Some "ip";
-    build_condition = (fun vname -> FAnd(FEquals(TField(vname, "dltyp"), TConst("0x0800")),
-                                    FEquals(TField(vname, "nwproto"), TConst("0x6"))));
+    build_condition = (fun vname -> FAnd(FEquals(TField(vname, "dltyp"), TConst(hex_str_to_int_string "0x0800")),
+                                    FEquals(TField(vname, "nwproto"), TConst(hex_str_to_int_string "0x6"))));
     fields = [("tpsrc", "tpport"); ("tpdst", "tpport")]}; (* expect we'll want flags eventually *)
 
     (* "tpport" represents a transport-layer port, i.e. either TCP or UDP port. *)
    {label = "udp"; superflavor = Some "ip";
-    build_condition = (fun vname -> FAnd(FEquals(TField(vname, "dltyp"), TConst("0x0800")),
-                                    FEquals(TField(vname, "nwproto"), TConst("0x11"))));
+    build_condition = (fun vname -> FAnd(FEquals(TField(vname, "dltyp"), TConst(hex_str_to_int_string "0x0800")),
+                                    FEquals(TField(vname, "nwproto"), TConst(hex_str_to_int_string "0x11"))));
     fields = [("tpsrc", "tpport"); ("tpdst", "tpport")]};
 
    {label = "igmp"; superflavor = Some "ip";
-    build_condition = (fun vname -> FAnd(FEquals(TField(vname, "dltyp"), TConst("0x0800")),
-                                    FEquals(TField(vname, "nwproto"), TConst("0x2"))));
+    build_condition = (fun vname -> FAnd(FEquals(TField(vname, "dltyp"), TConst(hex_str_to_int_string "0x0800")),
+                                    FEquals(TField(vname, "nwproto"), TConst(hex_str_to_int_string "0x2"))));
     fields = [("igmp_ver_and_typ", "int"); ("igmp_addr", "ipaddr"); ("igmp_v3typ", "int")]};
 
    {label = "icmp"; superflavor = Some "ip";
-    build_condition = (fun vname -> FAnd(FEquals(TField(vname, "dltyp"), TConst("0x0800")),
-                                    FEquals(TField(vname, "nwproto"), TConst("0x1"))));
+    build_condition = (fun vname -> FAnd(FEquals(TField(vname, "dltyp"), TConst(hex_str_to_int_string "0x0800")),
+                                    FEquals(TField(vname, "nwproto"), TConst(hex_str_to_int_string "0x1"))));
     fields = [("icmp_type", "int"); ("icmp_code", "int")]}; (* checksum will need calculation in runtime? *)
 
    {label = "mdns"; superflavor = Some "udp";
     build_condition = (fun vname -> FAnd(FEquals(TField(vname, "tpdst"), TConst("5353")),
-                                         FAnd(FEquals(TField(vname, "nwproto"), TConst("0x11")),
-                                              FEquals(TField(vname, "dltyp"), TConst("0x800")))));
+                                         FAnd(FEquals(TField(vname, "nwproto"), TConst(hex_str_to_int_string "0x11")),
+                                              FEquals(TField(vname, "dltyp"), TConst(hex_str_to_int_string "0x800")))));
     fields = [("mdns_question", "string")]};
   ];;
 

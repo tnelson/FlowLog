@@ -845,12 +845,12 @@
        (eqv? disposition 'permit)
        dest-addr
        (string->symbol (string-append "prot-" (string-upcase (symbol->string protocol))))
-       src-port
+       dest-port ;src-port
        src-addr
-       dest-port
+       src-port ;dest-port
        reflect-name
        name)))
-  ; TODO(tn) above: why does only the address get reversed? 
+  
   
   ;(class* extended-ACE-TCP/UDP% (ACE<%>)
 ;    (init line-number permit source-addr protocol source-port dest-addr dest-port)
