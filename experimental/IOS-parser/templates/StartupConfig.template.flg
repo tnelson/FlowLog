@@ -28,8 +28,3 @@ ON startup(e):
 
   //  LOL. MATH.
 @routerportmap
-
-  // 3 interfaces ought to be enough for anybody, right?
-  INSERT (2, 1, 2) INTO router_portmap;
-  INSERT (3, 3, 4) INTO router_portmap;
-  INSERT (4, 5, 6) INTO router_portmap;

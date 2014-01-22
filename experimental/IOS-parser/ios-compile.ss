@@ -156,7 +156,25 @@ namespace-for-template)
     ; Helper dictionaries for formula construction
     (define nn-for-router (make-hash))    
     (define dst-local-subnet-for-router (make-hash))
-        
+
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    ; temporary helpers for while we have to generate router_portmap from Racket
+    (define max-subnets 0)
+
+    (define (maybe-update-max-subnets num)
+      (set! max-subnets (max num max-subnets)))
+
+    (define (make-routerportmap num)
+      (if (< num 1)
+          ""
+          (begin
+            (let* ([n (number->string (add1 num))]
+                   [tmp (* 2 num)]
+                   [hstPt (number->string (sub1 tmp))]
+                   [rtrPt (number->string tmp)]
+                   [s (string-append "  INSERT (" n ", " hstPt ", " rtrPt ") INTO router_portmap;\n")])
+              (string-append s (make-routerportmap (sub1 num)))))))
+
     ;;;;;;;;;;;;;;;;;;;
     ; Need to assign an ID to the router and an ID to the interface
     (define (ifacedef->tuples arouter interface-defns nat-dpid rname rnum ifindex i ridx acl-dpid)
@@ -230,6 +248,7 @@ namespace-for-template)
       (define interface-keys (hash-keys interfaces))
       ;(printf "pre-processing hostname: ~v~n" hostname) ; DEBUG
       (define interface-defns (hash-map interfaces extract-ifs))
+      (maybe-update-max-subnets (length interface-defns))
       ;(pretty-display interface-defns) ; DEBUG
       (define hostnum (string-append "0x10000000000000" (string-pad (number->string (+ hostidx 1)) 2 #\0)))
       (define self-dpid (string-append "10000000000000" (string-pad hostnum 2 #\0))) ; TODO(adf): cleanup
@@ -286,7 +305,7 @@ namespace-for-template)
     ; First up, generate StartupConfig   
     (dict-set! startup-vars "basename" root-path)
     (dict-set! startup-vars "startupinserts" startupinserts)
-    (dict-set! startup-vars "routerportmap" "") ; TODO(adf): XXX
+    (dict-set! startup-vars "routerportmap" (make-routerportmap max-subnets))
     
     (store (render-template "templates/StartupConfig.template.flg" startup-vars)
            (make-path root-path "IOS.flg"))
