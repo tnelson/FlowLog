@@ -112,7 +112,7 @@ class FlowlogDemo(object):
     # outgoing to the next switch in the pipeline.
     # On the router, subnets are attached sequentially start at port 2.
 
-    def buildRouter(self, network, r):
+    def buildRouter(self, network, r, create_edge):
       r.name = r.name.encode('ascii', 'ignore')
 
       router = network.addSwitch(r.name + '-router', dpid=r.self_dpid)
@@ -132,7 +132,7 @@ class FlowlogDemo(object):
         network.addLink(translator, router, **self.linkopts)
 
         # if there's room for hosts, add an edge switch with some hosts!
-        if s.mask < 30 and self.options.create_edge:
+        if s.mask < 30 and create_edge:
           self.globalEdgeSwCount += 1
           edge_switch = network.addSwitch('s' + str(self.globalEdgeSwCount))
           network.addLink(srs, edge_switch, **self.linkopts)
@@ -157,11 +157,11 @@ class FlowlogDemo(object):
 
         self.networksToLaunch[name] = p.networks
 
-    def buildNetwork(self, network, routers):
+    def buildNetwork(self, network, routers, create_edge):
       self.subnetRootSwitch = defaultdict(lambda: self.nextSubnetRootSwitch(network))
 
       for router in routers.routers:
-        self.buildRouter(network, router)
+        self.buildRouter(network, router, create_edge)
 
     def readProtobuf(self):
       routers = routers_pb2.Routers()
@@ -227,7 +227,7 @@ class FlowlogDemo(object):
                           autoSetMacs=True)
 
         network.addController('flowlog')
-        self.buildNetwork(network, routers)
+        self.buildNetwork(network, routers, CREATE_EDGE[self.options.create_edge])
 
         self.launchNetwork(network, host_cmd, host_cmd_opts)
 
