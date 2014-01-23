@@ -214,8 +214,9 @@ module Xsb = struct
 		let fstr = (xsb_of_formula ~mode:XsbAddUnderscoreVars f) in
 		    (* printf "%s\n(%s, %s, fail).\n%!" (string_of_formula f) fstr (String.concat "," varoutfrags);*)
 		    (* The setof construct wrapped around the formula prevents duplicate results *)
+		    (* We wrap the fmla in parens in case it has more than one conjunct in it*)
 			if (length varoutfrags) > 0 then
-              sprintf "(setof(t, %s, _), %s, fail)." fstr (String.concat "," varoutfrags)
+              sprintf "(setof(t, (%s), _), %s, fail)." fstr (String.concat "," varoutfrags)
             else
               sprintf "%s." fstr;;
 

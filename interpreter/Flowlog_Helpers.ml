@@ -64,6 +64,11 @@ let starts_with (str1 : string) (str2 : string) : bool =
   if String.length str2 > String.length str1 then false
     else (String.sub str1 0 (String.length str2)) = str2;;
 
+let is_positive_atom (f: formula): bool =
+  match f with
+    | FAtom(_,_,_) -> true
+    | _ -> false;;
+
 let is_ANY_term (t: term): bool =
   match t with
     | TVar(x) when (starts_with x "any") -> true
@@ -74,6 +79,21 @@ let is_variable_term (t: term): bool =
     | TVar(x) -> true
     | _ -> false;;
 
+(* dltyps, then nwprotos, then the rest *)
+let dltyp_first (f1: formula) (f2: formula): int =
+  match f1 with
+    | FEquals(TField(_, "dltyp"), TConst(_))
+    | FEquals(TConst(_), TField(_, "dltyp")) ->
+      -1 (* f1 is smaller *)
+    | FEquals(TField(_, "nwproto"), TConst(_))
+    | FEquals(TConst(_), TField(_, "nwproto")) ->
+      (match f2 with
+        | FEquals(TField(_, "dltyp"), TConst(_))
+        | FEquals(TConst(_), TField(_, "dltyp")) ->
+          1 (* f2 is smaller *)
+        | _ ->
+         -1) (* f1 is smaller *)
+    | _ -> 0;; (* whichever *)
 
 let construct_map (bindings: (string * string) list): (string StringMap.t) =
   fold_left (fun acc (bx, by) -> StringMap.add bx by acc) StringMap.empty bindings
@@ -85,14 +105,14 @@ let rec get_terms (pred: term -> bool) (f: formula) : term list =
 		| FFalse -> []
 
 		| FAtom(_, _, tlargs) ->
-			filter pred tlargs
+			filter pred (unique tlargs)
 		| FEquals(t1, t2) ->
-			filter pred [t1; t2]
+			filter pred (unique [t1; t2])
     | FIn(t,_,_) -> filter pred [t]
 		| FAnd(f1, f2) ->
-			(unique (get_terms pred f1) @ (get_terms pred f2))
+      unique ((get_terms pred f1) @ (get_terms pred f2))
     | FOr(f1, f2) ->
-      (unique (get_terms pred f1) @ (get_terms pred f2))
+      unique ((get_terms pred f1) @ (get_terms pred f2))
 		| FNot(innerf) ->
 			get_terms pred innerf;;
 
@@ -101,14 +121,14 @@ let rec get_terms_with_sign (pred: term -> bool) (startsign : bool) (f: formula)
     | FTrue -> []
     | FFalse -> []
     | FAtom(_, _, tlargs) ->
-      filter_map (fun t -> if pred t then Some (t, startsign) else None) tlargs
+      filter_map (fun t -> if pred t then Some (t, startsign) else None) (unique tlargs)
     | FEquals(t1, t2) ->
-      filter_map (fun t -> if pred t then Some (t, startsign) else None) [t1; t2]
+      filter_map (fun t -> if pred t then Some (t, startsign) else None) (unique [t1; t2])
     | FIn(t,_,_) -> [(t, startsign)]
     | FAnd(f1, f2) ->
-      (unique (get_terms_with_sign pred startsign f1) @ (get_terms_with_sign pred startsign f2))
+      unique ((get_terms_with_sign pred startsign f1) @ (get_terms_with_sign pred startsign f2))
     | FOr(f1, f2) ->
-      (unique (get_terms_with_sign pred startsign f1) @ (get_terms_with_sign pred startsign f2))
+      unique ((get_terms_with_sign pred startsign f1) @ (get_terms_with_sign pred startsign f2))
     | FNot(innerf) ->
       get_terms_with_sign pred (not startsign) innerf;;
 

@@ -1,0 +1,26 @@
+TABLE t1(ipaddr);
+TABLE t2(ipaddr);
+TABLE t3(ipaddr);
+TABLE t4(ipaddr);
+
+// Expect only one clause left post-PE.
+ON ip_packet(pkt):
+  DO forward(new) WHERE
+    new.locPt != pkt.locPt AND
+    t1(pkt.nwSrc) and t2(pkt.nwSrc) and t3(pkt.nwSrc) and t4(pkt.nwSrc);
+
+ON startup(e):
+  INSERT (10.0.0.1) INTO t1;
+  INSERT (10.0.0.1) INTO t2;
+  INSERT (10.0.0.1) INTO t3;
+  INSERT (10.0.0.1) INTO t4;
+
+  // A bunch of garbage in the other tables
+
+  INSERT (10.0.0.2) INTO t2;
+  INSERT (10.0.0.2) INTO t3;
+  INSERT (10.0.0.2) INTO t4;
+
+  INSERT (10.0.0.3) INTO t2;
+  INSERT (10.0.0.3) INTO t3;
+  INSERT (10.0.0.3) INTO t4;
