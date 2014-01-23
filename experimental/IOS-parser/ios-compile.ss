@@ -250,11 +250,11 @@ namespace-for-template)
       (define interface-defns (hash-map interfaces extract-ifs))
       (maybe-update-max-subnets (length interface-defns))
       ;(pretty-display interface-defns) ; DEBUG
-      (define hostnum (string-append "0x10000000000000" (string-pad (number->string (+ hostidx 1)) 2 #\0)))
-      (define self-dpid (string-append "10000000000000" (string-pad hostnum 2 #\0))) ; TODO(adf): cleanup
-      (define nat-dpid (string-append "40000000000000" (string-pad hostnum 2 #\0)))
-      (define tr-dpid (string-append "20000000000000" (string-pad hostnum 2 #\0)))
-      (define acl-dpid (string-append "50000000000000" (string-pad hostnum 2 #\0)))
+      (define hostnum (string-append "0x1000000000" (string-pad (number->string (+ hostidx 1)) 2 #\0)))
+      (define self-dpid (string-append "1000000000" (string-pad hostnum 2 #\0))) ; TODO(adf): cleanup
+      (define nat-dpid (string-append "4000000000" (string-pad hostnum 2 #\0)))
+      (define tr-dpid (string-append "2000000000" (string-pad hostnum 2 #\0)))
+      (define acl-dpid (string-append "5000000000" (string-pad hostnum 2 #\0)))
       ; Prepare this list of needs-nat expressions
       (dict-set! nn-for-router hostnum empty)
       (dict-set! dst-local-subnet-for-router hostnum empty)
@@ -292,7 +292,7 @@ namespace-for-template)
       (string-append* (flatten (cons routertuple (cons iftuples (cons natinfo (cons trinfo aclinfo)))))))
   
     (define routers-msg (routers ""))
-    (set-routers-subnet-base-dpid! routers-msg "3000000000000000")
+    (set-routers-subnet-base-dpid! routers-msg "300000000000")
     (define startupinserts (string-append* (for/list ([config configurations] [hostidx (build-list (length configurations) values)]) 
                                              
                                              (extract-hosts routers-msg config hostidx))))

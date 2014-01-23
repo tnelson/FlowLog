@@ -3871,7 +3871,7 @@
 ;;   Returns an "empty" configuration
 (define (make-empty-IOS-config default-ACL-permit)
   (make-object IOS-config%
-    (make-object hostname% 'Router)
+    (make-object hostname% 'Rtr)
     (make-immutable-hash '())
     (make-immutable-hash (list (cons 'default default-ACL))) ; ACLs
     (make-immutable-hash '()) ;insert-ACLs
@@ -4131,4 +4131,4 @@
      [(list args ...) 
       (get-proto-for-formulas `(and ,args))]))
   
-  
+

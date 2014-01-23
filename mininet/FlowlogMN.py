@@ -115,7 +115,7 @@ class FlowlogDemo(object):
     def buildRouter(self, network, r, create_edge):
       r.name = r.name.encode('ascii', 'ignore')
 
-      router = network.addSwitch(r.name + '-router', dpid=r.self_dpid)
+      router = network.addSwitch(r.name + '-rtr', dpid=r.self_dpid)
 
       nat = network.addSwitch(r.name + '-nat', dpid=r.nat_dpid)
       network.addLink(router, nat, **self.linkopts)
@@ -221,7 +221,7 @@ class FlowlogDemo(object):
         controller = customConstructor(CONTROLLERS, self.options.controller)
         switch = customConstructor(SWITCHES, self.options.switch)
 
-        network = Mininet(controller=controller, link=TCLink,
+        network = Mininet(controller=controller, # link=TCLink,
                           # host=CPULimitedHost, # seems better without this
                           switch=switch,
                           autoSetMacs=True)
