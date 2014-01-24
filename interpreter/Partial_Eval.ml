@@ -190,8 +190,11 @@ let stage_2_partial_eval (incpkt: string) (f: formula): formula =
   let atoms_or_neg = conj_to_list f in
   build_and (map (fun subf -> match subf with
     (* If a negated atom, leave the disjunction *)
+    | FNot(FTrue) -> FFalse
+    | FNot(FFalse) -> FTrue
     | FNot(FAtom(_,_,_) as inner) ->
         let peresults = partial_evaluation_helper incpkt inner in
+        (*write_log (sprintf "s2pe: %s\n%!" (String.concat ", " (map string_of_formula peresults)));*)
           if (length peresults) < 1 then FTrue
           else FNot(build_or peresults)
     | _ -> subf) atoms_or_neg);;
@@ -296,8 +299,11 @@ let rec build_unsafe_switch_actions (oldpkt: string) (body: formula): action =
     in
 
     match lit with
-    | FFalse -> raise UnsatisfiableFlag
-    | FTrue -> actlist
+    | FFalse
+    | FNot(FTrue) -> raise UnsatisfiableFlag
+    | FTrue
+    | FNot(FFalse) -> actlist
+
     (* old.locpt != new.locpt ---> allports (meaning: all but incoming) *)
     | FNot(FEquals(TField(var1, fld1), TField(var2, fld2))) ->
       if var1 = oldpkt && fld1 = "locpt" && var2 <> oldpkt && fld2 = "locpt" then
@@ -547,7 +553,7 @@ let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_h
 
 
         if !global_verbose > 5 then
-          write_log (sprintf "bodies AFTER substitute_for_join = %s\n%!" (String.concat "   \n " (map string_of_formula bodies)));
+          write_log (sprintf "bodies AFTER substitute_for_join = \n    %s\n%!" (String.concat "\n    " (map string_of_formula bodies)));
 
 
         (*printf "BODIES: %s" (String.concat ",\n" (map string_of_formula bodies));*)
