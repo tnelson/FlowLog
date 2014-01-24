@@ -179,7 +179,7 @@ let partial_evaluation_helper (incpkt: string) (positive_f: formula): formula li
           build_and (reassemble_xsb_equality incpkt terms_used_no_constants tl))
       xsbresults in
     if !global_verbose >= 3 then
-      printf "<< POSITIVE partial evaluation result (converted from xsb) for %s\n    was: %s\n%!"
+      printf "<< partial_evaluation_helper result (converted from xsb) for %s\n    was: {%s}\n%!"
              (string_of_formula positive_f)
              (String.concat "\n" (map string_of_formula conjuncts));
     conjuncts;;
@@ -197,6 +197,9 @@ let stage_2_partial_eval (incpkt: string) (f: formula): formula =
         (*write_log (sprintf "s2pe: %s\n%!" (String.concat ", " (map string_of_formula peresults)));*)
           if (length peresults) < 1 then FTrue
           else FNot(build_or peresults)
+    | FNot(FEquals(_,_)) -> subf
+    | FNot(FIn(_,_,_)) -> subf
+    | FNot(_) -> failwith (sprintf "stage 2 PE: %s\n%!" (string_of_formula subf))
     | _ -> subf) atoms_or_neg);;
 
 (* Replace state references with constant matrices.
@@ -223,6 +226,8 @@ let rec partial_evaluation (p: flowlog_program) (incpkt: string) (f: formula): f
       let positive_conjuncts = partial_evaluation_helper incpkt positive_conj in
         (* Hook each positive disj together with the other_formulas. We now have possibly many different clauses. *)
         let stage_2_conjs = map (fun conj -> substitute_for_join (FAnd(conj, other_conj))) positive_conjuncts in
+          if !global_verbose >= 10 then
+            printf "Substitution complete; beginning stage 2 partial eval (negative and non-atomic-relation fmlas)\n%!";
           map (stage_2_partial_eval incpkt) stage_2_conjs;;
 
 

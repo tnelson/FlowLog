@@ -193,6 +193,8 @@ let reassemble_xsb_term (tstr: string): term =
 
 let reassemble_xsb_equality (incpkt: string) (tlargs: term list) (tuple: term list) : formula list =
     map2 (fun origterm xsbterm ->
+      if !global_verbose >= 10 then
+        printf "reassemble_xsb_equality checking: %s -> %s.\n%!" (string_of_term origterm) (string_of_term xsbterm);
 		  match xsbterm,origterm with
         | TVar(_), _ -> failwith "reassemble_xsb_equality: unconstrained variable"
         | TField(_, _), _ -> failwith "field def in xsb term returned"

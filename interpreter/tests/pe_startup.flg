@@ -2,12 +2,19 @@ TABLE t1(ipaddr);
 TABLE t2(ipaddr);
 TABLE t3(ipaddr);
 TABLE t4(ipaddr);
+TABLE t5(ipaddr);
 
 // Expect only one clause left post-PE.
+//ON ip_packet(pkt):
+//  DO forward(new) WHERE
+    //new.locPt != pkt.locPt AND
+    //t1(pkt.nwSrc) and t2(pkt.nwSrc) and t3(pkt.nwSrc) and t4(pkt.nwSrc);
+
 ON ip_packet(pkt):
   DO forward(new) WHERE
     new.locPt != pkt.locPt AND
-    t1(pkt.nwSrc) and t2(pkt.nwSrc) and t3(pkt.nwSrc) and t4(pkt.nwSrc);
+    t1(pkt.nwDst) and t2(pkt.nwSrc) and t3(pkt.nwSrc) and not t5(ANY);
+
 
 ON startup(e):
   INSERT (10.0.0.1) INTO t1;
