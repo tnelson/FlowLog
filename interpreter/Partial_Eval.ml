@@ -190,7 +190,10 @@ let stage_2_partial_eval (incpkt: string) (f: formula): formula =
   let atoms_or_neg = conj_to_list f in
   build_and (map (fun subf -> match subf with
     (* If a negated atom, leave the disjunction *)
-    | FNot(FAtom(_,_,_) as inner) -> build_or (partial_evaluation_helper incpkt inner)
+    | FNot(FAtom(_,_,_) as inner) ->
+        let peresults = partial_evaluation_helper incpkt inner in
+          if (length peresults) < 1 then FTrue
+          else FNot(build_or peresults)
     | _ -> subf) atoms_or_neg);;
 
 (* Replace state references with constant matrices.
