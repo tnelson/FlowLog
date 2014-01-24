@@ -133,9 +133,9 @@ class FlowlogDemo(object):
       network.addLink(router, nat, **self.linkopts)
 
       translator = network.addSwitch(r.name + '-tr',
-                                     dpid=padDpid(r.tr_dpid))
+                                     dpid=self.padDpid(r.tr_dpid))
       acl_table = network.addSwitch(r.name + '-acl',
-                                    dpid=padDpid(r.acl_dpid))
+                                    dpid=self.padDpid(r.acl_dpid))
 
       for (i, s) in enumerate(r.subnets):
         s.gw = s.gw.encode('ascii', 'ignore')
