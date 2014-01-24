@@ -56,6 +56,15 @@ class FlowlogDemo(object):
       lg.setLogLevel('info')
       self.runDemo()
 
+    # Sigh ... Userspace switch requires exactly 12 hex digits for the DPID,
+    # so that is what we generate in the protobuf. OVS requires exactly 16,
+    # hence the 4 digits of padding at the front.
+    def padDpid(self, dpid):
+      if self.options.switch != 'user':
+        return ('0000' + dpid)
+      else:
+        return dpid
+
     def setSubnetRootSwitchBaseDpid(self, routers):
       self.subnetRootSwitchBaseDpid = int(routers.subnet_base_dpid, 16)
 
@@ -63,7 +72,8 @@ class FlowlogDemo(object):
       num = len(self.subnetRootSwitch) + 1
       dpid = self.subnetRootSwitchBaseDpid + num
 
-      return network.addSwitch('rs' + str(num), dpid=hex(dpid)[2:]) # 0x is implicit
+      return network.addSwitch('rs' + str(num),
+                               dpid=self.padDpid(hex(dpid)[2:])) # 0x is implicit
 
     # TODO(adf): this needs a LOT more error checking:
     #
@@ -115,13 +125,17 @@ class FlowlogDemo(object):
     def buildRouter(self, network, r, create_edge):
       r.name = r.name.encode('ascii', 'ignore')
 
-      router = network.addSwitch(r.name + '-rtr', dpid=r.self_dpid)
+      router = network.addSwitch(r.name + '-rtr',
+                                 dpid=self.padDpid(r.self_dpid))
 
-      nat = network.addSwitch(r.name + '-nat', dpid=r.nat_dpid)
+      nat = network.addSwitch(r.name + '-nat',
+                              dpid=self.padDpid(r.nat_dpid))
       network.addLink(router, nat, **self.linkopts)
 
-      translator = network.addSwitch(r.name + '-tr', dpid=r.tr_dpid)
-      acl_table = network.addSwitch(r.name + '-acl', dpid=r.acl_dpid)
+      translator = network.addSwitch(r.name + '-tr',
+                                     dpid=self.padDpid(r.tr_dpid))
+      acl_table = network.addSwitch(r.name + '-acl',
+                                    dpid=self.padDpid(r.acl_dpid))
 
       for (i, s) in enumerate(r.subnets):
         s.gw = s.gw.encode('ascii', 'ignore')
