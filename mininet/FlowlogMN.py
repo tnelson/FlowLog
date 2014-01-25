@@ -60,7 +60,7 @@ class FlowlogDemo(object):
     # so that is what we generate in the protobuf. OVS requires exactly 16,
     # hence the 4 digits of padding at the front.
     def padDpid(self, dpid):
-      if self.options.switch != 'user':
+      if self.options.switch.split(",")[0] != 'user':
         return ('0000' + dpid)
       else:
         return dpid
