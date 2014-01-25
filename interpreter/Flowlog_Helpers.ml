@@ -576,7 +576,7 @@ let rec get_ins ?(sign: bool = true) (f: formula): (bool * formula) list =
 
 let get_atoms_used_in_bodies (p: flowlog_program): formula list =
 	let fmlas = map (fun cl -> cl.body) p.clauses in
-		fold_left (fun acc f -> unique ((get_atoms f) @ acc)) [] fmlas;;
+		unique (fold_left (fun acc f -> (get_atoms f) @ acc) [] fmlas);;
 
 let write_log_and_print (ln: string): unit =
   write_log ln;

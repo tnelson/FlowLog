@@ -875,14 +875,20 @@ let respond_to_notification (p: flowlog_program) ?(suppress_new_policy: bool = f
   (* populate the EDB with event *)
     Communication.assert_event_and_subevents p notif;
 
-
     (* Expire remote state if needed*)
     expire_remote_state_in_xsb p;
+
+    if !global_verbose >= 3 then
+      write_log (sprintf "Time after asserting event + expiring remote state: %fs\n%!" (Unix.gettimeofday() -. startt));
+
 
     (* Since we can't hook XSB's access to these relations,
        over-generalize and ask for all the fmlas that can possibly be needed.
        For instance, if foo(X, pkt.dlSrc) is used, ask for foo(X,Y) *)
     pre_load_all_remote_queries p;
+
+    if !global_verbose >= 3 then
+      write_log (sprintf "Time after preload: %fs\n%!" (Unix.gettimeofday() -. startt));
 
     (* for all declared tables +/- *)
     let triggered_insert_table_decls = get_local_tables_triggered p true notif in
@@ -897,6 +903,8 @@ let respond_to_notification (p: flowlog_program) ?(suppress_new_policy: bool = f
     write_log (sprintf "  *** WILL ADD: %s\n%!" (String.concat " ; " (map string_of_formula to_assert)));
     write_log (sprintf "  *** WILL DELETE: %s\n%!" (String.concat " ; " (map string_of_formula to_retract)));
 
+    if !global_verbose >= 3 then
+      write_log (sprintf "Time after calculating to_assert and to_retract: %fs\n%!" (Unix.gettimeofday() -. startt));
 
 
    (**********************************************************)
@@ -907,6 +915,9 @@ let respond_to_notification (p: flowlog_program) ?(suppress_new_policy: bool = f
     let outgoing_defns = (get_output_defns_triggered p notif) in
     let prepared_output = flatten (map (prepare_output p notif) outgoing_defns) in
    (**********************************************************)
+
+    if !global_verbose >= 3 then
+      write_log (sprintf "Time after preparing output: %fs\n%!" (Unix.gettimeofday() -. startt));
 
     (* depopulate event EDB *)
     Communication.retract_event_and_subevents p notif;
@@ -931,6 +942,9 @@ let respond_to_notification (p: flowlog_program) ?(suppress_new_policy: bool = f
     end;
    (**********************************************************)
 
+    if !global_verbose >= 3 then
+      write_log (sprintf "Time after asserting and retracting: %fs\n%!" (Unix.gettimeofday() -. startt));
+
    (**********************************************************)
    (* UPDATE POLICY ON SWITCHES  (use the NEW state)         *)
    (* Don't recreate a policy if there are no state changes! *)
@@ -950,6 +964,7 @@ let respond_to_notification (p: flowlog_program) ?(suppress_new_policy: bool = f
    (**********************************************************)
    (* Finally actually send output *)
     iter (execute_output p) prepared_output;
+
    (**********************************************************)
 
     printf "~~~~~~~~~~~~~~~~~~~FINISHED EVENT (%d total, %d packets) ~~~~~~~~~~~~~~~\n%!"
