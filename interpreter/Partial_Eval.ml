@@ -863,6 +863,7 @@ let get_local_tables_triggered (p: flowlog_program) (sign: bool) (notif: event):
    rebuilding the policy once for each new port. *)
 let respond_to_notification (p: flowlog_program) ?(suppress_new_policy: bool = false) (notif: event): string list =
   try
+      let startt = Unix.gettimeofday() in
       write_log "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<";
       write_log (sprintf "<<< incoming: %s" (string_of_event p notif));
       counter_inc_all := !counter_inc_all + 1;
@@ -956,6 +957,10 @@ let respond_to_notification (p: flowlog_program) ?(suppress_new_policy: bool = f
 
     (* Unlock the mutex. Make sure nothing uses XSB outside of this.*)
     Mutex.unlock xsbmutex;
+
+    if !global_verbose >= 3 then
+      write_log (sprintf "Time to process event completely: %fs\n%!" (Unix.gettimeofday() -. startt));
+
     modifications (* return tables that may have changed *)
 
   with
@@ -1009,7 +1014,10 @@ let make_policy_stream (p: flowlog_program)
           (* Only recompute policy on the last (first) port: *)
           ignore (respond_to_notification p (hd notifs));
           if !global_verbose >= 1 then
+          begin
             printf "Total time to process all switch-up events: %fs.\n%!" (Unix.gettimeofday() -. startt);
+            write_log (sprintf "Total time to process all switch-up events: %fs.\n%!" (Unix.gettimeofday() -. startt));
+          end;
           if !global_verbose > 2 then
           begin
             printf "Function counters:\n%!";
