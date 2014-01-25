@@ -480,7 +480,7 @@ let field_to_masked_pattern (fld: string) (aval:string) (maskstr:string): NetCor
 
   (* After PE, should be only equalities and negated equalities. Should be just a conjunction *)
   let eqlist = conj_to_list body in
-    let predlist = filter_map eq_to_pred eqlist in
+    let predlist = unique (filter_map eq_to_pred eqlist) in
       fold_left (fun acc pred -> match pred with
               | Nothing -> Nothing
               | Everything -> acc
