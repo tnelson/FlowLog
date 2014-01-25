@@ -532,7 +532,12 @@ let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_h
 
         let bodies = map substitute_for_join bodies_before_substitute_for_join in
 *)
+        let startt = Unix.gettimeofday() in
+
         let bodies = partial_evaluation p tcl.oldpkt tcl.clause.body in
+
+        if !global_verbose > 2 then
+          write_log (sprintf "Time to PE: %fs" (Unix.gettimeofday() -. startt));
 
 
         if !global_verbose > 5 then
@@ -543,7 +548,7 @@ let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_h
         (*printf "BODIES: %s" (String.concat ",\n" (map string_of_formula bodies));*)
          (*printf "BODIES from PE of single clause: %d\n%!" (length bodies);       *)
 
-        let result =
+        let unsafe_result =
           match callback with
             | None -> map (fun abodylist ->
                 let unsafe_pred = build_unsafe_switch_pred tcl.oldpkt abodylist in
@@ -558,7 +563,11 @@ let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_h
                 [(bigpred, [ControllerAction(f)])] in
 
           (* add context: the rule for this clause*)
-          (map (fun (apred, anact) -> (apred, anact, tcl.clause.orig_rule)) result)
+          let result = (map (fun (apred, anact) -> (apred, anact, tcl.clause.orig_rule)) unsafe_result) in
+
+          if !global_verbose > 2 then
+            write_log (sprintf "Time to PE+build policy for clause: %fs" (Unix.gettimeofday() -. startt));
+          result
       | _ -> failwith "pkt_triggered_clause_to_netcore";;
 
 
@@ -578,7 +587,8 @@ let build_metadata_action_pol (ac: NetCore_Types.action) (ru: srule): NetCore_Ty
 (* return the union of policies for each clause *)
 (* Side effect: reads current state in XSB *)
 let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: triggered_clause list) (callback: get_packet_handler option): pol =
-  (*printf "ENTERING pkt_triggered_clauses_to_netcore!\n%!";*)
+  if !global_verbose > 2 then
+    write_log (sprintf "Converting clauses to NetCore. %d clauses.\n%!" (length clauses));
   let pre_unique_pas = appendall (map (pkt_triggered_clause_to_netcore p callback) clauses) in
 
   (* First, group these pas into (action, metadata) -> pred list
@@ -1079,7 +1089,13 @@ let make_policy_stream (p: flowlog_program)
      *)
         let newpol = Union(Union(newfwdpol, newnotifpol), internal_policy()) in
           (* Since can't compare functions, need to use custom comparison *)
-          if not (safe_compare_pols newpol !last_policy_pushed) then
+
+          let startt = Unix.gettimeofday() in
+          let no_update_needed = (safe_compare_pols newpol !last_policy_pushed) in
+          if !global_verbose > 2 then
+            write_log (sprintf "Time to compare new and old policy: %fs" (Unix.gettimeofday() -. startt));
+
+          if not no_update_needed then
           begin
             counter_pols_pushed := !counter_pols_pushed + 1;
 
