@@ -34,6 +34,10 @@ access-list 10 permit 10.232.100.0 0.0.3.255
 access-list 20 permit 10.232.4.0 0.0.3.255
 access-list 20 permit 10.232.104.0 0.0.3.255
 !
+! TN: the ID "internet" has two map entries, which are checked in numeric order.
+!     It just so happens that in this case, the ACL ids and the entry ids are the same.
+! If no "match" was specified, then the map would apply to all packets.
+!
 route-map internet permit 10
 match ip address 10
 set ip next-hop 10.232.0.15
