@@ -17,3 +17,7 @@ experimental/IOS-parser/**/*.pb.bin
 experimental/IOS-parser/compiled/
 experimental/IOS-parser/ios2flowlog
 *.bak
+*_rtr_arp_table.txt
+*_rtr_route.txt
+*_rtr_spanning_tree.txt
+*_rtr_mac_table.txt
