@@ -9,6 +9,19 @@ from mininet.node import Controller, OVSSwitch, UserSwitch
 from mininet.topo import Topo
 
 
+class LazyOVSSwitch ( OVSSwitch ):
+    def start( self, controllers ):
+        OVSSwitch.start(self, controllers)
+        # Reconnect lazily to controllers (180s max_backoff, 15s inactivity_probe)
+        for uuid in self.controllerUUIDs():
+            if uuid.count( '-' ) != 4:
+                # Doesn't look like a UUID
+                continue
+            uuid = uuid.strip()
+            self.cmd( 'ovs-vsctl set Controller', uuid,
+                      'max_backoff=180000 inactivity_probe=15000' )
+
+
 # TODO(adf): replace with (I believe) a python metaclass? basically, we want an interface
 
 class SleepingUserSwitch ( UserSwitch ):
@@ -25,15 +38,15 @@ class SleepingUserSwitch ( UserSwitch ):
             sleep(self.sleep_time)
 
 
-class SleepingOVSSwitch ( OVSSwitch ):
+class SleepingOVSSwitch ( LazyOVSSwitch ):
     sleep_time = None
 
     def __init__(self, name, sleep=0, **kwargs):
-        OVSSwitch.__init__(self, name, **kwargs)
+        LazyOVSSwitch.__init__(self, name, **kwargs)
         self.sleep_time = sleep
 
     def start( self, controllers ):
-        OVSSwitch.start(self, controllers)
+        LazyOVSSwitch.start(self, controllers)
         if self.sleep_time > 0:
             print "started. sleeping for %d seconds..." % self.sleep_time
             sleep(self.sleep_time)
