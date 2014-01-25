@@ -79,7 +79,7 @@ let pre_load_all_remote_queries (p: flowlog_program): unit =
 
 (* Handle substitution of values in cases like (pkt.dlSrc = x, x = 5) and (pkt.dlSrc=pkt.dlDst, pkt.dlDst=5 *)
 (* Also, if there is an FIn(_,_,_) in the clause, it may need substitution with equalities produced in PE. *)
-let substitute_for_join (f: formula): formula =
+let substitute_for_join (f: formula): formula option =
   try
 
   if !global_verbose > 5 then printf "substitute_for_join: %s\n%!" (string_of_formula f);
@@ -159,8 +159,8 @@ let substitute_for_join (f: formula): formula =
   (* If there are still variables left in INs, they are free to vary arbitrarily, and so the compiler will ignore that IN. *)
   (* Also we need to make sure that DlTyp comes first, then NwProto, then other fields *)
   let result = sort ~cmp:dltyp_first (field_value_conj @ (conj_to_list substituted)) in
-    build_and result
-  with | ContradictionInPE(_,_) -> if !global_verbose > 5 then printf "ContradictionInPE: \n%!"; FFalse;;
+    Some(build_and result)
+  with | ContradictionInPE(_,_) -> if !global_verbose > 5 then printf "ContradictionInPE: \n%!"; None;;
 
 
 (* Assumes only positive subformulas! *)
@@ -222,8 +222,25 @@ let rec partial_evaluation (p: flowlog_program) (incpkt: string) (f: formula): f
     let other_conj = build_and other_formulas in
       let positive_conjuncts = partial_evaluation_helper incpkt positive_conj in
         (* Hook each positive disj together with the other_formulas. We now have possibly many different clauses. *)
-        let stage_2_conjs = map (fun conj -> substitute_for_join (FAnd(conj, other_conj))) positive_conjuncts in
-          map (stage_2_partial_eval incpkt) stage_2_conjs;;
+        let stage_2_conjs = filter_map (fun conj -> substitute_for_join (FAnd(conj, other_conj))) positive_conjuncts in
+          let result_clauses = map (stage_2_partial_eval incpkt) stage_2_conjs in
+          let unique_result_clauses = unique result_clauses in
+            if !global_verbose >= 4 then
+            begin
+              if (length result_clauses) <> (length unique_result_clauses) then
+              begin
+                write_log (sprintf "PE of clause completed with %d disjuncts; only %d were unique.\n%!" (length result_clauses) (length unique_result_clauses));
+              end
+              else
+              begin
+                write_log (sprintf "PE of clause completed with %d disjuncts.\n%!" (length unique_result_clauses));
+              end
+            end;
+            (* TODO: Any should just not be included in the aggregation. Filtering dupes after the fact is inefficient.
+               No reason why this should result in 41 separate disjuncts:
+               aclalias(ANY27,PKT__LOCSW,ANY28,ANY29), aclalias(Rtr-loopback1-acl,PKT__LOCSW,PKT__LOCPT,NEW__LOCPT)*)
+            unique_result_clauses;;
+
 
 
   (*match f with

@@ -149,21 +149,24 @@ let get_head_vars (cls : clause) : term list =
 let get_all_clause_vars (cls : clause) : term list =
 	unique ((get_vars_and_fieldvars cls.head ) @ (get_vars_and_fieldvars cls.body));;
 
+(* Important: This needs to use fold_right, not fold_left, or ordering will not be preserved.
+   Some functions (such as moving negated atoms to the end, for XSB) depend on an order-preserving
+   build_and. ExtList's fold_right is tail-recursive. *)
 let rec build_and (fs: formula list): formula =
-	if length fs > 1 then
-		FAnd((hd fs), build_and (tl fs))
-	else if length fs = 1 then
-		(hd fs)
-	else
-		FTrue;;
+ fold_right (fun f acc -> match f with
+      | FTrue -> acc
+      | FFalse -> FFalse
+      | _ when acc = FTrue -> f
+      | _ -> FAnd(f, acc))
+    fs FTrue;;
 
 let rec build_or (fs: formula list): formula =
-	if length fs > 1 then
-		FOr((hd fs), build_or (tl fs))
-	else if length fs = 1 then
-		(hd fs)
-	else
-		FFalse;;
+  fold_right (fun f acc -> match f with
+      | FFalse -> acc
+      | FTrue -> FTrue
+      | _ when acc = FFalse -> f
+      | _ -> FOr(f, acc))
+    fs FFalse;;
 
 let after_equals (str : string) : string =
 	let equals_index = try String.index str '=' with Not_found -> -1 in
