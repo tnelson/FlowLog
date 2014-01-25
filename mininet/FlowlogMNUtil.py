@@ -5,11 +5,41 @@
 from time import sleep
 
 from mininet.link import TCIntf
-from mininet.node import Controller, OVSSwitch
+from mininet.node import Controller, OVSSwitch, UserSwitch
 from mininet.topo import Topo
 
 
-class OVSBaseQosSwitch( OVSSwitch ):
+# TODO(adf): replace with (I believe) a python metaclass? basically, we want an interface
+
+class SleepingUserSwitch ( UserSwitch ):
+    sleep_time = None
+
+    def __init__(self, name, sleep=0, **kwargs):
+        UserSwitch.__init__(self, name, **kwargs)
+        self.sleep_time = sleep
+
+    def start( self, controllers ):
+        UserSwitch.start(self, controllers)
+        if self.sleep_time > 0:
+            print "started. sleeping for %d seconds..." % self.sleep_time
+            sleep(self.sleep_time)
+
+
+class SleepingOVSSwitch ( OVSSwitch ):
+    sleep_time = None
+
+    def __init__(self, name, sleep=0, **kwargs):
+        OVSSwitch.__init__(self, name, **kwargs)
+        self.sleep_time = sleep
+
+    def start( self, controllers ):
+        OVSSwitch.start(self, controllers)
+        if self.sleep_time > 0:
+            print "started. sleeping for %d seconds..." % self.sleep_time
+            sleep(self.sleep_time)
+
+
+class OVSBaseQosSwitch( SleepingOVSSwitch ):
     """A version of OVSSwitch which you can use with both TCIntf and OVS's QoS
        support. Note: this particular class is an abstract base class for
        OVSHtbQosSwitch or OVSHfscQosSwitch, as OVS supports two types of QoS
