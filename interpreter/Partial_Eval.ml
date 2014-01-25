@@ -79,18 +79,18 @@ let pre_load_all_remote_queries (p: flowlog_program): unit =
 
 (* Handle substitution of values in cases like (pkt.dlSrc = x, x = 5) and (pkt.dlSrc=pkt.dlDst, pkt.dlDst=5 *)
 (* Also, if there is an FIn(_,_,_) in the clause, it may need substitution with equalities produced in PE. *)
-let substitute_for_join (f: formula): formula option =
+let substitute_for_join (eqs: formula list) (othsubfs: formula list): formula list option =
   try
 
-  if !global_verbose > 5 then printf "substitute_for_join: %s\n%!" (string_of_formula f);
+  if !global_verbose > 5 then
+    printf "substitute_for_join: %s; %s\n%!"
+      (String.concat "," (map string_of_formula eqs))
+      (String.concat "," (map string_of_formula othsubfs));
 
-  let subfs = conj_to_list f in
   (* After PE, the formula will be a conjunction of equalities, INs, and negated PE fmlas. *)
-  let (ins, eqs, negs) = fold_left (fun (accins, accnonins, accnegs) subf -> match subf with
-                                    | FIn(_,_,_) -> (subf::accins, accnonins, accnegs)
-                                    | FEquals(t1, t2) -> (accins, subf::accnonins, accnegs)
-                                    | FNot(fnot) -> (accins, accnonins, fnot::accnegs)
-                                    | _ -> (accins, accnonins, accnegs)) ([],[],[]) subfs in
+  (*let eqs = fold_left (fun (accins, accnonins, accnegs) subf -> match subf with
+                              | FEquals(t1, t2) -> (accins, subf::accnonins, accnegs)
+                              | _ -> (accins, accnonins, accnegs)) ([],[],[]) subfs in*)
 
   (* gather assignments from the equality formulas
      detect duplicate or bad assignments *)
@@ -126,8 +126,8 @@ let substitute_for_join (f: formula): formula option =
 
                                   (* TODO: will also have to support equality between fields... *)
                                   | FEquals(TField(_,_), TField(_,_)) -> acc
-
-                                  | _ -> failwith ("unexpected eq fmla:"^(string_of_formula subf))
+                                  | FTrue -> acc
+                                  | _ -> failwith ("substitute_for_join: unexpected non-eq fmla:"^(string_of_formula subf))
                                 ) [] eqs in
 
   (* above won't be good enough. won't get negated INs and reduce them need to wait until after substitution and do a 2nd pass.
@@ -136,14 +136,13 @@ let substitute_for_join (f: formula): formula option =
   (* substitute according to assignments. but don't freak out if result contains a 5=7, since may be part of negated subfmla
      also check for contradictory INs.
      + we will replace field-assignments at end of this function *)
-  let substituted = substitute_terms ~report_inconsistency:false f assignments in
+  let substituted = (map (fun sf -> substitute_terms ~report_inconsistency:false sf assignments) othsubfs) in
 
-  if !global_verbose > 2 then
+  if !global_verbose >= 5 then
   begin
     printf "--- substitute_for_join ---\n%!";
-    printf "FMLA: %s\n%!" (string_of_formula f);
     iter (fun (v, c) -> (printf "ASSN: %s -> %s\n%!" (string_of_term v) (string_of_term c))) assignments;
-    printf "FMLA': %s\n%!" (string_of_formula substituted);
+    printf "FMLA': %s\n%!" (String.concat "," (map string_of_formula substituted));
   end;
 
   (* Re-add field assignments that we substituted out for safety: *)
@@ -158,37 +157,33 @@ let substitute_for_join (f: formula): formula option =
 
   (* If there are still variables left in INs, they are free to vary arbitrarily, and so the compiler will ignore that IN. *)
   (* Also we need to make sure that DlTyp comes first, then NwProto, then other fields *)
-  let result = sort ~cmp:dltyp_first (field_value_conj @ (conj_to_list substituted)) in
-    Some(build_and result)
+  let result = sort ~cmp:dltyp_first (field_value_conj @ substituted) in
+    Some(result)
   with | ContradictionInPE(_,_) -> if !global_verbose > 5 then printf "ContradictionInPE: \n%!"; None;;
 
-
-(* Assumes only positive subformulas! *)
-let partial_evaluation_helper (incpkt: string) (positive_f: formula): formula list =
+(* Assumes only positive subformulas!
+    Returns list of lists, each inner list represents a conjunction *)
+let partial_evaluation_helper (incpkt: string) (positive_f: formula): formula list list =
   (* Consider formulas like: seqpt(PUBLICIP,0x11,X) -- need to remove constants from tlargs before reassembling equalities *)
   let terms_used_no_constants = get_terms (fun t -> match t with | TConst(_) -> false | _ -> true) positive_f in
   (*printf "tunc: %s\n%!" (String.concat "," (map (string_of_term ~verbose:Verbose) terms_used_no_constants));*)
   let xsbresults = Communication.get_state positive_f in
-    let conjuncts =
-       map
+    let conjuncts = map
       (fun tl ->
-           if !global_verbose > 2 then
+           if !global_verbose >= 4 then
             printf "Reassembling an XSB equality for formula %s. incpkt=%s; tl=%s; terms_used_no_constants=%s\n%!"
                    (string_of_formula positive_f) incpkt (String.concat "," (map string_of_term tl)) (String.concat "," (map string_of_term terms_used_no_constants));
                     (* r_x_e has the duty of removing ANY variables, since they are universally bound under negation and guaranteed to have no joins. *)
-          build_and (reassemble_xsb_equality incpkt terms_used_no_constants tl))
+          (reassemble_xsb_equality incpkt terms_used_no_constants tl))
       xsbresults in
-    if !global_verbose >= 3 then
+    if !global_verbose >= 5 then
       printf "<< POSITIVE partial evaluation result (converted from xsb) for %s\n    was: %s\n%!"
              (string_of_formula positive_f)
-             (String.concat "\n" (map string_of_formula conjuncts));
+             (String.concat "\n" (map (fun fl -> (String.concat "," (map string_of_formula fl))) conjuncts));
     conjuncts;;
 
-(* TODO: stop pulling formulas apart and re-assembling them so much *)
-
-let stage_2_partial_eval (incpkt: string) (f: formula): formula =
-  let atoms_or_neg = conj_to_list f in
-  build_and (map (fun subf -> match subf with
+let stage_2_partial_eval (incpkt: string) (atoms_or_neg: formula list): formula list =
+  (map (fun subf -> match subf with
     (* If a negated atom, leave the disjunction *)
     | FNot(FTrue) -> FFalse
     | FNot(FFalse) -> FTrue
@@ -196,12 +191,13 @@ let stage_2_partial_eval (incpkt: string) (f: formula): formula =
         let peresults = partial_evaluation_helper incpkt inner in
         (*write_log (sprintf "s2pe: %s\n%!" (String.concat ", " (map string_of_formula peresults)));*)
           if (length peresults) < 1 then FTrue
-          else FNot(build_or peresults)
+          else FNot(build_or (map build_and peresults))
     | _ -> subf) atoms_or_neg);;
 
 (* Replace state references with constant matrices.
    ASSUMPTION: f is a conjunction of atoms. *)
-let rec partial_evaluation (p: flowlog_program) (incpkt: string) (f: formula): formula list =
+(* list of lists: outer list: new clauses; inner list: conjunctions of atoms in the clauses *)
+let rec partial_evaluation (p: flowlog_program) (incpkt: string) (f: formula): formula list list =
   (* we have may R(X) and P(y) and Q(z) and ...
       If these relations are heavily populated, we could wind up with many, many clauses as a PE result.
       Instead, use XSB as much as possible to avoid contradictions (and thus junk clauses)
@@ -219,11 +215,10 @@ let rec partial_evaluation (p: flowlog_program) (incpkt: string) (f: formula): f
     iter (refresh_remote_relation p) atoms;
 
     let positive_conj = build_and positive_atoms in
-    let other_conj = build_and other_formulas in
       let positive_conjuncts = partial_evaluation_helper incpkt positive_conj in
         (* Hook each positive disj together with the other_formulas. We now have possibly many different clauses. *)
-        let stage_2_conjs = filter_map (fun conj -> substitute_for_join (FAnd(conj, other_conj))) positive_conjuncts in
-          let result_clauses = map (stage_2_partial_eval incpkt) stage_2_conjs in
+        let stage_2_lists = filter_map (fun listconj -> substitute_for_join listconj other_formulas) positive_conjuncts in
+          let result_clauses = map (stage_2_partial_eval incpkt) stage_2_lists in
           let unique_result_clauses = unique result_clauses in
             if !global_verbose >= 4 then
             begin
@@ -240,39 +235,6 @@ let rec partial_evaluation (p: flowlog_program) (incpkt: string) (f: formula): f
                No reason why this should result in 41 separate disjuncts:
                aclalias(ANY27,PKT__LOCSW,ANY28,ANY29), aclalias(Rtr-loopback1-acl,PKT__LOCSW,PKT__LOCPT,NEW__LOCPT)*)
             unique_result_clauses;;
-
-
-
-  (*match f with
-    | FTrue -> f
-    | FFalse -> f
-    | FEquals(t1, t2) -> f
-    | FIn(_,_,_) -> f
-    | FAnd(f1, f2) -> FAnd(partial_evaluation p incpkt f1, partial_evaluation p incpkt f2)
-    | FNot(innerf) ->
-        let peresult = partial_evaluation p incpkt innerf in
-        (match peresult with | FTrue -> FFalse | FFalse -> FTrue | _ -> FNot(peresult))
-    | FOr(f1, f2) -> failwith "partial_evaluation: OR"
-
-    | FAtom(modname, relname, tlargs) ->
-      (*printf ">> partial_evaluation on atomic %s\n%!" (string_of_formula f);*)
-
-      (* No longer need to lock the mutex here, because called from respond_to_notification *)
-      let xsbresults: (term list list) = get_state_maybe_remote p f in
-      (* Consider formulas like: seqpt(PUBLICIP,0x11,X) -- need to remove constants from tlargs before reassembling equalities *)
-      let tlargs_no_constants = (filter (fun t -> match t with | TConst(_) -> false | _ -> true) tlargs) in
-        let disjuncts = map
-          (fun tl ->
-              if !global_verbose > 2 then
-                printf "Reassembling an XSB equality for formula %s. incpkt=%s; tl=%s; tlargs_no_constants=%s\n%!"
-                       (string_of_formula f) incpkt (String.concat "," (map string_of_term tl)) (String.concat "," (map string_of_term tlargs_no_constants));
-                       (* r_x_e has the duty of removing ANY variables, since they are universally bound under negation and guaranteed to have no joins. *)
-              build_and (reassemble_xsb_equality incpkt tlargs_no_constants tl))
-          xsbresults in
-        let fresult = build_or disjuncts in
-        if !global_verbose >= 3 then
-          printf "<< partial evaluation result (converted from xsb) for %s\n    was: %s\n%!" (string_of_formula f) (string_of_formula fresult);
-        fresult;;*)
 
 (***************************************************************************************)
 
@@ -295,7 +257,7 @@ let rec partial_evaluation (p: flowlog_program) (incpkt: string) (f: formula): f
         | _ -> failwith ("enhance_action_atom unknown afld: "^afld^" -> "^aval))
     | _ -> failwith ("enhance_action_atom non SwitchAction: "^afld^" -> "^aval);;
 
-let rec build_unsafe_switch_actions (oldpkt: string) (body: formula): action =
+let rec build_unsafe_switch_actions (oldpkt: string) (atoms: formula list): action =
   let create_port_actions (actlist: action) (lit: formula): action =
     let no_contradiction_or_repetition (aval: string): bool =
       for_all
@@ -327,7 +289,7 @@ let rec build_unsafe_switch_actions (oldpkt: string) (body: formula): action =
         [allportsatom] @ actlist
       else if var2 = oldpkt && fld2 = "locpt" && var1 <> oldpkt && fld1 = "locpt" then
         [allportsatom] @ actlist
-      else failwith ("create_port_actions: bad negation: "^(string_of_formula body))
+      else failwith ("create_port_actions: bad negation: "^(string_of_formula lit))
 
     | FEquals(TField(var1, fld1), TField(var2, fld2)) ->
       if fld1 <> fld2 then
@@ -374,7 +336,7 @@ let rec build_unsafe_switch_actions (oldpkt: string) (body: formula): action =
     | FIn(_, _, _) -> actlist
 
     | FEquals(TField(var1, fld1), TField(var2, fld2)) ->
-      failwith ("create_mod_actions: invalid equality "^(string_of_formula body))
+      failwith ("create_mod_actions: invalid equality "^(string_of_formula lit))
 
     | FEquals(TField(avar, afld), TConst(aval))
     | FEquals(TConst(aval), TField(avar, afld)) ->
@@ -384,12 +346,11 @@ let rec build_unsafe_switch_actions (oldpkt: string) (body: formula): action =
       else
         actlist (* ignore involving newpkt *)
 
-    | _ -> failwith ("create_mod_actions: "^(string_of_formula body)) in
+    | _ -> failwith ("create_mod_actions: "^(string_of_formula lit)) in
 
   (* list of SwitchAction(output)*)
   (* - this is only called for FORWARDING rules. so only newpkt should be involved *)
   (* - assume: no negated equalities except the special case pkt.locpt != newpkt.locpt *)
-  let atoms = conj_to_list body in
    (* printf "  >> build_switch_actions: %s\n%!" (String.concat " ; " (map (string_of_formula ~verbose:true) atoms));*)
     (* if any actions are false, folding is invalidated *)
     try
@@ -403,7 +364,7 @@ open NetCore_Wildcard
 
 (* worst ocaml error ever: used "val" for varname. *)
 
-let build_unsafe_switch_pred (oldpkt: string) (body: formula): pred =
+let build_unsafe_switch_pred (oldpkt: string) (eqlist: formula list): pred =
 let field_to_pattern (fld: string) (aval:string): NetCore_Pattern.t =
   match fld with (* switch handled via different pred type *)
     | "locpt" -> {all with ptrnInPort = WildcardExact (Physical(nwport_of_string aval)) }
@@ -478,15 +439,19 @@ let field_to_masked_pattern (fld: string) (aval:string) (maskstr:string): NetCor
       | _ -> None (* something for action, not pred *) in
       (*| _  -> failwith ("build_switch_pred: "^(string_of_formula ~verbose:true eqf)) in*)
 
+      (* SLOW! But check for NetCore accepted ordering of atoms if odd behavior. *)
+      if !global_verbose >= 5 then
+        ignore (validate_ordering eqlist);
+
   (* After PE, should be only equalities and negated equalities. Should be just a conjunction *)
-  let eqlist = conj_to_list body in
     let predlist = unique (filter_map eq_to_pred eqlist) in
-      fold_left (fun acc pred -> match pred with
+    (* MUST be fold_right, to preserve ordering! *)
+      fold_right (fun pred acc -> match pred with
               | Nothing -> Nothing
               | Everything -> acc
               | _ when acc = Everything -> pred
               | _ when acc = Nothing -> acc
-              | _ -> And(acc, pred)) Everything predlist;;
+              | _ -> And(pred, acc)) predlist Everything;;
 
 let is_all_ports_atom (a: action_atom): bool =
   a = allportsatom;;
@@ -544,6 +509,7 @@ let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_h
       | FAtom(_, _, headargs) ->
         (* Do partial evaluation. Need to know which terms are of the incoming packet.
           All others can be factored out. ASSUMPTION: the body is a conjunction of atoms. *)
+
   (*      let pebody = partial_evaluation p tcl.oldpkt tcl.clause.body in
 
         (* partial eval may insert disjunctions because of multiple tuples to match
@@ -570,7 +536,8 @@ let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_h
 
 
         if !global_verbose > 5 then
-          write_log (sprintf "bodies AFTER substitute_for_join = \n    %s\n%!" (String.concat "\n    " (map string_of_formula bodies)));
+          write_log (sprintf "bodies AFTER substitute_for_join = \n    %s\n%!"
+            (String.concat "\n    " (map (fun l -> (String.concat " & " (map string_of_formula l))) bodies)));
 
 
         (*printf "BODIES: %s" (String.concat ",\n" (map string_of_formula bodies));*)
@@ -578,16 +545,16 @@ let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_h
 
         let result =
           match callback with
-            | None -> map (fun body ->
-                let unsafe_pred = build_unsafe_switch_pred tcl.oldpkt body in
-                let unsafe_acts = build_unsafe_switch_actions tcl.oldpkt body in
+            | None -> map (fun abodylist ->
+                let unsafe_pred = build_unsafe_switch_pred tcl.oldpkt abodylist in
+                let unsafe_acts = build_unsafe_switch_actions tcl.oldpkt abodylist in
                   (* Need to deal with cases where all-ports and physical(x)
                      coexist. Remember that all-ports FORBIDS input port! *)
                   handle_all_and_port_together tcl.oldpkt unsafe_pred unsafe_acts)
                           bodies
             | Some(f) ->
               (* Action is always sending to controller. So don't extract action *)
-              let bigpred = fold_left (fun acc body -> Or(acc, build_unsafe_switch_pred tcl.oldpkt body)) Nothing bodies in
+              let bigpred = fold_left (fun acc abodylist -> Or(acc, build_unsafe_switch_pred tcl.oldpkt abodylist)) Nothing bodies in
                 [(bigpred, [ControllerAction(f)])] in
 
           (* add context: the rule for this clause*)
@@ -1033,6 +1000,12 @@ let make_policy_stream (p: flowlog_program)
           ignore (respond_to_notification p (hd notifs));
           if !global_verbose >= 1 then
             printf "Total time to process all switch-up events: %fs.\n%!" (Unix.gettimeofday() -. startt);
+          if !global_verbose > 2 then
+          begin
+            printf "Function counters:\n%!";
+            printf "build_and: %d\n%!" !build_and_count;
+          end
+
         end;
       | SwitchDown(swid) ->
         let sw_string = Int64.to_string swid in
@@ -1164,6 +1137,12 @@ let make_policy_stream (p: flowlog_program)
                used (!ms_on_packet_processing /. (float_of_int !counter_inc_pkt)) !longest_used_packet_ms;
             printf "Asserts: %d. Retracts: %d. Send_asserts: %d. Send_queries: %d\n%!"
               !count_assert_formula !count_retract_formula !count_send_assert !count_send_query;
+
+            if !global_verbose > 2 then
+            begin
+              printf "Function counters:\n%!";
+              printf "build_and: %d\n%!" !build_and_count;
+            end
         end;
         if !global_verbose >= 2 then
           printf "actions will be = %s\n%!" (NetCore_Pretty.string_of_action !fwd_actions);

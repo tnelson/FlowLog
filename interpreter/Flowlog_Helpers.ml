@@ -22,6 +22,12 @@ exception RelationHadMultipleReacts of string;;
 exception RelationHadMultipleDecls of string;;
 exception NoDefaultForField of string * string;;
 
+let out_log = ref None;;
+
+let write_log (ln: string): unit =
+  match !out_log with
+  | None -> printf "Unable to write to log file.\n%!"
+  | Some(out) -> fprintf out "%s\n%!" ln;;
 
 
   let string_of_term ?(verbose:printmode = Brief) (t: term): string =
@@ -79,21 +85,73 @@ let is_variable_term (t: term): bool =
     | TVar(x) -> true
     | _ -> false;;
 
+let is_dltyp_assign (f: formula): bool =
+  match f with
+    | FEquals(TField(_, "dltyp"), TConst(_))
+    | FEquals(TConst(_), TField(_, "dltyp")) -> true
+    | _ -> false;;
+
+let is_nwproto_assign (f: formula): bool =
+  match f with
+    | FEquals(TField(_, "nwproto"), TConst(_))
+    | FEquals(TConst(_), TField(_, "nwproto")) -> true
+    | _ -> false;;
+
+let is_nwproto_assign (f: formula): bool =
+  match f with
+    | FEquals(TField(_, "nwproto"), TConst(_))
+    | FEquals(TConst(_), TField(_, "nwproto")) -> true
+    | _ -> false;;
+
+(* expects no atomic rel fmlas! *)
+let rec has_tp_field_reference (f: formula): bool =
+  match f with
+    | FEquals(TField(_, "tpsrc"), _)
+    | FEquals(_, TField(_, "tpsrc"))
+    | FEquals(TField(_, "tpdst"), _)
+    | FEquals(_, TField(_, "tpdst")) -> true
+
+    | FNot(f2) -> has_tp_field_reference f2
+    | FAnd(f2, f3) -> has_tp_field_reference f2 || has_tp_field_reference f3
+    | FOr(f2, f3) -> has_tp_field_reference f2 || has_tp_field_reference f3
+    | _ -> false;;
+let rec has_nw_field_reference (f: formula): bool =
+  match f with
+    | FEquals(TField(_, "nwsrc"), _)
+    | FEquals(_, TField(_, "nwsrc"))
+    | FEquals(TField(_, "nwdst"), _)
+    | FEquals(_, TField(_, "nwdst"))
+    | FIn(TField(_, "nwsrc"), _, _)
+    | FIn(TField(_, "nwdst"), _, _) -> true
+
+    | FNot(f2) -> has_nw_field_reference f2
+    | FAnd(f2, f3) -> has_nw_field_reference f2 || has_nw_field_reference f3
+    | FOr(f2, f3) -> has_nw_field_reference f2 || has_nw_field_reference f3
+    | _ -> false;;
+
+
+let validate_ordering (eqlist: formula list) =
+  (* fold_left to follow ordering *)
+  fold_left (fun (seendltyp, seennwproto) eqfmla ->
+     if is_dltyp_assign eqfmla then (true, seennwproto)
+     else if is_nwproto_assign eqfmla then (seendltyp, true)
+     else if (not seendltyp) && has_nw_field_reference eqfmla then
+       failwith (sprintf "validate_ordering (dltyp): %s" (String.concat "," (map string_of_formula eqlist)))
+     else if ((not seennwproto) || (not seendltyp)) && has_tp_field_reference eqfmla then
+       failwith (sprintf "validate_ordering (nwproto): %s" (String.concat "," (map string_of_formula eqlist)))
+     else (seendltyp, seennwproto))
+    (false, false)
+    eqlist;;
+
 (* dltyps, then nwprotos, then the rest *)
 let dltyp_first (f1: formula) (f2: formula): int =
-  match f1 with
-    | FEquals(TField(_, "dltyp"), TConst(_))
-    | FEquals(TConst(_), TField(_, "dltyp")) ->
-      -1 (* f1 is smaller *)
-    | FEquals(TField(_, "nwproto"), TConst(_))
-    | FEquals(TConst(_), TField(_, "nwproto")) ->
-      (match f2 with
-        | FEquals(TField(_, "dltyp"), TConst(_))
-        | FEquals(TConst(_), TField(_, "dltyp")) ->
-          1 (* f2 is smaller *)
-        | _ ->
-         -1) (* f1 is smaller *)
-    | _ -> 0;; (* whichever *)
+  if (is_dltyp_assign f1) then -1 (* f1 is smaller *)
+  else if (is_nwproto_assign f1) then
+  begin
+    if (is_dltyp_assign f2) then 1 (* f2 is smaller *)
+    else -1 (* f1 is smaller *)
+  end
+  else 1;; (* not a priority --> goes at end (f2 may be a priority here) *)
 
 let construct_map (bindings: (string * string) list): (string StringMap.t) =
   fold_left (fun acc (bx, by) -> StringMap.add bx by acc) StringMap.empty bindings
@@ -149,11 +207,17 @@ let get_head_vars (cls : clause) : term list =
 let get_all_clause_vars (cls : clause) : term list =
 	unique ((get_vars_and_fieldvars cls.head ) @ (get_vars_and_fieldvars cls.body));;
 
+(* Gotta get preprocessor macros...
+   Using this as a very rough measure of how much our naive list-based impl is
+   being stressed. *)
+let build_and_count = ref 0;;
+
 (* Important: This needs to use fold_right, not fold_left, or ordering will not be preserved.
    Some functions (such as moving negated atoms to the end, for XSB) depend on an order-preserving
    build_and. ExtList's fold_right is tail-recursive. *)
 let rec build_and (fs: formula list): formula =
- fold_right (fun f acc -> match f with
+  if !global_verbose > 2 then build_and_count := !build_and_count + 1;
+  fold_right (fun f acc -> match f with
       | FTrue -> acc
       | FFalse -> FFalse
       | _ when acc = FTrue -> f
@@ -513,14 +577,6 @@ let rec get_ins ?(sign: bool = true) (f: formula): (bool * formula) list =
 let get_atoms_used_in_bodies (p: flowlog_program): formula list =
 	let fmlas = map (fun cl -> cl.body) p.clauses in
 		fold_left (fun acc f -> unique ((get_atoms f) @ acc)) [] fmlas;;
-
-
-let out_log = ref None;;
-
-let write_log (ln: string): unit =
-  match !out_log with
-  | None -> printf "Unable to write to log file.\n%!"
-  | Some(out) -> fprintf out "%s\n%!" ln;;
 
 let write_log_and_print (ln: string): unit =
   write_log ln;
