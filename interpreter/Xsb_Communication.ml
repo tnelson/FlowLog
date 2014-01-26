@@ -181,7 +181,7 @@ module Xsb = struct
 		| [] -> [];
 		| f :: r -> match group r num with
 			| [] -> [[f]];
-			| f1 :: r1 -> if List.length f1 < num
+			| f1 :: r1 -> if length f1 < num
 						then (f :: f1) :: r1
 						else [f] :: (f1 :: r1);;
 
@@ -249,7 +249,7 @@ module Xsb = struct
 		if debug then Printf.printf "send_query finished. answers: [%s]\n\n%!" (String.concat ", " !answer);
 		if !global_verbose >= 1 then count_send_query := !count_send_query + 1;
 		(* separate the list into a list of lists *)
-		List.map (fun (l : string list) -> List.map after_equals l) (group (List.rev !answer) num_vars);;
+		map (fun (l : string list) -> map after_equals l) (group (rev !answer) num_vars);;
 
 end
 
@@ -389,7 +389,7 @@ module Communication = struct
 
 	let start_clause (prgm: flowlog_program) ?(forcepositive = false) (cls : clause) : unit =
 		(*if debug then print_endline ("start_clause: assert((" ^ (Type_Helpers.clause_to_string cls) ^ ")).");
-		if debug then (List.iter (fun t -> (Printf.printf "var: %s\n%!" (Type_Helpers.term_to_string t))) (get_vars cls));*)
+		if debug then (iter (fun t -> (Printf.printf "var: %s\n%!" (Type_Helpers.term_to_string t))) (get_vars cls));*)
 		let on_context = get_on_context prgm cls in
 		let new_head = subs_xsb_formula prgm ~context_on:on_context cls.head in
 		let new_body = subs_xsb_formula prgm ~context_on:on_context cls.body in
@@ -431,9 +431,9 @@ module Communication = struct
 
 		(* Add a clause if it's not fully compiled, OR we're in no-compilation mode *)
 		if notables then
-		  List.iter (start_clause prgm ~forcepositive:forcepositive) prgm.clauses
+		  iter (start_clause prgm ~forcepositive:forcepositive) prgm.clauses
 	    else
-		  List.iter (start_clause prgm ~forcepositive:forcepositive) prgm.not_fully_compiled_clauses;
+		  iter (start_clause prgm ~forcepositive:forcepositive) prgm.not_fully_compiled_clauses;
 
 		Xsb.debug_print_listings();;
 

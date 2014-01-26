@@ -83,7 +83,7 @@
   stmt:
             | reactive_stmt {[SReactive($1)]}
             | decl_stmt {[SDecl($1)]}
-            | rule_stmt {List.map (fun r -> SRule(r)) $1};
+            | rule_stmt {map (fun r -> SRule(r)) $1};
 
   decl_stmt:
             | TABLE NAME LPAREN name_list RPAREN SEMICOLON {DeclTable($2, $4)}
