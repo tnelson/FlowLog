@@ -32,6 +32,10 @@ CREATE_EDGE_DEF = 'true'
 CREATE_EDGE = { 'true': True,
                 'false': False }
 
+CREATE_SRS_DEF = 'true'
+CREATE_SRS = { 'true': True,
+                'false': False }
+
 class FlowlogDemo(object):
     "Run a Flowlog demo."
 
@@ -104,6 +108,7 @@ class FlowlogDemo(object):
         addDictOption(opts, SWITCHES, SWITCHDEF, 'switch')
         addDictOption(opts, CONTROLLERS, CONTROLLERDEF, 'controller')
         addDictOption(opts, CREATE_EDGE, CREATE_EDGE_DEF, 'create_edge')
+        addDictOption(opts, CREATE_SRS, CREATE_SRS_DEF, 'create_srs')
         self.options, self.args = opts.parse_args()
 
 
@@ -122,7 +127,7 @@ class FlowlogDemo(object):
     # outgoing to the next switch in the pipeline.
     # On the router, subnets are attached sequentially start at port 2.
 
-    def buildRouter(self, network, r, create_edge):
+    def buildRouter(self, network, r, create_edge, create_srs):
       r.name = r.name.encode('ascii', 'ignore')
 
       router = network.addSwitch(r.name + '-rtr',
@@ -140,10 +145,14 @@ class FlowlogDemo(object):
       for (i, s) in enumerate(r.subnets):
         s.gw = s.gw.encode('ascii', 'ignore')
 
-        srs = self.subnetRootSwitch[subnetStr(s.addr, s.mask)]
-        network.addLink(srs, acl_table, **self.linkopts)
         network.addLink(acl_table, translator, **self.linkopts)
         network.addLink(translator, router, **self.linkopts)
+
+        if not create_srs:
+          continue
+
+        srs = self.subnetRootSwitch[subnetStr(s.addr, s.mask)]
+        network.addLink(srs, acl_table, **self.linkopts)
 
         # if there's room for hosts, add an edge switch with some hosts!
         if s.mask < 30 and create_edge:
@@ -171,11 +180,11 @@ class FlowlogDemo(object):
 
         self.networksToLaunch[name] = p.networks
 
-    def buildNetwork(self, network, routers, create_edge):
+    def buildNetwork(self, network, routers, create_edge, create_srs):
       self.subnetRootSwitch = defaultdict(lambda: self.nextSubnetRootSwitch(network))
 
       for router in routers.routers:
-        self.buildRouter(network, router, create_edge)
+        self.buildRouter(network, router, create_edge, create_srs)
 
     def readProtobuf(self):
       routers = routers_pb2.Routers()
@@ -241,7 +250,8 @@ class FlowlogDemo(object):
                           autoSetMacs=True)
 
         network.addController('flowlog')
-        self.buildNetwork(network, routers, CREATE_EDGE[self.options.create_edge])
+        self.buildNetwork(network, routers, CREATE_EDGE[self.options.create_edge],
+                                            CREATE_SRS[self.options.create_srs])
 
         self.launchNetwork(network, host_cmd, host_cmd_opts)
 
