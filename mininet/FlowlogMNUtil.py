@@ -5,54 +5,61 @@
 from time import sleep
 
 from mininet.link import TCIntf
-from mininet.node import Controller, OVSSwitch, UserSwitch
+from mininet.node import Controller, OVSSwitch
 from mininet.topo import Topo
 
 
-class LazyOVSSwitch ( OVSSwitch ):
+# Mixin for Open vSwitch to make the periodicity of the interactivity probe
+# much higher, and to lengthen the maximum backoff time.
+# Adds 'backoff=N' & 'probe=N' (both in seconds) params to the --switch option.
+def LazyOVSMixin( klass ):
+  class Lazy( klass ):
+    max_backoff_secs = None
+    inactivity_probe_secs = None
+
+    def __init__( self, name, backoff=600, probe=60, **kwargs ):
+        super( Lazy, self ).__init__( name, **kwargs )
+        self.max_backoff_secs = backoff
+        self.inactivity_probe_secs = probe
+
     def start( self, controllers ):
-        OVSSwitch.start(self, controllers)
-        # Reconnect lazily to controllers (180s max_backoff, 15s inactivity_probe)
-        for uuid in self.controllerUUIDs():
-            if uuid.count( '-' ) != 4:
-                # Doesn't look like a UUID
-                continue
-            uuid = uuid.strip()
-            self.cmd( 'ovs-vsctl set Controller', uuid,
-                      'max_backoff=180000 inactivity_probe=15000' )
+      super( Lazy, self ).start( controllers )
+
+      for uuid in self.controllerUUIDs():
+        if uuid.count( '-' ) != 4:
+            # Doesn't look like a UUID
+            continue
+        uuid = uuid.strip()
+        self.cmd( 'ovs-vsctl set Controller', uuid,
+                  'max_backoff=%d000 inactivity_probe=%d000'
+                  % (self.max_backoff_secs, self.inactivity_probe_secs) )
+
+  return Lazy
 
 
-# TODO(adf): replace with (I believe) a python metaclass? basically, we want an interface
-
-class SleepingUserSwitch ( UserSwitch ):
+# Mixin for any switch to cause Mininet to pause for a specified length
+# of time after starting the switch.
+# Adds 'sleep=N' (in seconds) param to the --switch option.
+def SleepyMixin( klass ):
+  class Sleepy( klass ):
     sleep_time = None
 
-    def __init__(self, name, sleep=0, **kwargs):
-        UserSwitch.__init__(self, name, **kwargs)
+    def __init__( self, name, sleep=0, **kwargs ):
+        super( Sleepy, self ).__init__( name, **kwargs )
         self.sleep_time = sleep
 
     def start( self, controllers ):
-        UserSwitch.start(self, controllers)
+        super( Sleepy, self ).start( controllers )
         if self.sleep_time > 0:
             print "started. sleeping for %d seconds..." % self.sleep_time
             sleep(self.sleep_time)
 
-
-class SleepingOVSSwitch ( LazyOVSSwitch ):
-    sleep_time = None
-
-    def __init__(self, name, sleep=0, **kwargs):
-        LazyOVSSwitch.__init__(self, name, **kwargs)
-        self.sleep_time = sleep
-
-    def start( self, controllers ):
-        LazyOVSSwitch.start(self, controllers)
-        if self.sleep_time > 0:
-            print "started. sleeping for %d seconds..." % self.sleep_time
-            sleep(self.sleep_time)
+  return Sleepy
 
 
-class OVSBaseQosSwitch( SleepingOVSSwitch ):
+# The next three classes, defininig QOS-enabled Open vSwitch designs are
+# from https://github.com/mininet/mininet/pull/132
+class OVSBaseQosSwitch( OVSSwitch ):
     """A version of OVSSwitch which you can use with both TCIntf and OVS's QoS
        support. Note: this particular class is an abstract base class for
        OVSHtbQosSwitch or OVSHfscQosSwitch, as OVS supports two types of QoS

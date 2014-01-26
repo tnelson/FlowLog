@@ -13,11 +13,11 @@ from optparse import OptionParser
 from mininet.net import Mininet
 from mininet.cli import CLI
 from mininet.log import lg
-from mininet.node import Node, RemoteController, CPULimitedHost
+from mininet.node import Node, UserSwitch, RemoteController, CPULimitedHost
 from mininet.link import TCLink
 from mininet.util import irange, customConstructor
 
-from FlowlogMNUtil import SleepingUserSwitch, OVSHtbQosSwitch, addDictOption, subnetStr
+from FlowlogMNUtil import LazyOVSMixin, SleepyMixin, OVSHtbQosSwitch, addDictOption, subnetStr
 
 import routers_pb2
 
@@ -25,8 +25,9 @@ CONTROLLERDEF = 'remote'
 CONTROLLERS = { 'remote': RemoteController }
 
 SWITCHDEF =  'ovshtb'
-SWITCHES = { 'ovshtb': OVSHtbQosSwitch,
-             'user': SleepingUserSwitch }
+SWITCHES = { 'ovshtb': SleepyMixin(LazyOVSMixin(OVSHtbQosSwitch)),
+             'ovshtb-notlazy': SleepyMixin(OVSHtbQosSwitch),
+             'user': SleepyMixin(UserSwitch) }
 
 CREATE_EDGE_DEF = 'true'
 CREATE_EDGE = { 'true': True,
