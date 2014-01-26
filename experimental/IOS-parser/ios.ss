@@ -4048,7 +4048,7 @@
   ; Margrave had automatic policy combination. 
   ;(RComb (fa permit deny translate route forward drop pass advertise encrypt))
   ; Decorrelation is needed to get that effect in Flowlog.
-
+  
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
   ;;; decorrelation (BY FIRST-APPLICABLE)
   ; Not just for ACLs. 
@@ -4066,13 +4066,17 @@
              [else 
               (define filtered-prevs 
                 (filter-map (lambda (aprev) 
-                              (define aprev-proto (get-proto-for-rule aprev)) 
-                              (if (safe-proto proto aprev-proto)
+                              (define aprev-proto (get-proto-for-rule aprev))                               
+                              (if (and (safe-proto proto aprev-proto)
+                                       (possible-overlap aprev conds))
                                   `(not (and ,@aprev))
                                   #f)) prevs))
               (cons `(RULE ,n ,dec ,argvars (and ,@conds ,@filtered-prevs))
                     (decorrelate remaining prevs goaldec))])]))
 
+  
+  ;; TODO ^^ Can still remove superfluous aclAlias atoms in prevs
+  
   (define (safe-proto fproto negproto)
     (cond [(equal? fproto negproto) #t]
           [(and (equal? fproto 'tcp) (equal? negproto 'ip)) #t]
@@ -4132,3 +4136,25 @@
       (get-proto-for-formulas `(and ,args))]))
   
 
+; prevent accumulation of massive nightmares of nested disjunction once Flowlog
+; converts to NNF clauses. only consider higher-priority rules that can overlap.
+; Assert: this function delivers false positives (it misses possible overlaps)
+; but never any false negatives.
+(define (possible-overlap aprev conds)  
+  (match aprev    
+    ; at least don't take other interfaces' rules into account:
+    [`(aclAlias ,prev-interface-id ,otherargs ...)      
+     (define helper-curr-interface-id (filter-map (lambda (acond) (match acond 
+                                                                    [`(aclAlias ,prev-interface-id ,otherargs ...) prev-interface-id]
+                                                                    [else #f])) conds))
+     (define curr-interface-id (if (empty? helper-curr-interface-id)
+                                   #f
+                                   (first helper-curr-interface-id)))
+    ; (printf "in possible-overlap ~v vs. ~v : ~v ~n" prev-interface-id curr-interface-id (equal? curr-interface-id prev-interface-id)) // DEBUG
+     (equal? curr-interface-id prev-interface-id)]    
+    [`(,(? symbol? predname) ,args ...) #t]
+    [`(or ,args ...) (error "possible overlap didn't expect an or")]    
+    [(or `(and ,args ...) ; <--- unsafe for general fmla sexpressions
+         (list args ...)) 
+     (andmap (lambda (prevatom) (possible-overlap prevatom conds)) args)]
+    [else #t])) 
