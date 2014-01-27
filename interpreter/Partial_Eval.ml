@@ -161,26 +161,38 @@ let substitute_for_join (eqs: formula list) (othsubfs: formula list): formula li
     Some(result)
   with | ContradictionInPE(_,_) -> if !global_verbose > 5 then printf "ContradictionInPE: \n%!"; None;;
 
+let pe_helper_cache = ref FmlaMap.empty;;
+
 (* Assumes only positive subformulas!
     Returns list of lists, each inner list represents a conjunction *)
-let partial_evaluation_helper (incpkt: string) (positive_f: formula): formula list list =
+let partial_evaluation_helper (positive_f: formula): formula list list =
+  (* Within a single PE cycle, the state won't change. So avoid repetitive calls to get_state.
+     ^ This optimization is more important than it seems, since clauses are split before negative fmlas get PE'd now. *)
+  if FmlaMap.mem positive_f !pe_helper_cache then
+  begin
+    if !global_verbose >= 4 then printf "Formula was cached for PE: %s\n%!" (string_of_formula positive_f);
+    FmlaMap.find positive_f !pe_helper_cache
+  end
+  else
+  begin
   (* Consider formulas like: seqpt(PUBLICIP,0x11,X) -- need to remove constants from tlargs before reassembling equalities *)
-  let terms_used_no_constants = get_terms (fun t -> match t with | TConst(_) -> false | _ -> true) positive_f in
-  (*printf "tunc: %s\n%!" (String.concat "," (map (string_of_term ~verbose:Verbose) terms_used_no_constants));*)
+  let terms_used_no_constants_or_any = get_terms (fun t -> not (is_ANY_term t) && match t with | TConst(_) -> false | _ -> true) positive_f in
+
   let xsbresults = Communication.get_state positive_f in
     let conjuncts = map
       (fun tl ->
            if !global_verbose >= 4 then
-            printf "Reassembling an XSB equality for formula %s. incpkt=%s; tl=%s; terms_used_no_constants=%s\n%!"
-                   (string_of_formula positive_f) incpkt (String.concat "," (map string_of_term tl)) (String.concat "," (map string_of_term terms_used_no_constants));
-                    (* r_x_e has the duty of removing ANY variables, since they are universally bound under negation and guaranteed to have no joins. *)
-          (reassemble_xsb_equality incpkt terms_used_no_constants tl))
+            printf "Reassembling an XSB equality for formula %s. tl=%s; terms_used_no_constants_or_any=%s\n%!"
+                   (string_of_formula positive_f) (String.concat "," (map string_of_term tl)) (String.concat "," (map string_of_term terms_used_no_constants_or_any));
+          (reassemble_xsb_equality terms_used_no_constants_or_any tl))
       xsbresults in
     if !global_verbose >= 5 then
       printf "<< POSITIVE partial evaluation result (converted from xsb) for %s\n    was: %s\n%!"
              (string_of_formula positive_f)
              (String.concat "\n" (map (fun fl -> (String.concat "," (map string_of_formula fl))) conjuncts));
-    conjuncts;;
+    pe_helper_cache := FmlaMap.add positive_f conjuncts !pe_helper_cache;
+    conjuncts
+  end;;
 
 let stage_2_partial_eval (incpkt: string) (atoms_or_neg: formula list): formula list =
   (map (fun subf -> match subf with
@@ -188,7 +200,7 @@ let stage_2_partial_eval (incpkt: string) (atoms_or_neg: formula list): formula 
     | FNot(FTrue) -> FFalse
     | FNot(FFalse) -> FTrue
     | FNot(FAtom(_,_,_) as inner) ->
-        let peresults = partial_evaluation_helper incpkt inner in
+        let peresults = partial_evaluation_helper inner in
         (*write_log (sprintf "s2pe: %s\n%!" (String.concat ", " (map string_of_formula peresults)));*)
           if (length peresults) < 1 then FTrue
           else FNot(build_or (map build_and peresults))
@@ -210,13 +222,21 @@ let rec partial_evaluation (p: flowlog_program) (incpkt: string) (f: formula): f
   let positive_atoms = filter is_positive_atom atoms in
   let other_formulas = subtract atoms positive_atoms in
 
+  (* Include Eqs and Ins that have terms constrained by positive_atoms.
+     This gives XSB additional purchase and lowers the number of silly answers we get back.
+     ^ This optimization is vital on large databases on rules with join.
+     ***VITAL*** that these supplemental formulas come after the main positive atoms, due to XSB eval ordering *)
+  let vars_defined_in_positive_atoms = unique (fold_left (fun acc atom -> (get_vars_and_fieldvars atom) @ acc) [] positive_atoms) in
+  let additional_positive_subfmlas = filter (fun othfmla -> let used = get_vars_and_fieldvars othfmla in list_contains vars_defined_in_positive_atoms used) other_formulas in
+
     (* force refresh remote relations
       TODO: is this needed? aren't they already refreshed by this point? *)
     iter (refresh_remote_relation p) atoms;
 
-    let positive_conj = build_and positive_atoms in
-      let positive_conjuncts = partial_evaluation_helper incpkt positive_conj in
-        (* Hook each positive disj together with the other_formulas. We now have possibly many different clauses. *)
+    let positive_conj = build_and (positive_atoms @ additional_positive_subfmlas) in
+      let positive_conjuncts = partial_evaluation_helper positive_conj in
+        (* Hook each positive disj together with the other_formulas. We now have possibly many different clauses.
+           ^ Note that this substitution also applies to the additional_positive_subfmlas.  *)
         let stage_2_lists = filter_map (fun listconj -> substitute_for_join listconj other_formulas) positive_conjuncts in
           let result_clauses = map (stage_2_partial_eval incpkt) stage_2_lists in
           let unique_result_clauses = unique result_clauses in
@@ -696,6 +716,10 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: triggered_cl
 let program_to_netcore (p: flowlog_program) (callback: get_packet_handler): (pol * pol) =
   (* posn 1: fully compilable packet-triggered.
      posn 2: pre-weakened, non-fully-compilable packet-triggered *)
+
+    (* Clear out the PE helper cache. This is vital! (TODO: make functional) *)
+    pe_helper_cache := FmlaMap.empty;
+
     (pkt_triggered_clauses_to_netcore p
       p.can_fully_compile_to_fwd_clauses
       None,

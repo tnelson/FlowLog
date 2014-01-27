@@ -175,8 +175,31 @@ module Xsb = struct
 		then String.sub str1 0 ((String.length str1) - (String.length str2))
 		else str1;;
 
+	let group (alist : 'a list) (num : int) : ('a list) list =
+		let rec group_helper (sublist: 'a list): ('a list) list =
+		(*printf "group helper: on length %d\n%!" (length sublist);*)
+			match sublist with
+				| [] -> []
+				| _ -> let (firstn, restlst) = split_nth num sublist in
+					firstn :: (group_helper restlst) in
+		let offset = (length alist) mod num in
+		let header = (take offset alist) in
+		let remainder = (drop offset alist) in
+		let grouped_remainder = group_helper remainder in
+			if offset > 0 then header :: grouped_remainder
+			else grouped_remainder;;
+
+
+
+(*printf "%s\n%!" (string_of_list_list "; " "," string_of_int (group [] 2));;
+printf "%s\n%!" (string_of_list_list "; " "," string_of_int (group [1] 2));;
+printf "%s\n%!" (string_of_list_list "; " "," string_of_int (group [1;2;3;4;5;6;7;8;9] 2));;
+printf "%s\n%!" (string_of_list_list "; " "," string_of_int (group [1;2;3;4;5;6;7;8;9;10] 2));;
+exit(1);;
+*)
+
 	(* groups elements of alist into lists of size num except possibly the first one *)
-	let rec group (alist : 'a list) (num : int) : ('a list) list =
+(*	let rec group (alist : 'a list) (num : int) : ('a list) list =
 		match alist with
 		| [] -> [];
 		| f :: r -> match group r num with
@@ -184,7 +207,7 @@ module Xsb = struct
 			| f1 :: r1 -> if length f1 < num
 						then (f :: f1) :: r1
 						else [f] :: (f1 :: r1);;
-
+*)
   let rec xsb_of_formula ?(mode:xsbmode = Xsb) (f: formula): string =
     match f with
       | FTrue -> "true"
@@ -208,17 +231,23 @@ module Xsb = struct
 	(* For variables not proceeded with underscore, XSB prints binding sets and requires a semicolon between them.
 	   This is problematic since we have no way of knowing how many semicolons to enter. Instead, tell XSB
 	   exactly how to print the results, with no semicolons between binding sets. *)
-	let build_xsb_query_string (f: formula) : string =
-		let varstrs = map xsb_of_term (get_vars_and_fieldvars f) in
+	let build_xsb_query_string (f: formula) : (int * string) =
+		let allvars = (get_vars_and_fieldvars f) in
+		(* anys need _ added here; the others get their _ added in xsb_of_formula*)
+		let anystrs = map (xsb_of_term ~mode:XsbAddUnderscoreVars) (filter is_ANY_term allvars) in
+		let varstrs = map xsb_of_term (filter (fun v -> not (is_ANY_term v)) allvars) in
 		let varoutfrags = map (fun varstr -> sprintf "write('%s='), writeln(_%s)" varstr varstr) varstrs in
+		let anystr = if (length anystrs) > 0 then (String.concat "^" anystrs)^"^" else "" in
 		let fstr = (xsb_of_formula ~mode:XsbAddUnderscoreVars f) in
 		    (* printf "%s\n(%s, %s, fail).\n%!" (string_of_formula f) fstr (String.concat "," varoutfrags);*)
 		    (* The setof construct wrapped around the formula prevents duplicate results *)
 		    (* We wrap the fmla in parens in case it has more than one conjunct in it*)
-			if (length varoutfrags) > 0 then
-              sprintf "(setof(t, (%s), _), %s, fail)." fstr (String.concat "," varoutfrags)
+		    (* any variables should be aggregated; hence the anystr with ^. See setof docs. *)
+			let resultstr = (if (length varoutfrags) > 0 then
+              sprintf "(setof(t, %s(%s), _), %s, fail)." anystr fstr (String.concat "," varoutfrags)
             else
-              sprintf "%s." fstr;;
+              sprintf "%s." fstr) in
+			(length varstrs, resultstr);;
 
 	(* Takes a string query (thing with semicolon answers),
 	 and the number of variables involved.
@@ -249,7 +278,14 @@ module Xsb = struct
 		if debug then Printf.printf "send_query finished. answers: [%s]\n\n%!" (String.concat ", " !answer);
 		if !global_verbose >= 1 then count_send_query := !count_send_query + 1;
 		(* separate the list into a list of lists *)
-		map (fun (l : string list) -> map after_equals l) (group (rev !answer) num_vars);;
+		if (length !answer) > 200000 then
+		begin
+			printf "\nXSB responded with %d terms. Something has possibly gone wrong in query construction (or the database is too large).\nXSB string was: %s\n%!" (length !answer) str;
+			exit(1);
+		end;
+
+		let grouped = (group (rev !answer) num_vars) in
+			map (fun (l : string list) -> map after_equals l) grouped;;
 
 end
 
@@ -299,7 +335,7 @@ module Communication = struct
 	    (* Begin by flushing the error buffer.
 	       XSB will send newlines in stderr for (seemingly) no reason...*)
 		Xsb.print_or_flush_errors true;
-		if !global_verbose >= 10 then (printf "send_message: %s (expected: %d)\n%!" message num_ans);
+		if !global_verbose >= 8 then (printf "send_message: %s (expected: %d)\n%!" message num_ans);
 		if num_ans > 0 then
 		    let strresults = Xsb.send_query message num_ans in
 		    let tupresults = map (fun tuplestr -> map reassemble_xsb_term tuplestr) strresults in
@@ -310,10 +346,12 @@ module Communication = struct
 		        if (ends_with yn "yes") then [[]]
 		        else []
 
-	(* Perfectly valid to ask "r(X, 2)" here. *)
+	(* Perfectly valid to ask "r(X, 2)" here.
+	   Note that ANYs will be auto-removed! *)
 	let get_state (f: formula): (term list) list =
 		(*send_message ((string_of_formula ~verbose:Xsb f)^".") (length (get_vars_and_fieldvars f));;		*)
-		send_message (Xsb.build_xsb_query_string f) (length (get_vars_and_fieldvars f));;
+		let num_non_any_vars, qstr = Xsb.build_xsb_query_string f in
+		send_message qstr num_non_any_vars ;;
 
 	(* Extract the entire local controller state from XSB. This lets us do pretty-printing, rather
 	   than just using XSB's "listing." command, among other things.
@@ -343,7 +381,7 @@ module Communication = struct
     let currstate = get_full_state_for_program p in
     let get_tblstrs (tbl: table_def) : string =
         let fmlasfortbl = flatten (Hashtbl.find_all currstate tbl) in
-          sprintf "%s:\n%s" tbl.tablename (String.concat "\n" (map (pretty_print_fact tbl) fmlasfortbl)) in
+          sprintf "%s (%d tuples):\n%s" tbl.tablename (length fmlasfortbl) (String.concat "\n" (map (pretty_print_fact tbl) fmlasfortbl)) in
 
     printf "-------\n|STATE|\n-------\n%s\n%!" (String.concat "\n" (map get_tblstrs p.tables));;
     (**************)

@@ -29,6 +29,13 @@ let write_log (ln: string): unit =
   | None -> printf "Unable to write to log file.\n%!"
   | Some(out) -> fprintf out "%s\n%!" ln;;
 
+let string_of_list (sep: string) (pro: 'a -> string) (alist: 'a list): string =
+  (String.concat sep (map pro alist));;
+
+let string_of_list_list (sep: string) (sep2: string) (pro: 'a -> string) (alist: 'a list list): string =
+  (String.concat sep (map (string_of_list sep2 pro) alist));;
+
+let identity (x: 'a): 'a = x;;
 
   let string_of_term ?(verbose:printmode = Brief) (t: term): string =
     match t with
@@ -258,7 +265,7 @@ let reassemble_xsb_term (tstr: string): term =
     TConst(String.sub tstr 8 ((String.length tstr) - 8))
   else TConst(tstr);;
 
-let reassemble_xsb_equality (incpkt: string) (tlargs: term list) (tuple: term list) : formula list =
+let reassemble_xsb_equality (tlargs: term list) (tuple: term list) : formula list =
     map2 (fun origterm xsbterm ->
 		  match xsbterm,origterm with
         | TVar(_), _ -> failwith "reassemble_xsb_equality: unconstrained variable"
@@ -266,7 +273,7 @@ let reassemble_xsb_equality (incpkt: string) (tlargs: term list) (tuple: term li
         (* COMPILATION: free variable. Keep this assertion around in case it's needed. *)
         | TConst(c), (TVar(vname) as avar) when not (is_ANY_term avar) -> FEquals(TVar(vname), TConst(c))
         (* + ANY variables need elimination since they are bound universally under negation: *)
-        | TConst(c), TVar(vname) -> FTrue
+        | TConst(c), TVar(vname) -> failwith "reassemble_xsb_equality saw ANY term"
 		    | _ -> FEquals(origterm, xsbterm))
     	 tlargs tuple;;
 
@@ -278,6 +285,10 @@ let subtract (biglst: 'a list) (toremove: 'a list): 'a list =
 
 let list_intersection (l1: 'a list) (l2: 'a list): 'a list =
   filter (fun ele1 -> (mem ele1 l2)) l1;;
+
+(* everything in l2 is in l1. "l1 contains l2" *)
+let list_contains (l1: 'a list) (l2: 'a list): bool =
+  for_all (fun e2 -> mem e2 l1) l2;;
 
 let is_field (t: term): bool =
   match t with | TField(_,_) -> true | _ -> false;;
