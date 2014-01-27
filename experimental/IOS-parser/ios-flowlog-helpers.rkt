@@ -132,21 +132,26 @@
   (define prim-netw-obj (send iface get-primary-network))
   (define sec-netw-obj (send iface get-secondary-network))
   (define nat-side (send iface get-nat-side))
+    
+  (cond [(not prim-addr-obj) 
+         (printf "extract-ifs IGNORING: ~v~n" name)
+         #f]
+        [else    
   
-  (define prim-addr (send prim-addr-obj text-address))
-  (define sec-addr (if sec-addr-obj  
-                       (send sec-addr-obj text-address) 
-                       #f))
-  (define prim-netw `(,(send prim-netw-obj text-address),(send prim-netw-obj text-mask)))
-  (define sec-netw (if sec-netw-obj 
-                       `(,(send sec-netw-obj text-address),(send sec-netw-obj text-mask))
-                       (list #f #f)))
-  
-  (unless (equal? (string-uncapitalize (symbol->string ifaceid)) name)
-    (error (format "extract-ifs: ~v vs. ~v" (symbol->string ifaceid) name)))
-  `(,name 
-    ,prim-addr ,prim-netw
-    ,sec-addr ,sec-netw ,nat-side))
+         (define prim-addr (send prim-addr-obj text-address))
+         (define sec-addr (if sec-addr-obj  
+                              (send sec-addr-obj text-address) 
+                              #f))
+         (define prim-netw `(,(send prim-netw-obj text-address),(send prim-netw-obj text-mask)))
+         (define sec-netw (if sec-netw-obj 
+                              `(,(send sec-netw-obj text-address),(send sec-netw-obj text-mask))
+                              (list #f #f)))
+         
+         (unless (equal? (string-uncapitalize (symbol->string ifaceid)) name)
+           (error (format "extract-ifs: ~v vs. ~v" (symbol->string ifaceid) name)))
+         `(,name 
+           ,prim-addr ,prim-netw
+           ,sec-addr ,sec-netw ,nat-side)]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Functions to produce startup insert tuples

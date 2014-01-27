@@ -46,7 +46,7 @@
     [(_ configurations accessor)
      (apply append (map (λ (configuration)
                           ; Please keep and comment out. Useful to know immediately which config is failing:
-                          (printf "Processing: ~v~n" (send (send configuration get-hostname) text)) ; DEBUG
+                          ; (printf "Processing: ~v~n" (send (send configuration get-hostname) text)) ; DEBUG
                           (send configuration accessor))
                         configurations))]))
 
@@ -106,13 +106,13 @@ namespace-for-template)
     (define insidenat (assoc2 'translate (policy '(translate) (combine-rules configurations inside-NAT-rules))))
     (define outsidenat (assoc2 'translate (policy '(translate) (combine-rules configurations outside-NAT-rules))))
     
-    (define local-switch (policy '(forward pass) (combine-rules configurations local-switching-rules)))
-    (define localswitching-forward (assoc2 'forward local-switch))
-    (define localswitching-pass (assoc2 'pass local-switch))
+   ;(define local-switch (policy '(forward pass) (combine-rules configurations local-switching-rules)))
+   ; (define localswitching-forward (assoc2 'forward local-switch))
+   ; (define localswitching-pass (assoc2 'pass local-switch))
     
-    (define network-switch (policy '(forward pass) (combine-rules configurations network-switching-rules)))
-    (define networkswitching-forward (assoc2 'forward network-switch))
-    (define networkswitching-pass (assoc2 'pass network-switch))
+   ; (define network-switch (policy '(forward pass) (combine-rules configurations network-switching-rules)))
+   ; (define networkswitching-forward (assoc2 'forward network-switch))
+   ; (define networkswitching-pass (assoc2 'pass network-switch))
     
     (define static-route (policy '(forward route pass) (combine-rules configurations static-route-rules)))
     (define staticroute-forward (assoc2 'forward static-route))
@@ -244,12 +244,18 @@ namespace-for-template)
         [else (pretty-display i) (error "ifacedef->tuple")]))
 
     ;;;;;;;;;;;;;;;;;;;
-    (define (extract-hosts routers-msg config hostidx)
+    (define (extract-hosts routers-msg config hostidx)      
       (define hostname (symbol->string (send (send config get-hostname) name)))
+      ; Please keep and comment out. Useful to know immediately which config is failing:
+      ;(printf "extract-hosts: ~v~n" hostname) ; DEBUG
       (define interfaces (send config get-interfaces))
-      (define interface-keys (hash-keys interfaces))
-      ;(printf "pre-processing hostname: ~v~n" hostname) ; DEBUG
-      (define interface-defns (hash-map interfaces extract-ifs))
+      (define interface-keys (hash-keys interfaces))      
+      
+      ; Filter out interfaces that extract-ifs returns #f for. (for instance, ifs with no subnet)
+      (define unfiltered-interface-defns (hash-map interfaces extract-ifs))
+      (define interface-defns (filter (lambda (i) i) unfiltered-interface-defns))
+      (printf "Processed ~v interfaces; ~v had subnets and will be handled.~n" (length unfiltered-interface-defns) (length interface-defns)) ; DEBUG
+      
       (maybe-update-max-subnets (length interface-defns))
       ;(pretty-display interface-defns) ; DEBUG
       (define hostnum (string-append "0x1000000000" (string-pad (number->string (+ hostidx 1)) 2 #\0)))
@@ -370,8 +376,8 @@ namespace-for-template)
     (store reflexive-inserts (make-path root-path "ReflexiveDebug.p"))
     (store insidenat (make-path root-path "InsideNAT.p"))
     (store outsidenat (make-path root-path "OutsideNAT.p"))
-    (store local-switch (make-path root-path "LocalSwitching.p"))
-    (store network-switch (make-path root-path "NetworkSwitching.p"))
+    ;(store local-switch (make-path root-path "LocalSwitching.p"))
+    ;(store network-switch (make-path root-path "NetworkSwitching.p"))
     (store static-route (make-path root-path "StaticRoute.p"))
     (store policy-route (make-path root-path "PolicyRoute.p"))
     (store default-policy-route (make-path root-path "DefaultPolicyRoute.p"))))
