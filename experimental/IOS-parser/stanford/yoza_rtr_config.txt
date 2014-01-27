@@ -168,7 +168,7 @@ access-list 168 permit tcp any any eq 443
 access-list 168 remark CSDCF: allow wordgames
 access-list 168 permit tcp any host 171.64.68.25 eq www
 access-list 168 permit tcp any host 171.64.68.25 range 8070 8080
-access-list 168 remark CSDCF: unknown 
+access-list 168 remark CSDCF: unknown
 access-list 168 permit tcp any any gt 27000
 access-list 168 remark CSDCF: ai / robotics itself, pop www imap etc.
 access-list 168 permit ip any 171.64.68.8 0.0.0.3
@@ -278,7 +278,7 @@ access-list 178 permit tcp any host 171.64.78.62 eq 22
 access-list 178 remark CSD-CF: moa holes
 access-list 178 permit tcp any host 171.64.78.81 eq 22
 access-list 178 permit tcp any host 171.64.78.81 eq 5467
-access-list 178 remark 
+access-list 178 remark
 access-list 178 remark CSDCF: Holes for dabo
 access-list 178 remark CSDCF: Holes for Pratt
 access-list 178 permit tcp any host 171.64.78.149 range ftp-data ftp
@@ -439,7 +439,7 @@ vlan 78
 vlan 79
  name 171.64.79.0/24
 !
-vlan 80 
+vlan 80
 !
 vlan 88
  name ee-admin
@@ -555,7 +555,7 @@ vlan 595
 vlan 632
  name campus-wireless-net
 !
-vlan 820,870 
+vlan 820,870
 !
 vlan 873
  name YOZ-mazieres
@@ -581,12 +581,12 @@ vlan 898
 vlan 899
  name temp-mkeown
 !
-vlan 900-909 
+vlan 900-909
 !
 vlan 910
  mtu 9216
 !
-vlan 911-931 
+vlan 911-931
 !
 vlan 3700
  name nlr-uwmadison
@@ -621,7 +621,7 @@ vlan 3722
 vlan 3738
  name nlr-kansasstate
 !
-! 
+!
 !
 !
 !
@@ -1610,10 +1610,12 @@ interface Vlan89
  standby 64 preempt
  standby 64 authentication vlan64
 !
+! TN removed the below from Vlan90, since this access-group isn't defined in this config
+! ip access-group 91 in
+!
 interface Vlan90
  ip address 172.24.90.2 255.255.254.0 secondary
  ip address 171.64.90.2 255.255.254.0
- ip access-group 91 in
  ip verify unicast source reachable-via rx allow-default
  ip helper-address 171.64.7.89
  ip helper-address 171.64.7.111

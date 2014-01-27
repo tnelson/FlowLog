@@ -140,7 +140,7 @@ access-list 168 permit tcp any any eq 443
 access-list 168 remark CSDCF: allow wordgames
 access-list 168 permit tcp any host 171.64.68.25 eq www
 access-list 168 permit tcp any host 171.64.68.25 range 8070 8080
-access-list 168 remark CSDCF: unknown 
+access-list 168 remark CSDCF: unknown
 access-list 168 permit tcp any any gt 27000
 access-list 168 remark CSDCF: ai / robotics itself, pop www imap etc.
 access-list 168 permit ip any 171.64.68.8 0.0.0.3
@@ -253,7 +253,7 @@ access-list 178 permit tcp any host 171.64.78.62 eq 22
 access-list 178 remark CSD-CF: moa holes
 access-list 178 permit tcp any host 171.64.78.81 eq 22
 access-list 178 permit tcp any host 171.64.78.81 eq 5467
-access-list 178 remark 
+access-list 178 remark
 access-list 178 remark CSDCF: Holes for dabo
 access-list 178 remark CSDCF: Holes for Pratt
 access-list 178 permit tcp any host 171.64.78.221
@@ -423,7 +423,7 @@ vlan 78
 vlan 79
  name 171.64.79.0/24
 !
-vlan 80 
+vlan 80
 !
 vlan 88
  name ee-admin
@@ -539,7 +539,7 @@ vlan 595
 vlan 632
  name campus-wireless-net
 !
-vlan 820,870 
+vlan 820,870
 !
 vlan 873
  name YOZ-mazieres
@@ -562,12 +562,12 @@ vlan 897
 vlan 898
  name 192.168.136.0
 !
-vlan 900-931 
+vlan 900-931
 !
 vlan 3704
  name of-bbn
 !
-! 
+!
 !
 !
 !
@@ -785,10 +785,12 @@ interface Vlan65
  standby 65 preempt
  standby 65 authentication vlan65
 !
+! TN: removed this from Vlan66, as access-group 166 isn't defined in this config.
+! ip access-group 166 in
+!
 interface Vlan66
  ip address 172.24.66.4 255.255.255.0 secondary
  ip address 171.64.66.3 255.255.255.0
- ip access-group 166 in
  ip verify unicast source reachable-via rx allow-default
  no ip redirects
  no ip unreachables
@@ -803,10 +805,14 @@ interface Vlan66
  standby 66 preempt
  standby 66 authentication vlan66
 !
+!
+! TN removed the below from Vlan67, since this access-group isn't defined in this config
+! ip access-group 167 out
+! [note use of EGRESS filter here]
+!
 interface Vlan67
  ip address 172.24.67.3 255.255.255.0 secondary
  ip address 171.64.67.3 255.255.255.0
- ip access-group 167 out
  ip verify unicast source reachable-via rx allow-default
  ip helper-address 171.64.7.89
  ip helper-address 171.64.7.111
@@ -1060,10 +1066,12 @@ interface Vlan89
  standby 64 preempt
  standby 64 authentication vlan64
 !
+! TN removed the below from Vlan90, since this access-group isn't defined in this config
+! ip access-group 91 in
+!
 interface Vlan90
  ip address 172.24.90.3 255.255.254.0 secondary
  ip address 171.64.90.3 255.255.254.0
- ip access-group 91 in
  ip verify unicast source reachable-via rx allow-default
  no ip redirects
  no ip unreachables

@@ -98,6 +98,10 @@ redundancy
   auto-sync running-config
  mode sso
 !
+! TN: removed "ip policy route-map trSOZ" from several vlans below
+! Did not comment out due to dumb parser getting confused on comments mid-block
+! To recover, see commit 36acb2a8807b95a546658a39adf5bc67ffccd783
+!
 ip access-list standard ctrSOZ
  permit 10.31.0.0 0.0.255.255
 ip access-list standard ctrSOZd
@@ -323,7 +327,7 @@ vlan 548
 vlan 911
  name rescomp-ghost
 !
-! 
+!
 !
 !
 !
@@ -462,7 +466,6 @@ interface Vlan10
  ip address 172.20.11.2 255.255.255.224
  no ip redirects
  no ip unreachables
- ip policy route-map trSOZ
  ip ospf cost 20
  ip ospf mtu-ignore
 !
@@ -914,7 +917,6 @@ interface Vlan500
  no ip unreachables
  no ip proxy-arp
  ip pim sparse-dense-mode
- ip policy route-map trSOZ
  standby 10 ip 172.19.124.1
  standby 10 ip 10.31.0.1 secondary
  standby 10 ip 10.31.16.1 secondary
@@ -935,7 +937,6 @@ interface Vlan502
  no ip unreachables
  no ip proxy-arp
  ip pim sparse-dense-mode
- ip policy route-map trSOZ
  standby 10 ip 172.19.125.1
  standby 10 ip 10.31.32.1 secondary
  standby 10 ip 10.31.48.1 secondary
@@ -956,7 +957,6 @@ interface Vlan504
  no ip unreachables
  no ip proxy-arp
  ip pim sparse-dense-mode
- ip policy route-map trSOZ
  standby 10 ip 172.19.140.1
  standby 10 ip 10.31.64.1 secondary
  standby 10 ip 10.31.80.1 secondary
@@ -977,7 +977,6 @@ interface Vlan506
  no ip unreachables
  no ip proxy-arp
  ip pim sparse-dense-mode
- ip policy route-map trSOZ
  standby 10 ip 172.19.142.1
  standby 10 ip 10.31.96.1 secondary
  standby 10 ip 10.31.112.1 secondary
@@ -998,7 +997,6 @@ interface Vlan508
  no ip unreachables
  no ip proxy-arp
  ip pim sparse-dense-mode
- ip policy route-map trSOZ
  standby 10 ip 172.19.144.1
  standby 10 ip 10.31.128.1 secondary
  standby 10 ip 10.31.144.1 secondary
@@ -1039,7 +1037,6 @@ interface Vlan514
  no ip unreachables
  no ip proxy-arp
  ip pim sparse-dense-mode
- ip policy route-map trSOZ
  standby 10 ip 172.19.150.1
  standby 10 ip 10.31.192.1 secondary
  standby 10 ip 10.31.208.1 secondary
@@ -1060,7 +1057,6 @@ interface Vlan516
  no ip unreachables
  no ip proxy-arp
  ip pim sparse-dense-mode
- ip policy route-map trSOZ
  standby 10 ip 172.19.152.1
  standby 10 ip 10.31.224.1 secondary
  standby 10 ip 10.31.240.1 secondary

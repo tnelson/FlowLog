@@ -45,6 +45,8 @@
   (syntax-rules ()
     [(_ configurations accessor)
      (apply append (map (λ (configuration)
+                          ; Please keep and comment out. Useful to know immediately which config is failing:
+                          (printf "Processing: ~v~n" (send (send configuration get-hostname) text)) ; DEBUG
                           (send configuration accessor))
                         configurations))]))
 

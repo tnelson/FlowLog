@@ -49,6 +49,13 @@ redundancy
   auto-sync running-config
  mode sso
 !
+! TN: removed "ip policy route-map trCOZ" from several vlans below
+! Did not comment out due to dumb parser getting confused on comments mid-block
+! To recover, see commit 36acb2a8807b95a546658a39adf5bc67ffccd783
+!
+! Note that the vlans that had the decl all connected to subnets covered by ctrCOZ below
+! and thus were directly attached (confirmed in routing table txtfile)
+!
 ip access-list standard ctrCOZ
  permit 10.30.0.0 0.0.255.255
 !
@@ -243,7 +250,7 @@ vlan 556
 vlan 558
  name Ev-West-WL
 !
-! 
+!
 !
 !
 !
@@ -379,7 +386,6 @@ interface Vlan10
  ip address 172.20.10.34 255.255.255.224
  no ip redirects
  no ip unreachables
- ip policy route-map trCOZ
  ip ospf cost 20
  ip ospf mtu-ignore
 !
@@ -807,7 +813,6 @@ interface Vlan550
  no ip redirects
  no ip unreachables
  ip pim sparse-dense-mode
- ip policy route-map trCOZ
  standby 10 ip 172.19.154.1
  standby 10 ip 10.30.0.1 secondary
  standby 10 ip 10.30.16.1 secondary
@@ -828,7 +833,6 @@ interface Vlan552
  no ip redirects
  no ip unreachables
  ip pim sparse-dense-mode
- ip policy route-map trCOZ
  standby 10 ip 172.19.156.1
  standby 10 ip 10.30.32.1 secondary
  standby 10 ip 10.30.48.1 secondary
@@ -849,7 +853,6 @@ interface Vlan554
  no ip redirects
  no ip unreachables
  ip pim sparse-dense-mode
- ip policy route-map trCOZ
  standby 10 ip 172.19.158.1
  standby 10 ip 10.30.64.1 secondary
  standby 10 ip 10.30.80.1 secondary
@@ -870,7 +873,6 @@ interface Vlan556
  no ip redirects
  no ip unreachables
  ip pim sparse-dense-mode
- ip policy route-map trCOZ
  standby 10 ip 172.19.160.1
  standby 10 ip 10.30.96.1 secondary
  standby 10 ip 10.30.112.1 secondary
@@ -891,7 +893,6 @@ interface Vlan558
  no ip redirects
  no ip unreachables
  ip pim sparse-dense-mode
- ip policy route-map trCOZ
  standby 10 ip 172.19.162.1
  standby 10 ip 10.30.128.1 secondary
  standby 10 ip 10.30.144.1 secondary
