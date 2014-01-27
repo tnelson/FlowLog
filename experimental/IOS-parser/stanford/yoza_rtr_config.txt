@@ -1291,7 +1291,6 @@ interface Vlan64
  ip flow ingress
  ip pim sparse-dense-mode
  ip dvmrp accept-filter 3 neighbor-list 4
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 64 ip 171.64.64.1
  standby 64 ip 172.24.64.1 secondary
@@ -1311,7 +1310,6 @@ interface Vlan65
  ip flow ingress
  ip pim sparse-dense-mode
  ip dvmrp accept-filter 3 neighbor-list 4
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 65 ip 171.64.65.1
  standby 65 ip 172.24.65.1 secondary
@@ -1330,7 +1328,6 @@ interface Vlan66
  ip flow ingress
  ip pim sparse-dense-mode
  ip dvmrp accept-filter 3 neighbor-list 4
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 66 ip 171.64.66.1
  standby 66 ip 172.24.66.1 secondary
@@ -1350,7 +1347,6 @@ interface Vlan67
  ip flow ingress
  ip pim sparse-dense-mode
  ip dvmrp accept-filter 3 neighbor-list 4
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 67 ip 171.64.67.1
  standby 67 ip 172.24.67.1 secondary
@@ -1371,7 +1367,6 @@ interface Vlan68
  ip flow ingress
  ip pim sparse-dense-mode
  ip dvmrp accept-filter 3 neighbor-list 4
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 68 ip 171.64.68.1
  standby 68 ip 171.64.69.1 secondary
@@ -1391,7 +1386,6 @@ interface Vlan70
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 70 ip 171.64.70.1
  standby 70 ip 172.24.70.1 secondary
@@ -1410,7 +1404,6 @@ interface Vlan71
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 71 ip 171.64.71.1
  standby 71 ip 172.24.71.1 secondary
@@ -1431,7 +1424,6 @@ interface Vlan72
  ip flow ingress
  ip pim sparse-dense-mode
  ip dvmrp accept-filter 3 neighbor-list 4
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 72 ip 171.64.72.1
  standby 72 ip 171.64.73.1 secondary
@@ -1460,7 +1452,6 @@ interface Vlan74
  ip flow ingress
  ip pim sparse-dense-mode
  ip dvmrp accept-filter 3 neighbor-list 4
- ip policy route-map gnat-1
  ip cgmp proxy
  standby use-bia
  standby 74 ip 171.64.74.1
@@ -1484,7 +1475,6 @@ interface Vlan75
  ip flow ingress
  ip pim sparse-dense-mode
  ip dvmrp accept-filter 3 neighbor-list 4
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 75 ip 171.64.75.1
  standby 75 ip 172.24.75.1 secondary
@@ -1503,7 +1493,6 @@ interface Vlan76
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 76 ip 171.64.76.1
  standby 76 ip 172.24.76.1 secondary
@@ -1523,7 +1512,6 @@ interface Vlan77
  ip flow ingress
  ip pim sparse-dense-mode
  ip dvmrp accept-filter 3 neighbor-list 4
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 77 ip 171.64.77.1
  standby 77 ip 172.24.77.1 secondary
@@ -1544,7 +1532,6 @@ interface Vlan78
  ip flow ingress
  ip pim sparse-dense-mode
  ip dvmrp accept-filter 3 neighbor-list 4
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 78 ip 171.64.78.1
  standby 78 ip 172.24.78.1 secondary
@@ -1562,7 +1549,6 @@ interface Vlan79
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 79 ip 171.64.79.129
  standby 79 timers 2 7
@@ -1580,7 +1566,6 @@ interface Vlan88
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  shutdown
  standby 64 ip 171.64.88.1
@@ -1600,7 +1585,6 @@ interface Vlan89
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  shutdown
  standby 64 ip 171.64.89.1
@@ -1623,7 +1607,6 @@ interface Vlan90
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 64 ip 171.64.90.1
  standby 64 ip 172.24.90.1 secondary
@@ -1634,7 +1617,6 @@ interface Vlan90
 !
 interface Vlan91
  no ip address
- ip policy route-map gnat-1
  shutdown
 !
 interface Vlan92
@@ -1647,7 +1629,6 @@ interface Vlan92
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 64 ip 171.64.92.1
  standby 64 ip 172.24.92.1 secondary
@@ -1658,7 +1639,6 @@ interface Vlan92
 !
 interface Vlan93
  no ip address
- ip policy route-map gnat-1
  shutdown
 !
 interface Vlan94
@@ -1671,7 +1651,6 @@ interface Vlan94
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 64 ip 171.64.94.1
  standby 64 ip 172.24.94.1 secondary
@@ -1690,7 +1669,6 @@ interface Vlan96
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 64 ip 171.64.96.1
  standby 64 ip 172.24.96.1 secondary
@@ -1703,7 +1681,6 @@ interface Vlan97
  no ip address
  no ip redirects
  no ip unreachables
- ip policy route-map gnat-1
 !
 interface Vlan98
  ip address 172.24.98.2 255.255.255.0 secondary
@@ -1715,7 +1692,6 @@ interface Vlan98
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  shutdown
  standby 64 ip 171.64.98.1
@@ -1735,7 +1711,6 @@ interface Vlan99
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 64 ip 171.64.99.1
  standby 64 ip 172.24.99.1 secondary
@@ -1754,7 +1729,6 @@ interface Vlan100
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 64 ip 171.64.100.1
  standby 64 ip 172.24.100.1 secondary
@@ -1887,7 +1861,6 @@ interface Vlan364
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 64 ip 171.67.64.1
  standby 64 ip 172.27.64.1 secondary
@@ -1906,7 +1879,6 @@ interface Vlan365
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 65 ip 171.67.65.1
  standby 65 ip 172.27.65.1 secondary
@@ -1925,7 +1897,6 @@ interface Vlan366
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 66 ip 171.67.66.1
  standby 66 ip 172.27.66.1 secondary
@@ -1944,7 +1915,6 @@ interface Vlan367
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 67 ip 171.67.67.1
  standby 67 ip 172.27.67.1 secondary
@@ -1963,7 +1933,6 @@ interface Vlan368
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 68 ip 171.67.68.1
  standby 68 ip 172.27.68.1 secondary
@@ -1982,7 +1951,6 @@ interface Vlan369
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 69 ip 171.67.69.1
  standby 69 ip 172.27.69.1 secondary
@@ -2001,7 +1969,6 @@ interface Vlan370
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 70 ip 171.67.70.1
  standby 70 ip 172.27.70.1 secondary
@@ -2020,7 +1987,6 @@ interface Vlan371
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  shutdown
  standby 71 ip 171.67.71.1
@@ -2039,7 +2005,6 @@ interface Vlan372
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 72 ip 171.67.72.1
  standby 72 ip 172.27.72.1 secondary
@@ -2053,7 +2018,6 @@ interface Vlan373
  no ip redirects
  no ip unreachables
  ip flow ingress
- ip policy route-map gnat-1
 !
 interface Vlan374
  ip address 171.67.234.2 255.255.255.128 secondary
@@ -2067,7 +2031,6 @@ interface Vlan374
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby use-bia
  standby 74 ip 172.27.74.1
@@ -2089,7 +2052,6 @@ interface Vlan376
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 76 ip 171.67.76.1
  standby 76 ip 172.27.76.1 secondary
@@ -2108,7 +2070,6 @@ interface Vlan378
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 78 ip 171.67.78.1
  standby 78 ip 172.27.78.1 secondary
@@ -2122,7 +2083,6 @@ interface Vlan379
  ip verify unicast source reachable-via rx allow-default
  no ip redirects
  no ip unreachables
- ip policy route-map gnat-1
  standby 79 ip 172.24.79.1
  standby 79 timers 2 7
  standby 79 priority 120
@@ -2172,7 +2132,6 @@ interface Vlan888
  no ip unreachables
  ip pim sparse-dense-mode
  ip dvmrp accept-filter 3 neighbor-list 4
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 64 ip 192.168.252.1
  standby 64 timers 2 7
@@ -2199,7 +2158,6 @@ interface Vlan898
  ip helper-address 171.64.7.111
  no ip redirects
  no ip unreachables
- ip policy route-map gnat-1
  standby 64 ip 192.168.136.1
  standby 64 timers 2 7
  standby 64 priority 120
@@ -2213,7 +2171,6 @@ interface Vlan899
  ip helper-address 171.64.7.111
  no ip redirects
  no ip unreachables
- ip policy route-map gnat-1
  standby 64 ip 192.168.139.1
  standby 64 timers 2 7
  standby 64 priority 120
@@ -2229,7 +2186,6 @@ interface Vlan900
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 90 ip 10.79.0.1
  standby 90 timers 2 7
@@ -2245,7 +2201,6 @@ interface Vlan901
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby use-bia
  standby 90 ip 10.79.1.1
@@ -2263,7 +2218,6 @@ interface Vlan902
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 90 ip 10.79.2.1
  standby 90 timers 2 7
@@ -2280,7 +2234,6 @@ interface Vlan903
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 90 ip 10.79.3.1
  standby 90 timers 2 7
@@ -2297,7 +2250,6 @@ interface Vlan904
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 90 ip 10.79.4.1
  standby 90 timers 2 7
@@ -2314,7 +2266,6 @@ interface Vlan905
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 90 ip 10.79.5.1
  standby 90 timers 2 7
@@ -2331,7 +2282,6 @@ interface Vlan906
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 90 ip 10.79.6.1
  standby 90 timers 2 7
@@ -2348,7 +2298,6 @@ interface Vlan907
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 90 ip 10.79.7.1
  standby 90 timers 2 7
@@ -2365,7 +2314,6 @@ interface Vlan908
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 90 ip 10.79.8.1
  standby 90 timers 2 7
@@ -2382,7 +2330,6 @@ interface Vlan909
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 90 ip 10.79.9.1
  standby 90 timers 2 7
@@ -2400,7 +2347,6 @@ interface Vlan910
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 90 ip 10.79.10.1
  standby 90 timers 2 7
@@ -2417,7 +2363,6 @@ interface Vlan911
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 90 ip 10.79.11.1
  standby 90 timers 2 7
@@ -2434,7 +2379,6 @@ interface Vlan912
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 90 ip 10.79.12.1
  standby 90 timers 2 7
@@ -2451,7 +2395,6 @@ interface Vlan913
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 90 ip 10.79.13.1
  standby 90 timers 2 7
@@ -2468,7 +2411,6 @@ interface Vlan914
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 90 ip 10.79.14.1
  standby 90 timers 2 7
@@ -2485,7 +2427,6 @@ interface Vlan915
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 90 ip 10.79.15.1
  standby 90 timers 2 7
@@ -2502,7 +2443,6 @@ interface Vlan916
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 90 ip 10.79.16.1
  standby 90 timers 2 7
@@ -2519,7 +2459,6 @@ interface Vlan917
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 90 ip 10.79.17.1
  standby 90 timers 2 7
@@ -2536,7 +2475,6 @@ interface Vlan918
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 90 ip 10.79.18.1
  standby 90 timers 2 7
@@ -2553,7 +2491,6 @@ interface Vlan919
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 90 ip 10.79.19.1
  standby 90 timers 2 7
@@ -2570,7 +2507,6 @@ interface Vlan920
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 90 ip 10.79.20.1
  standby 90 timers 2 7
@@ -2586,7 +2522,6 @@ interface Vlan921
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 90 ip 10.79.28.1
  standby 90 timers 2 7
@@ -2624,7 +2559,6 @@ interface Vlan929
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-2
  ip cgmp proxy
  standby 90 ip 10.79.29.1
  standby 90 timers 2 7
@@ -2641,7 +2575,6 @@ interface Vlan930
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-1
  ip cgmp proxy
  standby 90 ip 10.79.30.1
  standby 90 timers 2 7
@@ -2658,7 +2591,6 @@ interface Vlan931
  no ip unreachables
  ip flow ingress
  ip pim sparse-dense-mode
- ip policy route-map gnat-2
  ip cgmp proxy
  standby 90 ip 10.79.31.1
  standby 90 timers 2 7
