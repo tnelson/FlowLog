@@ -4069,11 +4069,16 @@
                               (define aprev-proto (get-proto-for-rule aprev))                               
                               (if (and (safe-proto proto aprev-proto)
                                        (possible-overlap aprev conds))
-                                  `(not (and ,@aprev))
+                                  `(not (and ,@(prune-previous aprev conds)))
                                   #f)) prevs))
               (cons `(RULE ,n ,dec ,argvars (and ,@conds ,@filtered-prevs))
                     (decorrelate remaining prevs goaldec))])]))
 
+  ; Eliminate SHARED subfmlas. If conds holds, then the same can't not hold in the negated prevs.
+  (define (prune-previous aprev conds)
+    ; remove removes arg 1 from arg 2
+    (remove* conds aprev))
+  
   
   ;; TODO ^^ Can still remove superfluous aclAlias atoms in prevs
   
