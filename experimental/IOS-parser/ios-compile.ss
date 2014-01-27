@@ -192,17 +192,18 @@ namespace-for-template)
          ; Produce tuples
          ; TODO: if secondary, need to increment tr_dpid
          (define prim (vals->subnet primaddr primnwa primnwm rnum inum ptnum ridx))
-         (define sec (if secaddr (vals->subnet primaddr primnwa primnwm rnum inum ptnum ridx) #f))
+         ;(define sec (if secaddr (vals->subnet secaddr secnwa secnwm rnum inum ptnum ridx) #f))
+         (define sec "")
          (define alias (vals->ifalias rname name inum))         
 
          ; local subnets
          (dict-set! dst-local-subnet-for-router rnum 
                     (cons `(= pkt.nwDst ,(string-append primnwa "/" primnwm))
                           (dict-ref dst-local-subnet-for-router rnum)))
-         (when sec
-           (dict-set! dst-local-subnet-for-router rnum
-                      (cons `(= pkt.nwDst ,(string-append secnwa "/" secnwm))
-                            (dict-ref dst-local-subnet-for-router rnum))))
+         ;(when sec
+         ;  (dict-set! dst-local-subnet-for-router rnum
+         ;             (cons `(= pkt.nwDst ,(string-append secnwa "/" secnwm))
+         ;                   (dict-ref dst-local-subnet-for-router rnum))))
 
          ; needs nat?
          (define needs-nat (if (and nat-side (equal? nat-side 'inside))
@@ -228,14 +229,17 @@ namespace-for-template)
 
          ; Deal with secondary subnet, if there is one
          (when secaddr 
-           (printf "WARNING! Secondary interface detected. Please confirm that the primary and secondaries get different IDs.~n")
-           (define aninterf2 (subnet ""))
-
-           (set-subnet-addr! aninterf2 secnwa)
-           (set-subnet-mask! aninterf2 (string->number secnwm))
-           (set-subnet-gw! aninterf2 secaddr)
-
-           (set-router-subnets! arouter (cons aninterf2 (router-subnets arouter) )))
+           (printf "WARNING! Secondary interface detected. Ignoring...~n")
+           ;(define aninterf2 (subnet ""))
+           ;
+           ;(set-subnet-addr! aninterf2 secnwa)
+           ;(set-subnet-mask! aninterf2 (string->number secnwm))
+           ;(set-subnet-gw! aninterf2 secaddr)
+           ;
+           ;(printf "~v ~v ~v~n" secaddr secnwa secnwm)
+           ;       
+           ;(set-router-subnets! arouter (cons aninterf2 (router-subnets arouter) )))         
+           )
          ;;;;;;;;;;;;;;;;;
 
          ; Finally, return the result tuples (protobuf changes are side-effects)
