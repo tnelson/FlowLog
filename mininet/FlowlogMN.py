@@ -145,15 +145,21 @@ class FlowlogDemo(object):
 
       for (i, s) in enumerate(r.subnets):
         s.gw = s.gw.encode('ascii', 'ignore')
+        N = i + 1
+        inPt = 2 * N - 1
+        outPt = 2 * N
+        rtrPt = N + 1
 
-        network.addLink(acl_table, translator, **self.linkopts)
-        network.addLink(translator, router, **self.linkopts)
+        network.addLink(acl_table, translator, port1=outPt, port2=inPt,
+                        **self.linkopts)
+        network.addLink(translator, router, port1=outPt, port2=rtrPt,
+                        **self.linkopts)
 
         if not create_srs:
           continue
 
         srs = self.subnetRootSwitch[subnetStr(s.addr, s.mask)]
-        network.addLink(srs, acl_table, **self.linkopts)
+        network.addLink(srs, acl_table, port2=inPt, **self.linkopts)
 
         # if there's room for hosts, add an edge switch with some hosts!
         if s.mask < 30 and create_edge:
@@ -167,7 +173,8 @@ class FlowlogDemo(object):
             ip = self.nextSubnetHost(s.addr, s.mask, s.gw)
 
             host = network.addHost(name, ip='%s/%d' % (ip, s.mask),
-                                   defaultRoute='dev %s-eth0 via %s' % (name, s.gw))
+                                   defaultRoute='dev %s-eth0 via %s'
+                                   % (name, s.gw))
             network.addLink(host, edge_switch, **self.linkopts)
 
       # Finally, add hosts which represents our BGP peers
