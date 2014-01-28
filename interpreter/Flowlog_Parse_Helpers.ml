@@ -473,7 +473,7 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
 
             (* Create and simplify clauses. Test for what can be compiled. Weaken as needed. *)
             let clauses = (fold_left (fun acc r -> (clauses_of_rule r) @ acc) [] the_rules) in
-            let simplified_clauses = map simplify_clause clauses in
+            let simplified_clauses = (map simplify_clause clauses) in
             (* pre-determine what can be fully compiled. pre-determine weakened versions of other packet-triggered clauses*)
             let can_fully_compile_simplified, weakened_cannot_compile_pt_clauses, not_fully_compiled_clauses =
               fold_left (fun (acc_comp, acc_weaken, acc_unweakened) cl ->

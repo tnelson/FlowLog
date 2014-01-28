@@ -253,7 +253,9 @@ let rec partial_evaluation (p: flowlog_program) (incpkt: string) (f: formula): f
             end;
             (* TODO: Any should just not be included in the aggregation. Filtering dupes after the fact is inefficient.
                No reason why this should result in 41 separate disjuncts:
-               aclalias(ANY27,PKT__LOCSW,ANY28,ANY29), aclalias(Rtr-loopback1-acl,PKT__LOCSW,PKT__LOCPT,NEW__LOCPT)*)
+               aclalias(ANY27,PKT__LOCSW,ANY28,ANY29), aclalias(Rtr-loopback1-acl,PKT__LOCSW,PKT__LOCPT,NEW__LOCPT)
+              ??? Is this TODO still in effect? ^^^*)
+
             unique_result_clauses;;
 
 (***************************************************************************************)
@@ -561,7 +563,7 @@ let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_h
 
 
         if !global_verbose > 5 then
-          write_log (sprintf "bodies AFTER substitute_for_join = \n    %s\n%!"
+          write_log (sprintf "bodies = \n    %s\n%!"
             (String.concat "\n    " (map (fun l -> (String.concat " & " (map string_of_formula l))) bodies)));
 
 
@@ -659,7 +661,8 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: triggered_cl
     begin
       let non_all_actionsused = unique ~cmp:safe_compare_actions
                         (filter_map (fun (ac, ap, aa) -> if involves_allports_atom aa then None else Some(ac)) clause_aps) in
-      let actionpolswithallports = filter_map (fun (ac, ap, aa) -> if (involves_allports_atom aa) then Some(aa) else None) clause_aps in
+      let actionpolswithallports = unique ~cmp:safe_compare_pols
+                        (filter_map (fun (ac, ap, aa) -> if (involves_allports_atom aa) then Some(aa) else None) clause_aps) in
 
       (*printf "actionsued = %s\nactionswithphysicalports = %s\n%!"
        (String.concat ";" (map NetCore_Pretty.string_of_action actionsused))
@@ -701,6 +704,8 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: triggered_cl
                     Union(acc, per_action_helper actionpols))
                 (Action([]))
                 non_all_actionsused in
+
+      write_log (sprintf "action pols with all ports: %s" (string_of_list "," NetCore_Pretty.string_of_pol actionpolswithallports));
 
       (* the "allports" actions (note, may have multiple unique allports acts,
          due to metadata) must always be checked first*)

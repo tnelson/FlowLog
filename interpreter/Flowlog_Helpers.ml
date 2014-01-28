@@ -98,16 +98,22 @@ let is_dltyp_assign (f: formula): bool =
     | FEquals(TConst(_), TField(_, "dltyp")) -> true
     | _ -> false;;
 
-let is_nwproto_assign (f: formula): bool =
+let is_dltyp_neg (f: formula): bool =
   match f with
-    | FEquals(TField(_, "nwproto"), TConst(_))
-    | FEquals(TConst(_), TField(_, "nwproto")) -> true
+    | FNot(FEquals(TField(_, "dltyp"), TConst(_)))
+    | FNot(FEquals(TConst(_), TField(_, "dltyp"))) -> true
     | _ -> false;;
 
 let is_nwproto_assign (f: formula): bool =
   match f with
     | FEquals(TField(_, "nwproto"), TConst(_))
     | FEquals(TConst(_), TField(_, "nwproto")) -> true
+    | _ -> false;;
+
+let is_nwproto_neg (f: formula): bool =
+  match f with
+    | FNot(FEquals(TField(_, "nwproto"), TConst(_)))
+    | FNot(FEquals(TConst(_), TField(_, "nwproto"))) -> true
     | _ -> false;;
 
 (* expects no atomic rel fmlas! *)
@@ -152,11 +158,21 @@ let validate_ordering (eqlist: formula list) =
 
 (* dltyps, then nwprotos, then the rest *)
 let dltyp_first (f1: formula) (f2: formula): int =
-  if (is_dltyp_assign f1) then -1 (* f1 is smaller *)
+  if (is_dltyp_assign f1) then -1
+  else if (is_dltyp_neg f1) then
+  begin
+    if (is_dltyp_assign f2) then 1
+    else -1
+  end
   else if (is_nwproto_assign f1) then
   begin
-    if (is_dltyp_assign f2) then 1 (* f2 is smaller *)
-    else -1 (* f1 is smaller *)
+    if (is_dltyp_assign f2) || (is_dltyp_neg f2) then 1
+    else -1
+  end
+  else if (is_nwproto_neg f1) then
+  begin
+    if (is_dltyp_assign f2) || (is_dltyp_neg f2) || (is_nwproto_assign f2) then 1
+    else -1
   end
   else 1;; (* not a priority --> goes at end (f2 may be a priority here) *)
 
@@ -699,7 +715,7 @@ let rec simplify_netcore_predicate (pr: pred): pred =
           else Or(sp1, sp2)
     | And(p1, p2) ->
       (* TODO: wasting a ton of time on these calls when sets would be much faster than lists *)
-        let conjuncts = unique( map simplify_netcore_predicate (unique (gather_predicate_and p1) @ (gather_predicate_and p2))) in
+        let conjuncts = unique (map simplify_netcore_predicate (unique ((gather_predicate_and p1) @ (gather_predicate_and p2)))) in
         build_predicate_and conjuncts
         (*let sp1 = simplify_netcore_predicate p1 in
         let sp2 = simplify_netcore_predicate p2 in
