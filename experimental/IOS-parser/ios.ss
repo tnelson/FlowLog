@@ -2860,7 +2860,7 @@
     
     ;; (listof rule%) -> (listof rule%)
     ;;   Returns a list of the rules for this set action
-    (define/public (rules match-rules)
+    (define/public (rules match-rules [dummy-arg-should-always-be-policyroute 'policyroute])
       (map (λ (match-rule)
              (send match-rule
                    augment/replace-decision

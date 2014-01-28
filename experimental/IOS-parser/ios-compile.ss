@@ -141,6 +141,7 @@ namespace-for-template)
            (and (or ,@policyroute-pass)
                 (or ,@staticroute-pass)
                 (or ,@defaultpolicyroute-route))))
+    ;(printf "next hop fragment: ~v~n" next-hop-fragment) ; debug
     ; Caveat: these will use flat router-names 
     ; Caveat: these will use flat interface names
     ; NOTE: We DO NOT SUPPORT routes that use an interface-name instead of a next-hop. 
