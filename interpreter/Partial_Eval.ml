@@ -1054,7 +1054,7 @@ let make_policy_stream (p: flowlog_program)
           ignore (respond_to_notification p (hd notifs));
           if !global_verbose >= 1 then
           begin
-            printf "Total time to process all switch-up events: %fs.\n%!" (Unix.gettimeofday() -. startt);
+            printf "Total time to process all switch_port events for switch 0x%Lx: %fs.\n%!" sw (Unix.gettimeofday() -. startt);
             write_log (sprintf "Total time to process all switch-up events: %fs.\n%!" (Unix.gettimeofday() -. startt));
           end;
           if !global_verbose > 2 then
