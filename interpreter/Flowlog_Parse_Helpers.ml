@@ -426,6 +426,28 @@ let make_outgoings (decls: sdecl list) (defns: sreactive list): outgoing_def lis
                             | _ -> failwith "make_tables")
                        | _ -> None) decls;;
 
+let rec fmla_necessary_false ?(sign: bool = true) (f: formula): bool =
+  match f with
+    | FFalse when sign -> true
+    | FTrue when not sign -> true
+    | FTrue -> false
+    | FFalse -> false
+    | FAtom(_,_,_) -> false
+    | FEquals(t1, t2) when not sign && t1 = t2 -> true
+    | FEquals(t1, t2) -> false
+    | FIn(_,_,_) -> false
+    | FNot(f2) -> fmla_necessary_false ~sign:(not sign) f2
+    | FAnd(f2, f3) -> fmla_necessary_false ~sign:sign f2 || fmla_necessary_false ~sign:sign f3
+    | FOr(f2, f3) -> fmla_necessary_false ~sign:sign f2 && fmla_necessary_false ~sign:sign f3;;
+
+let rule_condition_false (r: srule): bool =
+  match r.action with
+  | ADelete(_, _, f) -> fmla_necessary_false f
+  | AInsert(_, _, f) -> fmla_necessary_false f
+  | ADo(_, _, f) -> fmla_necessary_false f
+  | AStash(_, _, f, _) -> fmla_necessary_false f
+  | AForward(_, f, _) -> fmla_necessary_false f;;
+
 let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_program =
   let expanded_ast = expand_includes ast [filename] in
   let stmts = expanded_ast.statements in
@@ -438,7 +460,11 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
                           filter_map (function | SReactive(r) -> Some r
                                                | _ -> None) stmts @
                           (reacts_added_by_sugar stmts) in
-        let the_rules  =  filter_map (function | SRule(r) -> Some (add_built_ins r)
+        let the_rules  =  filter_map (function | SRule(r) when (rule_condition_false r) ->
+                                                  if !global_verbose > 0 then
+                                                    write_log (sprintf "Ignoring rule in %s because its condition is always false: %s\n%!" filename (string_of_rule r));
+                                                  None
+                                               | SRule(r) -> Some (add_built_ins r)
                                                | _ -> None) stmts in
 
             (* Validation *)
