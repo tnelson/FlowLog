@@ -25,7 +25,7 @@ let fwd_actions = ref [];;
    even if those changes were caused by an event that suppressed new policy generation. *)
 let modifications_since_last_policy = ref [];;
 
-exception ContradictionInPE of formula * formula;;
+exception ContradictionInPE;;
 
 (* Push function for packet stream. Used to emit rather than forward. *)
 (* Not sure why the input can be option. *)
@@ -79,18 +79,13 @@ let pre_load_all_remote_queries (p: flowlog_program): unit =
 
 (* Handle substitution of values in cases like (pkt.dlSrc = x, x = 5) and (pkt.dlSrc=pkt.dlDst, pkt.dlDst=5 *)
 (* Also, if there is an FIn(_,_,_) in the clause, it may need substitution with equalities produced in PE. *)
-let substitute_for_join (eqs: formula list) (othsubfs: formula list): formula list option =
+let rec substitute_for_join (eqs: formula list) (othsubfs: formula list): formula list option =
   try
-
-  if !global_verbose > 5 then
-    printf "substitute_for_join: %s; %s\n%!"
-      (String.concat "," (map string_of_formula eqs))
-      (String.concat "," (map string_of_formula othsubfs));
-
   (* After PE, the formula will be a conjunction of equalities, INs, and negated PE fmlas. *)
-  (*let eqs = fold_left (fun (accins, accnonins, accnegs) subf -> match subf with
-                              | FEquals(t1, t2) -> (accins, subf::accnonins, accnegs)
-                              | _ -> (accins, accnonins, accnegs)) ([],[],[]) subfs in*)
+  if !global_verbose > 5 then
+    write_log (sprintf "substitute_for_join: %s; %s\n%!"
+      (String.concat "," (map string_of_formula eqs))
+      (String.concat "," (map string_of_formula othsubfs)));
 
   (* gather assignments from the equality formulas
      detect duplicate or bad assignments *)
@@ -100,7 +95,7 @@ let substitute_for_join (eqs: formula list) (othsubfs: formula list): formula li
                                   | FEquals((TVar(_) as v), (TConst(_) as c))
                                   | FEquals((TConst(_) as c), (TVar(_) as v))
                                   | FEquals((TField(_, _) as v), (TConst(_) as c))
-                                  | FEquals(TConst(_) as c, (TField(_, _) as v))  ->
+                                  | FEquals(TConst(_) as c, (TField(_, _) as v)) ->
 
                                     (* we DO NOT need to check *EQUALITIES* under negated subformulas:
                                        a contradiction like (x=5 and y=6 and not (x=5 or y=6))
@@ -118,37 +113,55 @@ let substitute_for_join (eqs: formula list) (othsubfs: formula list): formula li
                                       (*write_log (sprintf "contradiction in PE (subfmla=%s):\n v=%s had=%s got=%s\n%!"
                                         (string_of_formula subf) (string_of_term v) (string_of_term (assoc v acc)) (string_of_term c));*)
                                       (* Without this exception, we will try to substitute below and end up with, e.g. FEquals(5,7) *)
-                                      raise (ContradictionInPE(subf, (FEquals(v,c))))
+                                      raise ContradictionInPE
                                       (* failwith ("contradictory assignment to "^(string_of_term v)^": "^(string_of_term (assoc v acc))^" versus"^(string_of_term c))*)
                                     end
                                     else
                                       (v, c) :: acc
 
-                                  (* TODO: will also have to support equality between fields... *)
                                   | FEquals(TField(_,_), TField(_,_)) -> acc
                                   | FTrue -> acc
                                   | _ -> failwith ("substitute_for_join: unexpected non-eq fmla:"^(string_of_formula subf))
                                 ) [] eqs in
-
-  (* above won't be good enough. won't get negated INs and reduce them need to wait until after substitution and do a 2nd pass.
-    wait -- can all this be handled in substitute terms? *)
 
   (* substitute according to assignments. but don't freak out if result contains a 5=7, since may be part of negated subfmla
      also check for contradictory INs.
      + we will replace field-assignments at end of this function *)
   let substituted = (map (fun sf -> substitute_terms ~report_inconsistency:false sf assignments) othsubfs) in
 
+  (* Need to iterate this substitution process. Consider: R(x), x=y, ~P(y).*)
+  let neweqs = fold_left (fun acc subf -> match subf with
+                              | FEquals((TVar(_)), (TConst(_)))
+                              | FEquals((TConst(_)), (TVar(_)))
+                              | FEquals((TField(_, _)), (TConst(_)))
+                              | FEquals(TConst(_), (TField(_, _))) -> subf::acc
+                              | _ -> acc) [] substituted in
+  let remainder =
+    (if (length neweqs) > 0 then
+    begin
+      (* need to recurse *)
+      if !global_verbose >= 5 then
+      begin
+        write_log (sprintf "substitute_for_join recursing. neweqs: %s" (string_of_list "," string_of_formula neweqs));
+        write_log (sprintf "former eqs: %s" (string_of_list "," string_of_formula eqs));
+        write_log (sprintf "former othersubfs: %s" (string_of_list "," string_of_formula othsubfs));
+      end;
+      substitute_for_join neweqs (subtract substituted neweqs)
+    end
+    else Some(substituted)) in
+
   if !global_verbose >= 5 then
   begin
-    printf "--- substitute_for_join ---\n%!";
-    iter (fun (v, c) -> (printf "ASSN: %s -> %s\n%!" (string_of_term v) (string_of_term c))) assignments;
-    printf "FMLA': %s\n%!" (String.concat "," (map string_of_formula substituted));
+    iter (fun (v, c) -> write_log (sprintf "ASSN: %s -> %s" (string_of_term v) (string_of_term c))) assignments;
+    write_log (sprintf "REMAINDER: %s" (String.concat "," (map string_of_formula (Option.default [FFalse] remainder))));
   end;
+
+  if Option.is_none remainder then
+    raise ContradictionInPE;
 
   (* Re-add field assignments that we substituted out for safety: *)
   let field_value_conj = filter_map (fun (v,c) -> match v with | TField(_, _) -> Some(FEquals(v, c)) | _ -> None) assignments in
-
-  if !global_verbose > 3 then printf "FIELD VALUE CONJ: %s\n%!" (string_of_formula (build_and field_value_conj));
+  if !global_verbose > 3 then write_log (sprintf "FIELD VALUE CONJ: %s\n%!" (string_of_formula (build_and field_value_conj)));
 
   (* ~~~ASSUMPTION~~~
      ON blocks guard all field references within their scope: if a tpSrc field is used (even only within a negated subfmla),
@@ -157,9 +170,11 @@ let substitute_for_join (eqs: formula list) (othsubfs: formula list): formula li
 
   (* If there are still variables left in INs, they are free to vary arbitrarily, and so the compiler will ignore that IN. *)
   (* Also we need to make sure that DlTyp comes first, then NwProto, then other fields *)
-  let result = sort ~cmp:dltyp_first (field_value_conj @ substituted) in
-    Some(result)
-  with | ContradictionInPE(_,_) -> if !global_verbose > 5 then printf "ContradictionInPE: \n%!"; None;;
+  let result = sort ~cmp:dltyp_first (field_value_conj @ (Option.get remainder)) in
+    Some(result) (* none = empty clause; some [] = empty conjunction. used by filter_map in parent *)
+  with | ContradictionInPE -> if !global_verbose >= 5 then printf "ContradictionInPE: \n%!"; None;;
+
+(*************************************************************************)
 
 let pe_helper_cache = ref FmlaMap.empty;;
 
