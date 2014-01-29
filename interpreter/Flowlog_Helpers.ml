@@ -156,25 +156,40 @@ let validate_ordering (eqlist: formula list) =
     (false, false)
     eqlist;;
 
-(* dltyps, then nwprotos, then the rest *)
-let dltyp_first (f1: formula) (f2: formula): int =
-  if (is_dltyp_assign f1) then -1
-  else if (is_dltyp_neg f1) then
-  begin
-    if (is_dltyp_assign f2) then 1
-    else -1
-  end
-  else if (is_nwproto_assign f1) then
-  begin
-    if (is_dltyp_assign f2) || (is_dltyp_neg f2) then 1
-    else -1
-  end
-  else if (is_nwproto_neg f1) then
-  begin
-    if (is_dltyp_assign f2) || (is_dltyp_neg f2) || (is_nwproto_assign f2) then 1
-    else -1
-  end
-  else 1;; (* not a priority --> goes at end (f2 may be a priority here) *)
+let field_order = Hashtbl.create(10);;
+Hashtbl.add field_order "locsw" 0;;
+Hashtbl.add field_order "locpt" 2;;
+Hashtbl.add field_order "dltyp" 4;;
+Hashtbl.add field_order "nwproto" 6;;
+Hashtbl.add field_order "dlsrc" 8;;
+Hashtbl.add field_order "dldst" 10;;
+Hashtbl.add field_order "nwsrc" 12;;
+Hashtbl.add field_order "nwdst" 14;;
+Hashtbl.add field_order "tpsrc" 16;;
+Hashtbl.add field_order "tpdst" 18;;
+(* others unordered *)
+
+let get_field_order_index (fmla: formula): int =
+  match fmla with
+    | FEquals(TField(_, fld), _)
+    | FEquals(_, TField(_, fld)) ->
+      if Hashtbl.mem field_order fld then Hashtbl.find field_order fld
+      else 100
+    | FNot(FEquals(TField(_, fld), _))
+    | FNot(FEquals(_, TField(_, fld))) ->
+      if Hashtbl.mem field_order fld then (Hashtbl.find field_order fld) + 1
+      else 101
+    | _ -> 200;;
+
+(* If we have nwSrc before dltyp (for instance), NetCore produces unsound results.
+   Even more, NetCore is sensitive to ordering within conjunctions, etc.
+   While this ordering is not guaranteed to be optimal, it is guaranteed to be sound
+   (and in practice, seems to lead to reasonably efficient flow tables.) *)
+let order_clause_conjunct (f1: formula) (f2: formula): int =
+  let idx1 = get_field_order_index f1 in
+  let idx2 = get_field_order_index f2 in
+  if idx1 - idx2 > 0 then 1
+  else -1;;
 
 let construct_map (bindings: (string * string) list): (string StringMap.t) =
   fold_left (fun acc (bx, by) -> StringMap.add bx by acc) StringMap.empty bindings

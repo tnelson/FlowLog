@@ -170,7 +170,7 @@ let rec substitute_for_join (eqs: formula list) (othsubfs: formula list): formul
 
   (* If there are still variables left in INs, they are free to vary arbitrarily, and so the compiler will ignore that IN. *)
   (* Also we need to make sure that DlTyp comes first, then NwProto, then other fields *)
-  let result = sort ~cmp:dltyp_first (field_value_conj @ (Option.get remainder)) in
+  let result = sort ~cmp:order_clause_conjunct (field_value_conj @ (Option.get remainder)) in
     Some(result) (* none = empty clause; some [] = empty conjunction. used by filter_map in parent *)
   with | ContradictionInPE -> if !global_verbose >= 5 then printf "ContradictionInPE: \n%!"; None;;
 
