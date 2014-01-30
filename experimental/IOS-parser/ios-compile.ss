@@ -38,7 +38,7 @@
 (require "ios-flowlog-helpers.rkt")
 (require racket/string)
 (require (only-in srfi/13 string-pad))
-
+      
 (provide compile-configurations)
 
 (define-syntax combine-rules
@@ -178,6 +178,8 @@ namespace-for-template)
                    [s (string-append "  INSERT (" n ", " hstPt ", " rtrPt ") INTO router_portmap;\n")])
               (string-append s (make-routerportmap (sub1 num)))))))
 
+    (define warned-secondary (box #f))
+    
     ;;;;;;;;;;;;;;;;;;;
     ; Need to assign an ID to the router and an ID to the interface
     (define (ifacedef->tuples arouter interface-defns nat-dpid rname rnum ifindex i ridx acl-dpid)
@@ -229,8 +231,10 @@ namespace-for-template)
          (set-router-subnets! arouter (cons aninterf (router-subnets arouter) ))
 
          ; Deal with secondary subnet, if there is one
-         (when secaddr 
-           (printf "WARNING! Secondary interface detected. Ignoring...~n")
+         (when secaddr
+           (unless (unbox warned-secondary)
+             (printf "WARNING! Secondary interface(s) detected on ~v. Ignoring...~n" rname)
+             (set-box! warned-secondary #t))
            ;(define aninterf2 (subnet ""))
            ;
            ;(set-subnet-addr! aninterf2 secnwa)
@@ -259,7 +263,44 @@ namespace-for-template)
       ; Filter out interfaces that extract-ifs returns #f for. (for instance, ifs with no subnet)
       (define unfiltered-interface-defns (hash-map interfaces extract-ifs))
       (define interface-defns (filter (lambda (i) i) unfiltered-interface-defns))
-      (printf "Processed ~v interfaces; ~v had subnets and will be handled.~n" (length unfiltered-interface-defns) (length interface-defns)) ; DEBUG
+      (printf "Processed ~v interfaces; ~v had subnets and will be handled.~n" (length unfiltered-interface-defns) (length interface-defns)) ; DEBUG     
+      
+      ;;;;;;;;;;;;;;;;;;;;
+      ;; to be moved to helper module
+      ; provide extra information
+      (define acls (send config get-ACLs))
+      (define acl-ids-used (foldl (lambda (iface acc)  
+                                    (define inid (get-field inbound-ACL-ID iface))
+                                    (define outid (get-field outbound-ACL-ID iface))
+                                    (define ifname (send iface text))
+                                    ;(printf "acl ~v and ~v used on interface ~v~n" inid outid ifname)
+                                    (cond [(and (not (equal? 'default inid)) (not (equal? 'default outid))) (cons inid (cons outid acc))]
+                                          [(not (equal? 'default inid))(cons inid acc)]
+                                          [(not (equal? 'default outid)) (cons outid acc)]
+                                          [else acc])) empty (hash-values interfaces)))
+      
+      (define acl-ids-used-nodupes (remove-duplicates acl-ids-used))
+      (printf "There were ~v ACLs defined. ~v (~v) were used on interfaces (either inbound or outbound) ~v times in total.~n" 
+              (hash-count acls)
+              (length acl-ids-used-nodupes)
+              acl-ids-used-nodupes
+              (length acl-ids-used))
+      
+      ;; ***TODO*** to understand rule counts, need to know how many times each acl is applied.
+      
+      (define (get-acl-counts id)
+        (define aces (send (hash-ref acls id) get-ACEs))
+        (for/fold ([overlaps 0] [permits 0] [denies 0]) ([ace aces])
+          (define dec (send ace decision))
+          (cond [(equal? 'permit dec) (values (+ overlaps denies) (+ permits 1) denies)]
+                [(equal? 'deny dec) (values overlaps permits (+ denies 1))]
+                [else (error (format "unexpected decision ~v" dec))])))
+      
+      (for-each (lambda (id) 
+                  (define-values (overlaps permits denies) (get-acl-counts id))
+                  (printf "id=~v had ~v overlaps, ~v permits, ~v denies. (ICMP will be ignored.)~n" id overlaps permits denies)) acl-ids-used-nodupes)
+      (printf "[Do not forget that interfaces without ACLs, and directions without ACLs, will produce flowlog rules...]~n")
+      ;;;;;;;;;;;;;;;;;;;;
       
       (maybe-update-max-subnets (length interface-defns))
       ;(pretty-display interface-defns) ; DEBUG
