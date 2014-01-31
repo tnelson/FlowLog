@@ -177,6 +177,11 @@ let rec substitute_for_join (eqs: formula list) (othsubfs: formula list): formul
 (*************************************************************************)
 
 let pe_helper_cache = ref FmlaMap.empty;;
+let count_pe_cache_hits = ref 0;;
+let count_pe_cache_misses = ref 0;;
+let count_clauses_pe = ref 0;;
+let count_disjuncts_pe = ref 0;;
+let count_unique_disjuncts_pe = ref 0;;
 
 (* Assumes only positive subformulas!
     Returns list of lists, each inner list represents a conjunction *)
@@ -185,11 +190,14 @@ let partial_evaluation_helper (positive_f: formula): formula list list =
      ^ This optimization is more important than it seems, since clauses are split before negative fmlas get PE'd now. *)
   if FmlaMap.mem positive_f !pe_helper_cache then
   begin
-    if !global_verbose >= 4 then printf "Formula was cached for PE: %s\n%!" (string_of_formula positive_f);
+    if !global_verbose >= 6 then write_log (sprintf "Formula was cached for PE: %s" (string_of_formula positive_f));
+    if !global_verbose >= 1 then count_pe_cache_hits :=  !count_pe_cache_hits + 1;
     FmlaMap.find positive_f !pe_helper_cache
   end
   else
   begin
+    if !global_verbose >= 6 then write_log (sprintf "Formula was a cache MISS for PE: %s" (string_of_formula positive_f));
+    if !global_verbose >= 1 then count_pe_cache_misses :=  !count_pe_cache_misses + 1;
   (* Consider formulas like: seqpt(PUBLICIP,0x11,X) -- need to remove constants from tlargs before reassembling equalities *)
   let terms_used_no_constants_or_any = get_terms (fun t -> not (is_ANY_term t) && match t with | TConst(_) -> false | _ -> true) positive_f in
 
@@ -255,6 +263,12 @@ let rec partial_evaluation (p: flowlog_program) (incpkt: string) (f: formula): f
         let stage_2_lists = filter_map (fun listconj -> substitute_for_join listconj other_formulas) positive_conjuncts in
           let result_clauses = map (stage_2_partial_eval incpkt) stage_2_lists in
           let unique_result_clauses = unique result_clauses in
+            if !global_verbose >= 1 then
+            begin
+              count_disjuncts_pe := !count_disjuncts_pe + (length result_clauses);
+              count_unique_disjuncts_pe := !count_unique_disjuncts_pe + (length unique_result_clauses);
+            end;
+
             if !global_verbose >= 4 then
             begin
               if (length result_clauses) <> (length unique_result_clauses) then
@@ -572,6 +586,7 @@ let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_h
         let startt = Unix.gettimeofday() in
 
         let bodies = partial_evaluation p tcl.oldpkt tcl.clause.body in
+        if !global_verbose >= 1 then count_clauses_pe := !count_clauses_pe + 1;
 
         if !global_verbose > 2 then
           write_log (sprintf "Time to PE: %fs" (Unix.gettimeofday() -. startt));
@@ -739,13 +754,31 @@ let program_to_netcore (p: flowlog_program) (callback: get_packet_handler): (pol
 
     (* Clear out the PE helper cache. This is vital! (TODO: make functional) *)
     pe_helper_cache := FmlaMap.empty;
+    count_pe_cache_hits := 0;
+    count_pe_cache_misses := 0;
+    count_clauses_pe := 0;
+    count_disjuncts_pe := 0;
+    count_unique_disjuncts_pe := 0;
 
-    (pkt_triggered_clauses_to_netcore p
+    let result = (pkt_triggered_clauses_to_netcore p
       p.can_fully_compile_to_fwd_clauses
       None,
      pkt_triggered_clauses_to_netcore p
       p.weakened_cannot_compile_pt_clauses
-     (Some callback));;
+     (Some callback)) in
+
+    if !global_verbose >= 1 then
+    begin
+      write_log ("--------------------------- program_to_netcore statistics ---------------------------\n%!");
+      write_log (sprintf "pe_helper_cache size = %d\n%!" (FmlaMap.cardinal !pe_helper_cache));
+      write_log (sprintf "count_pe_cache_hits = %d\n%!" !count_pe_cache_hits);
+      write_log (sprintf "count_pe_cache_misses = %d\n%!" !count_pe_cache_misses);
+      write_log (sprintf "count_clauses_pe = %d\n%!" !count_clauses_pe);
+      write_log (sprintf "count_disjuncts_pe = %d\n%!" !count_disjuncts_pe);
+      write_log (sprintf "count_unique_disjuncts_pe = %d\n%!" !count_unique_disjuncts_pe);
+    end;
+
+    result;;
 
 let forward_packet (p: flowlog_program) (ev: event): unit =
   printf "forwarding: %s\n%!" (string_of_event p ev);
