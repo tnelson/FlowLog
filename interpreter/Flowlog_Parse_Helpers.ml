@@ -380,11 +380,13 @@ let rec expand_includes (ast : flowlog_ast) (prev_includes : string list) : flow
           expand_includes new_ast (prev_includes @ includes)
 
 (* some duplication here from Flowlog_Graphs for now. *)
-  let build_memos_for_program (rules: srule list) (tables: table_def list) (outgoings: outgoing_def list) (events: event_def list): program_memos =
+  let build_memos_for_program (rules: srule list) (tables: table_def list) (outgoings: outgoing_def list) (events: event_def list) (simp_clauses: clause list): program_memos =
+    let fmlas = map (fun cl -> cl.body) simp_clauses in
     let memos = {out_triggers = Hashtbl.create 5; insert_triggers = Hashtbl.create 5;
                  delete_triggers = Hashtbl.create 5;
                  tablemap = Hashtbl.create 5; eventmap = Hashtbl.create 5;
                  outgoingmap = Hashtbl.create 5;
+                 atoms_used_in_bodies = unique (fold_left (fun acc f -> (get_atoms f) @ acc) [] fmlas);
                  } in
     let depends_from_rule (r: srule): unit =
       match r.action with
@@ -398,11 +400,11 @@ let rec expand_includes (ast : flowlog_ast) (prev_includes : string list) : flow
           Hashtbl.add memos.out_triggers r.onrel "forward"
         | AStash(p, where, until, thens) ->
           Hashtbl.add memos.out_triggers r.onrel "stash" in
-     iter depends_from_rule rules;
-     iter (fun tdef -> Hashtbl.add memos.tablemap tdef.tablename tdef) tables;
-     iter (fun odef -> Hashtbl.add memos.outgoingmap odef.outname odef) outgoings;
-     iter (fun edef -> Hashtbl.add memos.eventmap edef.eventname edef) events;
-     memos;;
+      iter depends_from_rule rules;
+      iter (fun tdef -> Hashtbl.add memos.tablemap tdef.tablename tdef) tables;
+      iter (fun odef -> Hashtbl.add memos.outgoingmap odef.outname odef) outgoings;
+      iter (fun edef -> Hashtbl.add memos.eventmap edef.eventname edef) events;
+      memos;;
 
 let make_tables (decls: sdecl list) (defns: sreactive list): table_def list =
   filter_map (function | DeclTable(n, tlist) -> Some {tablename=n; tablearity=tlist; source=LocalTable}
@@ -519,7 +521,7 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
                  can_fully_compile_to_fwd_clauses = can_fully_compile_simplified;
                  (* Remember: these are unweakened, and so can be used by XSB. *)
                  not_fully_compiled_clauses = not_fully_compiled_clauses;
-                 memos = build_memos_for_program the_rules the_tables the_outgoings the_events} in
+                 memos = build_memos_for_program the_rules the_tables the_outgoings the_events simplified_clauses} in
 
                   (* Validation *)
                   iter (well_formed_rule p) the_rules;

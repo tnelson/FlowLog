@@ -73,7 +73,7 @@ let pre_load_all_remote_queries (p: flowlog_program): unit =
   let remote_fmlas =
     filter (function | FAtom(modname, relname, args) when (is_remote_table p relname) -> true
                      | _-> false)
-           (get_atoms_used_in_bodies p) in
+           p.memos.atoms_used_in_bodies in
     iter (fun f -> ignore (refresh_remote_relation p f)) remote_fmlas;;
 
 
@@ -999,6 +999,9 @@ let respond_to_notification (p: flowlog_program) ?(suppress_new_policy: bool = f
     (* depopulate event EDB *)
     Communication.retract_event_and_subevents p notif;
 
+    if !global_verbose >= 3 then
+      write_log (sprintf "Time after retracting event and subevents: %fs\n%!" (Unix.gettimeofday() -. startt));
+
     (* Return the tables that have actually being modified.
        TODO: not as smart as it could be: we aren't checking whether this stuff actually *changes the state*,
              just whether facts are being asserted/retracted. *)
@@ -1012,15 +1015,20 @@ let respond_to_notification (p: flowlog_program) ?(suppress_new_policy: bool = f
    (* THIS MUST HAPPEN BEFORE POLICY IS UPDATED *)
     iter Communication.retract_formula to_retract;
     iter Communication.assert_formula to_assert;
+
+    if !global_verbose >= 3 then
+      write_log (sprintf "Time after asserting and retracting: %fs\n%!" (Unix.gettimeofday() -. startt));
+
     if !global_verbose >= 2 then
     begin
       (*Xsb.debug_print_listings();*)
       Communication.get_and_print_xsb_state p;
+
+      if !global_verbose >= 3 then
+        write_log (sprintf "Time after printing state: %fs\n%!" (Unix.gettimeofday() -. startt));
+
     end;
    (**********************************************************)
-
-    if !global_verbose >= 3 then
-      write_log (sprintf "Time after asserting and retracting: %fs\n%!" (Unix.gettimeofday() -. startt));
 
    (**********************************************************)
    (* UPDATE POLICY ON SWITCHES  (use the NEW state)         *)

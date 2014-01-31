@@ -123,6 +123,7 @@ type typeid = string;;
                         tablemap: (string, table_def) Hashtbl.t;
                         eventmap: (string, event_def) Hashtbl.t;
                         outgoingmap: (string, outgoing_def) Hashtbl.t;
+                        atoms_used_in_bodies: formula list;
                        };;
 
   type flowlog_program = {  desugared_decls: sdecl list; (* for use in errors, alloy conversion, etc. *)
