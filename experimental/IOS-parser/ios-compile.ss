@@ -251,7 +251,11 @@ namespace-for-template)
          ; Keep the tuples that are non-#f
          (filter (lambda (x) x) (list prim sec alias needs-nat acldefn natconfigs))]
         [else (pretty-display i) (error "ifacedef->tuple")]))
+ 
+      (define total-parsed-ace-count (box 0))      
+      (define total-used-ace-count (box 0))
 
+    
     ;;;;;;;;;;;;;;;;;;;
     (define (extract-hosts routers-msg config hostidx)      
       (define hostname (symbol->string (send (send config get-hostname) name)))
@@ -298,7 +302,9 @@ namespace-for-template)
               (length acl-ids-used-nodupes)
               acl-ids-used-nodupes
               (length acl-ids-used))
-      
+           
+      (set-box! total-used-ace-count (+ (unbox quick-used-ace-count) (unbox total-used-ace-count)))
+      (set-box! total-parsed-ace-count (+ (unbox quick-parsed-ace-count) (unbox total-parsed-ace-count)))      
       ;; ***TODO*** to understand rule counts, need to know how many times each acl is applied.
       
       (define (get-acl-counts id)
@@ -364,6 +370,9 @@ namespace-for-template)
                                              
                                              (extract-hosts routers-msg config hostidx))))
             
+    
+    (printf "total parsed ACL elements: ~v. total used ACL elements: ~v~n" (unbox total-parsed-ace-count) (unbox total-used-ace-count))
+    
     ; output the router message for this router
     (call-with-output-file (make-path root-path "IOS.pb.bin") #:exists 'replace
       (lambda (out) 
