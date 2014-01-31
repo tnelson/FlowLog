@@ -38,7 +38,7 @@
 (require "ios-flowlog-helpers.rkt")
 (require racket/string)
 (require (only-in srfi/13 string-pad))
-      
+  
 (provide compile-configurations)
 
 (define-syntax combine-rules
@@ -256,7 +256,7 @@ namespace-for-template)
     (define (extract-hosts routers-msg config hostidx)      
       (define hostname (symbol->string (send (send config get-hostname) name)))
       ; Please keep and comment out. Useful to know immediately which config is failing:
-      ;(printf "extract-hosts: ~v~n" hostname) ; DEBUG
+      (printf "~nprocessing host config: ~v~n" hostname) ; DEBUG
       (define interfaces (send config get-interfaces))
       (define interface-keys (hash-keys interfaces))      
       
@@ -272,13 +272,26 @@ namespace-for-template)
       (define acl-ids-used (foldl (lambda (iface acc)  
                                     (define inid (get-field inbound-ACL-ID iface))
                                     (define outid (get-field outbound-ACL-ID iface))
-                                    (define ifname (send iface text))
+                                    (define ifname (send iface text))                                    
                                     ;(printf "acl ~v and ~v used on interface ~v~n" inid outid ifname)
                                     (cond [(and (not (equal? 'default inid)) (not (equal? 'default outid))) (cons inid (cons outid acc))]
                                           [(not (equal? 'default inid))(cons inid acc)]
                                           [(not (equal? 'default outid)) (cons outid acc)]
                                           [else acc])) empty (hash-values interfaces)))
+  
+      ; start at -1 because the 'default ACE is always created
+      (define quick-parsed-ace-count (box -1))
+      ; but count 'default if used
+      (define quick-used-ace-count (box 0))
+
+      ; iterate by ACL, not interface (no risk of double-count)
+      (hash-map acls (lambda (key acl)
+                      ; (printf "acl ~v had: ~v~n" key (send acl get-ACEs))
+                       (set-box! quick-parsed-ace-count (+ (length (send acl get-ACEs)) (unbox quick-parsed-ace-count)))
+                       (when (member key acl-ids-used)
+                         (set-box! quick-used-ace-count (+ (length (send acl get-ACEs)) (unbox quick-used-ace-count))))))
       
+      (printf "#acl entries: ~v. #acl entries used for filtering on an interface: ~v~n" (unbox quick-parsed-ace-count) (unbox quick-used-ace-count))
       (define acl-ids-used-nodupes (remove-duplicates acl-ids-used))
       (printf "There were ~v ACLs defined. ~v (~v) were used on interfaces (either inbound or outbound) ~v times in total.~n" 
               (hash-count acls)
