@@ -898,7 +898,7 @@ let expire_remote_state_in_xsb (p: flowlog_program) : unit =
                   if !global_verbose > 1 then printf "REMOTE STATE --- Allowing relation to remain: %s %s %s\n%!"
                     (string_of_formula keyfmla) (string_of_int num) (string_of_float timestamp);
                   ();
-              | RefreshPure ->
+              | RefreshNever ->
                 (* never expire pure tables *)
                 ();
               | RefreshEvery ->

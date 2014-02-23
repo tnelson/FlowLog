@@ -35,7 +35,7 @@ rule token = parse
   | "outgoing" { OUTGOING }
   | "where" { WHERE }
   | "timeout" { TIMEOUT }
-  | "pure" { PURE }
+  | "never" { NEVER }
   | "then" { THEN }
   | "on" { ON }
 

@@ -15,7 +15,7 @@
   %token DO
   %token AT
   %token TIMEOUT
-  %token PURE
+  %token NEVER
   %token ON
   %token SEND
   %token TO
@@ -107,7 +107,7 @@
 
   refresh_clause:
             | TIMEOUT NUMBER NAME {RefreshTimeout(int_of_string($2), $3)}
-            | PURE {RefreshPure}
+            | NEVER {RefreshNever}
             | {RefreshEvery};
 
   rule_stmt: on_clause COLON action_clause_list

@@ -42,7 +42,7 @@ type typeid = string;;
   type refresh =
       (* number, units *)
       | RefreshTimeout of int * string
-      | RefreshPure
+      | RefreshNever
       | RefreshEvery;;
 
   (*type assignment = {afield: string; atupvar: string};;      *)
