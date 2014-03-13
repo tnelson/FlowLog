@@ -1,0 +1,43 @@
+EVENT stolen_laptop_report {macr: macaddr};
+EVENT stolen_laptop_cancel {macc: macaddr};
+EVENT stolen_laptop_found {mac: macaddr, swid: switchid, time: int};
+EVENT start_timer {seconds: int, id: string};
+EVENT timer_expired {id: int};
+
+TABLE stolen(macaddr);
+TABLE limit(macaddr);
+
+OUTGOING notify_police(stolen_laptop_found) THEN
+  SEND TO 127.0.0.1 5050;
+OUTGOING start_timer_out(start_timer) THEN
+  SEND TO 127.0.0.1 9091;
+
+REMOTE TABLE get_time(int)
+  FROM time AT 127.0.0.1 9091
+  TIMEOUT 1 seconds;
+
+ON stolen_laptop_cancel(rec):
+  DELETE (rec.macc) FROM stolen;
+ON stolen_laptop_report(stolen):
+  INSERT (stolen.macr) INTO stolen;
+
+ON packet(pkt):
+  DO forward(new) WHERE
+    new.locPt != pkt.locPt;
+
+  DO notify_police(sto) WHERE
+    sto.mac = pkt.dlSrc AND sto.time=currtime AND sto.swid = pkt.locSw AND
+    stolen(pkt.dlSrc) AND
+    NOT limit(pkt.dlSrc) AND
+    get_time(currtime);
+  INSERT (pkt.dlSrc) INTO limit WHERE
+    stolen(pkt.dlSrc) and NOT limit(pkt.dlSrc);
+
+// Every 15 seconds, clean out the rate-limiter table
+ON startup(empty_event):
+  DO start_timer_out(st) WHERE
+    st.seconds = 15 AND st.id = "tStolen";
+ON timer_expired(exp) WHERE exp.id = "tStolen":
+  DELETE (ANY) FROM limit;
+  DO start_timer_out(st) WHERE
+    st.seconds = 15 AND st.id = "tStolen";
