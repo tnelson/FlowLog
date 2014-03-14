@@ -467,8 +467,8 @@ module Communication = struct
 
 		(* remember that if the string contains >1 ., the error may come in the next read *)
 
-		(* Add a clause if it's not fully compiled, OR we're in no-compilation mode *)
-		if notables then
+		(* If unsafe and compiling to tables, add only non-fully compiled clauses to prevent overlap *)
+		if notables || not !global_unsafe then
 		  iter (start_clause prgm ~forcepositive:forcepositive) prgm.clauses
 	    else
 		  iter (start_clause prgm ~forcepositive:forcepositive) prgm.not_fully_compiled_clauses;

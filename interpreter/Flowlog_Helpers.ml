@@ -10,6 +10,7 @@ open NetCore_Types
 (* 10 = even XSB messages *)
 let global_verbose = ref 0;;
 
+let global_unsafe = ref false;;
 
 exception UndeclaredIncomingRelation of string;;
 exception UndeclaredOutgoingRelation of string;;

@@ -638,7 +638,7 @@ let build_metadata_action_pol (ac: NetCore_Types.action) (ru: srule): NetCore_Ty
 
 (* return the union of policies for each clause *)
 (* Side effect: reads current state in XSB *)
-let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: triggered_clause list) (callback: get_packet_handler option): pol =
+let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: triggered_clause list) (callback: get_packet_handler option): pol * pred =
   if !global_verbose > 2 then
     write_log (sprintf "Converting clauses to NetCore. %d clauses.\n%!" (length clauses));
   let pre_unique_pas = appendall (map (pkt_triggered_clause_to_netcore p callback) clauses) in
@@ -683,10 +683,10 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: triggered_cl
             clause_aps in
 
     if length clause_aps = 0 then
-      Action([])
+      (Action([]), Nothing)
     else if length clause_aps = 1 then
       let (act, pred, actpol) = (hd clause_aps) in
-        Seq(Filter(pred), actpol)
+        (Seq(Filter(pred), actpol), pred)
     else
     begin
       let non_all_actionsused = unique ~cmp:safe_compare_actions
@@ -725,9 +725,12 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: triggered_cl
          (Action([]))
          actionpols in
 
+      (* ***************************************** *)
+      (* SINGLE PORTS *)
+
       (* Build a single union over policies for each distinct action *)
       (* if we get dup packets, make certain || isn't getting compiled to bag union in netcore *)
-      let union_over_ports = fold_left
+      let (union_over_ports: pol * pred) = fold_left
                 (fun (acc: pol) (aportaction: action) ->
                   (* which metadata combos do we have for this action? *)
                   let actionpols = get_action_pols_for_action aportaction in
@@ -737,18 +740,25 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: triggered_cl
 
       write_log (sprintf "action pols with all ports: %s" (string_of_list "," NetCore_Pretty.string_of_pol actionpolswithallports));
 
+      (* ***************************************** *)
+      (* ALLPORTS *)
       (* the "allports" actions (note, may have multiple unique allports acts,
          due to metadata) must always be checked first*)
       (* If not all-ports, can safely union without overlap *)
-      fold_left (fun (acc: pol) (apactpol: pol) ->
-          ITE(or_of_preds_for_action_pol apactpol, apactpol, acc))
+      fold_left (fun (acc: pol * pred) (apactpol: pol) ->
+          let accpol, accpred = acc in
+          let (thepred: pred) = or_of_preds_for_action_pol apactpol in
+            (ITE(thepred, apactpol, accpol)), Or(thepred, accpred))
         union_over_ports
         (sort ~cmp:sort_by_decreasing_timeout actionpolswithallports)
+
+        (* return not just the policy, but the predicate that triggers it*)
     end;;
 
 (* Side effect: reads current state in XSB *)
 (* Set up policies for all packet-triggered clauses *)
-let program_to_netcore (p: flowlog_program) (callback: get_packet_handler): (pol * pol) =
+(* RETURN VALUES: fwd pol, notif pol, fwd pred (for safety; see caller) *)
+let program_to_netcore (p: flowlog_program) (callback: get_packet_handler): (pol * pol * pred) =
   (* posn 1: fully compilable packet-triggered.
      posn 2: pre-weakened, non-fully-compilable packet-triggered *)
 
@@ -760,12 +770,9 @@ let program_to_netcore (p: flowlog_program) (callback: get_packet_handler): (pol
     count_disjuncts_pe := 0;
     count_unique_disjuncts_pe := 0;
 
-    let result = (pkt_triggered_clauses_to_netcore p
-      p.can_fully_compile_to_fwd_clauses
-      None,
-     pkt_triggered_clauses_to_netcore p
-      p.weakened_cannot_compile_pt_clauses
-     (Some callback)) in
+    let fwd_pol, fwd_pred = pkt_triggered_clauses_to_netcore p p.can_fully_compile_to_fwd_clauses None in
+    let notif_pol, notif_pred = pkt_triggered_clauses_to_netcore p p.weakened_cannot_compile_pt_clauses (Some callback) in
+    let result = (fwd_pol, notif_pol, fwd_pred) in
 
     if !global_verbose >= 1 then
     begin
@@ -1021,7 +1028,6 @@ let respond_to_notification (p: flowlog_program) ?(suppress_new_policy: bool = f
 
     if !global_verbose >= 2 then
     begin
-      (*Xsb.debug_print_listings();*)
       Communication.get_and_print_xsb_state p;
 
       if !global_verbose >= 3 then
@@ -1081,6 +1087,11 @@ let respond_to_notification (p: flowlog_program) ?(suppress_new_policy: bool = f
 
 (* Ignore the switch's non-physical ports (pp. 18-19 of OpenFlow 1.0 spec). *)
 let ofpp_max_port = nwport_of_string "0xff00";;
+
+(* If not unsafe, packets that will update the switch must be handled entirely by controller *)
+let build_total_pol (notifypred: pred) (fwd: pol) (notif: pol) (internal: pol): pol =
+  if !global_unsafe then Union(Union(fwd, notif), internal)
+  else Union(ITE(notifypred, notif, fwd), internal);;
 
 (* If notables is true, send everything to controller *)
 let make_policy_stream (p: flowlog_program)
@@ -1190,12 +1201,12 @@ let make_policy_stream (p: flowlog_program)
       if not notables then
       begin
         (* Update the policy *)
-        let (newfwdpol, newnotifpol) = program_to_netcore p updateFromPacket in
+        let (newfwdpol, newnotifpol, newnotifpred) = program_to_netcore p updateFromPacket in
 
    (*     printf "NEW FWD policy: %s\n%!" (NetCore_Pretty.string_of_pol newfwdpol);
         printf "NEW NOTIF policy: %s\n%!" (NetCore_Pretty.string_of_pol newnotifpol);
      *)
-        let newpol = Union(Union(newfwdpol, newnotifpol), internal_policy()) in
+        let newpol = build_total_pol newnotifpred newfwdpol newnotifpol (internal_policy()) in (*Union(Union(newfwdpol, newnotifpol), internal_policy()) in*)
           (* Since can't compare functions, need to use custom comparison *)
 
           let startt = Unix.gettimeofday() in
@@ -1214,7 +1225,8 @@ let make_policy_stream (p: flowlog_program)
             write_log (sprintf "Pushed new policy (number %d).\n%!" !counter_pols_pushed);
             write_log (sprintf "NEW FWD policy: %s\n%!" (NetCore_Pretty.string_of_pol newfwdpol));
             write_log (sprintf "NEW NOTIF policy: %s\n%!" (NetCore_Pretty.string_of_pol newnotifpol));
-
+            write_log (sprintf "NEW NOTIF pred: %s\n%!" (NetCore_Pretty.string_of_pred newnotifpred));
+            if !global_verbose > 3 then write_log (sprintf "NEW POLICY: %s\n%!" (NetCore_Pretty.string_of_pol newpol));
           end
           else
           begin
@@ -1278,13 +1290,13 @@ let make_policy_stream (p: flowlog_program)
 
     if not notables then
     begin
-      let (initfwdpol, initnotifpol) = program_to_netcore p updateFromPacket in
+      let (initfwdpol, initnotifpol, initnotifpred) = program_to_netcore p updateFromPacket in
       printf "INITIAL FWD policy is:\n%s\n%!" (NetCore_Pretty.string_of_pol initfwdpol);
       printf "INITIAL NOTIF policy is:\n%s\n%!" (NetCore_Pretty.string_of_pol initnotifpol);
-      let initpol = Union(Union(initfwdpol, initnotifpol), internal_policy()) in
+      printf "INITIAL NOTIF pred is:\n%s\n%!" (NetCore_Pretty.string_of_pred initnotifpred);
+      let initpol = build_total_pol initnotifpred initfwdpol initnotifpol (internal_policy()) in
         (trigger_policy_recreation_thunk, NetCore_Stream.from_stream initpol policies)
     end else begin
       let initpol = Union(switch_event_handler_policy, Action([ControllerAction(updateFromPacket)])) in
         (trigger_policy_recreation_thunk, NetCore_Stream.from_stream initpol policies)
     end;;
-
