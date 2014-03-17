@@ -622,6 +622,22 @@ let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_h
           result
       | _ -> failwith "pkt_triggered_clause_to_netcore";;
 
+(* call simplify after extracting. but only once. *)
+let when_policy_applies_nodrop (startpol: pol): pred =
+    let rec applies_helper (apol: pol): pred =
+      match apol with
+        | Action(_) -> Everything
+        | ActionWithMeta(_,_) -> Everything
+        | Union(p1, p2) -> build_predicate_or [applies_helper p1; applies_helper p2]
+        | Seq(Filter(apred), p2) -> And(apred, applies_helper p2)
+        (* Disallow other kinds of sequences. *)
+        | Filter(apred) -> apred
+        | ITE(apred, p1, p2) -> build_predicate_or [And(apred,applies_helper p1);
+                                                    And(Not(apred), applies_helper p1)]
+
+        | _ -> failwith (sprintf "when_policy_applies_nodrop: could not handle %s\n" (NetCore_Pretty.string_of_pol apol)) in
+    simplify_netcore_predicate (applies_helper startpol);;
+
 
 (* Only timeout metadata for now *)
 let build_metadata_action_pol (ac: NetCore_Types.action) (ru: srule): NetCore_Types.pol =
@@ -638,7 +654,7 @@ let build_metadata_action_pol (ac: NetCore_Types.action) (ru: srule): NetCore_Ty
 
 (* return the union of policies for each clause *)
 (* Side effect: reads current state in XSB *)
-let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: triggered_clause list) (callback: get_packet_handler option): pol * pred =
+let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: triggered_clause list) (callback: get_packet_handler option): pol =
   if !global_verbose > 2 then
     write_log (sprintf "Converting clauses to NetCore. %d clauses.\n%!" (length clauses));
   let pre_unique_pas = appendall (map (pkt_triggered_clause_to_netcore p callback) clauses) in
@@ -683,10 +699,10 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: triggered_cl
             clause_aps in
 
     if length clause_aps = 0 then
-      (Action([]), Nothing)
+      (Action([]))
     else if length clause_aps = 1 then
       let (act, pred, actpol) = (hd clause_aps) in
-        (Seq(Filter(pred), actpol), pred)
+        (Seq(Filter(pred), actpol))
     else
     begin
       let non_all_actionsused = unique ~cmp:safe_compare_actions
@@ -730,7 +746,7 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: triggered_cl
 
       (* Build a single union over policies for each distinct action *)
       (* if we get dup packets, make certain || isn't getting compiled to bag union in netcore *)
-      let (union_over_ports: pol * pred) = fold_left
+      let (union_over_ports: pol) = fold_left
                 (fun (acc: pol) (aportaction: action) ->
                   (* which metadata combos do we have for this action? *)
                   let actionpols = get_action_pols_for_action aportaction in
@@ -745,10 +761,9 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: triggered_cl
       (* the "allports" actions (note, may have multiple unique allports acts,
          due to metadata) must always be checked first*)
       (* If not all-ports, can safely union without overlap *)
-      fold_left (fun (acc: pol * pred) (apactpol: pol) ->
-          let accpol, accpred = acc in
+      fold_left (fun (accpol: pol) (apactpol: pol) ->
           let (thepred: pred) = or_of_preds_for_action_pol apactpol in
-            (ITE(thepred, apactpol, accpol)), Or(thepred, accpred))
+            ITE(thepred, apactpol, accpol))
         union_over_ports
         (sort ~cmp:sort_by_decreasing_timeout actionpolswithallports)
 
@@ -770,8 +785,10 @@ let program_to_netcore (p: flowlog_program) (callback: get_packet_handler): (pol
     count_disjuncts_pe := 0;
     count_unique_disjuncts_pe := 0;
 
-    let fwd_pol, fwd_pred = pkt_triggered_clauses_to_netcore p p.can_fully_compile_to_fwd_clauses None in
-    let notif_pol, notif_pred = pkt_triggered_clauses_to_netcore p p.weakened_cannot_compile_pt_clauses (Some callback) in
+    let fwd_pol = pkt_triggered_clauses_to_netcore p p.can_fully_compile_to_fwd_clauses None in
+    let fwd_pred = when_policy_applies_nodrop fwd_pol in
+    let notif_pol = pkt_triggered_clauses_to_netcore p p.weakened_cannot_compile_pt_clauses (Some callback) in
+    (*let notif_pred = when_policy_applies_nodrop notif_pol in*)
     let result = (fwd_pol, notif_pol, fwd_pred) in
 
     if !global_verbose >= 1 then
