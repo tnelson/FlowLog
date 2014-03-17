@@ -713,6 +713,15 @@ let build_predicate_and (prs: pred list): pred =
     Everything
     (remove_contradictions prs);;
 
+let build_predicate_or (prs: pred list): pred =
+  fold_left (fun acc pr ->
+      if acc = Everything || pr = Everything then Everything
+      else if acc = Nothing then pr
+      else if pr = Nothing then acc
+      else Or(acc, pr))
+    Nothing
+    prs;; (* DO NOT call remove_contradictions here, as in b_p_and. *)
+
 let rec simplify_netcore_predicate (pr: pred): pred =
   match pr with
     | Nothing -> Nothing
