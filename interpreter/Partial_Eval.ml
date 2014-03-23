@@ -626,6 +626,8 @@ let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_h
 let when_policy_applies_nodrop (startpol: pol): pred =
     let rec applies_helper (apol: pol): pred =
       match apol with
+        | Action([])
+        | ActionWithMeta([], _) -> Nothing
         | Action(_) -> Everything
         | ActionWithMeta(_,_) -> Everything
         | Union(p1, p2) -> build_predicate_or [applies_helper p1; applies_helper p2]
