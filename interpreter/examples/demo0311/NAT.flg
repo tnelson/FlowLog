@@ -21,9 +21,11 @@ ON tcp_packet(p) WHERE p.locPt = 1 AND
 
 ON tcp_packet(p) WHERE p.locPt = 1 AND
              nat(p.nwSrc, p.tpSrc, natport):
-  DO forward(new) WHERE new.tpSrc = natport;
+  DO forward(new) WHERE new.tpSrc = natport
+                  AND new.nwSrc = 192.168.100.100
+                  AND new.locPt = 2;
 
 // Return traffic in a nat flow
 ON tcp_packet(p) WHERE p.locpt = 2 AND
-             nat(p.nwDst, origport, p.tpDst):
-  DO forward(new) WHERE new.tpDst = origport;
+             nat(origip, origport, p.tpDst):
+  DO forward(new) WHERE new.tpDst = origport AND new.nwDst = origip and new.locPt = 1;
