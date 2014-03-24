@@ -1,0 +1,29 @@
+EVENT stolen_laptop_report {macr: macaddr};
+EVENT stolen_laptop_cancel {macc: macaddr};
+EVENT stolen_laptop_found {macf: macaddr, swid: switchid, time: int};
+
+TABLE stolen(macaddr);
+
+OUTGOING notify_police(stolen_laptop_found) THEN
+  SEND TO 127.0.0.1 5050;
+
+REMOTE TABLE get_time(int)
+  FROM time AT 127.0.0.1 9091
+  TIMEOUT 1 seconds;
+
+ON stolen_laptop_cancel(rec):
+  DELETE (rec.macc) FROM stolen;
+
+ON stolen_laptop_report(stolen):
+  INSERT (stolen.macr) INTO stolen;
+
+ON packet(pkt):
+  // For demonstration only: flood.
+  DO forward(new) WHERE
+    new.locPt != pkt.locPt;
+
+  DO notify_police(sto) WHERE
+    sto.macf = pkt.dlSrc AND sto.time=currtime AND sto.swid = pkt.locSw AND
+    stolen(pkt.dlSrc) AND
+    get_time(currtime);
+

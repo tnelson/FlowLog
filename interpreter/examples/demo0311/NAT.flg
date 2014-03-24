@@ -1,0 +1,29 @@
+// Basic NAT
+
+TABLE nat(ipaddr, port, port);
+TABLE nextport(port);
+
+ON startup(e): INSERT (10000) INTO nextport;
+
+ON tcp_packet(p) WHERE p.locPt = 1 AND
+             NOT nat(p.nwSrc, p.tpSrc, ANY):
+
+  INSERT(p.nwSrc, p.tpSrc, natport) INTO nat WHERE
+    nextport(natport);
+  DELETE (ANY) FROM nextport;
+  INSERT (newport) INTO nextport WHERE
+    nextport(natport) AND add(natport, 1, newport);
+  DO forward(new) WHERE
+    new.nwSrc = 192.168.100.100 and
+    new.locPt = 2 and
+    //nextport(new.tpSrc);
+    nextport(oldpt) and add(oldpt, 1, new.tpSrc);
+
+ON tcp_packet(p) WHERE p.locPt = 1 AND
+             nat(p.nwSrc, p.tpSrc, natport):
+  DO forward(new) WHERE new.tpSrc = natport;
+
+// Return traffic in a nat flow
+ON tcp_packet(p) WHERE p.locpt = 2 AND
+             nat(p.nwDst, origport, p.tpDst):
+  DO forward(new) WHERE new.tpDst = origport;
