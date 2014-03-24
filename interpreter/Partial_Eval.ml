@@ -774,7 +774,7 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: triggered_cl
 
 (* Side effect: reads current state in XSB *)
 (* Set up policies for all packet-triggered clauses *)
-(* RETURN VALUES: fwd pol, notif pol, fwd pred (for safety; see caller) *)
+(* RETURN VALUES: fwd pol, notif pol, notif pred (for safety; see caller) *)
 let program_to_netcore (p: flowlog_program) (callback: get_packet_handler): (pol * pol * pred) =
   (* posn 1: fully compilable packet-triggered.
      posn 2: pre-weakened, non-fully-compilable packet-triggered *)
@@ -788,10 +788,10 @@ let program_to_netcore (p: flowlog_program) (callback: get_packet_handler): (pol
     count_unique_disjuncts_pe := 0;
 
     let fwd_pol = pkt_triggered_clauses_to_netcore p p.can_fully_compile_to_fwd_clauses None in
-    let fwd_pred = when_policy_applies_nodrop fwd_pol in
+    (*let fwd_pred = when_policy_applies_nodrop fwd_pol in*)
     let notif_pol = pkt_triggered_clauses_to_netcore p p.weakened_cannot_compile_pt_clauses (Some callback) in
-    (*let notif_pred = when_policy_applies_nodrop notif_pol in*)
-    let result = (fwd_pol, notif_pol, fwd_pred) in
+    let notif_pred = when_policy_applies_nodrop notif_pol in
+    let result = (fwd_pol, notif_pol, notif_pred) in
 
     if !global_verbose >= 1 then
     begin

@@ -664,6 +664,7 @@ let rec gather_predicate_and (pr: pred): pred list =
 
 exception UnsatisfiableFlag;;
 
+(* assumption: conjunctive list *)
 let remove_contradictions (subpreds: pred list): pred list =
     (* Hdr(...), OnSwitch(...) If contradictions, this becomes Nothing*)
     let process_pred acc p =
@@ -687,15 +688,18 @@ let remove_contradictions (subpreds: pred list): pred list =
       | Everything -> acc
       | Nothing -> raise UnsatisfiableFlag
 
-      | Not(p) as np ->
-        if exists (fun apred -> apred = p) complex then raise UnsatisfiableFlag
+      | Not(innerp) as np ->
+        if exists (fun apred -> apred = innerp) complex then raise UnsatisfiableFlag
         else (sws, hdrs, np :: complex)
 
         (* could be smarter TODO *)
       | Or(p1, p2) ->
         (sws, hdrs, p :: complex)
+      | And(p1, p2) ->
+        (sws, hdrs, p :: complex) in
 
-      | _ -> failwith ("remove_contradiction: expected only atomic preds") in
+
+      (*| _ -> failwith( (sprintf "remove_contradiction: expected only atomic preds: %s" (NetCore_Pretty.string_of_pred p)) in*)
       try
         let _ = fold_left process_pred ([],[],[]) subpreds in
           subpreds
@@ -736,7 +740,10 @@ let rec simplify_netcore_predicate (pr: pred): pred =
           else Or(sp1, sp2)
     | And(p1, p2) ->
       (* TODO: wasting a ton of time on these calls when sets would be much faster than lists *)
-        let conjuncts = unique (map simplify_netcore_predicate (unique ((gather_predicate_and p1) @ (gather_predicate_and p2)))) in
+        let unique_unsimp_conjuncts = (unique ((gather_predicate_and p1) @ (gather_predicate_and p2))) in
+        (*printf "uuconjs: %s\n%!" (string_of_list ";" NetCore_Pretty.string_of_pred unique_unsimp_conjuncts);*)
+        let conjuncts = unique (map simplify_netcore_predicate unique_unsimp_conjuncts) in
+        (*printf "conjs: %s\n%!" (string_of_list ";" NetCore_Pretty.string_of_pred conjuncts);*)
         build_predicate_and conjuncts
         (*let sp1 = simplify_netcore_predicate p1 in
         let sp2 = simplify_netcore_predicate p2 in
