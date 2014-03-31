@@ -12,6 +12,8 @@
   %token OUTGOING
   %token THEN
   %token INCOMING
+  %token INCREMENT
+  %token VAR
   %token DO
   %token AT
   %token TIMEOUT
@@ -120,7 +122,8 @@
             | DELETE LPAREN term_list RPAREN FROM NAME optional_where SEMICOLON {ADelete($6, $3, $7)}
             | INSERT LPAREN term_list RPAREN INTO NAME optional_where SEMICOLON {AInsert($6, $3, $7)}
             | DO FORWARD LPAREN term RPAREN optional_where optional_timeout SEMICOLON {AForward($4, $6, $7)}
-            | STASH LPAREN term RPAREN optional_where until_clause optional_then SEMICOLON {AStash($3, $5, $6, $7)};
+            | STASH LPAREN term RPAREN optional_where until_clause optional_then SEMICOLON {AStash($3, $5, $6, $7)}
+            | INCREMENT NAME {AIncrement($2)}
             | DO NAME LPAREN term_list RPAREN optional_where SEMICOLON {ADo($2, $4, $6)};
 
   until_clause: UNTIL formula {$2};

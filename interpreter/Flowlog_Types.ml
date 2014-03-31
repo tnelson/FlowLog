@@ -35,6 +35,7 @@ type typeid = string;;
               | ADelete of string * term list * formula
               | AInsert of string * term list * formula
               | ADo of string * term list * formula
+              | AIncrement of string (* sugar *)
               (* pkt var to stash; where clause; until clause; then clause*)
               | AStash of term * formula * formula * action list
               | AForward of term * formula * int option;;
@@ -70,6 +71,7 @@ type typeid = string;;
 
   type sdecl =
       | DeclTable of string * typeid list
+      | DeclVar of string * string
       | DeclRemoteTable of string * typeid list
       | DeclInc of string * string
       | DeclOut of string * outgoing_fields

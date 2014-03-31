@@ -2,6 +2,12 @@
 (* Automatic translation from Flowlog to Alloy                  *)
 (****************************************************************)
 
+(* TODO: confirm packet flavor hierarchy is properly handled. *)
+(* TODO: current translation drops destination for "send to" events.
+   So two separate named pipes with the same output event type will be
+   indistinguishable in this model. *)
+
+
 open Printf
 open Flowlog_Types
 open Flowlog_Packets
@@ -22,7 +28,7 @@ let alloy_boilerplate (out: out_channel): unit =
               localtm.tm_mon localtm.tm_mday (localtm.tm_year + 1900);
   fprintf out "%s\n%!" "
 pred true[] {}
-pred false[] { some none }
+pred false[] { not true[] }
 
 abstract sig Event {}
 
@@ -151,7 +157,7 @@ let write_alloy_ontology (out: out_channel) (o: alloy_ontology): unit =
             fprintf out "(%s) implies st1 = st2}\n\n%!" statesequal;
 
   (****** Constants ******************)
-  iter (fun (c_n, c_t) -> fprintf out "lone sig C_%s extends %s {}\n" c_n c_t) o.constants;
+  iter (fun (c_n, c_t) -> fprintf out "lone sig %s extends %s {}\n" c_n c_t) o.constants;
   fprintf out "\n%!";;
 
 (* Extract ontology; don't print it *)
@@ -328,13 +334,19 @@ let build_forward_defaults (pf: pred_fragment): string =
             StringMap.empty
             (map make_rule (unique (map (fun cl -> cl.orig_rule) p.clauses))) in
 
-  (* Convert each outrel to a string for Alloy*)
+  (* Convert each outrel (e.g., "forward", "emit") to an Alloy pred declaration string*)
   let rulestrs =
-    StringMap.fold (fun outrel pfl acc ->
+    StringMap.fold (fun outrel (pfls:pred_fragment list) acc ->
+                   (* If we know the type of the output, use it. *)
+                   let thisargdecls = (if (hd pfls).fortable then
+                                        (String.concat ", " (mapi (fun i t -> sprintf "out%d : univ" i) (hd pfls).outargs))
+                                      else
+                                        (sprintf "out0: %s" (event_alloysig_for (outspec_type (get_outgoing p outrel).react)))) in
+
                    let thispred = sprintf "pred %s[st: State, ev: Event, %s] {\n%s\n}\n"
                                     outrel
-                                    (String.concat ", " (mapi (fun i t -> sprintf "out%d : univ" i) (hd pfl).outargs))
-                                    (String.concat " ||\n" (map (alloy_of_pred_fragment "st") pfl)) in
+                                    thisargdecls
+                                    (String.concat " ||\n" (map (alloy_of_pred_fragment "st") pfls)) in
                    StringMap.add outrel thispred acc)
                    outrel_to_rules
                    StringMap.empty in

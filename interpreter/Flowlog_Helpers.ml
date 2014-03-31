@@ -873,6 +873,14 @@ module PredSet  = Set.Make( struct type t = pred let compare = smart_compare_pre
       | DeclOut(tname, arg) -> "OUTGOING "^tname^" "^(string_of_outgoing_fields arg);
       | DeclEvent(evname, argdecls) -> "EVENT "^evname^" "^(String.concat "," (map string_of_field_decl argdecls));;
 
+  let outspec_type (spec:spec_out) =
+    match spec with
+      | OutForward -> "packet"
+      | OutEmit(typ) -> "packet"
+      | OutPrint -> "print"
+      | OutLoopback -> "loopback"
+      | OutSend(evtype, ip, pt) -> evtype;;
+
   let string_of_outspec (spec: spec_out) =
     match spec with
       | OutForward -> "forward"
