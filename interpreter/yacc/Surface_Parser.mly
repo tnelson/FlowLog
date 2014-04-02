@@ -89,7 +89,7 @@
 
   decl_stmt:
             | TABLE NAME LPAREN name_list RPAREN SEMICOLON {ASTDeclTable($2, $4)}
-            | VAR NAME COLON NAME optional_default
+            | VAR NAME COLON NAME optional_default SEMICOLON
               {ASTDeclVar($2, $4, $5)}
             | REMOTE TABLE NAME LPAREN name_list RPAREN SEMICOLON {ASTDeclRemoteTable($3, $5)}
             | EVENT NAME LCURLY field_decl_list RCURLY SEMICOLON {ASTDeclEvent($2, $4)}
@@ -122,13 +122,13 @@
            {onrel=triggerrel; onvar=triggervar; action=(add_conjunct_to_action act optwhere)}) $3};
 
   on_clause: ON NAME LPAREN NAME RPAREN optional_where {($2,$4,$6)};
-
+// todo: gensym increment
   action_clause:
             | DELETE LPAREN term_list RPAREN FROM NAME optional_where SEMICOLON {[ADelete($6, $3, $7)]}
             | INSERT LPAREN term_list RPAREN INTO NAME optional_where SEMICOLON {[AInsert($6, $3, $7)]}
             | DO FORWARD LPAREN term RPAREN optional_where optional_timeout SEMICOLON {[AForward($4, $6, $7)]}
             | STASH LPAREN term RPAREN optional_where until_clause optional_then SEMICOLON {[AStash($3, $5, $6, $7)]}
-            | INCREMENT NAME { (* todo: gensym insert *)
+            | INCREMENT NAME SEMICOLON {
               [ADelete($2,[TVar("ANY")],FTrue);
                AInsert($2,[TVar("incrvar")],
                  FAnd(FAtom("", $2, [TVar("incroldvar")]),
