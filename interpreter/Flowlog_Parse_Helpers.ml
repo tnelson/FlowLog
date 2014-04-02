@@ -450,24 +450,47 @@ let rule_condition_false (r: srule): bool =
   | AStash(_, _, f, _) -> fmla_necessary_false f
   | AForward(_, f, _) -> fmla_necessary_false f;;
 
+let desugar_statements (aststmts: aststmt list): stmt list =
+  fold_left (fun (acc: stmt list) (astmt: aststmt) ->
+      match astmt with
+        | ASTReactive(s) -> SReactive(s)::acc
+        | ASTRule(s) -> SRule(s)::acc
+        | ASTDecl(ASTDeclTable(tname, types)) -> SDecl(DeclTable(tname, types))::acc
+        | ASTDecl(ASTDeclRemoteTable(tname, types)) -> SDecl(DeclRemoteTable(tname, types))::acc
+        | ASTDecl(ASTDeclInc(s1, s2)) -> SDecl(DeclInc(s1, s2))::acc
+        | ASTDecl(ASTDeclOut(s1, flds)) -> SDecl(DeclOut(s1, flds))::acc
+        | ASTDecl(ASTDeclEvent(s1, flds)) -> SDecl(DeclEvent(s1, flds))::acc
+          (* only desugar that adds, for now *)
+            (* todo: constrain to contain one thing at a time *)
+        | ASTDecl(ASTDeclVar(vname, atype, def)) ->
+          (match def with
+            | None -> SDecl(DeclTable(vname, [atype])) :: acc
+            | Some(d) ->
+              [SDecl(DeclTable(vname, [atype]));
+               SRule({onrel = "startup"; onvar = "e"; action = AInsert(vname, [d], FTrue)})]
+              @ acc))
+   []
+   aststmts;;
+
 let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_program =
   let expanded_ast = expand_includes ast [filename] in
-  let stmts = expanded_ast.statements in
+  let ast_stmts = expanded_ast.statements in
+  let desugared_stmts = desugar_statements ast_stmts in
         (* requires extlib *)
         let the_decls  =  built_in_decls @
                           filter_map (function | SDecl(d) -> Some d
-                                               | _ -> None) stmts @
-                          (decls_added_by_sugar stmts) in
+                                               | _ -> None) desugared_stmts @
+                          (decls_added_by_sugar desugared_stmts) in
         let the_reacts =  built_in_reacts @
                           filter_map (function | SReactive(r) -> Some r
-                                               | _ -> None) stmts @
-                          (reacts_added_by_sugar stmts) in
+                                               | _ -> None) desugared_stmts @
+                          (reacts_added_by_sugar desugared_stmts) in
         let the_rules  =  filter_map (function | SRule(r) when (rule_condition_false r) ->
                                                   if !global_verbose > 0 then
                                                     write_log (sprintf "Ignoring rule in %s because its condition is always false: %s\n%!" filename (string_of_rule r));
                                                   None
                                                | SRule(r) -> Some (add_built_ins r)
-                                               | _ -> None) stmts in
+                                               | _ -> None) desugared_stmts in
 
             (* Validation *)
             well_formed_reacts the_reacts;

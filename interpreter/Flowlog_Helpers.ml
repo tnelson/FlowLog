@@ -873,6 +873,17 @@ module PredSet  = Set.Make( struct type t = pred let compare = smart_compare_pre
       | DeclOut(tname, arg) -> "OUTGOING "^tname^" "^(string_of_outgoing_fields arg);
       | DeclEvent(evname, argdecls) -> "EVENT "^evname^" "^(String.concat "," (map string_of_field_decl argdecls));;
 
+let string_of_astdeclaration (d: astdecl): string =
+    match d with
+      | ASTDeclTable(tname, argtypes) -> "TABLE "^tname^" "^(String.concat "," argtypes);
+      | ASTDeclVar(tname, argtype, None) -> "VAR "^tname^": "^ argtype^" [no default]";
+      | ASTDeclVar(tname, argtype, Some(d)) -> "VAR "^tname^": "^argtype^" default="^(string_of_term d);
+      | ASTDeclRemoteTable(tname, argtypes) -> "REMOTE TABLE "^tname^" "^(String.concat "," argtypes);
+      | ASTDeclInc(tname, argtype) -> "INCOMING "^tname^" "^argtype;
+      | ASTDeclOut(tname, arg) -> "OUTGOING "^tname^" "^(string_of_outgoing_fields arg);
+      | ASTDeclEvent(evname, argdecls) -> "EVENT "^evname^" "^(String.concat "," (map string_of_field_decl argdecls));;
+
+
   let outspec_type (spec:spec_out) =
     match spec with
       | OutForward -> "packet"
@@ -904,9 +915,15 @@ module PredSet  = Set.Make( struct type t = pred let compare = smart_compare_pre
       | SDecl(dstmt) -> (string_of_declaration dstmt);
       | SRule(rstmt) -> (string_of_rule rstmt);;
 
+  let string_of_aststmt (stmt: aststmt): string =
+    match stmt with
+      | ASTReactive(rstmt) -> (string_of_reactive rstmt);
+      | ASTDecl(dstmt) -> (string_of_astdeclaration dstmt);
+      | ASTRule(rstmt) -> (string_of_rule rstmt);;
+
   let pretty_print_ast (ast: flowlog_ast): unit =
     iter (fun inc -> printf "INCLUDE %s;\n%!" inc) ast.includes;
-    iter (fun stmt -> printf "%s\n%!" (string_of_stmt stmt)) ast.statements;;
+    iter (fun stmt -> printf "%s\n%!" (string_of_aststmt stmt)) ast.statements;;
 
   let string_of_clause ?(verbose: printmode = Brief) (cl: clause): string =
     "CLAUSE: "^(string_of_formula ~verbose:verbose cl.head)^" :- "^(string_of_formula ~verbose:verbose cl.body)^"\n"^
