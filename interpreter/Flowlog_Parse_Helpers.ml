@@ -63,6 +63,7 @@ let build_clause (r: srule) (in_atom: formula) (relname: string) (terms: term li
     {orig_rule = r; head = head; body = negations_to_end body};;
 
 let clauses_of_rule (r: srule): clause list =
+    printf "producing clause for rule %s\n\n%!" (string_of_rule r);
     let atom_for_on = FAtom("", r.onrel, [TVar(r.onvar)]) in (* local atom, no module name *)
     match r.action with
         | ADelete(relname, terms, condition) ->
@@ -271,6 +272,7 @@ let well_formed_rule (p: flowlog_program) (r: srule): unit =
         with Not_found -> raise (UndeclaredTable relname));;
 
 let simplify_clause (cl: clause): clause =
+  printf "simplifying clause: %s\n%!" (string_of_clause cl);
     {head = cl.head; orig_rule = cl.orig_rule; body = minimize_variables cl.body};;
 
 let well_formed_reacts (reacts: sreactive list): unit =
@@ -472,10 +474,29 @@ let desugar_statements (aststmts: aststmt list): stmt list =
    []
    aststmts;;
 
+(* what variables appear? are they VAR names? then desugar.
+   more than just rule body: may have +R(v) :- true. if v is a varvar. *)
+let desugar_rule (r: srule) (vartblnames: string list): srule =
+  let varvarsused = get_terms_in_rule_head_and_body
+                     (function | TVar(x) when mem x vartblnames -> true | _ -> false)
+                     r in
+    let newact = fold_left (fun acc varvar ->
+        (match varvar with
+          | TVar(x) ->
+            add_conjunct_to_action acc (FAtom("", x, [varvar]))
+          | _ -> failwith ("desugar_rule:"^(string_of_term varvar))))
+      r.action
+      varvarsused in
+    printf "old rule: %s\n%!" (string_of_rule r);
+    printf "var table names: %s\nused: %s\n%!" (String.concat "," vartblnames) (string_of_list ";" string_of_term varvarsused);
+    printf "new rule: %s\n\n%!" (string_of_rule {r with action=newact}) ;
+    {r with action=newact};;
+
 let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_program =
   let expanded_ast = expand_includes ast [filename] in
   let ast_stmts = expanded_ast.statements in
   let desugared_stmts = desugar_statements ast_stmts in
+  let vartblnames = filter_map (function | ASTDecl(ASTDeclVar(tname, _, _)) -> Some(tname) | _ -> None) ast_stmts in
         (* requires extlib *)
         let the_decls  =  built_in_decls @
                           filter_map (function | SDecl(d) -> Some d
@@ -489,7 +510,7 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
                                                   if !global_verbose > 0 then
                                                     write_log (sprintf "Ignoring rule in %s because its condition is always false: %s\n%!" filename (string_of_rule r));
                                                   None
-                                               | SRule(r) -> Some (add_built_ins r)
+                                               | SRule(r) -> Some (desugar_rule (add_built_ins r) vartblnames)
                                                | _ -> None) desugared_stmts in
 
             (* Validation *)

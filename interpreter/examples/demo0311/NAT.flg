@@ -5,16 +5,16 @@ ON tcp_packet(p) WHERE p.locPt = 1 AND
     nat(p.dlSrc, p.nwSrc, p.tpSrc, natport):
   DO forward(new) WHERE new.tpSrc = natport AND
     new.nwSrc = 192.168.100.100 AND
-    new.dlSrc = 02:00:00:00:00:00 AND new.locPt = 2;
+    new.dlSrc = 00:00:00:00:00:02 AND new.locPt = 2;
 
 ON tcp_packet(p) WHERE p.locPt = 1 AND
      NOT nat(p.dlSrc, p.nwSrc, p.tpSrc, ANY):
   INSERT(p.dlSrc, p.nwSrc, p.tpSrc, nextport) INTO nat;
   INCREMENT nextport;
-// todo: safety check failure why? not including from ON?
+
   DO forward(new) WHERE new.tpSrc = nextport AND
    new.nwSrc = 192.168.100.100 AND
-   new.dlSrc = 02:00:00:00:00:00 AND new.locPt = 2;
+   new.dlSrc = 00:00:00:00:00:02 AND new.locPt = 2;
 // Return traffic in a nat flow
 ON tcp_packet(p) WHERE p.locpt = 2 AND
              nat(origmac, origip, origport, p.tpDst):

@@ -558,8 +558,16 @@ let hex_str_to_int_string (s: string): string = Int64.to_string (Int64.of_string
       (map (fun (k, v) -> k^":"^(pretty_print_value (get_type_for_field p notif k) v))
            (StringMap.bindings notif.values)))^"]";;
 
-
-
+let get_terms_in_rule_head_and_body (f: term -> bool) (r: srule): term list =
+  match r.action with
+    | ADelete(_,terms,fmla)
+    | AInsert(_,terms,fmla)
+    | ADo(_,terms,fmla) ->
+      unique ((filter f terms)@(get_terms f fmla))
+    | AForward(term,fmla,_) ->
+      unique ((filter f [term])@(get_terms f fmla))
+    | AStash(_, fmla,_,_) ->
+      get_terms f fmla;;
 
 
 
