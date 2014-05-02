@@ -98,7 +98,9 @@ let main () =
     printf "-----------\n%!";
 
     if !alloy then
-      write_as_alloy None program (alloy_filename filename)
+    begin
+      write_as_alloy program (alloy_filename filename) None
+    end
     else if !cimp then
     begin
       let filename2 = try hd (tl !args) with exn -> raise (Failure "Input a second .flg file name for use with change-impact.") in
