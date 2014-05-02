@@ -22,3 +22,6 @@ experimental/IOS-parser/ios2flowlog
 *_rtr_spanning_tree.txt
 *_rtr_mac_table.txt
 *.als
+pan.*
+pan
+*.pml.trail
