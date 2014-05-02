@@ -371,7 +371,7 @@ let alloy_actions (out: out_channel) (p: flowlog_program): unit =
                    (* Type annotations get ignored by Alloy (Appendix B.6.4)*)
                    let thisargforce = build_arg_force outrel (hd pfls) in
 
-                   let thispred = sprintf "pred %s[st: State, ev: Event, %s] {\n %s && %s\n}\n"
+                   let thispred = sprintf "pred %s[st: State, ev: Event, %s] {\n %s && (%s)\n}\n"
                                     outrel
                                     thisargdecls
                                     thisargforce
