@@ -12,6 +12,8 @@
   %token OUTGOING
   %token THEN
   %token INCOMING
+  %token INCREMENT
+  %token VAR
   %token DO
   %token AT
   %token TIMEOUT
@@ -81,16 +83,21 @@
             | INCLUDE QUOTED_IDENTIFIER SEMICOLON {$2};
 
   stmt:
-            | reactive_stmt {[SReactive($1)]}
-            | decl_stmt {[SDecl($1)]}
-            | rule_stmt {map (fun r -> SRule(r)) $1};
+            | reactive_stmt {[ASTReactive($1)]}
+            | decl_stmt {[ASTDecl($1)]}
+            | rule_stmt {map (fun r -> ASTRule(r)) $1};
 
   decl_stmt:
-            | TABLE NAME LPAREN name_list RPAREN SEMICOLON {DeclTable($2, $4)}
-            | REMOTE TABLE NAME LPAREN name_list RPAREN SEMICOLON {DeclRemoteTable($3, $5)}
-            | EVENT NAME LCURLY field_decl_list RCURLY SEMICOLON {DeclEvent($2, $4)}
-            | INCOMING NAME LPAREN NAME RPAREN SEMICOLON {DeclInc($2, $4)}
-            | OUTGOING NAME LPAREN NAME RPAREN SEMICOLON {DeclOut($2, FixedEvent($4))};
+            | TABLE NAME LPAREN name_list RPAREN SEMICOLON {ASTDeclTable($2, $4)}
+            | VAR NAME COLON NAME optional_default SEMICOLON
+              {ASTDeclVar($2, $4, $5)}
+            | REMOTE TABLE NAME LPAREN name_list RPAREN SEMICOLON {ASTDeclRemoteTable($3, $5)}
+            | EVENT NAME LCURLY field_decl_list RCURLY SEMICOLON {ASTDeclEvent($2, $4)}
+            | INCOMING NAME LPAREN NAME RPAREN SEMICOLON {ASTDeclInc($2, $4)}
+            | OUTGOING NAME LPAREN NAME RPAREN SEMICOLON {ASTDeclOut($2, FixedEvent($4))};
+
+  optional_default:
+            | EQUALS NUMBER {Some(TConst($2))} | {None};
 
   optional_colon:
             | COLON {()} | {()};
@@ -115,13 +122,18 @@
            {onrel=triggerrel; onvar=triggervar; action=(add_conjunct_to_action act optwhere)}) $3};
 
   on_clause: ON NAME LPAREN NAME RPAREN optional_where {($2,$4,$6)};
-
+// todo: gensym increment
   action_clause:
-            | DELETE LPAREN term_list RPAREN FROM NAME optional_where SEMICOLON {ADelete($6, $3, $7)}
-            | INSERT LPAREN term_list RPAREN INTO NAME optional_where SEMICOLON {AInsert($6, $3, $7)}
-            | DO FORWARD LPAREN term RPAREN optional_where optional_timeout SEMICOLON {AForward($4, $6, $7)}
-            | STASH LPAREN term RPAREN optional_where until_clause optional_then SEMICOLON {AStash($3, $5, $6, $7)};
-            | DO NAME LPAREN term_list RPAREN optional_where SEMICOLON {ADo($2, $4, $6)};
+            | DELETE LPAREN term_list RPAREN FROM NAME optional_where SEMICOLON {[ADelete($6, $3, $7)]}
+            | INSERT LPAREN term_list RPAREN INTO NAME optional_where SEMICOLON {[AInsert($6, $3, $7)]}
+            | DO FORWARD LPAREN term RPAREN optional_where optional_timeout SEMICOLON {[AForward($4, $6, $7)]}
+            | STASH LPAREN term RPAREN optional_where until_clause optional_then SEMICOLON {[AStash($3, $5, $6, $7)]}
+            | INCREMENT NAME SEMICOLON {
+              [ADelete($2,[TVar("ANY")],FTrue);
+               AInsert($2,[TVar("incrvar")],
+                 FAnd(FAtom("", $2, [TVar("incroldvar")]),
+                      FAtom("", "add", [TVar("incroldvar"); TConst("1"); TVar("incrvar")])))]}
+            | DO NAME LPAREN term_list RPAREN optional_where SEMICOLON {[ADo($2, $4, $6)]};
 
   until_clause: UNTIL formula {$2};
 
@@ -172,8 +184,8 @@
             | NAME COLON NAME COMMA field_decl_list {($1, $3) :: $5};
 
   action_clause_list:
-            | action_clause {[$1]}
-            | action_clause action_clause_list {$1 :: $2};
+            | action_clause {$1}
+            | action_clause action_clause_list {$1 @ $2};
 
   stmt_list:
             | stmt {$1}

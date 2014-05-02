@@ -41,7 +41,9 @@ let speclist = [
   ("-depend", Arg.Unit (fun () -> depend := true), ": output a JSON dependency graph");
   ("-reportall", Arg.Unit (fun () -> reportall := true), ": report all packets. WARNING: VERY SLOW!");
   (* Not calling this "reactive" because reactive still implies sending table entries. *)
-  ("-notables", Arg.Unit (fun () -> notables := true), ": send everything to controller");];;
+  ("-notables", Arg.Unit (fun () -> notables := true), ": send everything to controller");
+  ("-unsafe", Arg.Unit (fun () -> global_unsafe := true), ": allow switches to outpace controller");
+  ];;
 
 let listenPort = ref 6633;;
 
@@ -75,6 +77,12 @@ let main () =
   let _ = Arg.parse speclist collect usage in
   let filename = try hd !args with exn -> raise (Failure "Input a .flg file name.") in
 
+  if (!global_unsafe && (!notables || !cimpuniform || !cimpreach || !cimp || !alloy || !depend)) then
+  begin
+    printf "Invalid combination of -unsafe and other flags.\n%!";
+    exit(0);
+  end;
+
   if !depend then
   begin
     Flowlog_Graphs.output_single_dependency_graph filename;
@@ -90,7 +98,9 @@ let main () =
     printf "-----------\n%!";
 
     if !alloy then
-      write_as_alloy None program (alloy_filename filename)
+    begin
+      write_as_alloy program (alloy_filename filename) None
+    end
     else if !cimp then
     begin
       let filename2 = try hd (tl !args) with exn -> raise (Failure "Input a second .flg file name for use with change-impact.") in

@@ -39,6 +39,9 @@ rule token = parse
   | "then" { THEN }
   | "on" { ON }
 
+  | "increment" { INCREMENT }
+  | "var" { VAR }
+
   | "forward" { FORWARD }
   | "stash" { STASH }
   | "then" { THEN }

@@ -57,7 +57,7 @@ object (self)
       begin
         (* case-sensitive. But Flowlog's parser downcases everything. So fields are always lowercase.*)
         try
-          let mac = (Hashtbl.find values "mac") in
+          let mac = (Hashtbl.find values "macaddr") in
           let swid = (Hashtbl.find values "swid") in
           let time = (Hashtbl.find values "time") in
             printf "Our anonymous tipster, who sounds like a Flowlog Controller, saw %s on switch %s at time=%s.\n%!" mac swid time

@@ -75,14 +75,28 @@ type typeid = string;;
       | DeclOut of string * outgoing_fields
       | DeclEvent of string * (string * typeid) list;;
 
+(* AST elements pre desugaring*)
+type astdecl =
+      | ASTDeclVar of string * typeid * term option
+      | ASTDeclTable of string * typeid list
+      | ASTDeclRemoteTable of string * typeid list
+      | ASTDeclInc of string * string
+      | ASTDeclOut of string * outgoing_fields
+      | ASTDeclEvent of string * (string * typeid) list;;
+
   type srule = {onrel: string; onvar: string; action: action};;
+
+  type aststmt =
+      | ASTReactive of sreactive
+      | ASTDecl of astdecl
+      | ASTRule of srule;;
 
   type stmt =
       | SReactive of sreactive
       | SDecl of sdecl
       | SRule of srule;;
 
-  type flowlog_ast = {includes: string list; statements: stmt list};;
+  type flowlog_ast = {includes: string list; statements: aststmt list};;
 
 (*************************************************************)
 

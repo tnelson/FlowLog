@@ -10,6 +10,7 @@ open NetCore_Types
 (* 10 = even XSB messages *)
 let global_verbose = ref 0;;
 
+let global_unsafe = ref false;;
 
 exception UndeclaredIncomingRelation of string;;
 exception UndeclaredOutgoingRelation of string;;
@@ -557,8 +558,16 @@ let hex_str_to_int_string (s: string): string = Int64.to_string (Int64.of_string
       (map (fun (k, v) -> k^":"^(pretty_print_value (get_type_for_field p notif k) v))
            (StringMap.bindings notif.values)))^"]";;
 
-
-
+let get_terms_in_rule_head_and_body (f: term -> bool) (r: srule): term list =
+  match r.action with
+    | ADelete(_,terms,fmla)
+    | AInsert(_,terms,fmla)
+    | ADo(_,terms,fmla) ->
+      unique ((filter f terms)@(get_terms f fmla))
+    | AForward(term,fmla,_) ->
+      unique ((filter f [term])@(get_terms f fmla))
+    | AStash(_, fmla,_,_) ->
+      get_terms f fmla;;
 
 
 
@@ -663,6 +672,7 @@ let rec gather_predicate_and (pr: pred): pred list =
 
 exception UnsatisfiableFlag;;
 
+(* assumption: conjunctive list *)
 let remove_contradictions (subpreds: pred list): pred list =
     (* Hdr(...), OnSwitch(...) If contradictions, this becomes Nothing*)
     let process_pred acc p =
@@ -686,15 +696,18 @@ let remove_contradictions (subpreds: pred list): pred list =
       | Everything -> acc
       | Nothing -> raise UnsatisfiableFlag
 
-      | Not(p) as np ->
-        if exists (fun apred -> apred = p) complex then raise UnsatisfiableFlag
+      | Not(innerp) as np ->
+        if exists (fun apred -> apred = innerp) complex then raise UnsatisfiableFlag
         else (sws, hdrs, np :: complex)
 
         (* could be smarter TODO *)
       | Or(p1, p2) ->
         (sws, hdrs, p :: complex)
+      | And(p1, p2) ->
+        (sws, hdrs, p :: complex) in
 
-      | _ -> failwith ("remove_contradiction: expected only atomic preds") in
+
+      (*| _ -> failwith( (sprintf "remove_contradiction: expected only atomic preds: %s" (NetCore_Pretty.string_of_pred p)) in*)
       try
         let _ = fold_left process_pred ([],[],[]) subpreds in
           subpreds
@@ -712,6 +725,15 @@ let build_predicate_and (prs: pred list): pred =
     Everything
     (remove_contradictions prs);;
 
+let build_predicate_or (prs: pred list): pred =
+  fold_left (fun acc pr ->
+      if acc = Everything || pr = Everything then Everything
+      else if acc = Nothing then pr
+      else if pr = Nothing then acc
+      else Or(acc, pr))
+    Nothing
+    prs;; (* DO NOT call remove_contradictions here, as in b_p_and. *)
+
 let rec simplify_netcore_predicate (pr: pred): pred =
   match pr with
     | Nothing -> Nothing
@@ -726,7 +748,10 @@ let rec simplify_netcore_predicate (pr: pred): pred =
           else Or(sp1, sp2)
     | And(p1, p2) ->
       (* TODO: wasting a ton of time on these calls when sets would be much faster than lists *)
-        let conjuncts = unique (map simplify_netcore_predicate (unique ((gather_predicate_and p1) @ (gather_predicate_and p2)))) in
+        let unique_unsimp_conjuncts = (unique ((gather_predicate_and p1) @ (gather_predicate_and p2))) in
+        (*printf "uuconjs: %s\n%!" (string_of_list ";" NetCore_Pretty.string_of_pred unique_unsimp_conjuncts);*)
+        let conjuncts = unique (map simplify_netcore_predicate unique_unsimp_conjuncts) in
+        (*printf "conjs: %s\n%!" (string_of_list ";" NetCore_Pretty.string_of_pred conjuncts);*)
         build_predicate_and conjuncts
         (*let sp1 = simplify_netcore_predicate p1 in
         let sp2 = simplify_netcore_predicate p2 in
@@ -856,6 +881,25 @@ module PredSet  = Set.Make( struct type t = pred let compare = smart_compare_pre
       | DeclOut(tname, arg) -> "OUTGOING "^tname^" "^(string_of_outgoing_fields arg);
       | DeclEvent(evname, argdecls) -> "EVENT "^evname^" "^(String.concat "," (map string_of_field_decl argdecls));;
 
+let string_of_astdeclaration (d: astdecl): string =
+    match d with
+      | ASTDeclTable(tname, argtypes) -> "TABLE "^tname^" "^(String.concat "," argtypes);
+      | ASTDeclVar(tname, argtype, None) -> "VAR "^tname^": "^ argtype^" [no default]";
+      | ASTDeclVar(tname, argtype, Some(d)) -> "VAR "^tname^": "^argtype^" default="^(string_of_term d);
+      | ASTDeclRemoteTable(tname, argtypes) -> "REMOTE TABLE "^tname^" "^(String.concat "," argtypes);
+      | ASTDeclInc(tname, argtype) -> "INCOMING "^tname^" "^argtype;
+      | ASTDeclOut(tname, arg) -> "OUTGOING "^tname^" "^(string_of_outgoing_fields arg);
+      | ASTDeclEvent(evname, argdecls) -> "EVENT "^evname^" "^(String.concat "," (map string_of_field_decl argdecls));;
+
+
+  let outspec_type (spec:spec_out) =
+    match spec with
+      | OutForward -> "packet"
+      | OutEmit(typ) -> "packet"
+      | OutPrint -> "print"
+      | OutLoopback -> "loopback"
+      | OutSend(evtype, ip, pt) -> evtype;;
+
   let string_of_outspec (spec: spec_out) =
     match spec with
       | OutForward -> "forward"
@@ -879,9 +923,15 @@ module PredSet  = Set.Make( struct type t = pred let compare = smart_compare_pre
       | SDecl(dstmt) -> (string_of_declaration dstmt);
       | SRule(rstmt) -> (string_of_rule rstmt);;
 
+  let string_of_aststmt (stmt: aststmt): string =
+    match stmt with
+      | ASTReactive(rstmt) -> (string_of_reactive rstmt);
+      | ASTDecl(dstmt) -> (string_of_astdeclaration dstmt);
+      | ASTRule(rstmt) -> (string_of_rule rstmt);;
+
   let pretty_print_ast (ast: flowlog_ast): unit =
     iter (fun inc -> printf "INCLUDE %s;\n%!" inc) ast.includes;
-    iter (fun stmt -> printf "%s\n%!" (string_of_stmt stmt)) ast.statements;;
+    iter (fun stmt -> printf "%s\n%!" (string_of_aststmt stmt)) ast.statements;;
 
   let string_of_clause ?(verbose: printmode = Brief) (cl: clause): string =
     "CLAUSE: "^(string_of_formula ~verbose:verbose cl.head)^" :- "^(string_of_formula ~verbose:verbose cl.body)^"\n"^

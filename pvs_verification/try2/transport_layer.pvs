@@ -1,5 +1,0 @@
-transport_layer: DATATYPE
-  BEGIN
-  tcp(tpSrc: nat, tpDst: nat, payload: nat): tcp?
-  tl_unknown(payload: nat): tl_unknown? % again payload could have its own type as above
-  END transport_layer
