@@ -333,3 +333,4 @@ let switch_reg_relname = "switch_port_in";;
 let switch_down_relname = "switch_down";;
 let startup_relname = "startup";;
 
+let switch_has_port_relname = "switch_has_port";;

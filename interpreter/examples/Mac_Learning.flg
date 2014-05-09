@@ -1,6 +1,5 @@
 
 TABLE learned(switchid, portid, macaddr);
-TABLE switch_has_port(switchid, portid);
 
 // all the events used here are built-in
 
@@ -24,26 +23,12 @@ ON packet(pkt):
     // This rule doesn't have the negations all at the end of the
     // resulting clauses. If no pkts forwarded, it means negation-shuffling has failed.
   DO forward(new) WHERE
-    (learned(pkt.locSw, new.locPt, pkt.dlDst) AND
-      // NOTE: this line wasn't required in fully reactive version.
-      // But now, we may have learned (sw=x,pt=y,mac=z) and see a packet for z
-      // on port y (because the switch on that end hasn't yet learned where z is.)
-      // This is missing from the stock Mac Learning Frenetic functionality, and
-      // lacking it can result in dupe packets when pinging  at topo=tree,3,3
-      pkt.locPt != new.locPt
-     )
+
+    learned(pkt.locSw, new.locPt, pkt.dlDst)
+
     OR
-    (NOT learned(pkt.locSw, x, pkt.dlDst) AND
-     NOT pkt.locPt = new.locPt
-     // Commented out as **optimization**, only sound if compiled.
-     // (If interpreted in XSB, will get a problem because new.locPt isn't bound)
-     // AND switch_has_port(pkt.locSw, new.locPt)
-    );
-
-
-ON switch_port(swpt):
-  INSERT (swpt.sw, swpt.pt) INTO switch_has_port;
+    (NOT learned(pkt.locSw, ANY, pkt.dlDst) AND
+     pkt.locPt != new.locPt);
 
 ON switch_down(swd):
-  DELETE (swd.sw, ANY) FROM switch_has_port;
   DELETE (swd.sw, ANY, ANY) FROM learned;

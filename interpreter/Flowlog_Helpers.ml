@@ -21,6 +21,7 @@ exception UndeclaredField of string * string;;
 exception NonCondensedNoField of string;;
 exception RelationHadMultipleReacts of string;;
 exception RelationHadMultipleDecls of string;;
+exception RelationDeclClashesWithBuiltin of string;;
 exception NoDefaultForField of string * string;;
 
 let out_log = ref None;;
@@ -274,6 +275,7 @@ let rec build_or (fs: formula list): formula =
 let after_equals (str : string) : string =
 	let equals_index = try String.index str '=' with Not_found -> -1 in
 		String.trim (String.sub str (equals_index + 1) (String.length str - equals_index - 1));;
+
 
 (* XSB returns tuples like ["5", "3", "foo"].
    In the context of some variables TVar(x), etc.

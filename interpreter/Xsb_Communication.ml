@@ -430,7 +430,23 @@ module Communication = struct
 		if debug then (iter (fun t -> (Printf.printf "var: %s\n%!" (Type_Helpers.term_to_string t))) (get_vars cls));*)
 		let on_context = get_on_context prgm cls in
 		let new_head = subs_xsb_formula prgm ~context_on:on_context cls.head in
-		let new_body = subs_xsb_formula prgm ~context_on:on_context cls.body in
+		let subs_body = subs_xsb_formula prgm ~context_on:on_context cls.body in
+
+		(* Every forward clause needs XSB to enforce port domain.
+		   This is done here, rather than in desugaring, so that the compiler
+		   can just convert oldport != newport to an ALL action. *)
+		let new_body = if is_forward_clause cls then
+					   begin
+					   	 let (old, _) = trim_packet_from_body cls.body in
+					   	 let newp = string_of_term (hd (get_head_vars cls)) in
+					   	 (* positive, binding atom needs to come BEFORE potential negated atom *)
+		                 FAnd(FAtom("", switch_has_port_relname, [TVar((String.uppercase old)^"__LOCSW");
+		                 	                                      TVar((String.uppercase newp)^"__LOCPT")]),
+		                      subs_body)
+		               end
+		               else
+		                 subs_body in
+
 		printf "start_clause substituted: %s :- %s" (Xsb.xsb_of_formula new_head) (Xsb.xsb_of_formula new_body);
 		let subs_cls = {head = new_head;
 		                body = new_body;

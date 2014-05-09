@@ -133,36 +133,6 @@ let rec validate_formula_for_compile (strong_safe_list: term list) (newpkt: stri
     Some(build_and newliterals)
   end;;
 
-(* removes the packet_in atom (since that's meaningless here).
-   returns the var the old packet was bound to, and the trimmed fmla *)
-let rec trim_packet_from_body (body: formula): (string * formula) =
-  match body with
-    | FTrue -> ("", body)
-    | FFalse -> ("", body)
-    | FEquals(t1, t2) -> ("", body)
-    | FAnd(f1, f2) ->
-      let (var1, trimmed1) = trim_packet_from_body f1 in
-      let (var2, trimmed2) = trim_packet_from_body f2 in
-      let trimmed = if trimmed1 = FTrue then
-                      trimmed2
-                    else if trimmed2 = FTrue then
-                      trimmed1
-                    else
-                      FAnd(trimmed1, trimmed2) in
-      if (var1 = var2) || var1 = "" then
-        (var2, trimmed)
-      else if var2 = "" then
-        (var1, trimmed)
-      else failwith ("trim_packet_from_clause: multiple variables used in packet_in: "^var1^" and "^var2)
-    | FNot(f) ->
-      let (v, t) = trim_packet_from_body f in
-        (v, FNot(t))
-    | FOr(f1, f2) -> failwith "trim_packet_from_clause"
-    (* Don't remove non-packet input tables. Those flag caller that the clause is not packet-triggered *)
-    | FAtom("", relname, [TVar(varstr)]) when (is_packet_in_table relname) ->
-      (varstr, FTrue)
-    | _ -> ("", body);;
-
 let validate_and_process_pkt_triggered_clause (cl: clause): (clause * bool) =
 	let newpkt = (match cl.head with
 		| FAtom("", "forward", [TVar(newpktname)]) -> newpktname

@@ -17,6 +17,25 @@ exception SyntaxAnyInPlus of formula;;
 exception HexConstantSurvived of string;;
 exception SyntaxUnsafe of term;;
 
+(*ON switch_port(swpt):
+//  INSERT (swpt.sw, swpt.pt) INTO switch_has_port;
+
+//ON switch_down(swd):
+//  DELETE (swd.sw, ANY) FROM switch_has_port;
+//  DELETE (swd.sw, ANY, ANY) FROM learned;*)
+
+(* Auto-included AST for switch_has_port *)
+let switch_has_port_ast = {includes=[]; statements=
+  [ASTDecl(ASTDeclTable(switch_has_port_relname, ["switchid"; "portid"]));
+   ASTRule({onrel="switch_port"; onvar="sp";
+            action=AInsert(switch_has_port_relname, [TField("sp", "sw"); TField("sp", "pt")], FTrue) });
+   ASTRule({onrel="switch_down"; onvar="sd";
+            action=ADelete(switch_has_port_relname, [TField("sd", "sw"); TVar("ANY0")], FTrue) })]};;
+
+let built_in_asts = [switch_has_port_ast];;
+let auto_tables = [switch_has_port_relname];;
+
+
 (* Thanks to Jon Harrop on caml-list *)
 let from_case_insensitive_channel ic =
   let in_quote = ref false in
@@ -292,7 +311,9 @@ let well_formed_decls (decls: sdecl list): unit =
       | DeclInc(relname, _)
       | DeclTable(relname, _)
       | DeclRemoteTable(relname, _) ->
-        if mem relname acc then
+        if (is_built_in relname) || ((mem relname acc) && (mem relname auto_tables)) then
+          raise (RelationDeclClashesWithBuiltin(relname))
+        else if mem relname acc then
           raise (RelationHadMultipleDecls(relname))
         else relname::acc
       | _ -> acc) [] decls);;
@@ -342,7 +363,6 @@ let add_built_ins (r: srule): srule =
               else act' in
     {r with action=act''};;
 
-
 (*
  * takes a list of ASTs and returns a single AST which is comprised of the
  * flattened list of statements, and a flattened, unique list of includes
@@ -368,7 +388,7 @@ let flatten_asts (asts : flowlog_ast list) : flowlog_ast =
  *)
 
 let rec expand_includes (ast : flowlog_ast) (prev_includes : string list) : flowlog_ast =
-    if length ast.includes = 0 then ast
+    if length ast.includes = 0 then (flatten_asts (built_in_asts@[ast]))
     else
       let unquote = fun qfn -> String.sub qfn 1 ((String.length qfn) - 2) in
       let includes = map unquote ast.includes in
@@ -376,7 +396,7 @@ let rec expand_includes (ast : flowlog_ast) (prev_includes : string list) : flow
                                     then {includes=[]; statements=[]}
                                     else read_ast filename in
 
-      let flattened_ast = flatten_asts (map maybe_read_ast includes) in
+      let flattened_ast = flatten_asts (built_in_asts@(map maybe_read_ast includes)) in
 
         let new_ast = {includes=flattened_ast.includes; statements=ast.statements @ flattened_ast.statements} in
           expand_includes new_ast (prev_includes @ includes)
