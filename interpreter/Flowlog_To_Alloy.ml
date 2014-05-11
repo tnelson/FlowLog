@@ -43,6 +43,12 @@ sig Tpport {} // transport-layer port (TCP or UDP) number
 
 sig FLString {}
 sig FLInt{}
+
+// univ because of overlap: '1' may be the increment, or it may be a portid
+one sig BuiltIns {
+  add: univ -> univ -> univ
+}
+
 ";;
 
 (* These functions take the _relation name_, not the event name
@@ -83,19 +89,21 @@ type alloy_ontology = {
       | TField(varname, fname) ->
         (varname^"."^fname);;
 
-  let rec alloy_of_formula (stateid: string) (f: formula): string =
+  let rec alloy_of_formula (o: alloy_ontology) (stateid: string) (f: formula): string =
     match f with
       | FTrue -> "true[]"
       | FFalse -> "false[]"
       | FEquals(t1, t2) -> (alloy_of_term t1) ^ " = "^ (alloy_of_term t2)
       | FIn(t, addr, mask) -> sprintf "%s -> %s -> %s in in_ipv4_range" (alloy_of_term t) (alloy_of_term addr) (alloy_of_term mask)
-      | FNot(f2) ->  "not ("^(alloy_of_formula stateid f2)^")"
-      | FAtom("", relname, tlargs) ->
+      | FNot(f2) ->  "not ("^(alloy_of_formula o stateid f2)^")"
+      | FAtom("", relname, tlargs) when (exists (fun (tname, _) -> tname=relname) o.tables_used) ->
           (String.concat "->" (map alloy_of_term tlargs))^" in "^stateid^"."^relname
+      | FAtom("", relname, tlargs) ->
+          (String.concat "->" (map alloy_of_term tlargs))^" in o/BuiltIns."^relname
       | FAtom(modname, relname, tlargs) ->
           (String.concat "->" (map alloy_of_term tlargs))^" in "^stateid^"."^modname^"_"^relname
-      | FAnd(f1, f2) -> "("^(alloy_of_formula stateid f1) ^ " && "^ (alloy_of_formula stateid f2)^")"
-      | FOr(f1, f2) -> (alloy_of_formula stateid f1) ^ " || "^ (alloy_of_formula stateid f2)
+      | FAnd(f1, f2) -> "("^(alloy_of_formula o stateid f1) ^ " && "^ (alloy_of_formula o stateid f2)^")"
+      | FOr(f1, f2) -> (alloy_of_formula o stateid f1) ^ " || "^ (alloy_of_formula o stateid f2)
 
 
 
@@ -132,6 +140,8 @@ let get_bottom_fields (o: alloy_ontology) (ev: event_def) =
 (* Actually print the ontology
    TODO: cleanup *)
 let write_alloy_ontology (out: out_channel) (o: alloy_ontology): unit =
+
+  printf "Writing ontology. Tables used: %s\n%!" (string_of_list "," (fun (n, d) -> n) o.tables_used);
 
   (****** Boilerplate ******************)
   alloy_boilerplate out;
@@ -269,7 +279,7 @@ pred <outrel>[st: State, <incvar>: <reactive of increl>, <outarg0> :univ, <outar
 type pred_fragment = {fortable: string option; outrel: string; increl: string; incvar: string;
                       outargs: term list; where: formula};;
 
-let alloy_actions (out: out_channel) (p: flowlog_program): unit =
+let alloy_actions (out: out_channel) (o: alloy_ontology) (p: flowlog_program): unit =
 
   let make_rule (r: srule): pred_fragment =
     match r.action with
@@ -359,7 +369,7 @@ let alloy_actions (out: out_channel) (p: flowlog_program): unit =
     (* Finally, should any defaults be added on? *)
     let defaultsstr = build_defaults pf in
 
-      "\n  (ev in "^evtypename^defaultsstr^" && ("^freevarstr^" "^(alloy_of_formula stateid substituted)^")\n"^
+      "\n  (ev in "^evtypename^defaultsstr^" && ("^freevarstr^" "^(alloy_of_formula o stateid substituted)^")\n"^
 
       (* If field of invar in outargs, need to add an equality, otherwise connection is lost by alpha renaming. *)
       "      && "^(String.concat " && " (mapi (outarg_to_poss_equality evrestrictedname) pf.outargs))^")"
@@ -510,7 +520,7 @@ let write_as_alloy (p: flowlog_program) (fn: string) (merged_ontology: alloy_ont
             fprintf out "open %s as o\n" o.filename;
             o) in
 
-    	alloy_actions out p;
+    	alloy_actions out ontology p;
     	alloy_transition out p ontology;
       alloy_outpolicy out p;
       alloy_boilerplate_pred out;
