@@ -39,7 +39,7 @@ sig Ethtyp {}
 sig Portid {}
 sig Nwprotocol {}
 // TODO: If a base type is unused, don't declare it.
-sig TpPort {} // transport-layer port (TCP or UDP) number
+sig Tpport {} // transport-layer port (TCP or UDP) number
 
 sig FLString {}
 sig FLInt{}
@@ -77,6 +77,7 @@ type alloy_ontology = {
 (**********************************************************)
   let alloy_of_term (t: term): string =
     match t with
+      | TConst(s) when (starts_with s "-") -> "C_minus"^(String.sub s 1 ((String.length s)-1))
       | TConst(s) -> "C_"^s
       | TVar(s) -> s
       | TField(varname, fname) ->
@@ -100,7 +101,6 @@ type alloy_ontology = {
 
 
 (**********************************************************)
-
 let event_is_used (p: flowlog_program) (ev_def: event_def): bool =
   (* This event triggers a rule, or some outgoing_def triggered by a DO rule sends this event. *)
   let outrels_for_event = (filter_map (fun outd -> (match outd.react with
@@ -109,12 +109,25 @@ let event_is_used (p: flowlog_program) (ev_def: event_def): bool =
       | _ -> None)) p.outgoings) in
   (rule_uses p ev_def.eventname) || (exists (fun outrel -> do_rule_exists p outrel) outrels_for_event);;
 
+let assemble_needed_events (p: flowlog_program) (ev_def: event_def): event_def list =
+  (* Is this a packet flavor? If so, its superflavors are needed *)
+  let supers = built_in_supertypes ev_def.eventname in
+    printf "DEBUG: assembling needed events for %s. Got %s\n%!" ev_def.eventname (String.concat "," supers);
+    map (get_event p) supers;;
+
 let typestr_to_alloy (fldtype: string): string =
   match fldtype with
   | "string" -> "FLString"
   | "int" -> "FLInt"
   | _ -> String.capitalize fldtype;;
 
+
+let get_bottom_fields (o: alloy_ontology) (ev: event_def) =
+  match get_superflavor_typename ev.eventname with
+    | None -> ev.evfields
+    | Some(supername) ->
+      let superev = assoc supername o.events_used in
+        subtract ev.evfields superev.evfields;;
 
 (* Actually print the ontology
    TODO: cleanup *)
@@ -130,7 +143,7 @@ let write_alloy_ontology (out: out_channel) (o: alloy_ontology): unit =
     let ifislone = if length ev.evfields > 0 then "" else "lone " in
     let supertypename = (match (get_superflavor_typename ev.eventname) with | Some(super) -> ("EV"^super) | None -> "Event") in
         fprintf out "%ssig EV%s extends %s {\n%!" ifislone ev.eventname supertypename;
-        let flddecls = map (fun (fldname,fldtype) -> (sprintf "    %s: one %s") fldname (typestr_to_alloy fldtype)) ev.evfields in
+        let flddecls = map (fun (fldname,fldtype) -> (sprintf "    %s: one %s") fldname (typestr_to_alloy fldtype)) (get_bottom_fields o ev) in
           fprintf out "%s%!" (String.concat ",\n" flddecls);
           fprintf out "}\n\n%!";
 
@@ -161,14 +174,25 @@ let write_alloy_ontology (out: out_channel) (o: alloy_ontology): unit =
   iter (fun (c_n, c_t) -> fprintf out "lone sig %s extends %s {}\n" c_n c_t) o.constants;
   fprintf out "\n%!";;
 
-(* Extract ontology; don't print it *)
+(* If packet-flavors are used, need to declare their parent flavors *)
+let get_needed_events (p: flowlog_program) =
+  let supers_if_used (ev: event_def) =
+      if (event_is_used p ev) then
+        Some(assemble_needed_events p ev)
+      else
+        None in
+    unique (flatten (filter_map supers_if_used p.events));;
+
+(* Extract ontology; don't print it yet *)
 let program_to_ontology (p: flowlog_program): alloy_ontology =
   (* Identify the constants (like "0x1001") used and declare them. *)
   {constants= (map (fun c -> ((alloy_of_term c), "[FILL]"))
                 (fold_left (fun acc cl -> (unique ( acc @ (get_terms (function | TConst(_) -> true | _ -> false) cl.body))))
                            []
                            p.clauses));
-   events_used=filter_map (fun ev -> if (event_is_used p ev) then Some((ev.eventname, ev)) else None) p.events;
+
+   events_used=map (fun edec -> (edec.eventname, edec)) (get_needed_events p);
+
    tables_used=(map (fun tbl -> (tbl.tablename, tbl)) ((get_local_tables p) @ (get_remote_tables p)));
    filename = ""};;
 
@@ -178,7 +202,15 @@ let resolve_tables (o1: alloy_ontology) (o2: alloy_ontology): (string * table_de
   fold_left (fun acc tbl ->
               let tbl_n, tbl_def = tbl in
               if mem_assoc tbl_n acc && (assoc tbl_n acc) <> tbl_def then
-                failwith (sprintf "The programs had different declared arities for table %s" tbl_n)
+              begin
+                (* R_1 and R_2 separate *)
+                printf "WARNING: The programs had different declared arities for table %s.\n%!" tbl_n;
+                printf "  Both versions of the table will be included in the Alloy model,\n%!";
+                printf "  which may result in excess instances and require additional constraints to be added.\n%!";
+                (tbl_n^"_2", {tbl_def with tablename=tbl_def.tablename^"_2"}) :: acc
+                (*failwith (sprintf "The programs had different declared arities for table %s" tbl_n)              *)
+              end
+
               else if mem_assoc tbl_n acc then
                 acc
               else
@@ -358,7 +390,7 @@ let alloy_actions (out: out_channel) (p: flowlog_program): unit =
         (sprintf "out0 in %s" (event_alloysig_for (outspec_type (get_outgoing p outrel).react)))
       | Some(orig_rel) ->
         let tarity = ((get_table p orig_rel).tablearity) in
-          (String.concat ", " (mapi (fun i t -> sprintf "out%d in %s" i (typestr_to_alloy (nth tarity i)))
+          (String.concat " && " (mapi (fun i t -> sprintf "out%d in %s" i (typestr_to_alloy (nth tarity i)))
                                     pfl.outargs)) in
 
 
@@ -619,5 +651,5 @@ run changeImpactLast for 6 but 4 State, 5 Event, 4 seq
   (String.concat "||\n" (filter_map (build_prestate_table_compare p1 p2) ontol.tables_used));
   end;
       close_out out;
-      printf "WARNING: Make sure the two files have the same ontology, or the generated file may not run.\n%!";
+      (*printf "WARNING: Make sure the two files have the same ontology, or the generated file may not run.\n%!";*)
       printf "~~~ Finished change-impact query file. ~~~\n%!";;
