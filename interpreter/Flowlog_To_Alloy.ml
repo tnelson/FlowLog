@@ -429,7 +429,7 @@ let alloy_actions (out: out_channel) (o: alloy_ontology) (p: flowlog_program): u
 
 (* construct transition string for a particular table (including plus and minus rules) *)
 let build_table_transition (p: flowlog_program) (tbl : table_def): string =
-    let tupdvec = (String.concat "," (mapi  (fun i typ -> sprintf "tup%d: %s" i (String.capitalize typ)) tbl.tablearity)) in
+    let tupdvec = (String.concat "," (mapi  (fun i typ -> sprintf "tup%d: %s" i (typestr_to_alloy typ)) tbl.tablearity)) in
     let tupavec = (String.concat "," (init (length tbl.tablearity) (fun i -> sprintf "tup%d" i))) in
 
     (* - { sw: Switch, sw2: Switch | minus_ucTC[st, ev, sw, sw2] } *)
@@ -442,7 +442,7 @@ let build_table_transition (p: flowlog_program) (tbl : table_def): string =
 
 (* same as build_table_transition, but constructs change-impact strings *)
 let build_prestate_table_compare (p1: flowlog_program) (p2: flowlog_program) (_,tbl : string * table_def): string option =
-    let tupdvec = (String.concat "," (mapi (fun i typ -> sprintf "tup%d: %s" i (String.capitalize typ)) tbl.tablearity)) in
+    let tupdvec = (String.concat "," (mapi (fun i typ -> sprintf "tup%d: %s" i (typestr_to_alloy typ)) tbl.tablearity)) in
     let tupavec = (String.concat "," (init (length tbl.tablearity) (fun i -> sprintf "tup%d" i))) in
     let tupproduct = (String.concat "->" (init (length tbl.tablearity) (fun i -> sprintf "tup%d" i))) in
 

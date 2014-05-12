@@ -543,6 +543,7 @@ let hex_str_to_int_string (s: string): string = Int64.to_string (Int64.of_string
       | "ipaddr" -> Packet.string_of_ip (nwaddr_of_int_string strval)
       | "macaddr" -> Packet.string_of_mac (macaddr_of_int_string strval)
       | "portid" -> strval
+      | "nwprotocol" -> strval
       | "switchid" -> OpenFlow0x01.string_of_switchId (Int64.of_string strval)
       | "ethtyp" -> Packet.string_of_dlTyp (int_of_string strval)
       | _ -> strval);;

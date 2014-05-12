@@ -55,7 +55,7 @@ let packet_flavors = [
 
    {label = "ip"; superflavor = Some "packet";
     build_condition = (fun vname -> FEquals(TField(vname, "dltyp"), TConst(hex_str_to_int_string "0x0800")));
-    fields = [("nwsrc", "ipaddr"); ("nwdst", "ipaddr"); ("nwproto", "int")]};  (* missing: frag, tos, chksum, ident, ...*)
+    fields = [("nwsrc", "ipaddr"); ("nwdst", "ipaddr"); ("nwproto", "nwprotocol")]};  (* missing: frag, tos, chksum, ident, ...*)
 
   (* {label = "ipv6"; superflavor = Some "packet";
     build_condition = (fun vname -> FEquals(TField(vname, "dltyp"), TConst(hex_str_to_int_string "0x86DD")));
