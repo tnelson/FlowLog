@@ -81,6 +81,14 @@ type alloy_ontology = {
 }
 
 (**********************************************************)
+  let add_freevar_sym_str (v: string): string =
+    "var_"^v;;
+
+  let add_freevar_sym (v: term): term =
+    match v with
+      | TVar(vname) -> TVar(add_freevar_sym_str vname)
+      | _ -> failwith (sprintf "add_freevar_sym: %s" (string_of_term v));;
+
   let alloy_of_term (t: term): string =
     match t with
       | TConst(s) when (starts_with s "-") -> "C_minus"^(String.sub s 1 ((String.length s)-1))
@@ -305,8 +313,10 @@ let alloy_actions (out: out_channel) (o: alloy_ontology) (p: flowlog_program): u
     (* negative occur of an "any" term becomes universal. TODO: risk of string muddling *)
     let quantify_helper (tq: term*bool) =
       match tq with
-        | TVar(vname), false when starts_with vname "any" -> sprintf "all %s : univ | " vname
-        | TVar(vname), _ -> sprintf "some %s : univ | " vname
+        | TVar(vname), false when starts_with vname "any" ->
+          sprintf "all %s : univ | " (add_freevar_sym_str vname)
+        | TVar(vname), _ ->
+          sprintf "some %s : univ | " (add_freevar_sym_str vname)
         | _ -> failwith "make_quantified_decl" in
 
     let trimmed_list = fold_left (fun acc tq ->
@@ -352,21 +362,41 @@ let alloy_actions (out: out_channel) (o: alloy_ontology) (p: flowlog_program): u
             | OutEmit(tid) -> " && "^(build_emit_defaults pf tid)
             | _ -> "") in
 
+  (* Produce an Alloy constraint (string) for this Flowlog rule (as pred_fragment) *)
   let alloy_of_pred_fragment (stateid: string) (pf : pred_fragment): string =
   (* substitute var names: don't get stuck on rules with different args or in var name! *)
     let evtypename = (event_alloysig_for pf.increl) in
     let evrestrictedname = (sprintf "(%s <: ev)" evtypename) in
-    let to_substitute = [(TVar(pf.incvar), TVar(evrestrictedname))](* [(TVar(pf.incvar), TVar("ev"))]*)
-                        @ (mapi (fun i outarg -> (outarg, TVar("out"^(string_of_int i)))) pf.outargs) in
+    let quantified_vars = [TVar(pf.incvar)] @ pf.outargs in
+
+    (* free vars won't be replaced with "outx" or "ev" *)
+    let freevars_signed = get_terms_with_sign
+      (function | TVar(x) as t -> not (mem t quantified_vars) | _ -> false) true pf.where in
+
+    let to_substitute =
+      (* Domain-restrict ev for Alloy's type-checker*)
+      [(TVar(pf.incvar), TVar(evrestrictedname))] @
+      (* Generic "out" vars. This unifies multiple Flowlog rules with same input/output
+         but that use different variable names. Just alpha renaming. *)
+      (mapi (fun i outarg -> (outarg, TVar("out"^(string_of_int i)))) pf.outargs) @
+      (* Rule-scope variables: these need alpha-renaming too to avoid clashes with tables, etc. *)
+      (map (fun (v, _) -> (v, add_freevar_sym v)) freevars_signed)
+       in
+
+    printf "Substituting: %s\n%!"
+      (string_of_list "; "
+        (fun (a,b) -> ((string_of_term a)^"->"^(string_of_term b)))
+        to_substitute);
+
     let substituted = (substitute_terms pf.where to_substitute) in
     (*printf "alloy of formula: %s\n%!" (string_of_formula substituted);*)
-    let quantified_vars = [TVar("ev")] @ (mapi (fun i _ -> TVar("out"^(string_of_int i))) pf.outargs) in
-    let freevars_signed = get_terms_with_sign (function | TVar(x) as t -> not (mem t quantified_vars) | _ -> false) true substituted in
-    (* If the free var is an ANY, be careful how to bind it. If it is an ANY that appears within a negation, must be ALL not EXISTS *)
+
+    (* If the free var is an ANY, be careful how to bind it.
+       If it is an ANY that appears within a negation, must be ALL not EXISTS *)
     (* explicitly quantify rule-scope existentials *)
     let freevarstr = (String.concat " " (make_quantified_decl freevars_signed)) in
 
-    (* Finally, should any defaults be added on? *)
+    (* Finally, should any defaults be added on? (e.g., new.locsw = p.locsw)*)
     let defaultsstr = build_defaults pf in
 
       "\n  (ev in "^evtypename^defaultsstr^" && ("^freevarstr^" "^(alloy_of_formula o stateid substituted)^")\n"^
