@@ -92,7 +92,7 @@
             | VAR NAME COLON NAME optional_default SEMICOLON
               {ASTDeclVar($2, $4, $5)}
             | REMOTE TABLE NAME LPAREN name_list RPAREN SEMICOLON {ASTDeclRemoteTable($3, $5)}
-            | EVENT NAME LCURLY field_decl_list RCURLY SEMICOLON {ASTDeclEvent($2, $4)}
+            | EVENT NAME LCURLY poss_empty_field_decl_list RCURLY SEMICOLON {ASTDeclEvent($2, $4)}
             | INCOMING NAME LPAREN NAME RPAREN SEMICOLON {ASTDeclInc($2, $4)}
             | OUTGOING NAME LPAREN NAME RPAREN SEMICOLON {ASTDeclOut($2, FixedEvent($4))};
 
@@ -178,6 +178,8 @@
   name_list:
             | NAME {[$1]}
             | NAME COMMA name_list {$1 :: $3};
+
+  poss_empty_field_decl_list: {[]} | field_decl_list {$1};
 
   field_decl_list:
             | NAME COLON NAME {[($1, $3)]}
