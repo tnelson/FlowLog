@@ -110,7 +110,10 @@ type alloy_ontology = {
           (String.concat "->" (map alloy_of_term tlargs))^" in o/BuiltIns."^relname
       | FAtom(modname, relname, tlargs) ->
           (String.concat "->" (map alloy_of_term tlargs))^" in "^stateid^"."^modname^"_"^relname
-      | FAnd(f1, f2) -> "("^(alloy_of_formula o stateid f1) ^ " && "^ (alloy_of_formula o stateid f2)^")"
+      | FAnd(f1, f2) ->
+        (Format.sprintf "(@[%s@] && @[%s@])"
+          (alloy_of_formula o stateid f1)
+          (alloy_of_formula o stateid f2))
       | FOr(f1, f2) -> (alloy_of_formula o stateid f1) ^ " || "^ (alloy_of_formula o stateid f2)
 
 
@@ -399,10 +402,13 @@ let alloy_actions (out: out_channel) (o: alloy_ontology) (p: flowlog_program): u
     (* Finally, should any defaults be added on? (e.g., new.locsw = p.locsw)*)
     let defaultsstr = build_defaults pf in
 
-      "\n  (ev in "^evtypename^defaultsstr^" && ("^freevarstr^" "^(alloy_of_formula o stateid substituted)^")\n"^
-
-      (* If field of invar in outargs, need to add an equality, otherwise connection is lost by alpha renaming. *)
-      "      && "^(String.concat " && " (mapi (outarg_to_poss_equality evrestrictedname) pf.outargs))^")"
+      (* Final pred fragment Alloy: *)
+      Format.sprintf "\n  (@[ev in %s%s@] && @[(%s %s)@]\n      && @[%s@])"
+        evtypename defaultsstr
+        freevarstr
+        (alloy_of_formula o stateid substituted)
+        (* If field of invar in outargs, need to add an equality, otherwise connection is lost by alpha renaming. *)
+        (String.concat " && " (mapi (outarg_to_poss_equality evrestrictedname) pf.outargs))
   in
 
   (* Accumulate a map from outrel to rules that contribute*)
