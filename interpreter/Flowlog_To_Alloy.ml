@@ -117,8 +117,6 @@ type alloy_ontology = {
       | FOr(f1, f2) -> (alloy_of_formula o stateid f1) ^ " || "^ (alloy_of_formula o stateid f2)
 
 
-
-
 (**********************************************************)
 let event_is_used (p: flowlog_program) (ev_def: event_def): bool =
   (* This event triggers a rule, or some outgoing_def triggered by a DO rule sends this event. *)
@@ -224,14 +222,8 @@ let resolve_tables (o1: alloy_ontology) (o2: alloy_ontology): (string * table_de
               let tbl_n, tbl_def = tbl in
               if mem_assoc tbl_n acc && (assoc tbl_n acc) <> tbl_def then
               begin
-                (* R_1 and R_2 separate *)
-                printf "WARNING: The programs had different declared arities for table %s.\n%!" tbl_n;
-                printf "  Both versions of the table will be included in the Alloy model,\n%!";
-                printf "  which may result in excess instances and require additional constraints to be added.\n%!";
-                (tbl_n^"_2", {tbl_def with tablename=tbl_def.tablename^"_2"}) :: acc
-                (*failwith (sprintf "The programs had different declared arities for table %s" tbl_n)              *)
+                failwith (sprintf "resolve_tables unexpected mismatching arities: %s" tbl_n)
               end
-
               else if mem_assoc tbl_n acc then
                 acc
               else
@@ -579,8 +571,43 @@ let build_starting_state_trace (ontol: alloy_ontology): string =
   let tracestrs = map (fun (n,_ ) -> sprintf "no overall.trace.first.%s" n) ontol.tables_used in
   String.concat "\n" tracestrs;;
 
-(* *)
-let write_as_alloy_change_impact (p1: flowlog_program) (fn1: string) (p2: flowlog_program) (fn2: string) (reach: bool): unit =
+(* In case of ontology mismatch *)
+let needed_table_substitutions (p1: flowlog_program) (p2: flowlog_program): ((string * string) list * (string * string) list) =
+
+    let mismatches = fold_left
+      (fun acc td ->
+        try
+          let td2 = (get_table p2 td.tablename) in
+            if td <> td2 then (td.tablename)::acc
+            else acc
+        with
+          | _ -> acc) (* no such table in p2 *)
+      []
+      p1.tables in
+
+    let subs1 = [] in
+    let subs2 = [] in
+
+    if (length mismatches) <> 0 then
+    begin
+      printf "WARNING: The programs had different declared arities for tables %s.\n%!"
+        (string_of_list ", " identity mismatches);
+      printf "  Both versions of the table will be included in the Alloy model,\n%!";
+      printf "  which may result in excess instances and require additional constraints to be added.\n%!";
+    end;
+    (subs1, subs2);;
+
+let substitute_tables_in_program (subs: (string * string) list) (p: flowlog_program): flowlog_program =
+  p;; (* TODO *)
+
+let write_as_alloy_change_impact (orig_p1: flowlog_program) (fn1: string) (orig_p2: flowlog_program) (fn2: string) (reach: bool): unit =
+
+  (* Before anything else, check for conflicts that need resolution via substitution in the programs.
+     For instance, TABLE R(macaddr) vs. TABLE R(macaddr, ipaddr). Needs R_1 and R_2 with substitution. *)
+  let (subs1, subs2) = needed_table_substitutions orig_p1 orig_p2 in
+  let p1 = (substitute_tables_in_program subs1 orig_p1) in
+  let p2 = (substitute_tables_in_program subs2 orig_p2) in
+
   let modname1 = (Filename.chop_extension (Filename.basename fn1)) in
   let modname2 = (Filename.chop_extension (Filename.basename fn2)) in
   let ofn = ("ontology_"^modname1^"_vs_"^modname2) in
