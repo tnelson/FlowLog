@@ -585,8 +585,8 @@ let needed_table_substitutions (p1: flowlog_program) (p2: flowlog_program): ((st
       []
       p1.tables in
 
-    let subs1 = [] in
-    let subs2 = [] in
+    let subs1 = map (fun tn -> (tn, tn^"_1")) mismatches in
+    let subs2 = map (fun tn -> (tn, tn^"_2")) mismatches  in
 
     if (length mismatches) <> 0 then
     begin
@@ -597,8 +597,64 @@ let needed_table_substitutions (p1: flowlog_program) (p2: flowlog_program): ((st
     end;
     (subs1, subs2);;
 
+let rec subs_table_in_formula (subs: (string * string) list) (f: formula): formula =
+    match f with
+      | FTrue -> f
+      | FFalse -> f
+      | FEquals(t1, t2) -> f
+      | FIn(t, addr, mask) -> f
+      | FNot(f2) -> (subs_table_in_formula subs f2)
+      | FAtom(modname, relname, tlargs) when mem_assoc relname subs ->
+        FAtom(modname, assoc relname subs, tlargs)
+      | FAtom(modname, relname, tlargs) -> f
+      | FAnd(f1, f2) ->
+        FAnd(subs_table_in_formula subs f1, subs_table_in_formula subs f2)
+      | FOr(f1, f2) ->
+        FOr(subs_table_in_formula subs f1, subs_table_in_formula subs f2);;
+
+let add_pm_to_subs (subs: (string * string) list): (string * string) list =
+  fold_left (fun acc (o,n) ->
+    [(o,n);(plus_prefix^"_"^o, plus_prefix^"_"^n);(minus_prefix^"_"^o, minus_prefix^"_"^n)]
+    @acc) [] subs;;
+
+let subs_table_in_rule (subs: (string * string) list) (r: srule): srule =
+  let apply_subs reln: string =
+    if mem_assoc reln subs then assoc reln subs else reln in
+  let newaction = (match r.action with
+              | ADelete(reln, tl, fmla) ->
+                ADelete(apply_subs reln, tl, subs_table_in_formula subs fmla)
+              | AInsert(reln, tl, fmla) ->
+                AInsert(apply_subs reln, tl, subs_table_in_formula subs fmla)
+              | ADo(reln, tl, fmla) ->
+                ADo(apply_subs reln, tl, subs_table_in_formula subs fmla)
+              | AStash(_,_,_,_) ->
+                failwith "stash in subs_table"
+              | AForward(t, fmla, iopt) ->
+                AForward(t, subs_table_in_formula subs fmla, iopt)) in
+  (* assuming triggers won't need substitution *)
+  {r with action=newaction};;
+
+let subs_tables_in_clause (subs: (string * string) list) (cl: clause): clause =
+  (* plus and minus rules will need some string ops*)
+  {orig_rule=subs_table_in_rule subs cl.orig_rule;
+   head=subs_table_in_formula (add_pm_to_subs subs) cl.head;
+   body=subs_table_in_formula subs cl.body};;
+
 let substitute_tables_in_program (subs: (string * string) list) (p: flowlog_program): flowlog_program =
-  p;; (* TODO *)
+  (* tablemap *)
+  iter (fun (o,n) ->
+    let newdef = {(get_table p o) with tablename=n} in
+      Hashtbl.remove p.memos.tablemap o;
+      Hashtbl.add p.memos.tablemap n newdef)
+    subs;
+
+  {p with clauses=map (subs_tables_in_clause subs) p.clauses;
+
+          tables=map (fun td ->
+            if mem_assoc (td.tablename) subs then
+              {td with tablename=assoc (td.tablename) subs}
+            else
+              td) p.tables};;
 
 let write_as_alloy_change_impact (orig_p1: flowlog_program) (fn1: string) (orig_p2: flowlog_program) (fn2: string) (reach: bool): unit =
 
@@ -607,6 +663,8 @@ let write_as_alloy_change_impact (orig_p1: flowlog_program) (fn1: string) (orig_
   let (subs1, subs2) = needed_table_substitutions orig_p1 orig_p2 in
   let p1 = (substitute_tables_in_program subs1 orig_p1) in
   let p2 = (substitute_tables_in_program subs2 orig_p2) in
+
+  pretty_print_program p1;
 
   let modname1 = (Filename.chop_extension (Filename.basename fn1)) in
   let modname2 = (Filename.chop_extension (Filename.basename fn2)) in

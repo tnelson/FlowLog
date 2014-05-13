@@ -940,6 +940,10 @@ let string_of_astdeclaration (d: astdecl): string =
     "CLAUSE: "^(string_of_formula ~verbose:verbose cl.head)^" :- "^(string_of_formula ~verbose:verbose cl.body)^"\n"^
     (if verbose = Verbose then "FROM RULE: "^(string_of_rule cl.orig_rule) else "");;
 
+  let pretty_print_program (p: flowlog_program): unit =
+    Hashtbl.iter (fun k v -> (printf "table %s\n%!" k)) p.memos.tablemap;
+    iter (fun cl -> printf "clause: %s\n%!" (string_of_clause cl)) p.clauses;;
+
   let string_of_triggered_clause ?(verbose: bool = false) (cl: triggered_clause): string =
     "TRIGGER: "^cl.oldpkt^" "^(string_of_clause cl.clause);;
 
