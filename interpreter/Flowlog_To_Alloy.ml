@@ -46,6 +46,8 @@ sig FLInt{}
 
 // univ because of overlap: '1' may be the increment, or it may be a portid
 one sig BuiltIns {
+// TODO: univ^3 is far too big. And cross-use of constants means can't separate cleanly by types
+//   add: (Tpport+FLInt+Portid)->(Tpport+FLInt+Portid)->(Tpport+FLInt+Portid)
   add: univ -> univ -> univ
 }
 
@@ -309,8 +311,10 @@ let alloy_actions (out: out_channel) (o: alloy_ontology) (p: flowlog_program): u
     let quantify_helper (tq: term*bool) =
       match tq with
         | TVar(vname), false when starts_with vname "any" ->
+          printf "... Universally quantifying %s\n%!" vname;
           sprintf "all %s : univ | " (add_freevar_sym_str vname)
         | TVar(vname), _ ->
+          printf "... Existentially quantifying %s\n%!" vname;
           sprintf "some %s : univ | " (add_freevar_sym_str vname)
         | _ -> failwith "make_quantified_decl" in
 
@@ -367,6 +371,10 @@ let alloy_actions (out: out_channel) (o: alloy_ontology) (p: flowlog_program): u
     (* free vars won't be replaced with "outx" or "ev" *)
     let freevars_signed = get_terms_with_sign
       (function | TVar(x) as t -> not (mem t quantified_vars) | _ -> false) true pf.where in
+
+    printf "freevars: %s\n%!"
+      (string_of_list ";" (fun (t, s) -> (string_of_term t)^":"^(string_of_bool s)) freevars_signed);
+
 
     let to_substitute =
       (* Domain-restrict ev for Alloy's type-checker*)
@@ -603,7 +611,7 @@ let rec subs_table_in_formula (subs: (string * string) list) (f: formula): formu
       | FFalse -> f
       | FEquals(t1, t2) -> f
       | FIn(t, addr, mask) -> f
-      | FNot(f2) -> (subs_table_in_formula subs f2)
+      | FNot(f2) -> FNot(subs_table_in_formula subs f2)
       | FAtom(modname, relname, tlargs) when mem_assoc relname subs ->
         FAtom(modname, assoc relname subs, tlargs)
       | FAtom(modname, relname, tlargs) -> f
