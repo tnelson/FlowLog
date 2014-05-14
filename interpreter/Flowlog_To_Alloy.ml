@@ -240,8 +240,10 @@ let get_needed_events (p: flowlog_program) =
 (* Extract ontology; don't print it yet *)
 let program_to_ontology (p: flowlog_program): alloy_ontology =
   (* Identify the constants (like "0x1001") used and declare them. *)
+  (* Need to grab constants from both body and head. E.g., INSERT (10000) into x;*)
   {constants= (map (fun c -> ((alloy_of_term c), "[FILL]"))
-                (fold_left (fun acc cl -> (unique ( acc @ (get_terms (function | TConst(_) -> true | _ -> false) cl.body))))
+                (fold_left (fun acc cl -> (unique ( acc @ (get_terms (function | TConst(_) -> true | _ -> false)
+                                                            (FAnd(cl.head, cl.body))))))
                            []
                            p.clauses));
 
@@ -336,6 +338,7 @@ let alloy_actions (out: out_channel) (o: alloy_ontology) (p: flowlog_program): u
   let outarg_to_poss_equality (evrestricted: string) (i: int) (outarg: term): string =
     match outarg with
       | TField(v, f) -> sprintf "out%d = %s.%s" i evrestricted f (* NOT v and NOT "ev" *)
+      | TConst(_) -> sprintf "out%d = %s" i (alloy_of_term outarg)
       | _ -> "true[]"
   in
 
@@ -399,6 +402,8 @@ let alloy_actions (out: out_channel) (o: alloy_ontology) (p: flowlog_program): u
   (* substitute var names: don't get stuck on rules with different args or in var name! *)
     let evtypename = (event_alloysig_for pf.increl) in
     let evrestrictedname = (sprintf "(%s <: ev)" evtypename) in
+
+    (* will include constants as well*)
     let quantified_vars = [TVar(pf.incvar)] @ pf.outargs in
 
     (* free vars won't be replaced with "outx" or "ev" *)
@@ -421,7 +426,7 @@ let alloy_actions (out: out_channel) (o: alloy_ontology) (p: flowlog_program): u
       (map (fun (v, _) -> (v, add_freevar_sym v)) freevars_signed)
        in
 
-    printf "Substituting: %s\n%!"
+    printf "Substituting in WHERE: %s\n%!"
       (string_of_list "; "
         (fun (a,b) -> ((string_of_term a)^"->"^(string_of_term b)))
         to_substitute);
@@ -442,7 +447,10 @@ let alloy_actions (out: out_channel) (o: alloy_ontology) (p: flowlog_program): u
         evtypename defaultsstr
         freevarstr
         (alloy_of_formula o stateid substituted)
-        (* If field of invar in outargs, need to add an equality, otherwise connection is lost by alpha renaming. *)
+
+        (* If field of invar in outargs, need to add an equality,
+           otherwise connection is lost by alpha renaming. Same thing
+           holds for constants. *)
         (String.concat " && " (mapi (outarg_to_poss_equality evrestrictedname) pf.outargs))
   in
 
