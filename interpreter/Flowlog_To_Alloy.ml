@@ -44,10 +44,13 @@ sig Tpport {} // transport-layer port (TCP or UDP) number
 sig FLString {}
 sig FLInt{}
 
-// univ because of overlap: '1' may be the increment, or it may be a portid
 one sig BuiltIns {
-// TODO: univ^3 is far too big. And cross-use of constants means can't separate cleanly by types
-   add: (Tpport+FLInt+Portid)->(Tpport+FLInt+Portid)->(Tpport+FLInt+Portid)
+   add: ((Tpport+FLInt+Portid)->(Tpport+FLInt+Portid))-> (Tpport+FLInt+Portid)
+
+// Constrain add to be a partial function. Can help or hinder performance.
+//   add: ((Tpport+FLInt+Portid)->(Tpport+FLInt+Portid))-> lone (Tpport+FLInt+Portid)
+
+//  univ^3 is far too big. And cross-use of constants means can't separate cleanly by types
 //  add: univ -> univ -> univ
 }
 
