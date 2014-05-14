@@ -148,6 +148,38 @@ let get_bottom_fields (o: alloy_ontology) (ev: event_def) =
       let superev = assoc supername o.events_used in
         subtract ev.evfields superev.evfields;;
 
+
+(********************************************************************)
+
+(* Return a map from basic types to integers that give a bound
+   for representing the fields of an arbitrary event *)
+let single_event_ceilings (o: alloy_ontology): (int) StringMap.t =
+  let count_ceiling (e: event_def): (int) StringMap.t =
+    fold_left (fun acc (fldname, t) ->
+      let alloyt = typestr_to_alloy t in
+      (*printf "Processing field %s with type %s. mem = %b\n%!" fldname alloyt (StringMap.mem alloyt acc);*)
+      if StringMap.mem alloyt acc then
+        StringMap.add alloyt (1+(StringMap.find alloyt acc)) acc
+      else
+        StringMap.add alloyt 1 acc)
+    StringMap.empty
+    e.evfields in
+
+  let merge_ceilings (k: string) opt1 opt2: int option =
+    match opt1, opt2 with
+      | None, Some(_) -> opt2
+      | Some(_), None -> opt1
+      | Some(v1), Some(v2) -> Some(max v1 v2)
+      | _ -> None in
+
+  fold_left (fun acc (_, evdef) ->
+    let localceiling = count_ceiling evdef in
+      StringMap.merge merge_ceilings acc localceiling)
+  StringMap.empty
+  o.events_used;;
+
+(********************************************************************)
+
 (* Actually print the ontology
    TODO: cleanup *)
 let write_alloy_ontology (out: out_channel) (o: alloy_ontology): unit =
@@ -790,5 +822,13 @@ run changeImpactLast for 6 but 4 State, 5 Event, 4 seq
   (String.concat "||\n" (filter_map (build_prestate_table_compare p1 p2) ontol.tables_used));
   end;
       close_out out;
-      (*printf "WARNING: Make sure the two files have the same ontology, or the generated file may not run.\n%!";*)
+
+      (* TODO: not full ceilings yet. Testing... *)
+      let ceilings = single_event_ceilings ontol in
+        StringMap.iter (fun k v -> printf "Single-event ceiling for %s was %d\n%!" k v) ceilings;
+
       printf "~~~ Finished change-impact query file. ~~~\n%!";;
+
+
+(* *********************************************************************** *)
+
