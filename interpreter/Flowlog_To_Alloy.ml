@@ -47,8 +47,8 @@ sig FLInt{}
 // univ because of overlap: '1' may be the increment, or it may be a portid
 one sig BuiltIns {
 // TODO: univ^3 is far too big. And cross-use of constants means can't separate cleanly by types
-//   add: (Tpport+FLInt+Portid)->(Tpport+FLInt+Portid)->(Tpport+FLInt+Portid)
-  add: univ -> univ -> univ
+   add: (Tpport+FLInt+Portid)->(Tpport+FLInt+Portid)->(Tpport+FLInt+Portid)
+//  add: univ -> univ -> univ
 }
 
 ";;
@@ -67,9 +67,10 @@ let mod_rule_exists (p: flowlog_program) (tblname: string) (sign: bool): bool =
   if sign then plus_rule_exists p tblname
   else minus_rule_exists p tblname;;
 
-let do_rule_exists (p: flowlog_program) (tblname: string): bool =
+let do_or_forward_rule_exists (p: flowlog_program) (tblname: string): bool =
   exists (fun cl -> match cl.orig_rule.action with
     | ADo(rtbl, _, _) when tblname = rtbl -> true
+    | AForward(_, _, _) when tblname = "forward" -> true
     | _ -> false) p.clauses;;
 let rule_uses (p: flowlog_program) (tblname: string): bool =
   exists (fun cl -> cl.orig_rule.onrel = tblname) p.clauses;;
@@ -126,7 +127,7 @@ let event_is_used (p: flowlog_program) (ev_def: event_def): bool =
       | OutSend(evn, _, _) when evn = ev_def.eventname -> Some(outd.outname)
       | OutEmit(evn) when evn = ev_def.eventname -> Some(outd.outname)
       | _ -> None)) p.outgoings) in
-  (rule_uses p ev_def.eventname) || (exists (fun outrel -> do_rule_exists p outrel) outrels_for_event);;
+  (rule_uses p ev_def.eventname) || (exists (fun outrel -> do_or_forward_rule_exists p outrel) outrels_for_event);;
 
 let assemble_needed_events (p: flowlog_program) (ev_def: event_def): event_def list =
   (* Is this a packet flavor? If so, its superflavors are needed *)
@@ -413,7 +414,9 @@ let alloy_actions (out: out_channel) (o: alloy_ontology) (p: flowlog_program): u
       [(TVar(pf.incvar), TVar(evrestrictedname))] @
       (* Generic "out" vars. This unifies multiple Flowlog rules with same input/output
          but that use different variable names. Just alpha renaming. *)
-      (mapi (fun i outarg -> (outarg, TVar("out"^(string_of_int i)))) pf.outargs) @
+      (mapi (fun i outarg ->
+        match outarg with | TConst(_) -> (outarg, outarg) | _ -> (outarg, TVar("out"^(string_of_int i))))
+      pf.outargs) @
       (* Rule-scope variables: these need alpha-renaming too to avoid clashes with tables, etc. *)
       (map (fun (v, _) -> (v, add_freevar_sym v)) freevars_signed)
        in
@@ -551,7 +554,8 @@ let alloy_transition (out: out_channel) (p: flowlog_program) (ont: alloy_ontolog
 
 let alloy_outpolicy (out: out_channel) (p: flowlog_program): unit =
   let alloy_out_difference (d: outgoing_def): string option =
-    if do_rule_exists p d.outname then
+    printf "~~ Processing outgoing defn: %s\n%!" d.outname;
+    if do_or_forward_rule_exists p d.outname then
       Some(sprintf "  %s[st1, ev, ev2]" d.outname)
     else None
   in
