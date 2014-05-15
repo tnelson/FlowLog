@@ -730,7 +730,7 @@ let write_as_alloy_change_impact (orig_p1: flowlog_program) (fn1: string) (orig_
   write_as_alloy p1 fn1 (Some(ontol));
   write_as_alloy p2 fn2 (Some(ontol));
 
-  let out = open_out "change-impact.als" in
+  let out = open_out "change_impact.als" in
   if not reach then
   begin
   (* 3 states since prestate, newstate1, newstate 2. *)
@@ -842,7 +842,7 @@ run changeImpactLast for 6 but 4 State, 5 Event, 4 seq
       let ceilings = single_event_ceilings ontol in
         StringMap.iter (fun k v -> printf "Single-event ceiling for %s was %d\n%!" k v) ceilings;
 
-      printf "~~~ Finished change-impact query file. ~~~\n%!";;
+      printf "~~~ Finished change_impact.als query file. ~~~\n%!";;
 
 
 (* *********************************************************************** *)

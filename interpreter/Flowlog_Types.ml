@@ -143,6 +143,7 @@ type astdecl =
   type flowlog_program = {  desugared_decls: sdecl list; (* for use in errors, alloy conversion, etc. *)
                             desugared_reacts: sreactive list; (* for use in errors, alloy conversion, etc. *)
 
+                            vartablenames: string list;
                             (* for state tables only (local or remote)*)
                             tables: table_def list;
 

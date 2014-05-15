@@ -577,6 +577,8 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
                 let p = {
                  desugared_decls = the_decls;
                  desugared_reacts = the_reacts;
+                 vartablenames = vartblnames;
+
                  tables = the_tables;
                  outgoings = the_outgoings;
                  events = the_events;
