@@ -385,18 +385,23 @@ let flatten_asts (asts : flowlog_ast list) : flowlog_ast =
  *
  * the list of previously included files is needed to ensure that we don't
  * include a file more than once
+ *
+ * Also add built in ASTs! (Use "" to represent built-ins)
  *)
 
 let rec expand_includes (ast : flowlog_ast) (prev_includes : string list) : flowlog_ast =
-    if length ast.includes = 0 then (flatten_asts (built_in_asts@[ast]))
+    let maybe_built_in_asts = if mem "" prev_includes then [] else built_in_asts in
+
+    if length ast.includes = 0 then (flatten_asts (maybe_built_in_asts@[ast]))
     else
       let unquote = fun qfn -> String.sub qfn 1 ((String.length qfn) - 2) in
-      let includes = map unquote ast.includes in
+      let includes = (map unquote ast.includes) in
       let maybe_read_ast filename = if mem filename prev_includes
                                     then {includes=[]; statements=[]}
                                     else read_ast filename in
 
-      let flattened_ast = flatten_asts (built_in_asts@(map maybe_read_ast includes)) in
+      (* built_ins will be added on the first leaf; this is not a leaf *)
+      let flattened_ast = flatten_asts (map maybe_read_ast includes) in
 
         let new_ast = {includes=flattened_ast.includes; statements=ast.statements @ flattened_ast.statements} in
           expand_includes new_ast (prev_includes @ includes)
