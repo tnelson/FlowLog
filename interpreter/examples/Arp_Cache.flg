@@ -14,8 +14,6 @@
  *    (requires FlowLog improvements).
  */
 
-INCLUDE "examples/NIB.inc.flg";
-
 TABLE switches_without_arp(switchid);
 
 /*******************************************************************************
@@ -138,9 +136,7 @@ check cachedImmediateReply for 2 but 1 Event, 2 State
     // Constrain other ARP fields based on original request
     new.arp_tpa = request.arp_tpa and
     new.arp_sha = 00:00:CA:FE:CA:FE and // Controller MAC
-    new.arp_spa = 10.10.10.1 and // Controller IP addr (10.10.10.1)
-
-    switch_has_port(new.locSw, new.locPt); // REQUIRED: this rule is not compiled
+    new.arp_spa = 10.10.10.1; // Controller IP addr (10.10.10.1)
 
   //
   // Bonus: We can cache the source of this ARP request
