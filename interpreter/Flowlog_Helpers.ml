@@ -977,3 +977,79 @@ let string_of_astdeclaration (d: astdecl): string =
             if (length new_proven) > (length proven) then gst_helper new_proven
             else proven in
         gst_helper immediates;;
+
+
+(******************************************************************************)
+(* Infer types of terms. Used largely for rule-scope variables in the Alloy translator. *)
+
+module TypeIdSet = Set.Make(struct type t = string let compare = Pervasives.compare end);;
+module TermMap = Map.Make(struct type t = term let compare = Pervasives.compare end);;
+
+exception TypeInference of term;;
+let infer_type_of_vars (p: flowlog_program) (start_inferences: TypeIdSet.t TermMap.t) (cl: clause): TypeIdSet.t TermMap.t =
+  (* Keep the sign for our purposes; conflicts will result in an exception anyway *)
+  (*let atoms = filter_map (fun (s,b) -> if s then Some(b) else None) (get_atoms_with_sign cl.body) in*)
+  let atoms = (get_atoms cl.body) in
+
+  (* Inner fold operator to add an inferred term->type pair*)
+  let add_infer (acc2: TypeIdSet.t TermMap.t) (arg,aritytype): TypeIdSet.t TermMap.t =
+    if TermMap.mem arg acc2 then
+      TermMap.add arg (TypeIdSet.add aritytype (TermMap.find arg acc2)) acc2
+    else
+      TermMap.add arg (TypeIdSet.singleton aritytype) acc2 in
+
+  (* expand out fields of a variable that occurs in an incoming-event-table *)
+  let expand_fields (t: term) (fieldnames: string list): term list =
+    match t with
+      | TVar(vname) -> map (fun fn -> TField(vname, fn)) fieldnames
+      | _ -> failwith "expand_fields" in
+
+  (* Gather type assertions from table declarations
+     whenever a term "arg" appears in an atomic formula. *)
+  let base_body = fold_left (fun (acc: TypeIdSet.t TermMap.t) (at: formula) ->
+    match at with
+      | FAtom(_, relname, args) when is_local_table p relname ->
+        let tblarity = (get_table p relname).tablearity in
+          (* for every type in the table's arity, assert that type for the arg in that position *)
+          fold_left add_infer acc (combine args tblarity)
+      | FAtom(_, relname, args) when is_incoming_table p relname ->
+        let eventfieldnames, eventfieldtypes = split ((get_event p relname).evfields) in
+          fold_left add_infer acc (combine (expand_fields (hd args) eventfieldnames) eventfieldtypes)
+      | FAtom(_, relname, args)  -> acc
+      | _ -> failwith "infer_type_of_vars") start_inferences atoms in
+
+  (* TODO Also need to include head variables *)
+  let base = base_body in
+
+  (* Debug printing, please leave in function for quick diagnosis. *)
+  (*
+  printf "equalities: %s\natoms: %s\n%!"
+    (string_of_list ";" (fun (t1,t2) -> (string_of_term t1)^"="^(string_of_term t2)) equalities)
+    (string_of_list ";" string_of_formula atoms);
+
+  TermMap.iter (fun k v ->
+      printf "%s --> \n%!" (string_of_term k);
+      TypeIdSet.iter (fun t -> printf "%s\n%!" t) v)
+    base;
+  *)
+
+  (* Iterate knowledge to fixpoint along POSITIVE equalities *)
+  (* ASSUMPTION: Don't have to do this more than once, since excess variables have been removed *)
+  let equalities = gather_nonneg_equalities_involving_vars cl.body false in
+
+  let extend_by_equalities (curr: TypeIdSet.t TermMap.t): TypeIdSet.t TermMap.t =
+    (* If t1->type then add type to t2's type set. (and the other way around, too) *)
+    fold_left (fun acc (t1, t2) ->
+        match TermMap.mem t1 acc, TermMap.mem t2 acc with
+          | true,true ->
+            let theunion = (TypeIdSet.union (TermMap.find t1 acc) (TermMap.find t2 acc)) in
+              (TermMap.add t2 theunion (TermMap.add t1 theunion acc))
+          | false,true ->
+            TermMap.add t1 (TermMap.find t2 acc) acc
+          | true,false ->
+            TermMap.add t1 (TermMap.find t2 acc) acc
+          | _ -> acc)
+      curr equalities in
+
+    extend_by_equalities base;;
+

@@ -2,7 +2,6 @@
 (* Automatic translation from Flowlog to Alloy                  *)
 (****************************************************************)
 
-(* TODO: confirm packet flavor hierarchy is properly handled. *)
 (* TODO: current translation drops destination for "send to" events.
    So two separate named pipes with the same output event type will be
    indistinguishable in this model. *)
@@ -242,9 +241,43 @@ let get_needed_events (p: flowlog_program) =
 
 (* Extract ontology; don't print it yet *)
 let program_to_ontology (p: flowlog_program): alloy_ontology =
+
+  (* ASSUMPTION: constants have the same type across the entire program.
+     This is not generally true, and could lead to clashes in some programs.
+     In case of a clash, leave the [FILL] in and print a warning. *)
+
+  let inferences = fold_left (fun acc cl -> infer_type_of_vars p acc cl) TermMap.empty p.clauses in
+
+  TermMap.iter (fun k v ->
+      printf "Infered for %s: " (string_of_term k);
+      TypeIdSet.iter (fun t -> printf "%s " t) v;
+      printf "\n%!")
+    inferences;
+
+  let get_inferred_typestr (c: term): typeid =
+    if TermMap.mem c inferences then
+    begin
+      let theset = TermMap.find c inferences in
+        if TypeIdSet.cardinal theset != 1 then
+        begin
+          printf "Warning: Could not infer type for term: %s; it had more than one inference:\n%!" (string_of_term c);
+          TypeIdSet.iter (fun t -> printf ": %s\n%!" t) theset;
+          "[FILL]"
+        end
+        else
+        begin
+          TypeIdSet.choose theset
+        end
+    end
+    else
+    begin
+      printf "Warning: Could not infer type for term: %s.\n%!" (string_of_term c);
+      "[FILL]"
+    end in
+
   (* Identify the constants (like "0x1001") used and declare them. *)
   (* Need to grab constants from both body and head. E.g., INSERT (10000) into x;*)
-  {constants= (map (fun c -> ((alloy_of_term c), "[FILL]"))
+  {constants= (map (fun c -> ((alloy_of_term c), (get_inferred_typestr c)))
                 (fold_left (fun acc cl -> (unique ( acc @ (get_terms (function | TConst(_) -> true | _ -> false)
                                                             (FAnd(cl.head, cl.body))))))
                            []
@@ -321,6 +354,7 @@ pred <outrel>[st: State, <incvar>: <reactive of increl>, <outarg0> :univ, <outar
    into a single Alloy pred. *)
 type pred_fragment = {fortable: string option; outrel: string; increl: string; incvar: string;
                       outargs: term list; where: formula};;
+
 
 let alloy_actions (out: out_channel) (o: alloy_ontology) (p: flowlog_program): unit =
 
@@ -848,4 +882,3 @@ run changeImpactLast for 6 but 4 State, 5 Event, 4 seq
 
 
 (* *********************************************************************** *)
-
