@@ -982,6 +982,15 @@ let string_of_astdeclaration (d: astdecl): string =
 (******************************************************************************)
 (* Infer types of terms. Used largely for rule-scope variables in the Alloy translator. *)
 
+let get_trigger_event (p: flowlog_program) (cl: clause): event_def option =
+  fold_left (fun acc at ->
+    match at with
+      | FAtom(_, relname, _) when is_incoming_table p relname ->
+        (Some (get_event p relname))
+      | _ -> acc)
+    None
+    (get_atoms cl.body);;
+
 module TypeIdSet = Set.Make(struct type t = string let compare = Pervasives.compare end);;
 module TermMap = Map.Make(struct type t = term let compare = Pervasives.compare end);;
 
@@ -1018,8 +1027,25 @@ let infer_type_of_vars (p: flowlog_program) (start_inferences: TypeIdSet.t TermM
       | FAtom(_, relname, args)  -> acc
       | _ -> failwith "infer_type_of_vars") start_inferences atoms in
 
-  (* TODO Also need to include head variables *)
-  let base = base_body in
+  (* Also need to include head variables *)
+  let base =
+    (match cl.head with
+      | FAtom(_, relname, headargs) when is_outgoing_table p relname ->
+        (* Get the outgoing def for this relation name, and turn it into an event decl*)
+        let outdef = (get_outgoing p relname) in
+        let outevent = (match outdef.outarity with
+          | FixedEvent(evid) ->
+            (get_event p evid)
+          | SameAsOnFields ->
+            (match (get_trigger_event p cl) with
+              | Some(e) -> e
+              | None -> failwith "infer_type_of_vars head no trigger event")
+          | _ -> failwith "infer_type_of_vars head AnyFields") in
+        let headfieldnames, headfieldtypes = split (outevent.evfields) in
+          fold_left add_infer base_body (combine (expand_fields (hd headargs) headfieldnames) headfieldtypes)
+      |  FAtom(_, relname, args) -> base_body
+      | _ -> failwith "infer_type_of_vars head") in
+
 
   (* Debug printing, please leave in function for quick diagnosis. *)
   (*
