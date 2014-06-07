@@ -395,10 +395,12 @@ let alloy_actions (out: out_channel) (o: alloy_ontology) (p: flowlog_program): u
       | Some(_) -> ""
       | None ->
         let out_def = get_outgoing p pf.outrel in
-          (match out_def.react with
-            | OutForward -> " && "^(build_forward_defaults pf)
-            | OutEmit(tid) -> " && "^(build_emit_defaults pf tid)
+          let defstr = (match out_def.react with
+            | OutForward -> (build_forward_defaults pf)
+            | OutEmit(tid) -> (build_emit_defaults pf tid)
             | _ -> "") in
+              if (String.length defstr) == 0 then ""
+              else "&&"^defstr in
 
   (* Produce an Alloy constraint (string) for this Flowlog rule (as pred_fragment) *)
   let alloy_of_pred_fragment (stateid: string) (pf : pred_fragment): string =
