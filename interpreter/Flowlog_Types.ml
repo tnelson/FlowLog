@@ -177,11 +177,8 @@ type astdecl =
 (*************************************************************)
 
 
-(* For every non-negated equality that has one TVar in it
-   that is NOT in the exempt list, produces a tuple for substitution.
-   (Exempt list is so that vars in the head of a clause won't get substituted out) *)
-let rec gather_nonneg_equalities_involving_vars
-  ?(exempt: term list = []) (f: formula) (neg: bool): (term * term) list =
+let rec gather_nonneg_equalities
+  ?(exempt: term list = []) ?(vars_only: bool = false) (f: formula) (neg: bool): (term * term) list =
   match f with
         | FTrue -> []
         | FFalse -> []
@@ -192,17 +189,27 @@ let rec gather_nonneg_equalities_involving_vars
         | FEquals(t, (TVar(_) as thevar))
           when (not neg) && (not (thevar = t)) && (not (mem thevar exempt)) ->
             [(thevar, t)]
+        | FEquals(t1, t2) when not vars_only ->
+            [(t1, t2)]
         | FEquals(_, _) -> []
         | FIn(_,_,_) -> []
         | FAtom(modstr, relstr, argterms) -> []
         | FOr(f1, f2) ->
-            unique ((gather_nonneg_equalities_involving_vars ~exempt:exempt f1 neg) @
-                    (gather_nonneg_equalities_involving_vars ~exempt:exempt f2 neg))
+            unique ((gather_nonneg_equalities ~exempt:exempt ~vars_only:vars_only f1 neg) @
+                    (gather_nonneg_equalities ~exempt:exempt ~vars_only:vars_only f2 neg))
         | FAnd(f1, f2) ->
-            unique ((gather_nonneg_equalities_involving_vars ~exempt:exempt f1 neg) @
-                    (gather_nonneg_equalities_involving_vars ~exempt:exempt f2 neg))
+            unique ((gather_nonneg_equalities ~exempt:exempt ~vars_only:vars_only f1 neg) @
+                    (gather_nonneg_equalities ~exempt:exempt ~vars_only:vars_only f2 neg))
         | FNot(f2) ->
-            (gather_nonneg_equalities_involving_vars ~exempt:exempt f2 (not neg));;
+            (gather_nonneg_equalities ~exempt:exempt ~vars_only:vars_only f2 (not neg));;
+
+
+(* For every non-negated equality that has one TVar in it
+   that is NOT in the exempt list, produces a tuple for substitution.
+   (Exempt list is so that vars in the head of a clause won't get substituted out) *)
+let rec gather_nonneg_equalities_involving_vars
+  ?(exempt: term list = []) (f: formula) (neg: bool): (term * term) list =
+  gather_nonneg_equalities ~exempt:exempt ~vars_only:true f neg;;
 
 exception SubstitutionLedToInconsistency of formula;;
 

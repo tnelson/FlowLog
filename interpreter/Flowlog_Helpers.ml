@@ -1047,21 +1047,19 @@ let infer_type_of_vars (p: flowlog_program) (start_inferences: TypeIdSet.t TermM
       | _ -> failwith "infer_type_of_vars head") in
 
 
-  (* Debug printing, please leave in function for quick diagnosis. *)
-  (*
+  (* Iterate knowledge to fixpoint along POSITIVE equalities *)
+  (* ASSUMPTION: Don't have to do this more than once, since excess variables have been removed *)
+  let equalities = gather_nonneg_equalities cl.body false in
+
+  (* Debug printing, please leave commented-out in function for quick diagnosis. *)
+
+  (*TermMap.iter (fun k v ->
+      printf "%s --> \n%!" (string_of_term k);
+      TypeIdSet.iter (fun t -> printf "%s\n%!" t) v)
+    base;*)
   printf "equalities: %s\natoms: %s\n%!"
     (string_of_list ";" (fun (t1,t2) -> (string_of_term t1)^"="^(string_of_term t2)) equalities)
     (string_of_list ";" string_of_formula atoms);
-
-  TermMap.iter (fun k v ->
-      printf "%s --> \n%!" (string_of_term k);
-      TypeIdSet.iter (fun t -> printf "%s\n%!" t) v)
-    base;
-  *)
-
-  (* Iterate knowledge to fixpoint along POSITIVE equalities *)
-  (* ASSUMPTION: Don't have to do this more than once, since excess variables have been removed *)
-  let equalities = gather_nonneg_equalities_involving_vars cl.body false in
 
   let extend_by_equalities (curr: TypeIdSet.t TermMap.t): TypeIdSet.t TermMap.t =
     (* If t1->type then add type to t2's type set. (and the other way around, too) *)
@@ -1073,7 +1071,7 @@ let infer_type_of_vars (p: flowlog_program) (start_inferences: TypeIdSet.t TermM
           | false,true ->
             TermMap.add t1 (TermMap.find t2 acc) acc
           | true,false ->
-            TermMap.add t1 (TermMap.find t2 acc) acc
+            TermMap.add t2 (TermMap.find t1 acc) acc
           | _ -> acc)
       curr equalities in
 

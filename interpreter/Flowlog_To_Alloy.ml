@@ -254,7 +254,7 @@ let program_to_ontology (p: flowlog_program): alloy_ontology =
       printf "\n%!")
     inferences;
 
-  let get_inferred_typestr (c: term): typeid =
+  let get_inferred_typeid (c: term): typeid =
     if TermMap.mem c inferences then
     begin
       let theset = TermMap.find c inferences in
@@ -277,7 +277,7 @@ let program_to_ontology (p: flowlog_program): alloy_ontology =
 
   (* Identify the constants (like "0x1001") used and declare them. *)
   (* Need to grab constants from both body and head. E.g., INSERT (10000) into x;*)
-  {constants= (map (fun c -> ((alloy_of_term c), (get_inferred_typestr c)))
+  {constants= (map (fun c -> ((alloy_of_term c), (typestr_to_alloy (get_inferred_typeid c))))
                 (fold_left (fun acc cl -> (unique ( acc @ (get_terms (function | TConst(_) -> true | _ -> false)
                                                             (FAnd(cl.head, cl.body))))))
                            []
