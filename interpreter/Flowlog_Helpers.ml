@@ -1043,7 +1043,19 @@ let infer_type_of_vars (p: flowlog_program) (start_inferences: TypeIdSet.t TermM
           | _ -> failwith "infer_type_of_vars head AnyFields") in
         let headfieldnames, headfieldtypes = split (outevent.evfields) in
           fold_left add_infer base_body (combine (expand_fields (hd headargs) headfieldnames) headfieldtypes)
-      |  FAtom(_, relname, args) -> base_body
+
+      (* STRINGS ARE A GREAT WAY OF HIDING USEFUL INFORMATION :-( "_" is extra, not included in defines. *)
+      | FAtom(_, relname, args) when (starts_with relname plus_prefix) ->
+        let tblname = (String.sub relname ((String.length plus_prefix)+1) ((String.length relname) - (String.length plus_prefix) -1)) in
+        printf "tblname %s\n%!" tblname;
+        let tblarity = (get_table p tblname).tablearity in
+          fold_left add_infer base_body  (combine args tblarity)
+      | FAtom(_, relname, args) when (starts_with relname minus_prefix) ->
+        let tblname = (String.sub relname ((String.length minus_prefix)+1) ((String.length relname) - (String.length minus_prefix) -1)) in
+        let tblarity = (get_table p tblname).tablearity in
+          fold_left add_infer base_body  (combine args tblarity)
+
+      | FAtom(_, relname, args) -> base_body
       | _ -> failwith "infer_type_of_vars head") in
 
 
@@ -1057,9 +1069,9 @@ let infer_type_of_vars (p: flowlog_program) (start_inferences: TypeIdSet.t TermM
       printf "%s --> \n%!" (string_of_term k);
       TypeIdSet.iter (fun t -> printf "%s\n%!" t) v)
     base;*)
-  printf "equalities: %s\natoms: %s\n%!"
+  (*printf "equalities: %s\natoms: %s\n%!"
     (string_of_list ";" (fun (t1,t2) -> (string_of_term t1)^"="^(string_of_term t2)) equalities)
-    (string_of_list ";" string_of_formula atoms);
+    (string_of_list ";" string_of_formula atoms);*)
 
   let extend_by_equalities (curr: TypeIdSet.t TermMap.t): TypeIdSet.t TermMap.t =
     (* If t1->type then add type to t2's type set. (and the other way around, too) *)
