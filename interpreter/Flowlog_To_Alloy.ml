@@ -572,16 +572,18 @@ let build_prestate_table_compare (p1: flowlog_program) (p2: flowlog_program) (_,
        (mod_rule_exists p2 tbl.tablename modsign)
     then
       Some(sprintf "
-{ %s | %s %s prestate.%s && prog1/%s_%s[prestate, ev, %s]} !=
-{ %s | %s %s prestate.%s && prog2/%s_%s[prestate, ev, %s]}"
+{ %s | %s %s prestate1.%s && prog1/%s_%s[prestate1, ev, %s]} !=
+{ %s | %s %s prestate2.%s && prog2/%s_%s[prestate2, ev, %s]}"
         tupdvec tupproduct memstr tbl.tablename modstr tbl.tablename tupavec
         tupdvec tupproduct memstr tbl.tablename modstr tbl.tablename tupavec)
 
+    (* Only one program has a mod rule for this table; it's a diff if it ever _changes_
+       t in and removed; or t not in and added *)
     else if (mod_rule_exists p2 tbl.tablename modsign) then
-      Some(sprintf "some { %s | %s %s prestate.%s && prog2/%s_%s[prestate, ev, %s]}"
+      Some(sprintf "some { %s | %s %s prestate2.%s && prog2/%s_%s[prestate2, ev, %s]}"
         tupdvec tupproduct memstr tbl.tablename modstr tbl.tablename tupavec)
     else if (mod_rule_exists p1 tbl.tablename modsign) then
-      Some(sprintf "some { %s | %s %s prestate.%s && prog1/%s_%s[prestate, ev, %s]}"
+      Some(sprintf "some { %s | %s %s prestate1.%s && prog1/%s_%s[prestate1, ev, %s]}"
         tupdvec tupproduct memstr tbl.tablename modstr tbl.tablename tupavec)
     else None in
 
@@ -659,7 +661,7 @@ let write_shared_ontology (fn: string) (ontol: alloy_ontology): unit =
     close_out out;;
 
 let build_starting_state_trace (ontol: alloy_ontology): string =
-  let tracestrs = map (fun (n,_ ) -> sprintf "no overall.trace.first.%s" n) ontol.tables_used in
+  let tracestrs = map (fun (n,_ ) -> sprintf "no overall.trace1.first.%s" n) ontol.tables_used in
   String.concat "\n" tracestrs;;
 
 (* In case of ontology mismatch *)
@@ -811,56 +813,84 @@ open %s as o
 open %s as prog1
 open %s as prog2
 
+/////////////////////////////////////////////////
+
 one sig overall {
-  trace: seq State
+  // Ordering won't allow repeats; we need to allow repeats
+  trace1, trace2: seq State,
+  // The events used to take us to trace1.last and trace2.last. The change-impact event comes after.
+  traceevents: seq Event
+}{
+  // Both start at starting state
+  trace1.first = trace2.first
+  // Both are the same length
+  #trace1 = #trace2
+  // The scenario will have no extra events (the trace +1 for the change impact event)
+  #traceevents = #trace1 - 1
 }
 
-// Since we are looking for a path to the prestate, and not seeking,
-// post-states, we can disregard the possibility of state repeats:
+// We can't have this for BOTH, but we can guarantee it for ONE
+// (and rule out some longer-than-necessary scenarios).
+// Note that this no-duplication constraint doesn't include the change-impact post-states, if any.
 fact noDuplicateStates {
-  all s: State | one overall.trace.indsOf[s]
+  // every state is used
+  State = overall.trace1.elems + overall.trace2.elems
+  // >=1 of the traces has no repeats
+  (#overall.trace1 = #overall.trace1.elems || #overall.trace2 = #overall.trace2.elems)
+  // Events can be duplicated in the sequence, though
 }
-// 'one' above covers this
-//fact allStatesInSeq {
-//  State = overall.trace.elems
-//}
+
+fact orderRespectsTransitionsAndStops {
+  // same length, so can share \"i\". same event.
+  // refactored whole fact
+  all i : overall.trace1.inds - overall.trace1.lastIdx | {
+    prog1/transition[overall.trace1[i], overall.traceevents[i], overall.trace1[i+1]]
+      prog2/transition[overall.trace2[i], overall.traceevents[i], overall.trace2[i+1]] }
+  // the first event is always the startup event
+  overall.traceevents.first in EVstartup
+}
+
+/////////////////////////////////////////////////
 
 fact startingState {
   %s
 }
-
-
-fact orderRespectsTransitionsAndStops {
-  all i : overall.trace.inds - overall.trace.lastIdx |
-    (some ev: Event | prog1/transition[overall.trace[i], ev, overall.trace[i+1]])
-}
-
 
 ////////////////////////////////////////
 // Different from atemporal/instantaneous/static change impact:
 // Don't want to waste a state or two on the post-states. So re-frame
 // changeStateTransition to use plus/minus preds instead.
 
-pred changePolicyOutput[prestate: State, ev: Event] {
+pred reachChangePolicyOutput[prestate1, prestate2: State, ev: Event] {
     some outev: Event |
-      (prog1/outpolicy[prestate, ev, outev] and not prog2/outpolicy[prestate, ev, outev]) ||
-      (prog2/outpolicy[prestate, ev, outev] and not prog1/outpolicy[prestate, ev, outev])
+      (prog1/outpolicy[prestate1, ev, outev] and not prog2/outpolicy[prestate2, ev, outev]) ||
+      (prog2/outpolicy[prestate2, ev, outev] and not prog1/outpolicy[prestate1, ev, outev])
 }
 
-pred changeImpactLast[ev: Event] {
-    some State &&
-    (changeStateTransition[overall.trace.last, ev]
-    || changePolicyOutput[overall.trace.last, ev])
-}
-
-pred changeStateTransition[prestate: State, ev: Event]
+pred reachChangeStateTransition[prestate1, prestate2: State, ev: Event]
 {
   %s
 }
 
+// @@@ ev isn't necessarily in overall.traceevents; it fires on the final states
+pred reachCSTLast[ev: Event] {
+  some State
+  reachChangeStateTransition[overall.trace1.last, overall.trace2.last, ev]
+}
+pred reachCPOLast[ev: Event] {
+  some State
+  reachChangePolicyOutput[overall.trace1.last, overall.trace2.last, ev]
+}
+
 // If go above 8 (7?) states, be sure to increase the size of int
 // seq and State should always have the same bound
-run changeImpactLast for 6 but 4 State, 5 Event, 4 seq
+// ^ Not going to get this far due to Kodkod's MAXINT
+
+run reachCPOLast for 1 but 3 State, 4 Event, 3 seq,
+  4 Ethtyp, 8 Ipaddr, 4 Macaddr, 4 Nwprotocol, 4 Portid, 4 Switchid, 8 Tpport
+
+run reachCSTLast for 1 but 3 State, 4 Event, 3 seq,
+  4 Ethtyp, 8 Ipaddr, 4 Macaddr, 4 Nwprotocol, 4 Portid, 4 Switchid, 8 Tpport
 
 /// ^^ This doesn't reflect OSEPL guarantees: need 2x mac per packet, for instance
 // do NOT need one per state though. TODO: revise.
