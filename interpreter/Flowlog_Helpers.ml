@@ -982,11 +982,11 @@ let string_of_astdeclaration (d: astdecl): string =
 (******************************************************************************)
 (* Infer types of terms. Used largely for rule-scope variables in the Alloy translator. *)
 
-let get_trigger_event (p: flowlog_program) (cl: clause): event_def option =
+let get_trigger (p: flowlog_program) (cl: clause): (event_def * string * term list) option =
   fold_left (fun acc at ->
     match at with
-      | FAtom(_, relname, _) when is_incoming_table p relname ->
-        (Some (get_event p relname))
+      | FAtom(_, relname, args) when is_incoming_table p relname ->
+        (Some ((get_event p relname), relname, args))
       | _ -> acc)
     None
     (get_atoms cl.body);;
@@ -994,8 +994,37 @@ let get_trigger_event (p: flowlog_program) (cl: clause): event_def option =
 module TypeIdSet = Set.Make(struct type t = string let compare = Pervasives.compare end);;
 module TermMap = Map.Make(struct type t = term let compare = Pervasives.compare end);;
 
+(* Returns: (existentials, universals)
+   Not as simple as just looking for TVars, because plus_
+   and minus_ clauses will have free TVars.
+   Quantified vars are variables in a clause body that are not in the head.
+   This function excludes the trigger and its fields (e.g. "pkt") *)
+let get_non_trigger_quantified_vars (p: flowlog_program) (cl:clause): (term list * term list) =
+  let triggerargs = (match get_trigger p cl with | Some(_,_,args) -> args | None -> []) in
+  let head_and_trigger = (get_head_vars cl) @ triggerargs in
+  let signed_free = get_terms_with_sign
+      (function | TVar(x) as t -> not (mem t head_and_trigger) | _ -> false) true cl.body in
+    fold_left (fun (acce, acca) (term, sign) ->
+        if sign then (term::acce, acca) else (acce, term::acca))
+      ([],[])
+      signed_free;;
+
+let get_plus_or_minus_relname (relname: string): string =
+  if starts_with relname plus_prefix then
+    (String.sub relname ((String.length plus_prefix)+1) ((String.length relname) - (String.length plus_prefix) -1))
+  else if starts_with relname minus_prefix then
+    (String.sub relname ((String.length minus_prefix)+1) ((String.length relname) - (String.length minus_prefix) -1))
+  else failwith "get_plus_or_minus_relname";;
+
+
+type vars_report = {action_vars: term StringMap.t;
+                    plus_vars: term StringMap.t;
+                    minus_vars: term StringMap.t};;
+let get_program_quantified_vars (p: flowlog_program): vars_report =
+  {action_vars=StringMap.empty; plus_vars=StringMap.empty; minus_vars=StringMap.empty};;
+
 exception TypeInference of term;;
-let infer_type_of_vars (p: flowlog_program) (start_inferences: TypeIdSet.t TermMap.t) (cl: clause): TypeIdSet.t TermMap.t =
+let type_inference_of_vars (p: flowlog_program) (start_inferences: TypeIdSet.t TermMap.t) (cl: clause): TypeIdSet.t TermMap.t =
   (* Keep the sign for our purposes; conflicts will result in an exception anyway *)
   (*let atoms = filter_map (fun (s,b) -> if s then Some(b) else None) (get_atoms_with_sign cl.body) in*)
   let atoms = (get_atoms cl.body) in
@@ -1037,27 +1066,21 @@ let infer_type_of_vars (p: flowlog_program) (start_inferences: TypeIdSet.t TermM
           | FixedEvent(evid) ->
             (get_event p evid)
           | SameAsOnFields ->
-            (match (get_trigger_event p cl) with
-              | Some(e) -> e
+            (match (get_trigger p cl) with
+              | Some(e,_,_) -> e
               | None -> failwith "infer_type_of_vars head no trigger event")
           | _ -> failwith "infer_type_of_vars head AnyFields") in
         let headfieldnames, headfieldtypes = split (outevent.evfields) in
           fold_left add_infer base_body (combine (expand_fields (hd headargs) headfieldnames) headfieldtypes)
 
       (* STRINGS ARE A GREAT WAY OF HIDING USEFUL INFORMATION :-( "_" is extra, not included in defines. *)
-      | FAtom(_, relname, args) when (starts_with relname plus_prefix) ->
-        let tblname = (String.sub relname ((String.length plus_prefix)+1) ((String.length relname) - (String.length plus_prefix) -1)) in
-        printf "tblname %s\n%!" tblname;
-        let tblarity = (get_table p tblname).tablearity in
-          fold_left add_infer base_body  (combine args tblarity)
-      | FAtom(_, relname, args) when (starts_with relname minus_prefix) ->
-        let tblname = (String.sub relname ((String.length minus_prefix)+1) ((String.length relname) - (String.length minus_prefix) -1)) in
+      | FAtom(_, relname, args) when (starts_with relname plus_prefix) || (starts_with relname minus_prefix)->
+        let tblname = get_plus_or_minus_relname relname in
         let tblarity = (get_table p tblname).tablearity in
           fold_left add_infer base_body  (combine args tblarity)
 
       | FAtom(_, relname, args) -> base_body
       | _ -> failwith "infer_type_of_vars head") in
-
 
   (* Iterate knowledge to fixpoint along POSITIVE equalities *)
   (* ASSUMPTION: Don't have to do this more than once, since excess variables have been removed *)

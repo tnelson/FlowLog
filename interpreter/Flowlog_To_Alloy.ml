@@ -246,7 +246,7 @@ let program_to_ontology (p: flowlog_program): alloy_ontology =
      This is not generally true, and could lead to clashes in some programs.
      In case of a clash, leave the [FILL] in and print a warning. *)
 
-  let inferences = fold_left (fun acc cl -> infer_type_of_vars p acc cl) TermMap.empty p.clauses in
+  let inferences = fold_left (fun acc cl -> type_inference_of_vars p acc cl) TermMap.empty p.clauses in
 
   TermMap.iter (fun k v ->
       printf "Infered for %s: " (string_of_term k);
@@ -443,6 +443,7 @@ let alloy_actions (out: out_channel) (o: alloy_ontology) (p: flowlog_program): u
     let evrestrictedname = (sprintf "(%s <: ev)" evtypename) in
 
     (* will include constants as well*)
+    (* TODO: shouldn't this be called "free vars"? *)
     let quantified_vars = [TVar(pf.incvar)] @ pf.outargs in
 
     (* free vars won't be replaced with "outx" or "ev" *)
