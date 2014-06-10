@@ -159,7 +159,9 @@ let get_bottom_fields (o: alloy_ontology) (ev: event_def) =
 let single_event_ceilings (o: alloy_ontology): (int) StringMap.t =
   let count_ceiling (e: event_def): (int) StringMap.t =
     fold_left (fun acc (fldname, t) ->
-      let alloyt = typestr_to_alloy t in
+      (* keep lowercase for combination with var counts *)
+      (*let alloyt = typestr_to_alloy t in*)
+      let alloyt = t in
       (*printf "Processing field %s with type %s. mem = %b\n%!" fldname alloyt (StringMap.mem alloyt acc);*)
       if StringMap.mem alloyt acc then
         StringMap.add alloyt (1+(StringMap.find alloyt acc)) acc
@@ -750,6 +752,49 @@ let substitute_tables_in_program (subs: (string * string) list) (p: flowlog_prog
             else
               td) p.tables};;
 
+(*******************************************************************************************)
+
+(* Produce bounds from varcounts *)
+
+(* cpo = 1 State, 2 Event, 2x(Event ceiling) +
+   act2-E + act2-U + act2-E + act2-U
+   The Us are included because negation:
+
+ some outev: Event |
+      (prog1/outpolicy[prestate, ev, outev] and not prog2/outpolicy[prestate, ev, outev]) ||
+      (prog2/outpolicy[prestate, ev, outev] and not prog1/outpolicy[prestate, ev, outev])
+
+     *)
+
+let double_bounds (m: int StringMap.t): int StringMap.t =
+  StringMap.map (fun v -> 2*v) m;;
+
+let addbounds (m1: int StringMap.t) (m2: int StringMap.t): int StringMap.t =
+  (* note the ordering in the fold function. m2 serves as the initial acc. *)
+  StringMap.fold (fun k v acc ->
+    match StringMap.mem k acc with
+      | true -> StringMap.add k ((StringMap.find k acc)+v) acc
+      | false -> StringMap.add k v acc)
+    m1 m2;;
+
+let string_of_bounds (prefix: string) (m: int StringMap.t): string =
+  sprintf "1 but %s %s" prefix (String.concat "," (StringMap.fold (fun k v acc -> (sprintf "%d %s" v (typestr_to_alloy k))::acc) m []));;
+
+let cpo_bounds_string (p1: flowlog_program) (p2: flowlog_program) (ontol: alloy_ontology): string =
+  let (p1vs: vars_count_report) = (get_program_var_counts p1) in
+  let (p2vs: vars_count_report) = (get_program_var_counts p2) in
+  let (ceilings: int StringMap.t) = (single_event_ceilings ontol) in
+  let (p1ext: int StringMap.t) = p1vs.action_qvars_ext in
+  let (p2ext: int StringMap.t) = p2vs.action_qvars_ext in
+  let (p1uni: int StringMap.t) = p1vs.action_qvars_uni in
+  let (p2uni: int StringMap.t) = p2vs.action_qvars_uni in
+
+  (* Need 2 events! *)
+  let final = (addbounds (addbounds (addbounds (addbounds (double_bounds ceilings) p1ext) p2ext) p1uni) p2uni) in
+  string_of_bounds "1 State, 2 Event," final;;
+
+(*******************************************************************************************)
+
 let write_as_alloy_change_impact (orig_p1: flowlog_program) (fn1: string) (orig_p2: flowlog_program) (fn2: string) (reach: bool): unit =
 
   (* Before anything else, check for conflicts that need resolution via substitution in the programs.
@@ -798,11 +843,12 @@ pred changeImpact[prestate: State, ev: Event] {
 }
 
 run changeStateTransition for 4 but 3 State, 1 Event
-run changePolicyOutput for 4 but 2 State, 2 Event
+run changePolicyOutput for %s
 \n%!"
   ofn
   (Filename.chop_extension fn1)
-  (Filename.chop_extension fn2);
+  (Filename.chop_extension fn2)
+  (cpo_bounds_string p1 p2 ontol);
   end
   else
   begin
@@ -927,3 +973,7 @@ run reachCSTLast for 1 but 3 State, 4 Event, 3 seq,
 
 
 (* *********************************************************************** *)
+
+
+
+
