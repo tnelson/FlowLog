@@ -902,14 +902,28 @@ run reachCSTLast for 1 but 3 State, 4 Event, 3 seq,
   (Filename.chop_extension fn2)
   (build_starting_state_trace ontol)
   (String.concat "||\n" (filter_map (build_prestate_table_compare p1 p2) ontol.tables_used));
+
   end;
-      close_out out;
+    (* end of branch by reach/nonreach *)
 
-      (* TODO: not full ceilings yet. Testing... *)
-      let ceilings = single_event_ceilings ontol in
-        StringMap.iter (fun k v -> printf "Single-event ceiling for %s was %d\n%!" k v) ceilings;
+    (* output how many of each type one needs PER EVENT for completeness *)
+    StringMap.iter (fun k v -> fprintf out "// Single-event ceiling for %s was %d\n%!" k v)
+      (single_event_ceilings ontol);
 
-      printf "~~~ Finished change_impact.als query file. ~~~\n%!";;
+    (* output how many of each type one needs PER EVENT for completeness *)
+    fprintf out "\n/* VARCOUNTS p1:\n %s */\n" (string_of_varcount (get_program_var_counts p1));
+    fprintf out "\n/* VARCOUNTS p2:\n %s */\n" (string_of_varcount (get_program_var_counts p2));
+
+    (* IMPORTANT: Completeness guarantees depend on the shape of the predicate(s) being checked.
+       Just adding up these numbers is not sufficient.
+
+       Note further that Flowlog eliminates quantified variables that it can show unnecessary.
+       For instance a clause R(x) :- x=y and P(y) will be reduced to involve only x. This happens more
+       often than you'd think, since we often separate extracting data from tables in the ON's WHERE
+       and using that extracted data later. (See NAT example.)*)
+
+    close_out out;
+    printf "~~~ Finished change_impact.als query file. ~~~\n%!";;
 
 
 (* *********************************************************************** *)
