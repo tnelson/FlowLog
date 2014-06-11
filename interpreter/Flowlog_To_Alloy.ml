@@ -94,13 +94,26 @@ type alloy_ontology = {
       | TVar(vname) -> TVar(add_freevar_sym_str vname)
       | _ -> failwith (sprintf "add_freevar_sym: %s" (string_of_term v));;
 
-  let alloy_of_term (t: term): string =
+  let alloy_of_term ?(any: bool = true) (t: term): string =
     match t with
       | TConst(s) when (starts_with s "-") -> "C_minus"^(String.sub s 1 ((String.length s)-1))
       | TConst(s) -> "C_"^s
+      | TVar(s) when any && (starts_with s "var_any") -> "univ"
       | TVar(s) -> s
       | TField(varname, fname) ->
         (varname^"."^fname);;
+
+  let rec reduce_relation_expr (startwith: string) (tlargs: term list): string =
+    match tlargs with
+      | arg::[] ->
+        let lastterm = (alloy_of_term ~any:true arg) in
+          if lastterm = "univ" then
+            sprintf "some %s" startwith
+          else
+            sprintf "%s in %s" lastterm startwith
+      | arg::rest ->
+        (reduce_relation_expr (sprintf "%s[%s]" startwith (alloy_of_term ~any:true arg)) rest)
+      | [] -> failwith "reduce_relation_expr empty list";;
 
   let rec alloy_of_formula (o: alloy_ontology) (stateid: string) (f: formula): string =
     match f with
@@ -110,7 +123,24 @@ type alloy_ontology = {
       | FIn(t, addr, mask) -> sprintf "%s -> %s -> %s in in_ipv4_range" (alloy_of_term t) (alloy_of_term addr) (alloy_of_term mask)
       | FNot(f2) ->  "not ("^(alloy_of_formula o stateid f2)^")"
       | FAtom("", relname, tlargs) when (exists (fun (tname, _) -> tname=relname) o.tables_used) ->
-          (String.concat "->" (map alloy_of_term tlargs))^" in "^stateid^"."^relname
+
+(*
+// 100ms
+// ((((((((((not ((EVarp_packet <: ev).arp_tpa->var_any3 in st.cached) && not ((EVarp_packet <: ev).arp_tpa in st.queued.univ.univ.univ.univ)) &&
+
+((((((((((not ((EVarp_packet <: ev).arp_tpa->var_any3 in st.cached) && not ((EVarp_packet <: ev).arp_tpa in {c1 : univ | c1 in st.queued.univ.univ.univ.univ})) &&
+
+// 6 sec
+// ((((((((((not ((EVarp_packet <: ev).arp_tpa->var_any3 in st.cached) && not (some x1,x2,x3,x4: univ | ((EVarp_packet <: ev).arp_tpa->x1->x2->x3->x4 in st.queued))) &&
+
+// ...
+//((((((((((not ((EVarp_packet <: ev).arp_tpa->var_any3 in st.cached) && not ((EVarp_packet <: ev).arp_tpa->var_any4->var_any5->var_any6->var_any7 in st.queued)) &&
+*)
+      (* Incredibly inefficient in translation vs. relational operators if ANYs are broken out and quantified *)
+          (* (String.concat "->" (map alloy_of_term tlargs))^" in "^stateid^"."^relname*)
+      (* Instead, use join as much as possible *)
+        (reduce_relation_expr (stateid^"."^relname) tlargs)
+
       | FAtom("", relname, tlargs) ->
           (String.concat "->" (map alloy_of_term tlargs))^" in o/BuiltIns."^relname
       | FAtom(modname, relname, tlargs) ->
@@ -386,8 +416,11 @@ let alloy_actions (out: out_channel) (o: alloy_ontology) (p: flowlog_program): u
     let quantify_helper (tq: term*bool) =
       match tq with
         | TVar(vname), false when starts_with vname "any" ->
-          printf "... Universally quantifying %s\n%!" vname;
-          sprintf "all %s : univ | " (add_freevar_sym_str vname)
+          (* printf "... Universally quantifying %s\n%!" vname;
+          sprintf "all %s : univ | " (add_freevar_sym_str vname)*)
+          "" (* No longer quantify ANY. They are universally interpreted, but
+                can be represented much more efficiently via dot-join. *)
+
         | TVar(vname), _ ->
           printf "... Existentially quantifying %s\n%!" vname;
           sprintf "some %s : univ | " (add_freevar_sym_str vname)
@@ -766,6 +799,14 @@ let substitute_tables_in_program (subs: (string * string) list) (p: flowlog_prog
 
      *)
 
+(* cst = 3 State, 1 Event, 1x(Event ceiling) +
+      transition1-e + transition2-e
+
+     (prog1/transition[prestate, ev, newst1] and
+     prog2/transition[prestate, ev, newst2])
+
+   *)
+
 let double_bounds (m: int StringMap.t): int StringMap.t =
   StringMap.map (fun v -> 2*v) m;;
 
@@ -778,8 +819,9 @@ let addbounds (m1: int StringMap.t) (m2: int StringMap.t): int StringMap.t =
     m1 m2;;
 
 let string_of_bounds (prefix: string) (m: int StringMap.t): string =
-  sprintf "1 but %s %s" prefix (String.concat "," (StringMap.fold (fun k v acc -> (sprintf "%d %s" v (typestr_to_alloy k))::acc) m []));;
+  sprintf "0 but %s %s" prefix (String.concat "," (StringMap.fold (fun k v acc -> (sprintf "%d %s" v (typestr_to_alloy k))::acc) m []));;
 
+(******************************************************************)
 let cpo_bounds_string (p1: flowlog_program) (p2: flowlog_program) (ontol: alloy_ontology): string =
   let (p1vs: vars_count_report) = (get_program_var_counts p1) in
   let (p2vs: vars_count_report) = (get_program_var_counts p2) in
@@ -792,6 +834,17 @@ let cpo_bounds_string (p1: flowlog_program) (p2: flowlog_program) (ontol: alloy_
   (* Need 2 events! *)
   let final = (addbounds (addbounds (addbounds (addbounds (double_bounds ceilings) p1ext) p2ext) p1uni) p2uni) in
   string_of_bounds "1 State, 2 Event," final;;
+
+let cst_bounds_string (p1: flowlog_program) (p2: flowlog_program) (ontol: alloy_ontology): string =
+  let (p1vs: vars_count_report) = (get_program_var_counts p1) in
+  let (p2vs: vars_count_report) = (get_program_var_counts p2) in
+  let (ceilings: int StringMap.t) = (single_event_ceilings ontol) in
+  let (p1ext: int StringMap.t) = p1vs.transition_qvars_ext in
+  let (p2ext: int StringMap.t) = p2vs.transition_qvars_ext in
+
+  (* Need 3 States, but only one Event. *)
+  let final = (addbounds (addbounds ceilings p1ext) p2ext) in
+  string_of_bounds "3 State, 1 Event," final;;
 
 (*******************************************************************************************)
 
@@ -842,12 +895,13 @@ pred changeImpact[prestate: State, ev: Event] {
     || changePolicyOutput[prestate, ev]
 }
 
-run changeStateTransition for 4 but 3 State, 1 Event
+run changeStateTransition for %s
 run changePolicyOutput for %s
 \n%!"
   ofn
   (Filename.chop_extension fn1)
   (Filename.chop_extension fn2)
+  (cst_bounds_string p1 p2 ontol)
   (cpo_bounds_string p1 p2 ontol);
   end
   else
