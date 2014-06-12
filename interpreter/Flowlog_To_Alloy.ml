@@ -848,15 +848,17 @@ let cst_bounds_string (p1: flowlog_program) (p2: flowlog_program) (ontol: alloy_
   let final = (addbounds (addbounds ceilings p1ext) p2ext) in
   string_of_bounds "3 State, 1 Event," final;;
 
+(* seq must be max sequence length (max of bounds on events and states). must also have enough ints for the indices
+   ints are 2s-complement, so the default 3 int only gets you {-4, -3, -2, -1, 0, 1, 2, 3} *)
 let rcst_bounds_string (ontol: alloy_ontology): string =
   let (ceilings: int StringMap.t) = (single_event_ceilings ontol) in
   let final = (mulbounds ceilings 4) in
-  string_of_bounds "3 State, 4 Event, 3 seq," final;;
+  string_of_bounds "3 State, 4 Event, 4 seq, 4 int, " final;;
 
 let rcpo_bounds_string (ontol: alloy_ontology): string =
   let (ceilings: int StringMap.t) = (single_event_ceilings ontol) in
   let final = (mulbounds ceilings 4) in
-  string_of_bounds "3 State, 4 Event, 3 seq," final;;
+  string_of_bounds "3 State, 4 Event, 4 seq, 4 int, " final;;
 
 
 (*******************************************************************************************)
