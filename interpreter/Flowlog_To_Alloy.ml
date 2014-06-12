@@ -809,8 +809,8 @@ let substitute_tables_in_program (subs: (string * string) list) (p: flowlog_prog
 
    *)
 
-let double_bounds (m: int StringMap.t): int StringMap.t =
-  StringMap.map (fun v -> 2*v) m;;
+let mulbounds (m: int StringMap.t) (mul: int): int StringMap.t =
+  StringMap.map (fun v -> mul*v) m;;
 
 let addbounds (m1: int StringMap.t) (m2: int StringMap.t): int StringMap.t =
   (* note the ordering in the fold function. m2 serves as the initial acc. *)
@@ -834,7 +834,7 @@ let cpo_bounds_string (p1: flowlog_program) (p2: flowlog_program) (ontol: alloy_
   let (p2uni: int StringMap.t) = p2vs.action_qvars_uni in
 
   (* Need 2 events! *)
-  let final = (addbounds (addbounds (addbounds (addbounds (double_bounds ceilings) p1ext) p2ext) p1uni) p2uni) in
+  let final = (addbounds (addbounds (addbounds (addbounds (mulbounds ceilings 2) p1ext) p2ext) p1uni) p2uni) in
   string_of_bounds "1 State, 2 Event," final;;
 
 let cst_bounds_string (p1: flowlog_program) (p2: flowlog_program) (ontol: alloy_ontology): string =
@@ -847,6 +847,17 @@ let cst_bounds_string (p1: flowlog_program) (p2: flowlog_program) (ontol: alloy_
   (* Need 3 States, but only one Event. *)
   let final = (addbounds (addbounds ceilings p1ext) p2ext) in
   string_of_bounds "3 State, 1 Event," final;;
+
+let rcst_bounds_string (ontol: alloy_ontology): string =
+  let (ceilings: int StringMap.t) = (single_event_ceilings ontol) in
+  let final = (mulbounds ceilings 4) in
+  string_of_bounds "3 State, 4 Event, 3 seq," final;;
+
+let rcpo_bounds_string (ontol: alloy_ontology): string =
+  let (ceilings: int StringMap.t) = (single_event_ceilings ontol) in
+  let final = (mulbounds ceilings 4) in
+  string_of_bounds "3 State, 4 Event, 3 seq," final;;
+
 
 (*******************************************************************************************)
 
@@ -990,11 +1001,9 @@ pred reachCPOLast[ev: Event] {
 // seq and State should always have the same bound
 // ^ Not going to get this far due to Kodkod's MAXINT
 
-run reachCPOLast for 1 but 3 State, 4 Event, 3 seq,
-  4 Ethtyp, 8 Ipaddr, 4 Macaddr, 4 Nwprotocol, 4 Portid, 4 Switchid, 8 Tpport
+run reachCPOLast for %s
 
-run reachCSTLast for 1 but 3 State, 4 Event, 3 seq,
-  4 Ethtyp, 8 Ipaddr, 4 Macaddr, 4 Nwprotocol, 4 Portid, 4 Switchid, 8 Tpport
+run reachCSTLast for %s
 
   /// ^^ Warning: there are no OSEPL guarantees for reachability-aware predicates!
   /// It is possible to generate bounds for individual steps, but beyond 1 or 2 states
@@ -1008,7 +1017,9 @@ run reachCSTLast for 1 but 3 State, 4 Event, 3 seq,
   (Filename.chop_extension fn1)
   (Filename.chop_extension fn2)
   (build_starting_state_trace ontol)
-  (String.concat "||\n" (filter_map (build_prestate_table_compare p1 p2) ontol.tables_used));
+  (String.concat "||\n" (filter_map (build_prestate_table_compare p1 p2) ontol.tables_used))
+  (rcpo_bounds_string ontol)
+  (rcst_bounds_string ontol);
 
   end;
     (* end of branch by reach/nonreach *)
