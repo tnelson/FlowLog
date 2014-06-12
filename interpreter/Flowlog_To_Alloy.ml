@@ -6,6 +6,8 @@
    So two separate named pipes with the same output event type will be
    indistinguishable in this model. *)
 
+(* TODO: well behaved variables facts (e.g., lone VAR and empty VAR -> empty state*)
+
 
 open Printf
 open Flowlog_Types
@@ -20,7 +22,7 @@ let alloy_filename (flfn: string): string =
 (**********************************************************)
 (* Some boilerplate (packets, etc.) *)
 
-let alloy_boilerplate (out: out_channel): unit =
+let alloy_ontology_boilerplate (out: out_channel): unit =
   let localtm = localtime (gettimeofday()) in
   fprintf out "// Produced automatically by flowlog -alloy at %d:%d:%d on %d %d %d\n%!"
               localtm.tm_hour localtm.tm_min localtm.tm_sec
@@ -222,7 +224,7 @@ let write_alloy_ontology (out: out_channel) (o: alloy_ontology): unit =
   printf "Writing ontology. Tables used: %s\n%!" (string_of_list "," (fun (n, d) -> n) o.tables_used);
 
   (****** Boilerplate ******************)
-  alloy_boilerplate out;
+  alloy_ontology_boilerplate out;
 
   (****** Events ******************)
   (* Every program's declared notifications need a sig... *)
@@ -930,15 +932,16 @@ one sig overall {
   #traceevents = #trace1 - 1
 }
 
-// We can't have this for BOTH, but we can guarantee it for ONE
-// (and rule out some longer-than-necessary scenarios).
-// Note that this no-duplication constraint doesn't include the change-impact post-states, if any.
+// Misnamed fact; read comments.
 fact noDuplicateStates {
+
   // every state is used
   State = overall.trace1.elems + overall.trace2.elems
-  // >=1 of the traces has no repeats
-  (#overall.trace1 = #overall.trace1.elems || #overall.trace2 = #overall.trace2.elems)
-  // Events can be duplicated in the sequence, though
+
+  // Cannot rule out repeats in general:
+  // (1) startup event MUST be first, and it often doesn't change the state
+  // (2) Consider {0->1->0->1 ; 0->1->2->0. CST will detect on state 3 (one trace no dupes)
+  //   but *CPO* might only fire on the fourth (both need dupes to get there)}
 }
 
 fact orderRespectsTransitionsAndStops {
@@ -993,8 +996,12 @@ run reachCPOLast for 1 but 3 State, 4 Event, 3 seq,
 run reachCSTLast for 1 but 3 State, 4 Event, 3 seq,
   4 Ethtyp, 8 Ipaddr, 4 Macaddr, 4 Nwprotocol, 4 Portid, 4 Switchid, 8 Tpport
 
-/// ^^ This doesn't reflect OSEPL guarantees: need 2x mac per packet, for instance
-// do NOT need one per state though. TODO: revise.
+  /// ^^ Warning: there are no OSEPL guarantees for reachability-aware predicates!
+  /// It is possible to generate bounds for individual steps, but beyond 1 or 2 states
+  /// either scales poorly or pushes us over Alloy's MAXINT limitations. Instead, pick
+  /// a reasonable bound: here enough for 4 TCP packets. Since existential values
+  /// in the state have to come from an event (modulo var declarations) this should
+  /// be a complete check up to 3 states (2 steps)
 
 \n%!"
   ofn
