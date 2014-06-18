@@ -85,6 +85,7 @@ type alloy_ontology = {
   constants: (string * typeid) list;
   events_used: (string * event_def) list;
   tables_used: (string * table_def) list;
+  inferences: TypeIdSet.t TermMap.t;
 }
 
 (**********************************************************)
@@ -96,57 +97,69 @@ type alloy_ontology = {
       | TVar(vname) -> TVar(add_freevar_sym_str vname)
       | _ -> failwith (sprintf "add_freevar_sym: %s" (string_of_term v));;
 
-  let alloy_of_term ?(any: bool = true) (t: term): string =
+  let format_constant_for_alloy (infers: TypeIdSet.t TermMap.t) (t: term) (strval: string): string =
+    if TermMap.mem t infers then
+    begin
+      let theset = TermMap.find t infers in
+        if TypeIdSet.cardinal theset != 1 then strval
+        else
+        begin
+          let tid = TypeIdSet.choose theset in
+          let non_alloy_str = pretty_print_value tid strval in
+              (* Replace any dots or colons with underscore *)
+             tid^"_"^(Str.global_replace (Str.regexp "\\.\\|:") "_" non_alloy_str)
+        end
+    end
+    else
+      strval;;
+
+  let alloy_of_term (infers: TypeIdSet.t TermMap.t) ?(any: bool = true) (t: term): string =
     match t with
-      | TConst(s) when (starts_with s "-") -> "C_minus"^(String.sub s 1 ((String.length s)-1))
-      | TConst(s) -> "C_"^s
+      | TConst(s) -> "C_"^(format_constant_for_alloy infers t s)
       | TVar(s) when any && (starts_with s "var_any") -> "univ"
       | TVar(s) -> s
       | TField(varname, fname) ->
         (varname^"."^fname);;
 
-  let rec reduce_relation_expr (startwith: string) (tlargs: term list): string =
+  let rec reduce_relation_expr (ontol: alloy_ontology) (startwith: string) (tlargs: term list): string =
     match tlargs with
       | arg::[] ->
-        let lastterm = (alloy_of_term ~any:true arg) in
+        let lastterm = (alloy_of_term ontol.inferences ~any:true arg) in
           if lastterm = "univ" then
             sprintf "some %s" startwith
           else
             sprintf "%s in %s" lastterm startwith
       | arg::rest ->
-        (reduce_relation_expr (sprintf "%s[%s]" startwith (alloy_of_term ~any:true arg)) rest)
+        (reduce_relation_expr ontol (sprintf "%s[%s]" startwith (alloy_of_term ontol.inferences ~any:true arg)) rest)
       | [] -> failwith "reduce_relation_expr empty list";;
 
   let rec alloy_of_formula (o: alloy_ontology) (stateid: string) (f: formula): string =
     match f with
       | FTrue -> "true[]"
       | FFalse -> "false[]"
-      | FEquals(t1, t2) -> (alloy_of_term t1) ^ " = "^ (alloy_of_term t2)
-      | FIn(t, addr, mask) -> sprintf "%s -> %s -> %s in in_ipv4_range" (alloy_of_term t) (alloy_of_term addr) (alloy_of_term mask)
+      | FEquals(t1, t2) ->
+        (alloy_of_term o.inferences t1) ^ " = "^ (alloy_of_term o.inferences t2)
+      | FIn(t, addr, mask) ->
+        sprintf "%s -> %s -> %s in in_ipv4_range"
+          (alloy_of_term o.inferences t) (alloy_of_term o.inferences addr) (alloy_of_term o.inferences mask)
       | FNot(f2) ->  "not ("^(alloy_of_formula o stateid f2)^")"
       | FAtom("", relname, tlargs) when (exists (fun (tname, _) -> tname=relname) o.tables_used) ->
 
 (*
 // 100ms
 // ((((((((((not ((EVarp_packet <: ev).arp_tpa->var_any3 in st.cached) && not ((EVarp_packet <: ev).arp_tpa in st.queued.univ.univ.univ.univ)) &&
-
-((((((((((not ((EVarp_packet <: ev).arp_tpa->var_any3 in st.cached) && not ((EVarp_packet <: ev).arp_tpa in {c1 : univ | c1 in st.queued.univ.univ.univ.univ})) &&
-
 // 6 sec
 // ((((((((((not ((EVarp_packet <: ev).arp_tpa->var_any3 in st.cached) && not (some x1,x2,x3,x4: univ | ((EVarp_packet <: ev).arp_tpa->x1->x2->x3->x4 in st.queued))) &&
-
-// ...
-//((((((((((not ((EVarp_packet <: ev).arp_tpa->var_any3 in st.cached) && not ((EVarp_packet <: ev).arp_tpa->var_any4->var_any5->var_any6->var_any7 in st.queued)) &&
 *)
       (* Incredibly inefficient in translation vs. relational operators if ANYs are broken out and quantified *)
           (* (String.concat "->" (map alloy_of_term tlargs))^" in "^stateid^"."^relname*)
       (* Instead, use join as much as possible *)
-        (reduce_relation_expr (stateid^"."^relname) tlargs)
+        (reduce_relation_expr o (stateid^"."^relname) tlargs)
 
       | FAtom("", relname, tlargs) ->
-          (String.concat "->" (map alloy_of_term tlargs))^" in o/BuiltIns."^relname
+          (String.concat "->" (map (alloy_of_term o.inferences) tlargs))^" in o/BuiltIns."^relname
       | FAtom(modname, relname, tlargs) ->
-          (String.concat "->" (map alloy_of_term tlargs))^" in "^stateid^"."^modname^"_"^relname
+          (String.concat "->" (map (alloy_of_term o.inferences) tlargs))^" in "^stateid^"."^modname^"_"^relname
       | FAnd(f1, f2) ->
         (Format.sprintf "(@[%s@] && @[%s@])"
           (alloy_of_formula o stateid f1)
@@ -311,7 +324,7 @@ let program_to_ontology (p: flowlog_program): alloy_ontology =
 
   (* Identify the constants (like "0x1001") used and declare them. *)
   (* Need to grab constants from both body and head. E.g., INSERT (10000) into x;*)
-  {constants= (map (fun c -> ((alloy_of_term c), (typestr_to_alloy (get_inferred_typeid c))))
+  {constants= (map (fun c -> ((alloy_of_term inferences c), (typestr_to_alloy (get_inferred_typeid c))))
                 (fold_left (fun acc cl -> (unique ( acc @ (get_terms (function | TConst(_) -> true | _ -> false)
                                                             (FAnd(cl.head, cl.body))))))
                            []
@@ -320,7 +333,8 @@ let program_to_ontology (p: flowlog_program): alloy_ontology =
    events_used=map (fun edec -> (edec.eventname, edec)) (get_needed_events p);
 
    tables_used=(map (fun tbl -> (tbl.tablename, tbl)) ((get_local_tables p) @ (get_remote_tables p)));
-   filename = ""};;
+   filename = "";
+   inferences=inferences};;
 
 (* TODO: support table-widening, etc. *)
 (* For now, require tables to have same arity/types. *)
@@ -368,7 +382,8 @@ let programs_to_ontology (p1: flowlog_program) (p2: flowlog_program): alloy_onto
   let o1 = program_to_ontology p1 in
   let o2 = program_to_ontology p2 in
     {constants=resolve_constants o1 o2; events_used=resolve_events o1 o2; tables_used=resolve_tables o1 o2;
-     filename=""};;
+     filename="";
+     inferences=(combine_inferences o1.inferences o2.inferences)};;
 
 (**********************************************************)
 (* Every +, every -, every DO gets a predicate IFFing disj of appropriate rules *)
@@ -409,7 +424,7 @@ let alloy_actions (out: out_channel) (o: alloy_ontology) (p: flowlog_program): u
   let outarg_to_poss_equality (evrestricted: string) (i: int) (outarg: term): string =
     match outarg with
       | TField(v, f) -> sprintf "out%d = %s.%s" i evrestricted f (* NOT v and NOT "ev" *)
-      | TConst(_) -> sprintf "out%d = %s" i (alloy_of_term outarg)
+      | TConst(_) -> sprintf "out%d = %s" i (alloy_of_term o.inferences outarg)
       | _ -> "true[]"
   in
 

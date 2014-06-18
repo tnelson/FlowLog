@@ -1154,3 +1154,12 @@ let get_program_var_counts (p: flowlog_program): vars_count_report =
     {action_qvars_ext=StringMap.empty; transition_qvars_ext=StringMap.empty;
      action_qvars_uni=StringMap.empty; transition_qvars_uni=StringMap.empty}
     p.clauses;;
+
+let combine_inferences (i1: TypeIdSet.t TermMap.t) (i2: TypeIdSet.t TermMap.t): TypeIdSet.t TermMap.t =
+  TermMap.merge (fun k i1o i2o ->
+      match i1o, i2o with
+        | Some(x1),Some(x2) -> Some(TypeIdSet.union x1 x2)
+        | Some(x),None
+        | None,Some(x) -> Some(x)
+        | None,None -> None)
+    i1 i2;;
