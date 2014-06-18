@@ -338,7 +338,7 @@ let program_to_ontology (p: flowlog_program): alloy_ontology =
 
 (* TODO: support table-widening, etc. *)
 (* For now, require tables to have same arity/types. *)
-let resolve_tables (o1: alloy_ontology) (o2: alloy_ontology): (string * table_def) list =
+let resolve_tables (ontos: alloy_ontology list): (string * table_def) list =
   fold_left (fun acc tbl ->
               let tbl_n, tbl_def = tbl in
               if mem_assoc tbl_n acc && (assoc tbl_n acc) <> tbl_def then
@@ -349,11 +349,11 @@ let resolve_tables (o1: alloy_ontology) (o2: alloy_ontology): (string * table_de
                 acc
               else
                 tbl :: acc)
-            [] (o1.tables_used @ o2.tables_used);;
+            [] (fold_left (fun acc ont -> acc @ ont.tables_used) [] ontos);;
 
 (* TODO: duplicate code in resolve funcs *)
 (* EVENTS need to have the same shape/fields *)
-let resolve_events (o1: alloy_ontology) (o2: alloy_ontology): (string * event_def) list =
+let resolve_events (ontos: alloy_ontology list): (string * event_def) list =
   fold_left (fun acc ev ->
               let ev_n, ev_def = ev in
               if mem_assoc ev_n acc && (assoc ev_n acc) <> ev_def then
@@ -362,10 +362,10 @@ let resolve_events (o1: alloy_ontology) (o2: alloy_ontology): (string * event_de
                 acc
               else
                 ev :: acc)
-            [] (o1.events_used @ o2.events_used);;
+            [] (fold_left (fun acc ont -> acc @ ont.events_used) [] ontos);;
 
 (* Better agree on types! o.constants is an association list. *)
-let resolve_constants (o1: alloy_ontology) (o2: alloy_ontology): (string * typeid) list =
+let resolve_constants (ontos: alloy_ontology list): (string * typeid) list =
   fold_left (fun acc con ->
               let con_n, con_t = con in
               if mem_assoc con_n acc && assoc con_n acc <> con_t then
@@ -374,16 +374,15 @@ let resolve_constants (o1: alloy_ontology) (o2: alloy_ontology): (string * typei
                 acc
               else
                 con :: acc)
-            [] (o1.constants @ o2.constants);;
+            [] (fold_left (fun acc ont -> acc @ ont.constants) [] ontos);;
 
 
-let programs_to_ontology (p1: flowlog_program) (p2: flowlog_program): alloy_ontology =
+let programs_to_ontology (programs: flowlog_program list): alloy_ontology =
   (* Detect conflicts + combine *)
-  let o1 = program_to_ontology p1 in
-  let o2 = program_to_ontology p2 in
-    {constants=resolve_constants o1 o2; events_used=resolve_events o1 o2; tables_used=resolve_tables o1 o2;
+  let ontos = map program_to_ontology programs in
+    {constants=resolve_constants ontos; events_used=resolve_events ontos; tables_used=resolve_tables ontos;
      filename="";
-     inferences=(combine_inferences o1.inferences o2.inferences)};;
+     inferences=(fold_left (fun acc ont -> combine_inferences ont.inferences acc) TermMap.empty ontos)};;
 
 (**********************************************************)
 (* Every +, every -, every DO gets a predicate IFFing disj of appropriate rules *)
@@ -891,7 +890,7 @@ let write_as_alloy_change_impact (orig_p1: flowlog_program) (fn1: string) (orig_
   let modname1 = (Filename.chop_extension (Filename.basename fn1)) in
   let modname2 = (Filename.chop_extension (Filename.basename fn2)) in
   let ofn = ("ontology_"^modname1^"_vs_"^modname2) in
-  let ontol = {(programs_to_ontology p1 p2) with filename = ofn} in
+  let ontol = {(programs_to_ontology [p1;p2]) with filename = ofn} in
 
   write_shared_ontology (ofn^".als") ontol;
   write_as_alloy p1 fn1 (Some(ontol));
