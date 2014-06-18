@@ -716,31 +716,31 @@ let build_starting_state_trace (ontol: alloy_ontology): string =
   let tracestrs = map (fun (n,_ ) -> sprintf "no overall.trace1.first.%s" n) ontol.tables_used in
   String.concat "\n" tracestrs;;
 
+let accumulate_defs (acc: (table_def list) StringMap.t) (prog: flowlog_program): (table_def list) StringMap.t =
+  fold_left
+      (fun acc2 td ->
+        match StringMap.mem td.tablename acc2 with
+          | true when mem td (StringMap.find td.tablename acc2) -> acc2
+          | true -> StringMap.add td.tablename (td::(StringMap.find td.tablename acc2)) acc2
+          | false -> StringMap.add td.tablename [td] acc2)
+      acc
+      prog.tables;;
+
 (* In case of ontology mismatch *)
-let needed_table_substitutions (p1: flowlog_program) (p2: flowlog_program): ((string * string) list * (string * string) list) =
+let needed_table_substitutions (progs: flowlog_program list): (string * string) list list =
 
-    let mismatches = fold_left
-      (fun acc td ->
-        try
-          let td2 = (get_table p2 td.tablename) in
-            if td <> td2 then (td.tablename)::acc
-            else acc
-        with
-          | _ -> acc) (* no such table in p2 *)
-      []
-      p1.tables in
-
-    let subs1 = map (fun tn -> (tn, tn^"_1")) mismatches in
-    let subs2 = map (fun tn -> (tn, tn^"_2")) mismatches  in
+    let mismatches = (filter (fun (tname, deflst) -> (length deflst) > 1)
+                       (fold_left accumulate_defs StringMap.empty progs)) in
+    let subs = mapi (fun tn i -> (tn, tn^"_"^(string_of_int i))) mismatches in
 
     if (length mismatches) <> 0 then
     begin
       printf "WARNING: The programs had different declared arities for tables %s.\n%!"
         (string_of_list ", " identity mismatches);
-      printf "  Both versions of the table will be included in the Alloy model,\n%!";
+      printf "  All versions of the table will be included in the Alloy model,\n%!";
       printf "  which may result in excess instances and require additional constraints to be added.\n%!";
     end;
-    (subs1, subs2);;
+    subs;;
 
 let rec subs_table_in_formula (subs: (string * string) list) (f: formula): formula =
     match f with
@@ -876,25 +876,23 @@ let rcpo_bounds_string (ontol: alloy_ontology): string =
 
 
 (*******************************************************************************************)
-
-let write_as_alloy_change_impact (orig_p1: flowlog_program) (fn1: string) (orig_p2: flowlog_program) (fn2: string) (reach: bool): unit =
+let write_as_alloy_change_impact (orig_progs: (flowlog_program * string) list) (reach: bool): unit =
 
   (* Before anything else, check for conflicts that need resolution via substitution in the programs.
      For instance, TABLE R(macaddr) vs. TABLE R(macaddr, ipaddr). Needs R_1 and R_2 with substitution. *)
-  let (subs1, subs2) = needed_table_substitutions orig_p1 orig_p2 in
-  let p1 = (substitute_tables_in_program subs1 orig_p1) in
-  let p2 = (substitute_tables_in_program subs2 orig_p2) in
+  let orig_progs_solo,_ = split orig_progs in
+  let subs = needed_table_substitutions orig_progs_solo in
+  let progs = (map (fun s (p,fn) -> (substitute_tables_in_program s p),fn) (combine subs orig_progs)) in
 
-  pretty_print_program p1;
+  (*pretty_print_program (hd progs);*)
 
-  let modname1 = (Filename.chop_extension (Filename.basename fn1)) in
-  let modname2 = (Filename.chop_extension (Filename.basename fn2)) in
-  let ofn = ("ontology_"^modname1^"_vs_"^modname2) in
-  let ontol = {(programs_to_ontology [p1;p2]) with filename = ofn} in
+  let ofn = "ontology_"^
+    (string_of_list "_" (fun (op, fn) ->
+        (Filename.chop_extension (Filename.basename fn))) orig_progs) in
+  let ontol = {(programs_to_ontology progs) with filename = ofn} in
 
   write_shared_ontology (ofn^".als") ontol;
-  write_as_alloy p1 fn1 (Some(ontol));
-  write_as_alloy p2 fn2 (Some(ontol));
+  iter (fun (p,fn) ->  write_as_alloy p fn (Some(ontol))) progs;
 
   let out = open_out "change_impact.als" in
   if not reach then
