@@ -728,10 +728,12 @@ let accumulate_defs (acc: (table_def list) StringMap.t) (prog: flowlog_program):
 
 (* In case of ontology mismatch *)
 let needed_table_substitutions (progs: flowlog_program list): (string * string) list list =
+    let accumulated_table_defs = (fold_left accumulate_defs StringMap.empty progs) in
+    let mismatches = StringMap.fold (fun tname defs acc -> if (length defs) > 1 then tname::acc else acc)
+                       accumulated_table_defs [] in
 
-    let mismatches = (filter (fun (tname, deflst) -> (length deflst) > 1)
-                       (fold_left accumulate_defs StringMap.empty progs)) in
-    let subs = mapi (fun tn i -> (tn, tn^"_"^(string_of_int i))) mismatches in
+    (* One list of str->str for each program, saying how to rename the clashing tables *)
+    let subs = mapi (fun i _ -> (map (fun tn -> (tn, tn^"_"^(string_of_int i))) mismatches)) progs in
 
     if (length mismatches) <> 0 then
     begin
@@ -740,6 +742,7 @@ let needed_table_substitutions (progs: flowlog_program list): (string * string) 
       printf "  All versions of the table will be included in the Alloy model,\n%!";
       printf "  which may result in excess instances and require additional constraints to be added.\n%!";
     end;
+
     subs;;
 
 let rec subs_table_in_formula (subs: (string * string) list) (f: formula): formula =
@@ -876,39 +879,26 @@ let rcpo_bounds_string (ontol: alloy_ontology): string =
 
 
 (*******************************************************************************************)
-let write_as_alloy_change_impact (orig_progs: (flowlog_program * string) list) (reach: bool): unit =
-
-  (* Before anything else, check for conflicts that need resolution via substitution in the programs.
-     For instance, TABLE R(macaddr) vs. TABLE R(macaddr, ipaddr). Needs R_1 and R_2 with substitution. *)
-  let orig_progs_solo,_ = split orig_progs in
-  let subs = needed_table_substitutions orig_progs_solo in
-  let progs = (map (fun s (p,fn) -> (substitute_tables_in_program s p),fn) (combine subs orig_progs)) in
-
-  (*pretty_print_program (hd progs);*)
-
-  let ofn = "ontology_"^
-    (string_of_list "_" (fun (op, fn) ->
-        (Filename.chop_extension (Filename.basename fn))) orig_progs) in
-  let ontol = {(programs_to_ontology progs) with filename = ofn} in
-
-  write_shared_ontology (ofn^".als") ontol;
-  iter (fun (p,fn) ->  write_as_alloy p fn (Some(ontol))) progs;
-
-  let out = open_out "change_impact.als" in
-  if not reach then
-  begin
-  (* 3 states since prestate, newstate1, newstate 2. *)
-  (* 2 events since ev, outev *)
-      fprintf out "
-module cimp
-
-open %s as o
-open %s as prog1
-open %s as prog2
-
+let build_diff_preds (ontol: alloy_ontology) (p1: flowlog_program) (p2: flowlog_program): string =
+  sprintf
+"
+// These automatically-generated predicates are linked to the first and second programs
+// given. To reference others instead, just change the 'prog1' and 'prog2' to the appropriate
+// identifiers. (See the top of this module for filename vs. identifier mapping.) The predicates
+// are otherwise identical!
+//
+// Sufficient bounds for each can be obtained by calling
+// rcpo_bounds_string and
+// rcst_bounds_string
+// with the appropriate programs.
+// (The bounds may vary by program since they depend on the variables used in each rule.)
+//
+// If doing delta-of-delta, SUM the necessary bounds:
+// CPO for (prog1 vs prog2) vs (prog1 vs prog3) would use the sum of the bounds for the two pairs.
+//
 pred changeStateTransition[prestate: State, ev: Event]
 {
-  some disj newst1, newst2: State |
+    some disj newst1, newst2: State |
     (prog1/transition[prestate, ev, newst1] and
      prog2/transition[prestate, ev, newst2])
 }
@@ -923,13 +913,47 @@ pred changeImpact[prestate: State, ev: Event] {
 }
 
 run changeStateTransition for %s
-run changePolicyOutput for %s
+run changePolicyOutput for %s"
+  (cst_bounds_string p1 p2 ontol)
+  (cpo_bounds_string p1 p2 ontol);;
+
+let write_as_alloy_change_impact (orig_progs: (flowlog_program * string) list) (reach: bool): unit =
+
+  (* Before anything else, check for conflicts that need resolution via substitution in the programs.
+     For instance, TABLE R(macaddr) vs. TABLE R(macaddr, ipaddr). Needs R_1 and R_2 with substitution. *)
+  let orig_progs_solo,_ = split orig_progs in
+  let subs = needed_table_substitutions orig_progs_solo in
+  let progs = (map (fun (s,(p,fn)) -> ((substitute_tables_in_program s p),fn)) (combine subs orig_progs)) in
+
+  (*pretty_print_program (hd progs);*)
+
+  let ofn = "ontology_"^
+    (string_of_list "_" (fun (op, fn) ->
+        (Filename.chop_extension (Filename.basename fn))) orig_progs) in
+  let ontol = {(programs_to_ontology (map (fun (p,fn) -> p) progs)) with filename = ofn} in
+
+  write_shared_ontology (ofn^".als") ontol;
+  iter (fun (p,fn) ->  write_as_alloy p fn (Some(ontol))) progs;
+
+  let p1,_ = (hd progs) in
+  let p2,_ = (hd (tl progs)) in
+
+  let out = open_out "change_impact.als" in
+  if not reach then
+  begin
+  (* 3 states since prestate, newstate1, newstate 2. *)
+  (* 2 events since ev, outev *)
+      fprintf out "
+module cimp
+
+open %s as o
+%s
+
+%s
 \n%!"
   ofn
-  (Filename.chop_extension fn1)
-  (Filename.chop_extension fn2)
-  (cst_bounds_string p1 p2 ontol)
-  (cpo_bounds_string p1 p2 ontol);
+  (string_of_list "\n" identity (mapi (fun i (_,fn) -> sprintf "open %s as progi" fn) progs))
+  (build_diff_preds ontol p1 p2);
   end
   else
   begin
@@ -938,8 +962,7 @@ run changePolicyOutput for %s
 module cimp
 
 open %s as o
-open %s as prog1
-open %s as prog2
+%s
 
 /////////////////////////////////////////////////
 
@@ -1028,12 +1051,11 @@ run reachCSTLast for %s
 
 \n%!"
   ofn
-  (Filename.chop_extension fn1)
-  (Filename.chop_extension fn2)
+  (string_of_list "\n" identity (mapi (fun i (_,fn) -> sprintf "open %s as progi" fn) progs))
   (build_starting_state_trace ontol)
   (String.concat "||\n" (filter_map (build_prestate_table_compare p1 p2) ontol.tables_used))
-  (rcpo_bounds_string ontol)
-  (rcst_bounds_string ontol);
+  (rcst_bounds_string ontol)
+  (rcpo_bounds_string ontol);
 
   end;
     (* end of branch by reach/nonreach *)
