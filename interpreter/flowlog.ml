@@ -34,11 +34,11 @@ let args = ref [];;
 
 let speclist = [
   ("-verbose", Arg.Int (fun lvl -> global_verbose := lvl), ": set level of debug output");
-  ("-alloy", Arg.Unit (fun () -> alloy := true), ": convert to Alloy");
-  ("-cimp", Arg.Unit (fun () -> cimp := true), ": convert two files to Alloy and compare their semantics");
-  ("-cimpuniform", Arg.Unit (fun () -> cimpuniform := true), ": change impact via uniform containment");
+  ("-alloy", Arg.Unit (fun () -> alloy := true), ": convert (single file) to Alloy");
+  ("-cimp", Arg.Unit (fun () -> cimp := true), ": convert multiple files to Alloy and compare their semantics");
+  ("-cimpuniform", Arg.Unit (fun () -> cimpuniform := true), ": [EXPERIMENTAL] change impact via uniform containment");
   ("-cimpreach", Arg.Unit (fun () -> cimpreach := true), ": change impact via Alloy, plus bounded reachability check");
-  ("-depend", Arg.Unit (fun () -> depend := true), ": output a JSON dependency graph");
+  ("-depend", Arg.Unit (fun () -> depend := true), ": [EXPERIMENTAL] output a JSON dependency graph");
   ("-reportall", Arg.Unit (fun () -> reportall := true), ": report all packets. WARNING: VERY SLOW!");
   (* Not calling this "reactive" because reactive still implies sending table entries. *)
   ("-notables", Arg.Unit (fun () -> notables := true), ": send everything to controller");
@@ -97,28 +97,25 @@ let main () =
   let program = (desugared_program_of_ast ast filename) in
     printf "-----------\n%!";
 
+    (**********************************)
     if !alloy then
     begin
       write_as_alloy program (alloy_filename filename) None
     end
-    else if !cimp then
+    (**********************************)
+    else if !cimp || !cimpreach then
     begin
-      let filename2 = try hd (tl !args) with exn -> raise (Failure "Input a second .flg file name for use with change-impact.") in
-      let ast2 = read_ast filename2 in
-      let program2 = (desugared_program_of_ast ast2 filename2) in
-        write_as_alloy_change_impact program (alloy_filename filename)
-                                     program2 (alloy_filename filename2)
-                                     false
+      if (length !args) < 2 then
+        raise (Failure "Input a second .flg file name for use with change-impact.");
+
+      let other_filenames = (tl !args) in
+      let other_asts = (map (fun fn ->
+            (desugared_program_of_ast (read_ast fn) fn, (alloy_filename fn)))
+          other_filenames) in
+        write_as_alloy_change_impact ((program,(alloy_filename filename))::other_asts)
+                                     !cimpreach
     end
-    else if !cimpreach then
-    begin
-      let filename2 = try hd (tl !args) with exn -> raise (Failure "Input a second .flg file name for use with change-impact.") in
-      let ast2 = read_ast filename2 in
-      let program2 = (desugared_program_of_ast ast2 filename2) in
-        write_as_alloy_change_impact program (alloy_filename filename)
-                                     program2 (alloy_filename filename2)
-                                     true
-    end
+    (**********************************)
     else if !cimpuniform then
     begin
       let filename2 = try hd (tl !args) with exn -> raise (Failure "Input a second .flg file name for use with change-impact.") in
@@ -127,7 +124,7 @@ let main () =
       let results = build_chase_equivalence program program2 in
         printf "LACKING: %s\n%!" (String.concat ";\n " (map string_of_pmodel results));
     end
-
+    (**********************************)
     (* ACTUALLY RUN THE PROGRAM HERE *)
     else
     begin

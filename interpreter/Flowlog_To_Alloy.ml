@@ -952,7 +952,7 @@ open %s as o
 %s
 \n%!"
   ofn
-  (string_of_list "\n" identity (mapi (fun i (_,fn) -> sprintf "open %s as progi" fn) progs))
+  (string_of_list "\n" identity (mapi (fun i (_,fn) -> sprintf "open %s as prog%d" (Filename.chop_extension fn) (i+1)) progs))
   (build_diff_preds ontol p1 p2);
   end
   else
@@ -1051,7 +1051,7 @@ run reachCSTLast for %s
 
 \n%!"
   ofn
-  (string_of_list "\n" identity (mapi (fun i (_,fn) -> sprintf "open %s as progi" fn) progs))
+  (string_of_list "\n" identity (mapi (fun i (_,fn) -> sprintf "open %s as prog%d" (Filename.chop_extension fn) (i+1)) progs))
   (build_starting_state_trace ontol)
   (String.concat "||\n" (filter_map (build_prestate_table_compare p1 p2) ontol.tables_used))
   (rcst_bounds_string ontol)
