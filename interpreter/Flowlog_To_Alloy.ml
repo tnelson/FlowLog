@@ -733,7 +733,7 @@ let needed_table_substitutions (progs: flowlog_program list): (string * string) 
                        accumulated_table_defs [] in
 
     (* One list of str->str for each program, saying how to rename the clashing tables *)
-    let subs = mapi (fun i _ -> (map (fun tn -> (tn, tn^"_"^(string_of_int i))) mismatches)) progs in
+    let subs = mapi (fun i _ -> (map (fun tn -> (tn, tn^"_"^(string_of_int (i+1)))) mismatches)) progs in
 
     if (length mismatches) <> 0 then
     begin
