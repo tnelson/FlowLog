@@ -141,6 +141,7 @@ ON ip_packet(pkt) WHERE subnets(addr, mask, gwip, gwmac, router, rport)
 
   INSERT (pkt.nwDst) INTO router_queued;
 
+  // Send requests out of every ACL sub-router (avoid burdening the core)
   DO emit_arp(new) WHERE
     not router_queued(pkt.nwDst) and
     router_acl(router, new.locSw) and
@@ -151,9 +152,11 @@ ON ip_packet(pkt) WHERE subnets(addr, mask, gwip, gwmac, router, rport)
     new.arp_op = 1 and // ARP request
     new.arp_tpa = pkt.nwDst and
     new.arp_sha = 00:00:CA:FE:CA:FE and // Controller MAC
-    new.arp_spa = 10.10.10.1 and // Controller IP addr (10.10.10.1)
+    new.arp_spa = 10.10.10.1 // Controller IP addr
 
-    switch_has_port(new.locSw, new.locPt); // REQUIRED? this rule is not compiled TODO(adf): needed???
+    // This is NOT needed since new.locSw and new.locPt are both constrained positively
+    // and switch_has_port(new.locSw, new.locPt)
+    ;
 
 
 // with the above physically wired translators, we are trying to achieve

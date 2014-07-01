@@ -96,28 +96,6 @@ ON arp_packet(request) WHERE request.arp_op = 1 AND
     ///not cached(request.arp_tpa, x) ---> exists x | not cached ...
     ///not cached(request.arp_tpa, ANY) ---> not exists x | cached ...     forall x not cached ...
 
-/*
-
-sig EVarp_packet extends EVpacket
-  { arp_op: FLInt, arp_tha: Macaddr, arp_sha: Macaddr,
-     arp_tpa: Ipaddr, arp_spa: Ipaddr}
-
-assert cachedImmediateReply {
-  all st1, st2: State, ev: EVarp_packet |
-     (transition[st1, ev, st2] &&
-//      some ev2: EVarp_packet | outpolicy[st1, ev, ev2] &&
-      ev.arp_op = C_1 &&
-      // exists ip | st1.cached[ev.arp_tpa, ip]
-      some (st1.cached)[ev.arp_tpa]) implies
-
-      // The only change to state is the requestor's data
-      st1 = st2 || st2.cached - st1.cached = (ev.arp_spa -> ev.arp_sha)
-     // TODO: add condition about what gets output
-}
-check cachedImmediateReply for 2 but 1 Event, 2 State
-*/
-
-
   //
   // Finally, issue an arp request from the controller for unlearned
   // addresses without an existing queued request. The new request is
@@ -140,7 +118,9 @@ check cachedImmediateReply for 2 but 1 Event, 2 State
     new.arp_sha = 00:00:CA:FE:CA:FE and // Controller MAC
     new.arp_spa = 10.10.10.1 and // Controller IP addr (10.10.10.1)
 
-    switch_has_port(new.locSw, new.locPt); // REQUIRED: this rule is not compiled
+    // REQUIRED: this rule is not compiled and not a forwarding rule.
+    // Need to positively constrain new.locPt.
+    switch_has_port(new.locSw, new.locPt);
 
   //
   // Bonus: We can cache the source of this ARP request

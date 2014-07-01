@@ -626,16 +626,21 @@ let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_h
 let when_policy_applies_nodrop (startpol: pol): pred =
     let rec applies_helper (apol: pol): pred =
       match apol with
+        (* Drop actions count as the policy not applying *)
         | Action([])
         | ActionWithMeta([], _) -> Nothing
-        | Action(_) -> Everything
+        (* All other actions count as the policy applying *)
+        | Action(_)
         | ActionWithMeta(_,_) -> Everything
+
+        (* A union B -> applies when A does or B does*)
         | Union(p1, p2) -> build_predicate_or [applies_helper p1; applies_helper p2]
+        (* Sequential composition with a filter first: filter must hold *)
         | Seq(Filter(apred), p2) -> And(apred, applies_helper p2)
         (* Disallow other kinds of sequences. *)
         | Filter(apred) -> apred
-        | ITE(apred, p1, p2) -> build_predicate_or [And(apred,applies_helper p1);
-                                                    And(Not(apred), applies_helper p1)]
+        | ITE(apred, p1, p2) -> build_predicate_or [And(apred, applies_helper p1);
+                                                    And(Not(apred), applies_helper p2)]
 
         | _ -> failwith (sprintf "when_policy_applies_nodrop: could not handle %s\n" (NetCore_Pretty.string_of_pol apol)) in
     simplify_netcore_predicate (applies_helper startpol);;
