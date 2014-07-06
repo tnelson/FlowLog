@@ -47,7 +47,8 @@ let packet_flavors = [
    (* base type (Ethernet) *)
    {label = "packet"; superflavor = None;
     build_condition = (fun vname -> FTrue);
-    fields = [("locsw", "switchid"); ("locpt", "portid"); ("dlsrc", "macaddr"); ("dldst", "macaddr"); ("dltyp", "ethtyp")]};
+    fields = [("locsw", "switchid"); ("locpt", "portid"); ("dlsrc", "macaddr"); ("dldst", "macaddr"); ("dltyp", "ethtyp");
+              ("dlvlan", "int")]};
 
    {label = "arp"; superflavor = Some "packet";
     build_condition = (fun vname -> FEquals(TField(vname, "dltyp"), TConst(hex_str_to_int_string "0x0806")));
@@ -123,6 +124,7 @@ let field_is_defined (ev: event) (fldname: string): bool =
 let defaults_table = [
   (("packet", "dlsrc"), "0");
   (("packet", "dldst"), "0");
+  (("packet", "dlvlan"), "0");
   (("ip_packet", "nwfrag"), "0");
   (("ip_packet", "nwttl"), "255");
   (("ip_packet", "nwtos"), "0");
@@ -155,7 +157,7 @@ let flow_removed_fields = [
          ("sw",       "switchid");("reason",   "string");
          ("dlsrc",    "macaddr"); ("dldst",    "macaddr");
          ("dltyp",    "ethtyp");  ("nwproto",  "int");
-         ("tpsrc",    "tpport"); ("tpdst",    "tpport");
+         ("tpsrc",    "tpport");  ("tpdst",    "tpport");
          ("nwsrcaddr","ipaddr");  ("nwdstaddr","ipaddr");
          ("nwsrcmask","int");     ("nwdstmask","int")];;
 
@@ -298,8 +300,10 @@ let get_field (ev: event) (fldname: string): string =
 let make_eth (ev: event) (nw: Packet.nw): Packet.bytes =
   let dlSrc = macaddr_of_int_string (get_field ev "dlsrc") in
   let dlDst = macaddr_of_int_string (get_field ev "dldst") in
+  let dlVlan_val = int_of_string (get_field ev "dlvlan") in
+  let dlVlan = if dlVlan_val >= 0 then Some dlVlan_val else None in
     Packet.marshal {Packet.dlSrc = dlSrc; Packet.dlDst = dlDst;
-                    Packet.dlVlan = None; Packet.dlVlanPcp = 0;
+                    Packet.dlVlan = dlVlan; Packet.dlVlanPcp = 0;
                     Packet.dlVlanDei = false; nw = nw };;
 
 let make_arp (ev: event): Packet.nw =
@@ -477,11 +481,13 @@ let get_igmp (pkt: Packet.packet): (string*string) list =
    | _ -> [];;
 
 let pkt_to_event (sw : switchId) (pt: port) (pkt : Packet.packet) : event =
+   let vlan_val = match pkt.Packet.dlVlan with | None -> "-1" | Some(x) -> string_of_int x in
    let values = [
     ("locsw", Int64.to_string sw);
     ("locpt", NetCore_Pretty.string_of_port pt);
     ("dlsrc", macaddr_to_int_string pkt.Packet.dlSrc);
     ("dldst", macaddr_to_int_string pkt.Packet.dlDst);
+    ("dlvlan", vlan_val);
     ("dltyp", string_of_int (Packet.dlTyp pkt))]
     @ (get_arp pkt)
     @ (get_ip pkt)

@@ -81,6 +81,9 @@ rule token = parse
     { NUMBER(macaddr_to_int_string (Packet.mac_of_string mac))}
   | '0''x'['0'-'9''a'-'f']+ as hexnum
     { NUMBER(hex_str_to_int_string hexnum)}
+
+  (* allow both positive and negative *)
+  | '-'['0'-'9']+ as number
   | ['0'-'9']+ as number
     { NUMBER(number) }
 

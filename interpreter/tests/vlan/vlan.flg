@@ -1,0 +1,37 @@
+// VLan test
+
+// sudo mn --topo=tree,depth=2,fanout=2 --controller=remote --mac --arp
+
+//////////////////////////////////////////////////////////////////////
+
+// vlan set -> increment the vlan field when passing a switch
+// not a standard use of the field, but good test of *controller* behavior
+// (this can't be compiled)
+ON packet(p) WHERE p.dlvlan != -1:
+	DO forward(new) WHERE new.locPt != p.locPt
+		AND add(p.dlvlan, 1, new.dlvlan);
+
+// REMEMBER: all but the final arg to add must be strongly safe.
+// (i.e., the "result" needs to be the last arg)
+
+//////////////////////////////////////////////////////////////////////
+
+// vlan not set -> just flood
+// (this WILL be compiled)
+ON packet(p) WHERE p.dlvlan = -1:
+	DO forward(new) WHERE new.locPt != p.locPt;
+
+//////////////////////////////////////////////////////////////////////
+
+// Allow us to manufacture packets that DO have the vlan set
+
+EVENT vlan_test {vlan: int};
+
+ON vlan_test(t):
+	DO emit(new) WHERE new.dlvlan = t.vlan
+		AND new.dltyp = 0x001 // arbitrary value. don't try 0x800 or it'l try parsing IP fields
+		AND new.dldst = 00:00:00:00:00:01
+		AND new.dlsrc = ca:fe:ca:fe:00:01
+		AND switch_has_port(new.locSw, new.locPt);
+
+// TODO: > ?

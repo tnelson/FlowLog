@@ -305,6 +305,11 @@ let rec partial_evaluation (p: flowlog_program) (incpkt: string) (f: formula): f
         | "tpsrc" -> SwitchAction({oldout with outTpSrc = Some (None, (tpport_of_int_string aval)) })
         | "tpdst" -> SwitchAction({oldout with outTpDst = Some (None, (tpport_of_int_string aval)) })
         | "nwproto" -> failwith ("OpenFlow 1.0 does not allow this field to be updated")
+
+        | "dlvlan" ->
+          let vlanval = if aval = "-1" then None else Some(int_of_string aval) in
+            SwitchAction({oldout with outDlVlan = Some (None, vlanval) })
+
         | _ -> failwith ("enhance_action_atom unknown afld: "^afld^" -> "^aval))
     | _ -> failwith ("enhance_action_atom non SwitchAction: "^afld^" -> "^aval);;
 
@@ -427,6 +432,7 @@ let field_to_pattern (fld: string) (aval:string): NetCore_Pattern.t =
     | "nwproto" -> {all with ptrnNwProto = WildcardExact (int_of_string aval) }
     | "tpsrc" -> {all with ptrnTpSrc = WildcardExact (int_of_string aval) }
     | "tpdst" ->  {all with ptrnTpDst = WildcardExact (int_of_string aval) }
+    | "dlvlan" -> {all with ptrnDlVlan = if aval = "-1" then WildcardExact None else WildcardExact(Some (int_of_string aval)) }
     | _ -> failwith ("field_to_pattern: "^fld^" -> "^aval) in
     (* TODO: dlVLan, dlVLanPCP *)
 
