@@ -438,6 +438,9 @@ namespace-for-template)
     (copy-with-basename "NATgeneric")
     (copy-with-basename "NIB.inc")
 
+    (printf "Template values:~n~n")
+    (printf "dst-local-subnet: ~a~n" (dict-ref router-vars "dst-local-subnet"))
+    
     ; For debugging purposes:
     (store inboundacl (make-path root-path "InboundACL.p"))
     (store outboundacl (make-path root-path "OutboundACL.p"))

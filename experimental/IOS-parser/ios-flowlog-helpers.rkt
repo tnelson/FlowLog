@@ -229,10 +229,16 @@
         [else ""]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-; Construct the needs-nat template formula per router
+; Construct template formula for a specific router
+; "nn" is an artifact of former use of this func for just "needs-nat"
 ; IMPORTANT: this assumes current location is at x-router, not x-nat (hence the use of rnum)
 (define (build-per-router-fmla-for-router rnum nnlst)
-  `(and (= pkt.locSw ,rnum) (or ,@nnlst)))
+  `(and (or (= pkt.locSw ,rnum) (router_tr ,rnum pkt.locSw)) 
+        (or ,@nnlst)))
+
+; Given a hash mapping router to lst for use with build-per-fouter-fmla..., construct fmla
 (define (build-per-router-fmla-from-hash nn-for-router)
   (define fmla `(or ,@(hash-map nn-for-router build-per-router-fmla-for-router))) 
   (sexpr-to-flowlog fmla #f))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

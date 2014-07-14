@@ -72,8 +72,11 @@ ON ip_packet(pkt):
     // and pkt.nwDst IN addr/mask
 
     // templated nexthop IP selection
-
     @nexthop-fragment-for-tr
+
+    // not in a local subnet for this router
+    // (prevent overlap with L3router.flg)
+    and NOT (@dst-local-subnet)
 
     and subnets(nexthop_subnet, nexthop_mask, ANY, gwmac, router, rport)
     and router_tr(router, pkt.locSw)
