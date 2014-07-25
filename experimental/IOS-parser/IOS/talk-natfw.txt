@@ -21,6 +21,11 @@ ip nat inside source list 1 interface in_dmz overload
 !
 ip route 0.0.0.0 0.0.0.0 10.1.1.2
 !
-access-list 1 permit 192.168.1.1 0.0.255.255
+! TEST [not included in paper config]: make sure needs-nat gets all subnets that appear here.
+! Needs-nat is not limited to (or indeed, guaranteed to cover all of) the interface subnet.
+! So here is a piece of the LAN (a /24 out of a /16) and another /24 that
+! (in theory) comes via another L3 device:
+access-list 1 permit 192.168.1.1 0.0.0.255
+access-list 1 permit 192.167.1.1 0.0.0.255
 ! // need to give the end command
 end

@@ -335,8 +335,10 @@ namespace-for-template)
       ; Confirm that no unsupported NAT variety appears
       (define static-NAT (send config get-static-NAT)) 
       (define dynamic-NAT (send config get-dynamic-NAT))
-      (for-each (lambda (anat) (unless (send anat supported-flowlog)
-                                 (error (format "unsupported NAT: ~v: ~v" (send anat name (string->symbol hostname) "") (send anat direction)))))
+      (for-each (lambda (anat) 
+                  (unless (send anat supported-flowlog)
+                    (error (format "unsupported NAT: ~v: ~v" (send anat name (string->symbol hostname) "") (send anat direction))))
+                  )                
                 (append static-NAT dynamic-NAT))
       ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -439,7 +441,8 @@ namespace-for-template)
     (copy-with-basename "NIB.inc")
 
     (printf "Template values:~n~n")
-    (printf "dst-local-subnet: ~a~n" (dict-ref router-vars "dst-local-subnet"))
+    (printf "~ndst-local-subnet: ~a~n" (dict-ref router-vars "dst-local-subnet"))    
+    (printf "~nneeds-nat-disj: ~a~n" (dict-ref router-vars "needs-nat-disj"))
     
     ; For debugging purposes:
     (store inboundacl (make-path root-path "InboundACL.p"))
