@@ -348,8 +348,11 @@ let decls_added_by_sugar (stmts: stmt list): sdecl list =
   let remote_decls_needed = filter_map (function SReactive(ReactRemote(tblname, argtypes, _,_,_,_)) when not (mem tblname remote_with_decl) -> Some(DeclRemoteTable(tblname, argtypes)) | _ -> None) stmts in
     remote_decls_needed @ out_decls_needed @ incsfromevents;;
 
-(* built_in_where_for_vname (vname: string) (relname: string): *)
-let add_built_ins (r: srule): srule =
+(* Types of incoming and outgoing packets assert constraints on the clauses. For instance,
+   ON ip_packet(p) means that we need to add a WHERE p.dlTyp = 0x800.
+   and
+   emit_tcp(new) means we need to add WHERE new.dlTyp = 0x800 AND new.nwProto = 6 *)
+let add_packet_type_constraints (r: srule): srule =
   let to_add_for_incoming = (built_in_where_for_variable (TVar(r.onvar)) r.onrel) in
   (* built-in outgoing additions will only work on condensed rels as written (note the length = 1 check) *)
   let to_add_for_outgoing = (match r.action with | ADo(outrel, outterms, where) when (length outterms) = 1 ->
@@ -517,6 +520,16 @@ let desugar_rule (r: srule) (vartblnames: string list): srule =
     printf "new rule: %s\n\n%!" (string_of_rule {r with action=newact}) ;
     {r with action=newact};;
 
+(* For INSERT and DELETE rules, help out the proactive compiler by adding a
+   "if something will even change..." subformula to the WHERE clause. For instance,
+   INSERT (p.dlSrc) INTO seen;  would become INSERT (p.dlSrc) INTO seen WHERE NOT seen(p.dlSrc). *)
+let add_id_filters (r: srule): srule =
+  let a' = (match r.action with
+    | ADelete(s, t, where) -> ADelete(s, t, FAnd(where, FAtom("", s, t)))
+    | AInsert(s, t, where) -> AInsert(s, t, FAnd(where, FNot(FAtom("", s, t))))
+    | _ -> r.action) in
+      {r with action = a'};;
+
 let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_program =
   let expanded_ast = expand_includes ast [filename] in
   let ast_stmts = expanded_ast.statements in
@@ -535,7 +548,10 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
                                                   if !global_verbose > 0 then
                                                     write_log (sprintf "Ignoring rule in %s because its condition is always false: %s\n%!" filename (string_of_rule r));
                                                   None
-                                               | SRule(r) -> Some (desugar_rule (add_built_ins r) vartblnames)
+                                               | SRule(r) ->
+                                                let rule_with_type_constraints = (add_packet_type_constraints r) in
+                                                let rule_with_insert_delete_filters = (add_id_filters rule_with_type_constraints) in
+                                                  Some (desugar_rule rule_with_insert_delete_filters vartblnames)
                                                | _ -> None) desugared_stmts in
 
             (* Validation *)
