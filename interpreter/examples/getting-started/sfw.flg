@@ -1,0 +1,9 @@
+TABLE permit_back(ipaddr, ipaddr);
+
+ON ip_packet(p) WHERE p.locPt = 1:
+  DO forward(new) WHERE new.locPt = 2;
+  INSERT (p.nwSrc, p.nwDst) INTO permit_back;
+
+ON ip_packet(p) WHERE p.locPt = 2 AND
+                   permit_back(p.nwDst, p.nwSrc):
+  DO forward(new) WHERE new.locPt = 1;

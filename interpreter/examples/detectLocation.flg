@@ -1,0 +1,10 @@
+TABLE connectedAt(switchid, portid, macaddr);
+
+// Record the first time a MAC address (src) is seen on the network.
+ON packet(pkt) WHERE NOT connectedAt(ANY, ANY, pkt.dlSrc):
+  INSERT (pkt.locSw, pkt.locPt, pkt.dlSrc) INTO connectedAt;
+
+// Flood as L2 policy (keep simple for example)
+ON packet(pkt):
+  DO forward(new) WHERE pkt.locPt != new.locPt;
+

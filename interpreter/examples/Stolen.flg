@@ -1,42 +1,29 @@
+/*
+    MUST BE STARTED FIRST:
+      thrift/timer.native
+      thrift/police_tipline.native
 
-//////////
-// Declarations and interface
-//////////
-
-// EVENT, OUTGOING, etc. for packet handling is all built in.
+    To send events, use
+      thrift/notify.native
+    e.g.,
+      ./notify.native stolen_laptop_report mac=1
+      (addresses must be passed as decimal numbers for now)
+*/
 
 EVENT stolen_laptop_report {mac: macaddr};
 EVENT stolen_laptop_cancel {mac: macaddr};
-EVENT stolen_laptop_found {mac: macaddr, swid: switchid, time: int};
+EVENT stolen_laptop_found  {macaddr: macaddr, swid: switchid, time: int};
 
 TABLE stolen(macaddr);
-
-//////////
-// Reactive
-//////////
-
-/*
-// abstraction like "named pipe": the notify_police pipe takes these events,
-// and sends them to X, Y, ...
-// another pipe that takes the same events but sends to a different destination
-
-REMOTE TABLE get_time(time: int)
-  CALL time AT 127.0.0.1 9091
-  TIMEOUT 1 seconds;
-*/
 
 // Outgoing defn just defines a named pipe for events:
 OUTGOING notify_police(stolen_laptop_found) THEN
   SEND TO 127.0.0.1 5050;
 
+// Basic test for REMOTE TABLE: current time
 REMOTE TABLE get_time(int)
   FROM time AT 127.0.0.1 9091
   TIMEOUT 1 seconds;
-
-
-/*
-  Rules
-*/
 
 ON stolen_laptop_cancel(rec):
   DELETE (rec.mac) FROM stolen;
@@ -49,9 +36,8 @@ ON packet(pkt):
   DO forward(new) WHERE
     new.locPt != pkt.locPt;
 
-  //DO notify_police(pkt.dlSrc, pkt.locSw, time) WHERE
-    DO notify_police(sto) WHERE
-    sto.mac = pkt.dlSrc AND sto.time=time AND sto.swid = pkt.locSw AND
+  DO notify_police(sto) WHERE
+    sto.macaddr = pkt.dlSrc AND sto.time=time AND sto.swid = pkt.locSw AND
     stolen(pkt.dlSrc) AND
     get_time(time);
 

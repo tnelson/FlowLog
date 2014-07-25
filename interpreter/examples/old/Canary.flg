@@ -1,9 +1,0 @@
-import Mac_Learning;
-
-module Canary:
-
-type low_oxygen = {seconds};
-
-action forward(pkt : packet, newpkt : packet) :- Mac_Learning.forward(pkt, newpkt), not unconscious();
-
-plus unconscious(lo : low_oxygen) :- true;

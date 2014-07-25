@@ -1,3 +1,0 @@
-INCLUDE "examples/Arp_Cache.flg";
-
-INCLUDE "examples/Mac_Learning.inc.flg";
