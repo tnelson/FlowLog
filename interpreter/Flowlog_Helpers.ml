@@ -610,22 +610,6 @@ let rec get_equalities ?(sign: bool = true) (f: formula): (bool * formula) list 
     | FNot(innerf) ->
       get_equalities ~sign:(not sign) innerf;;
 
-let rec get_ins ?(sign: bool = true) (f: formula): (bool * formula) list =
-  match f with
-    | FTrue -> []
-    | FFalse -> []
-    | FAtom(modname, relname, tlargs) -> []
-    | FEquals(t1, t2) -> []
-    | FIn(_,_,_) -> [(sign, f)]
-    | FAnd(f1, f2) ->
-      (unique (get_equalities ~sign:sign f1) @ (get_equalities ~sign:sign f2))
-    | FOr(f1, f2) ->
-      (unique (get_equalities ~sign:sign f1) @ (get_equalities ~sign:sign f2))
-    | FNot(innerf) ->
-      get_equalities ~sign:(not sign) innerf;;
-
-
-
 (* TODO: so many lists... Ocaml has sets. *)
 
 let write_log_and_print (ln: string): unit =
