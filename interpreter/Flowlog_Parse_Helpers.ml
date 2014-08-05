@@ -51,12 +51,15 @@ let from_case_insensitive_channel ic =
   Lexing.from_function aux
 
 let read_ast (filename : string) : flowlog_ast =
-    printf "Trying to open %s\n%!" filename;
+    (*printf "Trying to open %s\n%!" filename;*)
     let lexbuf = from_case_insensitive_channel (open_in filename) in
     try
       let result = Surface_Parser.main Surface_Lexer.token lexbuf in
-        printf "Done parsing. Resulting AST: \n%!";
-        pretty_print_ast result;
+        if !global_verbose > 4 then
+        begin
+          printf "Done parsing. Resulting AST: \n%!";
+          pretty_print_ast result;
+        end;
         result
     with exn ->
       let curr = lexbuf.Lexing.lex_curr_p in
@@ -108,7 +111,9 @@ let build_clause (r: srule) (in_atom: formula) (relname: string) (terms: term li
     {orig_rule = r; head = head; body = negations_to_end body};;
 
 let clauses_of_rule (r: srule): clause list =
-    printf "producing clause for rule %s\n\n%!" (string_of_rule r);
+    if !global_verbose > 4 then
+      printf "producing clause for rule %s\n\n%!" (string_of_rule r);
+
     let atom_for_on = FAtom("", r.onrel, [TVar(r.onvar)]) in (* local atom, no module name *)
     match r.action with
         | ADelete(relname, terms, condition) ->
@@ -159,8 +164,12 @@ let get_terms_to_prove_safe (p: flowlog_program) (cl: clause): term list =
               (flatten (mapi (Communication.decls_expand_fields p modname relname on_context) outargs)))
     | _ -> failwith ("safe_clause: "^(string_of_formula cl.head))) in
 
-      printf "checking safety of clause: %s%!" (string_of_clause cl);
-      printf "MUST BE SAFE: %s\n\n%!" (String.concat ", " (map (string_of_term ~verbose:Verbose) must_be_safe));
+      if !global_verbose > 4 then
+      begin
+        printf "checking safety of clause: %s%!" (string_of_clause cl);
+        printf "MUST BE SAFE: %s\n\n%!" (String.concat ", " (map (string_of_term ~verbose:Verbose) must_be_safe));
+      end;
+
       must_be_safe;;
 
 let safe_clause (p: flowlog_program) (cl: clause): unit =
@@ -182,7 +191,8 @@ let safe_clause (p: flowlog_program) (cl: clause): unit =
       (* STEP 2: discover what terms are proven safe *)
       let proven_safe = (get_safe_terms cl.body) in
         (* STEP 3: are any terms that need to be proven safe, unsafe? *)
-        printf "PROVEN SAFE: %s\n%!" (String.concat ", " (map (string_of_term ~verbose:Verbose) proven_safe));
+        if !global_verbose > 4 then
+          printf "PROVEN SAFE: %s\n%!" (String.concat ", " (map (string_of_term ~verbose:Verbose) proven_safe));
         iter (fun toprove ->
           if (not (mem toprove proven_safe) &&
              (match toprove with
@@ -317,8 +327,9 @@ let well_formed_rule (p: flowlog_program) (r: srule): unit =
         with Not_found -> raise (UndeclaredTable relname));;
 
 let simplify_clause (cl: clause): clause =
-  printf "simplifying clause: %s\n%!" (string_of_clause cl);
-    {head = cl.head; orig_rule = cl.orig_rule; body = minimize_variables cl.body};;
+  if !global_verbose > 4 then
+    printf "simplifying clause: %s\n%!" (string_of_clause cl);
+  {head = cl.head; orig_rule = cl.orig_rule; body = minimize_variables cl.body};;
 
 let well_formed_reacts (reacts: sreactive list): unit =
   ignore (fold_left (fun acc react ->
@@ -541,9 +552,12 @@ let desugar_rule (r: srule) (vartblnames: string list): srule =
           | _ -> failwith ("desugar_rule:"^(string_of_term varvar))))
       r.action
       varvarsused in
-    printf "old rule: %s\n%!" (string_of_rule r);
-    printf "var table names: %s\nused: %s\n%!" (String.concat "," vartblnames) (string_of_list ";" string_of_term varvarsused);
-    printf "new rule: %s\n\n%!" (string_of_rule {r with action=newact}) ;
+    if !global_verbose > 4 then
+    begin
+      printf "old rule: %s\n%!" (string_of_rule r);
+      printf "var table names: %s\nused: %s\n%!" (String.concat "," vartblnames) (string_of_list ";" string_of_term varvarsused);
+      printf "new rule: %s\n\n%!" (string_of_rule {r with action=newact});
+    end;
     {r with action=newact};;
 
 (* For INSERT and DELETE rules, help out the proactive compiler by adding a
@@ -616,8 +630,11 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
                 (length weakened_cannot_compile_pt_clauses)
                 (length not_fully_compiled_clauses);
 
-              printf "DECLS: %s\n%!" (String.concat ",\n"(map string_of_declaration the_decls));
-              printf "REACTS: %s\n%!" (String.concat ",\n"(map string_of_reactive the_reacts));
+              if !global_verbose > 4 then
+              begin
+                printf "DECLS: %s\n%!" (String.concat ",\n"(map string_of_declaration the_decls));
+                printf "REACTS: %s\n%!" (String.concat ",\n"(map string_of_reactive the_reacts));
+              end;
 
                 (* Convert decls and defns syntax (with built ins) into a program *)
                 let the_tables = make_tables the_decls the_reacts in

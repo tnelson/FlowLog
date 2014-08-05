@@ -114,13 +114,16 @@ let rec validate_formula_for_compile (strong_safe_list: term list) (newpkt: stri
 
   if (length errors) = 0 then
   begin
-    printf "clause can be compiled.\n%!";
+    if !global_verbose > 4 then
+      printf "clause can be compiled.\n%!";
     None
   end
   else
   begin
-    printf "clause CANNOT be compiled. weakened instead. reasons:\n%!";
-    iter (fun e -> match e with
+    if !global_verbose > 4 then
+    begin
+      printf "clause CANNOT be compiled. weakened instead. reasons:\n%!";
+      iter (fun e -> match e with
             | UsesUncompilableBuiltIns(f) -> if !global_verbose > 0 then printf "UsesUncompilableBuiltIns: %s\n%!" (string_of_formula f);
             | IllegalFieldModification(s) -> if !global_verbose > 0 then printf "IllegalFieldModification: %s\n%!" s;
             | NeedsStronglySafeTerm(tl) -> if !global_verbose > 0 then printf "NeedsStronglySafeTerm: %s\n%!" (String.concat "; " (map string_of_term tl));
@@ -129,7 +132,8 @@ let rec validate_formula_for_compile (strong_safe_list: term list) (newpkt: stri
             | IllegalEquality(t1,t2) -> if !global_verbose > 0 then printf "IllegalEquality: %s = %s\n%!" (string_of_term t1) (string_of_term t2);
             | _ -> failwith "unexpected exception in errors")
           errors;
-    printf "\n%!";
+      printf "\n%!";
+    end;
     Some(build_and newliterals)
   end;;
 
@@ -140,19 +144,27 @@ let validate_and_process_pkt_triggered_clause (cl: clause): (clause * bool) =
 		| _ -> "") in
       let (_, trimmed) = (trim_packet_from_body cl.body) in
       let strong_safe_list = get_safe_terms trimmed in
-      printf "\nValidating clause with body (trimmed) = %s\n%!" (string_of_formula trimmed);
-      printf "Strong safe list: %s\n%!" (String.concat ", " (map string_of_term strong_safe_list));
+
+      if !global_verbose > 4 then
+      begin
+        printf "\nValidating clause with body (trimmed) = %s\n%!" (string_of_formula trimmed);
+        printf "Strong safe list: %s\n%!" (String.concat ", " (map string_of_term strong_safe_list));
+      end;
+
       let final_formula_maybe = validate_formula_for_compile strong_safe_list newpkt trimmed in
       (match final_formula_maybe with
         (* forwarding clause, no weakening needed *)
         | None when newpkt <> "" ->
-          printf "Forwarding clause, no weakening needed. Fully compilable.\n%!";
+          if !global_verbose > 4 then
+            printf "Forwarding clause, no weakening needed. Fully compilable.\n%!";
           (cl, true)
         (* non-forwarding clause, no weakening needed *)
         | None ->
-          printf "NON-forwarding clause, no weakening needed (but trimmed).\n%!";
+          if !global_verbose > 4 then
+            printf "NON-forwarding clause, no weakening needed (but trimmed).\n%!";
           ({head = cl.head; orig_rule = cl.orig_rule; body = trimmed}, false)
         (* weakened *)
         | Some(final_formula) ->
-          printf "Weakened (either forwarding or non-forwarding). New body: %s\n%!" (string_of_formula final_formula);
+          if !global_verbose > 4 then
+            printf "Weakened (either forwarding or non-forwarding). New body: %s\n%!" (string_of_formula final_formula);
           ({head = cl.head; orig_rule = cl.orig_rule; body = final_formula}, false));;

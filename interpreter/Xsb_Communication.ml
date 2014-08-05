@@ -446,12 +446,14 @@ module Communication = struct
 		               end
 		               else
 		                 subs_body in
+		if !global_verbose > 4 then
+			printf "start_clause substituted: %s :- %s" (Xsb.xsb_of_formula new_head) (Xsb.xsb_of_formula new_body);
 
-		printf "start_clause substituted: %s :- %s" (Xsb.xsb_of_formula new_head) (Xsb.xsb_of_formula new_body);
 		let subs_cls = {head = new_head;
 		                body = new_body;
 						orig_rule = cls.orig_rule}  in
-			printf "subs cls: %s\n%!" (string_of_clause cls);
+			if !global_verbose > 4 then
+				printf "subs cls: %s\n%!" (string_of_clause cls);
 			ignore (send_message ("assert((" ^ (clause_to_xsb ~forcepositive:forcepositive subs_cls) ^ ")).")
 				                 (length (get_all_clause_vars subs_cls)));;
 
