@@ -1,0 +1,9 @@
+TABLE foo(ipaddr);
+
+// Expect an warning here: foo's first column is IPaddr, not Mac Addr
+ON ip_packet(p) WHERE foo(p.dlSrc):
+  DO forward(new) WHERE new.locPt != p.locPt;
+
+// Expect a warning here: port vs. switch. possible mistake.
+ON ip_packet(p):
+  DO forward(new) WHERE new.locPt != p.locSw;

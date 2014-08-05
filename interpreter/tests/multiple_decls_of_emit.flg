@@ -1,7 +1,7 @@
 
 // This program should produce a compiler error:
 
-OUTGOING forward(switchid);
+OUTGOING emit(packet);
 
-ON packet_in(pkt):
+ON packet(pkt):
   DO forward(new) WHERE new.locPt != pkt.locPt;

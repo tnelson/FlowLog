@@ -7,6 +7,9 @@ OCAMLBUILD = ocamlbuild -use-ocamlfind -I thrift -I thrift/gen-ocaml
 default: yacc flowlog.native
 	@echo "Compiled FlowLog. If you would rather build everyting, use 'make all'"
 
+tests: yacc Tests.native
+	@echo "Built Flowlog tests."
+
 all: $(patsubst %.ml,%.native,$(wildcard *.ml))
 
 %.native: .force

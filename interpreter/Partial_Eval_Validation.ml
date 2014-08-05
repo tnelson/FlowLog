@@ -133,6 +133,7 @@ let rec validate_formula_for_compile (strong_safe_list: term list) (newpkt: stri
     Some(build_and newliterals)
   end;;
 
+(* Returns processed clause, along with a Boolean that indicates whether the clause is fully-compilable. *)
 let validate_and_process_pkt_triggered_clause (cl: clause): (clause * bool) =
 	let newpkt = (match cl.head with
 		| FAtom("", "forward", [TVar(newpktname)]) -> newpktname

@@ -1091,9 +1091,11 @@ let type_inference_of_vars (p: flowlog_program) (start_inferences: TypeIdSet.t T
       | FAtom(_, relname, args) -> base_body
       | _ -> failwith "infer_type_of_vars head") in
 
-  (* Iterate knowledge to fixpoint along POSITIVE equalities *)
+  (* Iterate knowledge to fixpoint along equalities *)
   (* ASSUMPTION: Don't have to do this more than once, since excess variables have been removed *)
-  let equalities = gather_nonneg_equalities cl.body false in
+  let equalities = (map (fun (sn,eqf) -> match eqf with FEquals(t1, t2) -> (t1, t2) | _ -> failwith "get_equalities")
+    (get_equalities cl.body)) in
+  (*let equalities = gather_nonneg_equalities cl.body false in*)
 
   (* Debug printing, please leave commented-out in function for quick diagnosis. *)
 

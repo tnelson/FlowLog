@@ -189,7 +189,7 @@ let rec gather_nonneg_equalities
         | FEquals(t, (TVar(_) as thevar))
           when (not neg) && (not (thevar = t)) && (not (mem thevar exempt)) ->
             [(thevar, t)]
-        | FEquals(t1, t2) when not vars_only ->
+        | FEquals(t1, t2) when (not neg) && (not vars_only) ->
             [(t1, t2)]
         | FEquals(_, _) -> []
         | FIn(_,_,_) -> []

@@ -70,6 +70,32 @@ let read_ast (filename : string) : flowlog_ast =
 
 (**************************************************************************)
 
+(* Type mismatch warnings.
+   I'd rather throw an error outright for a type-mismatch, but since many of these
+   atomic values are "just numbers" (of a given bitwidth) I'm leery of being too draconian, here.
+
+   negated use will throw the warning, even though it's technically OK. (e.g. p.locPt != new.locSw)
+ *)
+
+let check_clause_types (p: flowlog_program) (cl: clause): unit =
+  let inferences = type_inference_of_vars p TermMap.empty cl in
+
+  let check_multi_inferences k vs =
+    if TypeIdSet.cardinal vs > 1 then
+    begin
+      printf "--------------------------------------------------\n";
+      printf "    TYPE WARNING: \n%!";
+      printf "    IN CLAUSE: %s\n" (string_of_clause cl);
+      printf "    TERM %s was inferred to have multiple types:\n" (string_of_term k);
+      TypeIdSet.iter (fun s -> printf "%s " s) vs;
+      printf "\n\n%!"
+    end in
+
+  (* Any time multiple types are inferred, toss a warning: *)
+  TermMap.iter check_multi_inferences inferences;;
+
+(**************************************************************************)
+
 let negations_to_end (f: formula): formula =
   let atoms = conj_to_list f in
   let (pos, neg) = partition (function | FNot(_) -> false | _ -> true) atoms in
@@ -536,6 +562,8 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
   let desugared_stmts = desugar_statements ast_stmts in
   let vartblnames = filter_map (function | ASTDecl(ASTDeclVar(tname, _, _)) -> Some(tname) | _ -> None) ast_stmts in
         (* requires extlib *)
+        (* Compute de-sugared rules, declarations, and reactive declarations
+           Note that in the docs, decls and reacts are squished into a single concept.*)
         let the_decls  =  built_in_decls @
                           filter_map (function | SDecl(d) -> Some d
                                                | _ -> None) desugared_stmts @
@@ -613,4 +641,6 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
                   (* Validation *)
                   iter (well_formed_rule p) the_rules;
                   iter (safe_clause p) simplified_clauses;
+                  iter (check_clause_types p) simplified_clauses;
+
                   p;;

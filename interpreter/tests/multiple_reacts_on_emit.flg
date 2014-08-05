@@ -1,9 +1,9 @@
 
 // This program should produce a compiler error:
 
-OUTGOING forward(x) THEN
-  SEND EVENT blargh {x:=x} TO 127.0.0.1 9091;
+OUTGOING emit(packet) THEN
+  SEND TO 127.0.0.1 9091;
 
-ON packet_in(pkt):
+ON packet(pkt):
   DO forward(new) WHERE new.locPt != pkt.locPt;
 

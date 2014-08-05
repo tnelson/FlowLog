@@ -2,19 +2,12 @@
 /* This variation on Mac_Learning is identical except for different names.
    Used for change-impact soundness testing. */
 
+// WARNING: This version is old, do not use it as an example of how to run Mac Learning!
+
 TABLE learned(switchid, portid, macaddr);
-TABLE switch_has_port(switchid, portid);
 
-// all the events used here are built-in
 
-ON packet_in(p):
-
-  // ***TODO*** Add these restrictions (which only exist for limiting to-controller traffic)
-  // automatically. But not always easy! Naive learned/notlearned have some issues
-  // in that to use them one sometimes needs complex joins?
-
-  // Instead, bespoke optimizations that can be tested via change impact. (old, unoptimized ==
-  // new, optimized?)
+ON packet(p):
 
   INSERT (p.locSw, p.locPt, p.dlSrc) INTO learned WHERE
     not learned(p.locSw, p.locPt, p.dlSrc);
@@ -33,15 +26,4 @@ ON packet_in(p):
     OR
     (NOT learned(p.locSw, x, p.dlDst) AND
      NOT p.locPt = n.locPt
-     // Commented out as **optimization**, only sound if compiled.
-     // (If interpreted in XSB, will get a problem because new.locPt isn't bound)
-     // AND switch_has_port(p.locSw, n.locPt)
     );
-
-
-ON switch_port_in(swpt):
-  INSERT (swpt.sw, swpt.pt) INTO switch_has_port;
-
-ON switch_down(swd):
-  DELETE (swd.sw, ANY) FROM switch_has_port;
-  DELETE (swd.sw, ANY, ANY) FROM learned;

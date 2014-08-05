@@ -1,3 +1,0 @@
-ON packet_in(pkt):
-  DO forward(pkt, pkt);
-
