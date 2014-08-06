@@ -41,13 +41,16 @@ ON startup(e):
 // cookie=0x0, duration=13.856s, table=0, n_packets=0, n_bytes=0, priority=65533,icmp actions=output:3
 // cookie=0x0, duration=13.856s, table=0, n_packets=0, n_bytes=0, priority=65532 actions=drop
 
-// New strategy:
-// Always include switch_has_port, even during compilation. (There's a cost, but benefit = soundness)
-// Consequence: that makes new.locPt strongly safe. (GOOD, but BAD: concerns re: conflict detection)
+// ****
+// New strategy (to be done at desugaring time):
+// If new.locPt is only mentioned in a new.locPt != p.locPt, same as before.
+// If term appears elsewhere in clause, insert a switch_has_port. <--- THIS IS MISSING IN CURRENT BUILD
+
+// Consequence: that makes new.locPt strongly safe. (GOOD, but BAD: concerns
+// re: conflict detection? should be resolved since (a) all new.f are strongly
+// safe and (b) new PE substitutes SS values into negative atoms/equalities
+// before evaluating them)
+
 // Consequence: breaks ALL optimization
 //  ~~ if no other constraints (syntactic check) on new.locPt, ALL is ok?
-//  ~~ ideally: could detect the ALL and compress it. (ugh)
-
-// But what to do about negative new.f assertions, now?
-// not R(X, Y) -> not ((x = 1 and y = 2) or (x = 3 and y = 4) or ...)
-// Do we have conflict resolution code?
+//  ~~ ideally: could detect the ALL and compress it. (ugh. do this in new compiler?)
