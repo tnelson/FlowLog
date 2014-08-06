@@ -1,0 +1,53 @@
+// ~~~~~~~~~~~~
+// Test extraction of ALL parallel to negated constraints on action
+
+TABLE forbidden_out(portid);
+TABLE nonempty(portid);
+
+// EXAMPLE A: should be flood except 1, 2 (compiled)
+ON tcp_packet(p):
+  DO forward(new) WHERE
+    not forbidden_out(new.locPt) and
+    new.locpt != p.locPt;
+
+// EXAMPLE Z: should be drop
+ON udp_packet(p):
+  DO forward(new) WHERE
+    not forbidden_out(new.locPt) and
+    forbidden_out(new.locPt) and
+    new.locpt != p.locPt;
+
+// EXAMPLE Y: should be fwd on 3 unless inport = 3.
+ON icmp_packet(p):
+  DO forward(new) WHERE
+    not forbidden_out(new.locPt) and
+    nonempty(new.locPt) and
+    new.locpt != p.locPt;
+
+ON startup(e):
+  INSERT (1) INTO forbidden_out;
+  INSERT (2) INTO forbidden_out;
+  INSERT (1) INTO nonempty;
+  INSERT (2) INTO nonempty;
+  INSERT (3) INTO nonempty;
+
+
+// Current (8/5) [ex A] build doesn't compile the forward:
+//   clause CANNOT be compiled. weakened instead. reasons:
+//   NeedsStronglySafeTerm: NEW__LOCPT
+// Instead, safe but inefficient: send all TCP to controller:
+// cookie=0x0, duration=13.856s, table=0, n_packets=0, n_bytes=0, priority=65535,tcp actions=CONTROLLER:65535
+// cookie=0x0, duration=13.856s, table=0, n_packets=0, n_bytes=0, priority=65534,in_port=3 actions=drop
+// cookie=0x0, duration=13.856s, table=0, n_packets=0, n_bytes=0, priority=65533,icmp actions=output:3
+// cookie=0x0, duration=13.856s, table=0, n_packets=0, n_bytes=0, priority=65532 actions=drop
+
+// New strategy:
+// Always include switch_has_port, even during compilation. (There's a cost, but benefit = soundness)
+// Consequence: that makes new.locPt strongly safe. (GOOD, but BAD: concerns re: conflict detection)
+// Consequence: breaks ALL optimization
+//  ~~ if no other constraints (syntactic check) on new.locPt, ALL is ok?
+//  ~~ ideally: could detect the ALL and compress it. (ugh)
+
+// But what to do about negative new.f assertions, now?
+// not R(X, Y) -> not ((x = 1 and y = 2) or (x = 3 and y = 4) or ...)
+// Do we have conflict resolution code?

@@ -1,0 +1,31 @@
+/*
+    Meant to be run with:
+    sudo mn --mac --arp --controller=remote --topo=tree,depth=3,fanout=2
+*/
+
+TABLE permit_back(switchid, macaddr, macaddr);
+TABLE mac_cache(switchid, portid, macaddr);
+TABLE stateful_firewall(switchid, portid);
+
+ON startup(empty_event):
+    INSERT (6,1) INTO stateful_firewall;
+    INSERT (6,2) INTO stateful_firewall;
+    INSERT (7,1) INTO stateful_firewall;
+    INSERT (7,2) INTO stateful_firewall;
+
+
+ON packet(p) WHERE NOT mac_cache(p.locSw, ANY, p.dlSrc):
+    INSERT (p.locSw, p.locPt, p.dlSrc) INTO mac_cache;
+
+ON packet(p) WHERE stateful_firewall(p.locSw, p.locPt):
+    INSERT (p.locSw, p.dlSrc, p.dlDst) INTO permit_back;
+
+ON packet(p) WHERE mac_cache(p.locSw, out_port, p.dlDst) OR
+                   (NOT mac_cache(p.locSw, ANY, p.dlDst) AND out_port != p.locPt):
+  DO forward(new) WHERE
+    new.locPt = out_port AND
+    (NOT stateful_firewall(p.locSw, out_port) OR permit_back(p.locSw, p.dlDst, p.dlSrc));
+
+
+// TODO: can we re-use maclearning table, or drop it (reducing us to just 1 table?)
+// TODO: ^ one of the branches above does not compile (says new.locPt not SSafe?)

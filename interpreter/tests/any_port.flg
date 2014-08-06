@@ -1,0 +1,4 @@
+
+// Should flood + backflow.
+ON packet(p):
+	DO forward(new) WHERE new.locPt = ANY;
