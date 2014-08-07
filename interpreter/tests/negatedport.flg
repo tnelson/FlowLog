@@ -1,28 +1,9 @@
 // ~~~~~~~~~~~~
 // Test extraction of ALL parallel to negated constraints on action
+// sudo mn --mac --arp --controller=remote --topo=tree,depth=1,fanout=4
 
 TABLE forbidden_out(portid);
 TABLE nonempty(portid);
-
-// EXAMPLE A: should be flood except 1, 2 (compiled)
-ON tcp_packet(p):
-  DO forward(new) WHERE
-    not forbidden_out(new.locPt) and
-    new.locpt != p.locPt;
-
-// EXAMPLE Z: should be drop
-ON udp_packet(p):
-  DO forward(new) WHERE
-    not forbidden_out(new.locPt) and
-    forbidden_out(new.locPt) and
-    new.locpt != p.locPt;
-
-// EXAMPLE Y: should be fwd on 3 unless inport = 3.
-ON icmp_packet(p):
-  DO forward(new) WHERE
-    not forbidden_out(new.locPt) and
-    nonempty(new.locPt) and
-    new.locpt != p.locPt;
 
 ON startup(e):
   INSERT (1) INTO forbidden_out;
@@ -31,26 +12,67 @@ ON startup(e):
   INSERT (2) INTO nonempty;
   INSERT (3) INTO nonempty;
 
+//////////////////////////////////////////////////////////////////////////
 
-// Current (8/5) [ex A] build doesn't compile the forward:
-//   clause CANNOT be compiled. weakened instead. reasons:
-//   NeedsStronglySafeTerm: NEW__LOCPT
-// Instead, safe but inefficient: send all TCP to controller:
-// cookie=0x0, duration=13.856s, table=0, n_packets=0, n_bytes=0, priority=65535,tcp actions=CONTROLLER:65535
-// cookie=0x0, duration=13.856s, table=0, n_packets=0, n_bytes=0, priority=65534,in_port=3 actions=drop
-// cookie=0x0, duration=13.856s, table=0, n_packets=0, n_bytes=0, priority=65533,icmp actions=output:3
-// cookie=0x0, duration=13.856s, table=0, n_packets=0, n_bytes=0, priority=65532 actions=drop
+// EXAMPLE: should be 3, 4 minus inport (compiled)
+ON packet(p) WHERE p.dlTyp = 0x101: // decimal 257
+  DO forward(new) WHERE
+    not forbidden_out(new.locPt) and
+    new.locpt != p.locPt;
 
-// ****
-// New strategy (to be done at desugaring time):
-// If new.locPt is only mentioned in a new.locPt != p.locPt, same as before.
-// If term appears elsewhere in clause, insert a switch_has_port. <--- THIS IS MISSING IN CURRENT BUILD
+// EXAMPLE: should be drop always (compiled)
+ON packet(p) WHERE p.dlTyp = 0x102: // decimal 258
+  DO forward(new) WHERE
+    not forbidden_out(new.locPt) and
+    forbidden_out(new.locPt) and
+    new.locpt != p.locPt;
 
-// Consequence: that makes new.locPt strongly safe. (GOOD, but BAD: concerns
-// re: conflict detection? should be resolved since (a) all new.f are strongly
-// safe and (b) new PE substitutes SS values into negative atoms/equalities
-// before evaluating them)
+// EXAMPLE: should be fwd on 3 unless inport = 3 (compiled)
+ON packet(p) WHERE p.dlTyp = 0x103: // decimal 259
+  DO forward(new) WHERE
+    not forbidden_out(new.locPt) and
+    nonempty(new.locPt) and
+    new.locpt != p.locPt;
 
-// Consequence: breaks ALL optimization
-//  ~~ if no other constraints (syntactic check) on new.locPt, ALL is ok?
-//  ~~ ideally: could detect the ALL and compress it. (ugh. do this in new compiler?)
+// EXAMPLE: should be flood, provided in port is 1, 2, or 3 (not 4)
+ON packet(p) WHERE p.dlTyp = 0x104: // decimal 260
+  DO forward(new) WHERE
+    nonempty(p.locPt) and
+    new.locpt != p.locPt;
+
+// EXAMPLE: direct inequality for new.locPt, should be 1,2,4 (compiled)
+ON packet(p) WHERE p.dlTyp = 0x105: // decimal 261
+  DO forward(new) WHERE
+  	new.locpt != 3;
+
+// EXAMPLE: switch_has_port added, compiled, out all ports (no ALL; though ALL+INPORT might be cleaner?)
+ON packet(p) WHERE p.dlTyp = 0x106: // decimal 262
+  DO forward(new) WHERE
+  	new.locpt = ANY;
+
+// EXAMPLE: should backflow (no mention of a field -> field identical)
+ON packet(p) WHERE p.dlTyp = 0x107: // decimal 263
+  DO forward(new) WHERE
+    true;
+
+// EXAMPLE: simple flood. should use ANY (not port-by-port enumeration)
+ON packet(p) WHERE p.dlTyp = 0x108: // decimal 264
+  DO forward(new) WHERE
+  	new.locpt != p.locpt;
+
+// 107 still wrong
+
+*** s1 ------------------------------------------------------------------------
+ cookie=0x0, duration=5.706s, table=0, n_packets=0, n_bytes=0, priority=65535,dl_type=0x0108 actions=ALL
+ cookie=0x0, duration=5.706s, table=0, n_packets=0, n_bytes=0, priority=65535,dl_type=0x0106 actions=output:1,output:2,output:3,output:4
+ cookie=0x0, duration=5.706s, table=0, n_packets=0, n_bytes=0, priority=65535,dl_type=0x0105 actions=output:1,output:2,output:4
+ cookie=0x0, duration=5.706s, table=0, n_packets=0, n_bytes=0, priority=65535,in_port=1,dl_type=0x0104 actions=ALL
+ cookie=0x0, duration=5.706s, table=0, n_packets=0, n_bytes=0, priority=65535,in_port=4,dl_type=0x0101 actions=output:3
+ cookie=0x0, duration=5.706s, table=0, n_packets=0, n_bytes=0, priority=65535,in_port=3,dl_type=0x0101 actions=output:4
+ cookie=0x0, duration=5.706s, table=0, n_packets=0, n_bytes=0, priority=65535,in_port=3,dl_type=0x0104 actions=ALL
+ cookie=0x0, duration=5.706s, table=0, n_packets=0, n_bytes=0, priority=65535,in_port=2,dl_type=0x0104 actions=ALL
+ cookie=0x0, duration=5.706s, table=0, n_packets=0, n_bytes=0, priority=65534,in_port=3 actions=drop
+ cookie=0x0, duration=5.706s, table=0, n_packets=0, n_bytes=0, priority=65533,dl_type=0x0101 actions=output:3,output:4
+ cookie=0x0, duration=5.706s, table=0, n_packets=0, n_bytes=0, priority=65533,dl_type=0x0103 actions=output:3
+ cookie=0x0, duration=5.706s, table=0, n_packets=0, n_bytes=0, priority=65532 actions=drop
+

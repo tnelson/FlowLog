@@ -313,14 +313,18 @@ let rec partial_evaluation (p: flowlog_program) (incpkt: string) (f: formula): f
         | _ -> failwith ("enhance_action_atom unknown afld: "^afld^" -> "^aval))
     | _ -> failwith ("enhance_action_atom non SwitchAction: "^afld^" -> "^aval);;
 
+(* "unsafe" because the caller is responsible for resolving ALL vs. fwd(x) actions
+   Without that resolution, the action set could produce duplicate packets. *)
 let rec build_unsafe_switch_actions (oldpkt: string) (atoms: formula list): action =
+
+  (* port actions: focus on new.locPt *)
   let create_port_actions (actlist: action) (lit: formula): action =
+
+    (* Prevent actlist from accumulating duplicates or contradictions.
+       (Since this set of atoms has been partially-evaluated, there should never be >1 outport value) *)
     let no_contradiction_or_repetition (aval: string): bool =
       for_all
         (function
-          (* Don't just check for <> pts. Prevent adding repetitions of same action.
-             I.e., once you have a physical port, you never get another one. *)
-          (* NetCore_Pattern.Physical(nwport_of_string aval)*)
           | SwitchAction(pat) ->
             (match pat.outPort with
               | NetCore_Pattern.Physical(aval2) ->
@@ -346,6 +350,14 @@ let rec build_unsafe_switch_actions (oldpkt: string) (atoms: formula list): acti
       else if var2 = oldpkt && fld2 = "locpt" && var1 <> oldpkt && fld1 = "locpt" then
         [allportsatom] @ actlist
       else failwith ("create_port_actions: bad negation: "^(string_of_formula lit))
+
+    (* Substitition may give us a new.locPt != c. *)
+    | FNot(FEquals(TField(var1, fld1), TConst(avalue))) when var1 <> oldpkt && fld1 = "locpt" ->
+      [allportsatom] @ actlist
+
+    (* when is this an all? *)
+
+
 
     | FEquals(TField(var1, fld1), TField(var2, fld2)) ->
       if fld1 <> fld2 then
@@ -404,16 +416,19 @@ let rec build_unsafe_switch_actions (oldpkt: string) (atoms: formula list): acti
 
     | _ -> failwith ("create_mod_actions: "^(string_of_formula lit)) in
 
-  (* list of SwitchAction(output)*)
-  (* - this is only called for FORWARDING rules. so only newpkt should be involved *)
-  (* - assume: no negated equalities except the special case pkt.locpt != newpkt.locpt *)
-   (* printf "  >> build_switch_actions: %s\n%!" (String.concat " ; " (map (string_of_formula ~verbose:true) atoms));*)
+    (* printf "  >> build_switch_actions: %s\n%!" (String.concat " ; " (map (string_of_formula ~verbose:true) atoms));*)
+
+    (* Get a list of SwitchAction(output) by first folding over the atoms to get fwding actions, and then
+       augmenting those with header modifications. So two iterations over atoms in all. *)
+    (*  ASSUME: This is only called for FORWARDING rules, so only look at newpkt-related atoms *)
     (* if any actions are false, folding is invalidated *)
     try
       let port_actions = fold_left create_port_actions [] atoms in
       let complete_actions = fold_left create_mod_actions port_actions atoms in
       complete_actions
     with UnsatisfiableFlag -> [];;
+
+(*********************************************************************************)
 
 open NetCore_Pattern
 open NetCore_Wildcard
@@ -537,7 +552,9 @@ let is_physical_port_atom (a: action_atom): bool =
 let handle_all_and_port_together (oldpkt: string) (apred: pred) (acts: action_atom list): (pred * action) =
   (* If both allportsatom and physical(x) appear in acts,
      (1) remove allportsatom from acts
-     (2) add oldpt != x to pred *)
+     (2) add oldpt != x to pred
+     ASSUMPTION: an allportsatom only comes from new.locPt != old.locPt. *)
+
   if exists is_all_ports_atom acts &&
      exists is_physical_port_atom acts then
      let avalopt = get_physical_port_atom (find is_physical_port_atom acts) in

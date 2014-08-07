@@ -570,6 +570,55 @@ let add_id_filters (r: srule): srule =
     | _ -> r.action) in
       {r with action = a'};;
 
+(* If new.locPt appears in a FORWARD rule's WHERE outside of "new.locPt != p.locPt"
+   then add switch_has_port(p.locSw, new.locPt) to make new.locPt safe. *)
+let add_shp_if_needed (r: srule): srule =
+  (* srule type: {onrel: string; onvar: string; action: action}*)
+  match r.action with
+    | AForward(TVar(newp) as newpvar, fmla, tout) ->
+      (* Does TField(newp, "locpt") appear anywhere but in a flood equality?
+         Is shp already asserted? *)
+      let inswitch = TField(r.onvar, "locsw") in
+      let nptterm = TField(newp, "locpt") in
+      let optterm = TField(r.onvar, "locpt") in
+
+      let signed_atoms = (get_atoms_with_sign fmla) in
+      let has_shp_already = exists (fun (s, a) -> match a with
+        | FAtom("", "switch_has_port", [t1;t2])
+          when s && t1 = inswitch && t2 = nptterm -> true
+        | _ -> false) signed_atoms in
+
+      (*let has_flood_ineq = exists (fun (s, a) -> match a with
+        | FEquals(t1, t2)
+          when (not s) && ((t1 = nptterm && t2 = optterm) || (t2 = nptterm && t1 = optterm)) -> true
+        | _ -> false) signed_atoms in*)
+      let signed_eqs = (get_equalities fmla) in
+      let has_other_newpt = exists (fun (s, a) ->
+          match a with
+            | FAtom(_, _, args) when mem nptterm args -> true
+            | FEquals(t1, t2) when
+              (* A positive eq involving new.locPt, OR a negative involving new.locPt that isn't the flood atom. *)
+              (s && (t1 = nptterm || t2 = nptterm)) ||
+              ((not s) && (t1 = nptterm && t2 <> optterm)) ||
+              ((not s) && (t2 = nptterm && t1 <> optterm)) -> true
+            | _ -> false) (signed_atoms@signed_eqs) in
+
+      (* TODO: Unconstrained entirely? Then trivial equality. *)
+
+      if (has_other_newpt && (not has_shp_already)) then
+      begin
+        (* positive SHP must go before other atoms. *)
+        let newaction = AForward(newpvar, FAnd(FAtom("", "switch_has_port", [inswitch;nptterm]), fmla), tout) in
+          printf "~~~ ADDING SHP: %s\n%!" (string_of_action newaction);
+          {onrel=r.onrel;onvar=r.onvar;action=newaction}
+      end
+      else
+      begin
+        printf "~~~ Not adding SHP (hon=%b, hsa=%b): %s\n%!" has_other_newpt has_shp_already (string_of_action r.action);
+        r
+      end
+    | _ -> r;;
+
 let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_program =
   let expanded_ast = expand_includes ast [filename] in
   let ast_stmts = expanded_ast.statements in
@@ -591,14 +640,28 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
                                                     write_log (sprintf "Ignoring rule in %s because its condition is always false: %s\n%!" filename (string_of_rule r));
                                                   None
                                                | SRule(r) ->
+
+                                                (* Rule desugaring process: *)
+                                                (* Where we see packet types, add filters on ethtyp, nwproto field *)
                                                 let rule_with_type_constraints = (add_packet_type_constraints r) in
+                                                (* Filters, e.g., adding WHERE NOT R(t) to INSERT (t) INTO R. *)
                                                 let rule_with_insert_delete_filters = (add_id_filters rule_with_type_constraints) in
-                                                  Some (desugar_rule rule_with_insert_delete_filters vartblnames)
+
+                                                (* Make sure forwarding behavior is strongly safe. *)
+                                                let safe_if_fwd_rule = (add_shp_if_needed rule_with_insert_delete_filters) in
+
+                                                  (* Misc. other final desugaring, for instance dealing with VARs
+                                                     and turning them into proper table refs *)
+                                                  Some (desugar_rule safe_if_fwd_rule vartblnames)
+
                                                | _ -> None) desugared_stmts in
 
             (* Validation *)
             well_formed_reacts the_reacts;
             well_formed_decls the_decls;
+
+            (***********************************)
+            (* Now turn ~RULES~ into ~CLAUSES~ *)
 
             (* Create and simplify clauses. Test for what can be compiled. Weaken as needed. *)
             let clauses = (fold_left (fun acc r -> (clauses_of_rule r) @ acc) [] the_rules) in
