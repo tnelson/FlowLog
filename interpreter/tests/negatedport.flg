@@ -15,64 +15,95 @@ ON startup(e):
 //////////////////////////////////////////////////////////////////////////
 
 // EXAMPLE: should be 3, 4 minus inport (compiled)
-ON packet(p) WHERE p.dlTyp = 0x101: // decimal 257
+ON packet(p) WHERE p.dlTyp = 0x0101: // decimal 257
   DO forward(new) WHERE
     not forbidden_out(new.locPt) and
     new.locpt != p.locPt;
 
 // EXAMPLE: should be drop always (compiled)
-ON packet(p) WHERE p.dlTyp = 0x102: // decimal 258
+ON packet(p) WHERE p.dlTyp = 0x0102: // decimal 258
   DO forward(new) WHERE
     not forbidden_out(new.locPt) and
     forbidden_out(new.locPt) and
     new.locpt != p.locPt;
 
 // EXAMPLE: should be fwd on 3 unless inport = 3 (compiled)
-ON packet(p) WHERE p.dlTyp = 0x103: // decimal 259
+ON packet(p) WHERE p.dlTyp = 0x0103: // decimal 259
   DO forward(new) WHERE
     not forbidden_out(new.locPt) and
     nonempty(new.locPt) and
     new.locpt != p.locPt;
 
 // EXAMPLE: should be flood, provided in port is 1, 2, or 3 (not 4)
-ON packet(p) WHERE p.dlTyp = 0x104: // decimal 260
+ON packet(p) WHERE p.dlTyp = 0x0104: // decimal 260
   DO forward(new) WHERE
     nonempty(p.locPt) and
     new.locpt != p.locPt;
 
 // EXAMPLE: direct inequality for new.locPt, should be 1,2,4 (compiled)
-ON packet(p) WHERE p.dlTyp = 0x105: // decimal 261
+ON packet(p) WHERE p.dlTyp = 0x0105: // decimal 261
   DO forward(new) WHERE
   	new.locpt != 3;
 
 // EXAMPLE: switch_has_port added, compiled, out all ports (no ALL; though ALL+INPORT might be cleaner?)
-ON packet(p) WHERE p.dlTyp = 0x106: // decimal 262
+ON packet(p) WHERE p.dlTyp = 0x0106: // decimal 262
   DO forward(new) WHERE
   	new.locpt = ANY;
 
 // EXAMPLE: should backflow (no mention of a field -> field identical)
-ON packet(p) WHERE p.dlTyp = 0x107: // decimal 263
+ON packet(p) WHERE p.dlTyp = 0x0107: // decimal 263
   DO forward(new) WHERE
     true;
 
 // EXAMPLE: simple flood. should use ANY (not port-by-port enumeration)
-ON packet(p) WHERE p.dlTyp = 0x108: // decimal 264
+ON packet(p) WHERE p.dlTyp = 0x0108: // decimal 264
   DO forward(new) WHERE
   	new.locpt != p.locpt;
 
-// 107 still wrong
+// EXAMPLE: send to all but 3 and inport
+ON packet(p) WHERE p.dlTyp = 0x0109: // decimal 265
+  DO forward(new) WHERE
+    new.locpt != 3 AND
+  	new.locpt != p.locpt;
+
+// EXAMPLE: Like 107, but with explicit equality
+ON packet(p) WHERE p.dlTyp = 0x0110: // decimal 266
+  DO forward(new) WHERE
+  	new.locpt = p.locPt;
+
+
+/*
+
+// Not optimized (see semantic equiv between 107 and 110, but one splits out into a rule per inport and one does not)
 
 *** s1 ------------------------------------------------------------------------
- cookie=0x0, duration=5.706s, table=0, n_packets=0, n_bytes=0, priority=65535,dl_type=0x0108 actions=ALL
- cookie=0x0, duration=5.706s, table=0, n_packets=0, n_bytes=0, priority=65535,dl_type=0x0106 actions=output:1,output:2,output:3,output:4
- cookie=0x0, duration=5.706s, table=0, n_packets=0, n_bytes=0, priority=65535,dl_type=0x0105 actions=output:1,output:2,output:4
- cookie=0x0, duration=5.706s, table=0, n_packets=0, n_bytes=0, priority=65535,in_port=1,dl_type=0x0104 actions=ALL
- cookie=0x0, duration=5.706s, table=0, n_packets=0, n_bytes=0, priority=65535,in_port=4,dl_type=0x0101 actions=output:3
- cookie=0x0, duration=5.706s, table=0, n_packets=0, n_bytes=0, priority=65535,in_port=3,dl_type=0x0101 actions=output:4
- cookie=0x0, duration=5.706s, table=0, n_packets=0, n_bytes=0, priority=65535,in_port=3,dl_type=0x0104 actions=ALL
- cookie=0x0, duration=5.706s, table=0, n_packets=0, n_bytes=0, priority=65535,in_port=2,dl_type=0x0104 actions=ALL
- cookie=0x0, duration=5.706s, table=0, n_packets=0, n_bytes=0, priority=65534,in_port=3 actions=drop
- cookie=0x0, duration=5.706s, table=0, n_packets=0, n_bytes=0, priority=65533,dl_type=0x0101 actions=output:3,output:4
- cookie=0x0, duration=5.706s, table=0, n_packets=0, n_bytes=0, priority=65533,dl_type=0x0103 actions=output:3
- cookie=0x0, duration=5.706s, table=0, n_packets=0, n_bytes=0, priority=65532 actions=drop
+ cookie=0x0, duration=4.181s, table=0, n_packets=0, n_bytes=0, priority=65535,dl_type=0x0108 actions=ALL
+ cookie=0x0, duration=4.181s, table=0, n_packets=0, n_bytes=0, priority=65535,dl_type=0x0107 actions=IN_PORT
+ cookie=0x0, duration=4.181s, table=0, n_packets=0, n_bytes=0, priority=65535,in_port=1,dl_type=0x0103 actions=output:3
+ cookie=0x0, duration=4.181s, table=0, n_packets=0, n_bytes=0, priority=65535,in_port=2,dl_type=0x0110 actions=IN_PORT
+ cookie=0x0, duration=4.181s, table=0, n_packets=0, n_bytes=0, priority=65535,in_port=3,dl_type=0x0104 actions=ALL
+ cookie=0x0, duration=4.181s, table=0, n_packets=0, n_bytes=0, priority=65535,in_port=4,dl_type=0x0109 actions=output:1,output:2
+ cookie=0x0, duration=4.181s, table=0, n_packets=0, n_bytes=0, priority=65535,in_port=1,dl_type=0x0105 actions=IN_PORT,output:2,output:4
+ cookie=0x0, duration=4.181s, table=0, n_packets=0, n_bytes=0, priority=65535,in_port=4,dl_type=0x0110 actions=IN_PORT
+ cookie=0x0, duration=4.181s, table=0, n_packets=0, n_bytes=0, priority=65535,in_port=1,dl_type=0x0104 actions=ALL
+ cookie=0x0, duration=4.181s, table=0, n_packets=0, n_bytes=0, priority=65535,in_port=3,dl_type=0x0101 actions=output:4
+ cookie=0x0, duration=4.181s, table=0, n_packets=0, n_bytes=0, priority=65535,in_port=1,dl_type=0x0106 actions=IN_PORT,output:2,output:3,output:4
+ cookie=0x0, duration=4.181s, table=0, n_packets=0, n_bytes=0, priority=65535,in_port=1,dl_type=0x0109 actions=output:2,output:4
+ cookie=0x0, duration=4.181s, table=0, n_packets=0, n_bytes=0, priority=65535,in_port=1,dl_type=0x0110 actions=IN_PORT
+ cookie=0x0, duration=4.181s, table=0, n_packets=0, n_bytes=0, priority=65535,in_port=3,dl_type=0x0110 actions=IN_PORT
+ cookie=0x0, duration=4.181s, table=0, n_packets=0, n_bytes=0, priority=65535,in_port=1,dl_type=0x0101 actions=output:3,output:4
+ cookie=0x0, duration=4.181s, table=0, n_packets=0, n_bytes=0, priority=65535,in_port=2,dl_type=0x0109 actions=output:1,output:4
+ cookie=0x0, duration=4.181s, table=0, n_packets=0, n_bytes=0, priority=65535,in_port=4,dl_type=0x0101 actions=output:3
+ cookie=0x0, duration=4.181s, table=0, n_packets=0, n_bytes=0, priority=65535,in_port=2,dl_type=0x0104 actions=ALL
+ cookie=0x0, duration=4.181s, table=0, n_packets=0, n_bytes=0, priority=65534,in_port=1 actions=drop
+ cookie=0x0, duration=4.181s, table=0, n_packets=0, n_bytes=0, priority=65533,dl_type=0x0109 actions=output:1,output:2,output:4
+ cookie=0x0, duration=4.181s, table=0, n_packets=0, n_bytes=0, priority=65533,dl_type=0x0106 actions=output:1,output:2,output:3,output:4
+ cookie=0x0, duration=4.181s, table=0, n_packets=0, n_bytes=0, priority=65533,dl_type=0x0105 actions=output:1,output:2,output:4
+ cookie=0x0, duration=4.181s, table=0, n_packets=0, n_bytes=0, priority=65532,in_port=3 actions=drop
+ cookie=0x0, duration=4.181s, table=0, n_packets=0, n_bytes=0, priority=65531,dl_type=0x0101 actions=output:3,output:4
+ cookie=0x0, duration=4.181s, table=0, n_packets=0, n_bytes=0, priority=65531,dl_type=0x0103 actions=output:3
+ cookie=0x0, duration=4.181s, table=0, n_packets=0, n_bytes=0, priority=65530 actions=drop
 
+// TODO: In MAC Learning, can get many controller rules at very end. Why?
+
+*/

@@ -588,11 +588,8 @@ let add_shp_if_needed (r: srule): srule =
           when s && t1 = inswitch && t2 = nptterm -> true
         | _ -> false) signed_atoms in
 
-      (*let has_flood_ineq = exists (fun (s, a) -> match a with
-        | FEquals(t1, t2)
-          when (not s) && ((t1 = nptterm && t2 = optterm) || (t2 = nptterm && t1 = optterm)) -> true
-        | _ -> false) signed_atoms in*)
       let signed_eqs = (get_equalities fmla) in
+
       let has_other_newpt = exists (fun (s, a) ->
           match a with
             | FAtom(_, _, args) when mem nptterm args -> true
@@ -603,9 +600,8 @@ let add_shp_if_needed (r: srule): srule =
               ((not s) && (t2 = nptterm && t1 <> optterm)) -> true
             | _ -> false) (signed_atoms@signed_eqs) in
 
-      (* TODO: Unconstrained entirely? Then trivial equality. *)
-
-      if (has_other_newpt && (not has_shp_already)) then
+      (* Add SHP if not already present, and contains non-flood newpt reference. *)
+      if (not has_shp_already) && has_other_newpt then
       begin
         (* positive SHP must go before other atoms. *)
         let newaction = AForward(newpvar, FAnd(FAtom("", "switch_has_port", [inswitch;nptterm]), fmla), tout) in

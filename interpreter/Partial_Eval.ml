@@ -313,6 +313,9 @@ let rec partial_evaluation (p: flowlog_program) (incpkt: string) (f: formula): f
         | _ -> failwith ("enhance_action_atom unknown afld: "^afld^" -> "^aval))
     | _ -> failwith ("enhance_action_atom non SwitchAction: "^afld^" -> "^aval);;
 
+open NetCore_Pattern
+open NetCore_Wildcard
+
 (* "unsafe" because the caller is responsible for resolving ALL vs. fwd(x) actions
    Without that resolution, the action set could produce duplicate packets. *)
 let rec build_unsafe_switch_actions (oldpkt: string) (atoms: formula list): action =
@@ -351,13 +354,11 @@ let rec build_unsafe_switch_actions (oldpkt: string) (atoms: formula list): acti
         [allportsatom] @ actlist
       else failwith ("create_port_actions: bad negation: "^(string_of_formula lit))
 
-    (* Substitition may give us a new.locPt != c. *)
+    (* Substitition may give us a new.locPt != c.
+       CONCERN: This smells a bit bad. How do we know that this always comes from a flood+substitution?
+       *)
     | FNot(FEquals(TField(var1, fld1), TConst(avalue))) when var1 <> oldpkt && fld1 = "locpt" ->
       [allportsatom] @ actlist
-
-    (* when is this an all? *)
-
-
 
     | FEquals(TField(var1, fld1), TField(var2, fld2)) ->
       if fld1 <> fld2 then
@@ -424,14 +425,28 @@ let rec build_unsafe_switch_actions (oldpkt: string) (atoms: formula list): acti
     (* if any actions are false, folding is invalidated *)
     try
       let port_actions = fold_left create_port_actions [] atoms in
-      let complete_actions = fold_left create_mod_actions port_actions atoms in
+
+      if !global_verbose > 4 then
+      begin
+        write_log "Actions: ";
+        write_log (sprintf "%s\n" (NetCore_Pretty.string_of_action port_actions));
+        write_log "\n";
+      end;
+
+      (* If no action has been produced, there were no new.locPt terms.
+         Turn into a backflow to satisfy "all unmentioned equal" semantics.
+         (PE won't remove all mention of new.locPt, because it always keeps a copy of the assertion it substitutes.) *)
+      let port_actions_checked =
+        if (length port_actions) = 0 then [SwitchAction({id with outPort = Here})]
+        (* then pass *)
+        (*if (length port_actions) = 0 then [SwitchAction(id)]*)
+        else port_actions in
+
+      let complete_actions = fold_left create_mod_actions port_actions_checked atoms in
       complete_actions
     with UnsatisfiableFlag -> [];;
 
 (*********************************************************************************)
-
-open NetCore_Pattern
-open NetCore_Wildcard
 
 (* worst ocaml error ever: used "val" for varname. *)
 
@@ -642,6 +657,18 @@ let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_h
 
           if !global_verbose > 2 then
             write_log (sprintf "Time to PE+build policy for clause: %fs" (Unix.gettimeofday() -. startt));
+
+          if !global_verbose > 4 then
+          begin
+            write_log "PREDS AND ACTIONS: \n";
+            iter (fun res ->
+              let result_pred, result_act, orig_rule = res in
+                write_log (sprintf "%s -> %s\n"
+                             (NetCore_Pretty.string_of_pred result_pred)
+                             (NetCore_Pretty.string_of_action result_act))) result;
+            write_log "\n\n";
+          end;
+
           result
       | _ -> failwith "pkt_triggered_clause_to_netcore";;
 
