@@ -2,7 +2,7 @@
   Single rule to rewrite network source address field of an ip packet.
   Should (1) pass validation
   and    (2) actually perform the modification when tested with h1 ping h2.
-  (3) When replacing ip_packet_in with packet_in, should not pass validation.
+  (3) When replacing ip_packet with packet, should not pass validation.
 
   (4) Moreover, this should be tested with -notables to
       confirm that fields are handled properly in XSB.
@@ -10,11 +10,11 @@
 */
 
 
-//ON packet_in(p):
-ON ip_packet_in(p):
+//ON packet(p):
+ON ip_packet(p):
   DO forward(new) WHERE
     new.nwSrc = 100 AND
     new.locPt != p.locPt;
 
-// With packet_in:
+// With packet:
 // Fatal error: exception Flowlog_Parse_Helpers.UndeclaredField("new", "nwsrc")

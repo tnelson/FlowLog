@@ -9,12 +9,12 @@ TABLE arptest(ipaddr);
 TABLE iptest(ipaddr);
 TABLE ethtest(macaddr);
 
-ON packet_in(p):
+ON packet(p):
   INSERT (p.dlSrc) INTO ethtest;
 
-ON ip_packet_in(p):
+ON ip_packet(p):
   INSERT (p.nwSrc) INTO iptest;
 
-ON arp_packet_in(p):
+ON arp_packet(p):
   INSERT (p.arp_spa) INTO arptest;
 
