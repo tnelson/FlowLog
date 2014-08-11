@@ -501,10 +501,8 @@ let rec disj_to_top ?(ignore_negation: bool = false) (f: formula): formula =
  * to handle IP addresses >= 128.0.0.0 (which will be received as >= 0x80000000)
  *)
 let nwaddr_of_int_string (s: string): Int32.t =
-  let n = int_of_string s in
-  if n <= Int32.to_int Int32.max_int
-  then Int32.of_int n
-  else Int32.of_int (n - 0xFFFFFFFF - 1)
+  let n = Int64.of_string s in 
+    Int64.to_int32 n;;
 
 (* Note: This will result in negative integers for IP addr >= 128.0.0.0 *)
 let nwaddr_to_int_string (n: Int32.t): string = Int32.to_string n

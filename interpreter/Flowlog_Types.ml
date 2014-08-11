@@ -224,10 +224,11 @@ let equals_if_consistent (report_inconsistency: bool) (t1: term) (t2: term): for
         FFalse
     | _ -> FEquals(t1, t2);;
 
+let int32_allones = Int32.lognot (Int32.zero);;
 
 let is_in_ip_range (v: Int32.t) (addr: Int32.t) (mask: int): bool =
   (* MAXINT (32 bit) *)
-  let nwfield = Int32.of_int (4294967295 lsl (32-mask)) in
+  let nwfield = Int32.shift_left int32_allones (32-mask) in
     (Int32.logand v nwfield) = (Int32.logand addr nwfield);;
 
 let in_if_consistent (report_inconsistency: bool) (v: term) (addr: term) (mask: term): formula =

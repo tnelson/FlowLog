@@ -246,6 +246,23 @@ let test_parse_errors () =
 
   ();;
 
+let test_ip_conversion () =
+  (* Test intstr (not dotted) -> Int32 *)
+  assert_equal ~msg:"conv1" ~printer:Int32.to_string (nwaddr_of_int_string "12345") (Int32.of_int 12345);
+  assert_equal ~msg:"conv2" ~printer:Int32.to_string (nwaddr_of_int_string "3000000000") (Int32.of_string "-1294967296");
+  assert_equal ~msg:"conv3" (nwaddr_of_int_string (nwaddr_to_int_string (Packet.ip_of_string "192.168.0.1"))) (Packet.ip_of_string "192.168.0.1");
+
+  (* Test Int32 -> pretty print *)
+  assert_equal ~msg:"conv4" (pretty_print_value "ipaddr" (nwaddr_to_int_string (Packet.ip_of_string "192.168.0.1"))) "192.168.0.1";
+
+  (* Test containment check (this tests in OCaml, not XSB!) *)
+  let h1 = (Packet.ip_of_string "192.168.0.1") in
+  let a1 = (Packet.ip_of_string "192.168.0.0") in
+  let a2 = (Packet.ip_of_string "192.168.1.0") in
+    assert_equal ~msg:"contain1" (is_in_ip_range h1 a1 24) true;
+    assert_equal ~msg:"contain2" (is_in_ip_range h1 a2 24) false;
+  ();;
+
 (**********************************************************************)
 (* SUITE DEFINITION *)
 (**********************************************************************)
@@ -256,6 +273,7 @@ let test_parse_errors () =
                                    "test_nnf" >:: test_nnf;
                                    "test_minimize_variables" >:: test_minimize_variables;
                                    "test_pe_valid" >:: test_pe_valid;
+                                   "test_ip_conversion" >:: test_ip_conversion;
                                    (*"test_strip_to_valid" >:: test_strip_to_valid;*)
                                    (*"test_build_switch_pred" >:: test_build_switch_pred;*)
                                   ];;
