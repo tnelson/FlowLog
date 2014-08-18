@@ -10,6 +10,9 @@ default: yacc flowlog.native
 tests: yacc Tests.native
 	@echo "Built Flowlog tests."
 
+exp: yacc Temptest.native
+	@echo "Built temporary test file"
+
 all: $(patsubst %.ml,%.native,$(wildcard *.ml))
 
 %.native: .force
