@@ -10,8 +10,11 @@ default: yacc flowlog.native
 tests: yacc Tests.native
 	@echo "Built Flowlog tests."
 
-exp: yacc Temptest.native
-	@echo "Built temporary test file"
+expin: yacc Flowlog_Packet_In.native	
+	@echo "Built temporary test in file"
+
+expout: yacc Flowlog_Packet_Out.native	
+	@echo "Built temporary test out file"
 
 all: $(patsubst %.ml,%.native,$(wildcard *.ml))
 
