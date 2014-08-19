@@ -5,6 +5,7 @@
 open NetCore_Types
 open Printf
 open OpenFlow0x01
+open OpenFlow0x01_Core
 open Message
 open Lwt_unix
 
@@ -89,31 +90,37 @@ let rec test_listener (): unit Lwt.t =
     printf "received\n%!";
     printf "  xid: %d\n%!" (Int32.to_int xid);
     printf "  msg: %s\n%!" (Message.to_string msg);
-
-    test_listener();;
-
-  (*lwt _ = match msg with
-    | PacketInMsg pktIn ->
-      handle_packet_in xid pktIn;
-      test_listener ();
-    | _ -> failwith "unsupported OpenFlow message";;*)
+    match msg with
+      | PacketInMsg(pin) ->
+        printf "  pkt_in: %s\n%!" (packetIn_to_string pin); 
+        test_listener()
+      | _ -> test_listener();;
 
 (***********************************************************************************)
 
 let test_start (): unit =
+  let shutdown_connections () = 
+    lwt fd = get_fd() in 
+      printf "shutting down connections\n%!";
+      Lwt_unix.close fd in
+
   (* Taken from frenetic/Flowlog startup *)
   let listen_for_packets () =
     init_with_port !otherListenPort >>
-      (* real version will have multiple picks, like flowlog.ml has *)
-      Lwt.pick [test_listener ()] in
+    (* real version will have multiple picks, like flowlog.ml has *)
+    Lwt.pick [test_listener ()] >> 
+    shutdown_connections () in
 
     Sys.catch_break true;
-    try
-      Lwt_main.run (listen_for_packets ())
+    try      
+      Lwt_main.run (listen_for_packets ());      
     with exn ->
       Printf.eprintf "unhandled exception: %s\n%s\n%!"
         (Printexc.to_string exn)
         (Printexc.get_backtrace ());
+      Lwt_main.run(shutdown_connections ());
       exit 1;;
 
 test_start()
+
+(* Should have close or shutdown explicitly above *)
