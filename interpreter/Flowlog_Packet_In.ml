@@ -92,6 +92,39 @@ let rec terminate_pin_connection_thread (servicefd: Lwt_unix.file_descr): unit L
   printf "Closing connection fd...\n%!";
   Lwt_unix.close servicefd;;
 
+let rec send_hello_reply (servicefd: Lwt_unix.file_descr) (sa: sockaddr): unit Lwt.t =  
+  let hello_message = Hello(Cstruct.create 0) in      
+    match_lwt OpenFlow0x01_Switch.send_to_switch_fd servicefd (Int32.of_int 0) hello_message with
+      | true -> Lwt.return ()
+      | false -> failwith "wait_for_hello";; 
+
+let rec send_features_request (servicefd: Lwt_unix.file_descr) (sa: sockaddr): unit Lwt.t =  
+  let features_message = SwitchFeaturesRequest in      
+    match_lwt OpenFlow0x01_Switch.send_to_switch_fd servicefd (Int32.of_int 0) features_message with
+      | true -> Lwt.return ()          
+      | false -> failwith "wait_for_features_reply";;
+  
+let rec wait_for_features_reply (servicefd: Lwt_unix.file_descr) (sa: sockaddr): int64 option Lwt.t =  
+  match_lwt (OpenFlow0x01_Switch.recv_from_switch_fd servicefd) with
+    | Some (_, SwitchFeaturesReply(features)) ->    
+      Lwt.return (Some features.switch_id)
+    | Some(_,_) -> 
+      wait_for_features_reply servicefd sa;
+    | None -> 
+      printf "recv_from_switch_fd returned None.\n%!";
+      Lwt.return None;;  
+
+let rec wait_for_hello (servicefd: Lwt_unix.file_descr): unit Lwt.t =
+  (* Expect hello -> send hello -> send features request -> expect features reply *) 
+  match_lwt (OpenFlow0x01_Switch.recv_from_switch_fd servicefd) with
+    | Some (_, Hello(_)) ->    
+      Lwt.return();
+    | Some(_,_) -> 
+      wait_for_hello servicefd
+    | None -> 
+      printf "recv_from_switch_fd returned None.\n%!";
+      Lwt.return ();;  
+
 let rec listen_for_connections (): unit Lwt.t =
   (* use lwt instead of let to resolve "thread returning 'a" vs. "'a" *)
   printf "listening for connections. \n%!";
@@ -101,6 +134,16 @@ let rec listen_for_connections (): unit Lwt.t =
   lwt (servicefd, sa) = Lwt_unix.accept fd in
   printf "accepted from %s\n%!" (string_of_sockaddr sa);  
   printf "Service FD Stats: %s\n%!" (string_of_lwtfd servicefd);      
+  
+  wait_for_hello servicefd;
+  send_hello_reply servicefd sa;
+  send_features_request servicefd sa;
+  lwt swid = (match_lwt wait_for_features_reply servicefd sa with 
+    | None -> failwith "features reply returned None"
+    | Some(id) -> Lwt.return id) in
+
+  printf "Discovered switch with dpid=%Ld\n%!" swid;
+  
   Lwt.async (fun () -> listen_for_packet_ins_thread servicefd >> terminate_pin_connection_thread servicefd);
   (* continue listening *)
   listen_for_connections();;

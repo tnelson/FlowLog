@@ -2,7 +2,7 @@
 (* Testing sending packet_in on alternative ports         *)
 (****************************************************************)
 
-open NetCore_Types
+(*open NetCore_Types*)
 open Flowlog_Types
 open Flowlog_Helpers
 open Printf
@@ -59,6 +59,91 @@ let get_fd (pt: int) : file_descr =
   else  
     raise (Invalid_argument "No file-descriptor stored for port");;
 
+let rec wait_for_features_request (servicefd: Lwt_unix.file_descr): unit Lwt.t =  
+  match_lwt (OpenFlow0x01_Switch.recv_from_switch_fd servicefd) with
+    | Some (_, SwitchFeaturesRequest) ->    
+      Lwt.return ()
+    | Some(_,_) -> 
+      wait_for_features_request servicefd;
+    | None -> 
+      printf "recv_from_switch_fd returned None.\n%!";
+      Lwt.return ();;  
+
+let rec wait_for_hello (servicefd: Lwt_unix.file_descr): unit Lwt.t =
+  (* Expect hello -> send hello -> send features request -> expect features reply *) 
+  match_lwt (OpenFlow0x01_Switch.recv_from_switch_fd servicefd) with
+    | Some (_, Hello(_)) ->    
+      Lwt.return();
+    | Some(_,_) -> 
+      wait_for_hello servicefd
+    | None -> 
+      printf "recv_from_switch_fd returned None.\n%!";
+      Lwt.return ();;  
+
+  (*type t =
+    { switch_id : int64
+    ; num_buffers : int32
+    ; num_tables : int8
+    ; supported_capabilities : Capabilities.t
+    ; supported_actions : SupportedActions.t
+    ; ports : PortDescription.t list }*)
+
+(*
+    type t =
+      { flow_stats : bool (** Flow statistics. *)
+      ; table_stats : bool (** Table statistics. *)
+      ; port_stats : bool (** Port statistics. *)
+      ; stp : bool (** 802.1D spanning tree. *)
+      ; ip_reasm : bool (** Can reassemble IP fragments. *)
+      ; queue_stats : bool (** Queue statistics. *)
+      ; arp_match_ip : bool (** Match IP addresses in ARP packets. *)
+      }
+*)
+
+open OpenFlow0x01.SwitchFeatures.Capabilities;;
+open OpenFlow0x01.SwitchFeatures.SupportedActions;;
+open OpenFlow0x01.PortDescription;;
+
+let nocaps = { flow_stats=false
+      ; table_stats=false
+      ; port_stats=false
+      ; stp=false
+      ; ip_reasm=false
+      ; queue_stats=false
+      ; arp_match_ip=false
+      };;
+
+let noacts = { output=false
+      ; set_vlan_id=false
+      ; set_vlan_pcp=false
+      ; strip_vlan=false
+      ; set_dl_src=false
+      ; set_dl_dst=false
+      ; set_nw_src=false
+      ; set_nw_dst=false
+      ; set_nw_tos=false
+      ; set_tp_src=false
+      ; set_tp_dst=false
+      ; enqueue=false
+      ; vendor=false};;
+
+
+(* Beware conflict with This expression has type NetCore_Types.capabilities
+       but an expression was expected of type
+         OpenFlow0x01.SwitchFeatures.Capabilities.t
+*)
+
+
+let rec send_features_reply (servicefd: Lwt_unix.file_descr) (swid: int64): unit Lwt.t =  
+  let features_message = SwitchFeaturesReply(
+      {switch_id=swid; num_buffers= Int32.zero; num_tables=0;
+       supported_capabilities=nocaps;
+       supported_actions=noacts;
+       ports=[];}) in      
+    match_lwt OpenFlow0x01_Switch.send_to_switch_fd servicefd (Int32.of_int 0) features_message with
+      | true -> Lwt.return ()          
+      | false -> failwith "wait_for_features_reply";;
+
 let init_connection (swid: int64) (sourceport: int) (dstip: inet_addr) (dstport: int): int = 
   printf "opening connection...\n%!";
   let fd = socket PF_INET SOCK_STREAM 0 in
@@ -76,10 +161,10 @@ let init_connection (swid: int64) (sourceport: int) (dstip: inet_addr) (dstport:
         send_to_switch_fd fd (Int32.of_int 0) hello_message;
       
       (* TODO step 2: hold and wait for HELLO reply, then features request *)
-      ();
-      ();
+      wait_for_hello fd;
+      wait_for_features_request fd;
       (* TODO step 3: send features reply with DPID *)
-      (); 
+      send_features_reply fd swid;
 
       (* return the actual port used *)
       newport;;
@@ -104,12 +189,14 @@ let test() =
   Todo: no field modifications performed! (possible switch id change) 
 *)
 
-let last_packet_received_from_dp: (int64 * port * Packet.packet * int32 option) option ref = ref None;;
+let last_packet_received_from_dp: (int64 * int32 * Packet.packet * int32 option) option ref = ref None;;
 
 let swid_to_port: (int * int) list ref = ref [];;
 
-let set_last_packet_received (sw: switchId) (pt: port) (pkt: Packet.packet) (buf: int32 option): unit =
-  last_packet_received_from_dp := Some (sw, pt, pkt, buf);;
+let set_last_packet_received (sw: switchId) (ncpt: NetCore_Pattern.port) (pkt: Packet.packet) (buf: int32 option): unit =
+  match ncpt with
+    | NetCore_Pattern.Physical(x) -> last_packet_received_from_dp := Some (sw, x, pkt, buf) 
+    | _ -> failwith "set_last_packet_received";;
 
 let doSendPacketIn (ev: event) (cpip: string) (cpport_s: string) : unit =
   let cpport = (int_of_string cpport_s) in
