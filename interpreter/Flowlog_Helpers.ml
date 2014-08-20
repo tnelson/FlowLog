@@ -23,6 +23,7 @@ exception RelationHadMultipleReacts of string;;
 exception RelationHadMultipleDecls of string;;
 exception RelationDeclClashesWithBuiltin of string;;
 exception NoDefaultForField of string * string;;
+exception ReqDifferentOutputVar of string;;
 
 let out_log = ref None;;
 

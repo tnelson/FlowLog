@@ -189,7 +189,7 @@ let safe_clause (p: flowlog_program) (cl: clause): unit =
          e.g. new.dlSrc = x, x = y, R(y). *)
 
       (* STEP 2: discover what terms are proven safe *)
-      let proven_safe = (get_safe_terms cl.body) in
+      let proven_safe = (get_safe_terms cl.body) in      
         (* STEP 3: are any terms that need to be proven safe, unsafe? *)
         if !global_verbose > 4 then
           printf "PROVEN SAFE: %s\n%!" (String.concat ", " (map (string_of_term ~verbose:Verbose) proven_safe));
@@ -209,7 +209,7 @@ let safe_clause (p: flowlog_program) (cl: clause): unit =
 let well_formed_rule (p: flowlog_program) (r: srule): unit =
 
     (* This may be called for a term in the head OR in the body.*)
-    let well_formed_term (headrelname: string) (headterms: term list) (inrelname: string) (inargname: string) (t: term): unit =
+    let well_formed_term ?(inhead: bool = false) (headrelname: string) (headterms: term list) (inrelname: string) (inargname: string) (t: term): unit =
       match t with
       | TConst(cval) when (starts_with cval "0x") ->
         (* kludge guard to deal with fact that values inside TConsts are strings, not integers.*)
@@ -217,7 +217,9 @@ let well_formed_rule (p: flowlog_program) (r: srule): unit =
       | TConst(cval) -> () (* constant is always OK *)
 
       | TVar(vname) ->
-        if vname = inargname then
+        if inhead && vname = inargname && headrelname = "forward" then
+          raise (ReqDifferentOutputVar(vname))
+        else if (not inhead) && vname = inargname then
           raise (NonCondensedNoField(vname))
 
         (* variable name in input relation *)
@@ -292,7 +294,7 @@ let well_formed_rule (p: flowlog_program) (r: srule): unit =
   let validate_common_elements inrelname inrelarg outrelname outrelterms where: unit =
     iter (well_formed_atom outrelname outrelterms inrelname inrelarg) (get_atoms where);
     iter (fun (_, f) -> (well_formed_atom outrelname outrelterms inrelname inrelarg f)) (get_equalities where);
-    iter (well_formed_term outrelname outrelterms inrelname inrelarg) outrelterms;
+    iter (well_formed_term ~inhead:true outrelname outrelterms inrelname inrelarg) outrelterms;
     try
       ignore (get_event p inrelname)
     with
