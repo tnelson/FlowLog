@@ -1,0 +1,19 @@
+
+// As this pipe takes packets, it will automatically package the notification
+// as a packet_in, not a Thrift RPC.
+
+OUTGOING send_to_cp(ip_packet) THEN
+  SEND TO 127.0.0.1:9999;
+
+// Flood the packet on the DP
+// ... AND send a copy of it elsewhere on the CP.
+
+ON ip_packet(p):
+  DO forward(new) WHERE new.locPt != p.locPt;
+
+  // Want to copy everything, including the payload.
+  // Should be analogous to forward, then?  
+  DO send_to_cp(p);
+
+  // if we did
+  // DO emit_ip(p) --- should be safe, since same variable!
