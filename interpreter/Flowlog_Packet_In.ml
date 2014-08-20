@@ -40,27 +40,25 @@ let init_with_port (port : int) : unit Lwt.t =
     listen fd max_pending;
     init_with_fd fd;;
 
-(* ^^^ no accept call??? **)
+let string_of_lwtfd (fd: Lwt_unix.file_descr): string =
+  let ufd = unix_file_descr fd in
+    let st = Unix.fstat ufd in 
+      (* Many other fields here *)
+      sprintf "dev: %d, inode: %d" st.st_dev st.st_ino;;
+
 
 let get_fd () : Lwt_unix.file_descr Lwt.t =
   match !listener_fd with
-    | Some fd ->
+    | Some fd ->    
       Lwt.return fd
     | None ->
       raise_lwt (Invalid_argument "Platform not initialized");;
 
 type msg = Message.t;;
 
-let recv_from_descriptor (servicefd: Lwt_unix.file_descr): 'a Lwt.t =
-  match_lwt (OpenFlow0x01_Switch.recv_from_switch_fd servicefd) with
-    | Some pr ->
-      Lwt.return pr
-    | None ->
-      failwith "recv_from_switch_fd returned None";;
-
-
 let print_fd_status () =
   lwt fd = get_fd () in
+  printf "Listener FD Stats: %s\n%!" (string_of_lwtfd fd);      
   match state fd with
     | Opened -> printf "opened\n%!"; Lwt.return();
     | Closed -> printf "closed\n%!"; Lwt.return();
@@ -77,48 +75,62 @@ let string_of_sockaddr (sa: sockaddr): string =
     | ADDR_UNIX str -> str
     | ADDR_INET(addr, pt) -> (Unix.string_of_inet_addr addr)^":"^(string_of_int pt);;
 
-let rec test_listener (): unit Lwt.t =
+let rec listen_for_packet_ins_thread (servicefd: Lwt_unix.file_descr): unit Lwt.t = 
+  match_lwt (OpenFlow0x01_Switch.recv_from_switch_fd servicefd) with
+    | Some (xid, msg) ->
+      printf "received from descriptor: \n%!";
+      printf "  xid: %d\n%!" (Int32.to_int xid);
+      printf "  msg: %s\n%!" (Message.to_string msg);
+      (match msg with
+        | PacketInMsg(pin) ->
+          printf "  pkt_in: %s\n%!" (packetIn_to_string pin); 
+          listen_for_packet_ins_thread servicefd
+        | _ -> listen_for_packet_ins_thread servicefd)
+    | None ->
+      printf "recv_from_switch_fd returned None.\n%!";
+      Lwt.return ();;
+
+let rec terminate_pin_connection_thread (servicefd: Lwt_unix.file_descr): unit Lwt.t = 
+  printf "Closing connection fd...\n%!";
+  Lwt_unix.close servicefd;;
+
+let rec listen_for_connections (): unit Lwt.t =
   (* use lwt instead of let to resolve "thread returning 'a" vs. "'a" *)
-  printf "in test_listener. \n%!";
+  printf "listening for connections. \n%!";
   print_fd_status ();
 
   lwt fd = get_fd() in
   lwt (servicefd, sa) = Lwt_unix.accept fd in
-  printf "accepted from %s\n%!" (string_of_sockaddr sa);
-
-  lwt (xid, msg) = recv_from_descriptor servicefd in
-    printf "received\n%!";
-    printf "  xid: %d\n%!" (Int32.to_int xid);
-    printf "  msg: %s\n%!" (Message.to_string msg);
-    match msg with
-      | PacketInMsg(pin) ->
-        printf "  pkt_in: %s\n%!" (packetIn_to_string pin); 
-        test_listener()
-      | _ -> test_listener();;
+  printf "accepted from %s\n%!" (string_of_sockaddr sa);  
+  printf "Service FD Stats: %s\n%!" (string_of_lwtfd servicefd);      
+  Lwt.async (fun () -> listen_for_packet_ins_thread servicefd >> terminate_pin_connection_thread servicefd);
+  (* continue listening *)
+  listen_for_connections();;
 
 (***********************************************************************************)
 
 let test_start (): unit =
-  let shutdown_connections () = 
+  let shutdown_listeners_thread () = 
     lwt fd = get_fd() in 
-      printf "shutting down connections\n%!";
+      printf "shutting down listener FD\n%!";
       Lwt_unix.close fd in
 
   (* Taken from frenetic/Flowlog startup *)
-  let listen_for_packets () =
+  let listen_for_packets_thread () =
     init_with_port !otherListenPort >>
     (* real version will have multiple picks, like flowlog.ml has *)
-    Lwt.pick [test_listener ()] >> 
-    shutdown_connections () in
+    Lwt.pick [listen_for_connections ()] >> 
+    shutdown_listeners_thread () in
 
     Sys.catch_break true;
     try      
-      Lwt_main.run (listen_for_packets ());      
+      Lwt_main.run (listen_for_packets_thread ());
     with exn ->
       Printf.eprintf "unhandled exception: %s\n%s\n%!"
         (Printexc.to_string exn)
         (Printexc.get_backtrace ());
-      Lwt_main.run(shutdown_connections ());
+      (* TN: No explicit shutdown of active connections? *)
+      Lwt_main.run(shutdown_listeners_thread ());
       exit 1;;
 
 test_start()

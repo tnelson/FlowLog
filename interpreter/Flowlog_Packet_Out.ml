@@ -40,14 +40,25 @@ buffer id = -1 : not buffered
 *)
 
 
-let to_send_packet  = {Packet.dlSrc = Int64.of_int 1; Packet.dlDst = Int64.of_int 2;
+let to_send_packet1  = {Packet.dlSrc = Int64.of_int 1; Packet.dlDst = Int64.of_int 2;
                     Packet.dlVlan = None; Packet.dlVlanPcp = 0;
-                    Packet.dlVlanDei = false; nw = Packet.Unparsable(100, Cstruct.create(0))};;
+                    Packet.dlVlanDei = false; nw = Packet.Unparsable(1000, Cstruct.create(0))};;
 
-let to_send_message = PacketInMsg({input_payload = NotBuffered(Packet.marshal to_send_packet); 
-                                       total_len = Packet.len to_send_packet;
+let to_send_packet2  = {Packet.dlSrc = Int64.of_int 100; Packet.dlDst = Int64.of_int 200;
+                    Packet.dlVlan = None; Packet.dlVlanPcp = 0;
+                    Packet.dlVlanDei = false; nw = Packet.Unparsable(2000, Cstruct.create(0))};;
+
+
+let to_send_message1 = PacketInMsg({input_payload = NotBuffered(Packet.marshal to_send_packet1); 
+                                       total_len = Packet.len to_send_packet1;
                                        port = 0;
                                        reason = ExplicitSend});;
+
+let to_send_message2 = PacketInMsg({input_payload = NotBuffered(Packet.marshal to_send_packet2); 
+                                       total_len = Packet.len to_send_packet2;
+                                       port = 0;
+                                       reason = ExplicitSend});;
+
 
 (***************************************************)
 
@@ -86,12 +97,7 @@ let init_connection () =
 (* inet_addr_of_string *)
 
 init_connection();;
-
-(* send_to_switch_fd (sock : file_descr) (xid : xid) (msg : msg) : bool Lwt.t*)
-
-send_to_switch_fd (get_fd()) (Int32.of_int 0) to_send_message;;
-
+(* test multiple messages in one connection *)
+send_to_switch_fd (get_fd()) (Int32.of_int 0) to_send_message1;;
+send_to_switch_fd (get_fd()) (Int32.of_int 0) to_send_message2;;
 close (get_fd());;
-
-
-(* BUG: can't re-send. listener improperly set up? (never gets back to listening?) *)
