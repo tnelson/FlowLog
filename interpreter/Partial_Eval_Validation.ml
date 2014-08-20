@@ -5,6 +5,7 @@
 open Flowlog_Types
 open Flowlog_Packets
 open Flowlog_Helpers
+open Flowlog_Safety
 open ExtList.List
 open Printf
 
@@ -138,12 +139,12 @@ let rec validate_formula_for_compile (strong_safe_list: term list) (newpkt: stri
   end;;
 
 (* Returns processed clause, along with a Boolean that indicates whether the clause is fully-compilable. *)
-let validate_and_process_pkt_triggered_clause (cl: clause): (clause * bool) =
+let validate_and_process_pkt_triggered_clause (prgm: flowlog_program) (cl: clause): (clause * bool) =
 	let newpkt = (match cl.head with
 		| FAtom("", "forward", [TVar(newpktname)]) -> newpktname
 		| _ -> "") in
       let (_, trimmed) = (trim_packet_from_body cl.body) in
-      let strong_safe_list = get_safe_terms trimmed in
+      let strong_safe_list = get_safe_terms prgm None cl.body in
 
       if !global_verbose > 4 then
       begin

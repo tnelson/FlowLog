@@ -262,6 +262,9 @@ let built_in_packet_input_tables = map (fun flav -> flavor_to_inrelname flav) pa
 
 let built_in_event_names = map (fun flav -> flavor_to_typename flav) packet_flavors;;
 
+let is_built_in_packet_typename (tname: string) = 
+  mem tname built_in_event_names;;
+
 let is_packet_in_table (relname: string): bool =
   mem relname built_in_packet_input_tables;;
 

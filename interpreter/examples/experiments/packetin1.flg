@@ -12,8 +12,10 @@ ON ip_packet(p):
   DO forward(new) WHERE new.locPt != p.locPt;
 
   // Want to copy everything, including the payload.
-  // Should be analogous to forward, then?  
+  // ???: Distinguish this from emit behavior later; for now assume forwarding, not creating new pkts
   DO send_to_cp(p);
 
-  // if we did
-  // DO emit_ip(p) --- should be safe, since same variable!
+
+
+// NOTE: Do we need a separate source port for each switch id?  If so, avoid
+// one port per pipe issue by handling *source* port under the hood. 

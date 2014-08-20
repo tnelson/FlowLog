@@ -8,6 +8,7 @@ open ExtList.List
 open NetCore_Types
 open NetCore_Pattern
 open Flowlog_Parse_Helpers
+open Flowlog_Packets
 
 (**********************************************************************)
 (* Formula Wrangling: NNF, disjunction lifting, substitution ...*)
@@ -170,12 +171,26 @@ let cl8 = {orig_rule = dummy_rule;
            head = FAtom("", "forward", [newpkt]);
            body = FAnd(FAtom("", "R", [oldpktdlsrc; xvar]), FNot(FEquals(newpktlocpt,oldpktlocpt)))};;
 
+let the_outgoings = make_outgoings the_decls built_in_decls;;
+let the_events = make_events the_decls built_in_reacts;;
+let prog = {     desugared_decls = built_in_decls;
+                 desugared_reacts = built_in_reacts;
+                 vartablenames = [];
+                 tables = [];
+                 outgoings = [];
+                 events = [];
+                 clauses = [];
+                 weakened_cannot_compile_pt_clauses = [];
+                 can_fully_compile_to_fwd_clauses = [];                 
+                 not_fully_compiled_clauses = [];
+                 memos = build_memos_for_program [] [] the_outgoings the_events []};;
+
 let test_pe_valid () =
 
     (* outdated *)
     (*assert_raises  ~msg:"cl1" (IllegalAssignmentViaEquals (FEquals(newpktdlsrc, oldpktdldst))) (fun _ -> validate_fwd_clause cl1);*)
 
-    ignore (validate_and_process_pkt_triggered_clause cl2);
+    ignore (validate_and_process_pkt_triggered_clause prog cl2);
 
     (*assert_equal   ~msg:"cl2" (validate_fwd_clause cl2) ();
     (*assert_equal  ~msg:"cl3" (validate_clause cl3) ();*)

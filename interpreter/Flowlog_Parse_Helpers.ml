@@ -5,6 +5,7 @@
 open Flowlog_Types
 open Flowlog_Packets
 open Flowlog_Helpers
+open Flowlog_Safety
 open Flowlog_Builtins
 open Surface_Parser
 open Surface_Lexer
@@ -189,7 +190,7 @@ let safe_clause (p: flowlog_program) (cl: clause): unit =
          e.g. new.dlSrc = x, x = y, R(y). *)
 
       (* STEP 2: discover what terms are proven safe *)
-      let proven_safe = (get_safe_terms cl.body) in      
+      let proven_safe = (get_safe_terms p (Some cl) cl.body) in      
         (* STEP 3: are any terms that need to be proven safe, unsafe? *)
         if !global_verbose > 4 then
           printf "PROVEN SAFE: %s\n%!" (String.concat ", " (map (string_of_term ~verbose:Verbose) proven_safe));
@@ -658,6 +659,26 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
             well_formed_reacts the_reacts;
             well_formed_decls the_decls;
 
+            let the_tables = make_tables the_decls the_reacts in
+            let the_outgoings = make_outgoings the_decls the_reacts in
+            let the_events = make_events the_decls the_reacts in
+
+            (* pre_program contains everything but the clauses. It's used for *)
+            (* clause-processing (because validation, etc. needs to know the *)
+            (* reacts, decls, ...*)
+            let pre_program = 
+                {desugared_decls = the_decls;
+                 desugared_reacts = the_reacts;
+                 vartablenames = vartblnames;
+                 tables = the_tables;
+                 outgoings = the_outgoings;
+                 events = the_events;
+                 clauses = [];
+                 weakened_cannot_compile_pt_clauses = [];
+                 can_fully_compile_to_fwd_clauses = [];                 
+                 not_fully_compiled_clauses = [];
+                 memos = build_memos_for_program the_rules the_tables the_outgoings the_events []} in
+
             (***********************************)
             (* Now turn ~RULES~ into ~CLAUSES~ *)
 
@@ -672,7 +693,7 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
                                        (acc_comp, acc_weaken, cl::acc_unweakened)
                                      else
                                      begin
-                                      let (newcl, fully_compiled) = validate_and_process_pkt_triggered_clause cl in
+                                      let (newcl, fully_compiled) = validate_and_process_pkt_triggered_clause pre_program cl in
 
                                         (* fully compilable *)
                                         if fully_compiled then
@@ -697,23 +718,14 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
                 printf "REACTS: %s\n%!" (String.concat ",\n"(map string_of_reactive the_reacts));
               end;
 
-                (* Convert decls and defns syntax (with built ins) into a program *)
-                let the_tables = make_tables the_decls the_reacts in
-                let the_outgoings = make_outgoings the_decls the_reacts in
-                let the_events = make_events the_decls the_reacts in
-                let p = {
-                 desugared_decls = the_decls;
-                 desugared_reacts = the_reacts;
-                 vartablenames = vartblnames;
-
-                 tables = the_tables;
-                 outgoings = the_outgoings;
-                 events = the_events;
+                (* Convert decls and defns syntax (with built ins) into a program *)                
+                let p = {pre_program with                  
                  clauses = simplified_clauses;
                  weakened_cannot_compile_pt_clauses = weakened_cannot_compile_pt_clauses;
                  can_fully_compile_to_fwd_clauses = can_fully_compile_simplified;
                  (* Remember: these are unweakened, and so can be used by XSB. *)
                  not_fully_compiled_clauses = not_fully_compiled_clauses;
+                 (* rebuild memos *)
                  memos = build_memos_for_program the_rules the_tables the_outgoings the_events simplified_clauses} in
 
                   (* Validation *)
