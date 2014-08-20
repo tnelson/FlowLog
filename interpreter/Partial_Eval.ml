@@ -1320,6 +1320,8 @@ let make_policy_stream (p: flowlog_program)
     (* The callback to be invoked when the policy says to send pkt to controller *)
     (* callback here. *)
     updateFromPacket (sw: switchId) (pt: port) (pkt: Packet.packet) (buf: int32 option) : NetCore_Types.action =
+      set_last_packet_received sw pt pkt buf;
+
       (* Update the policy via the push function *)
       let startt = Unix.gettimeofday() in
       let buf_id = match buf with

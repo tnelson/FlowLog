@@ -68,8 +68,6 @@ let print_fd_status () =
 
 (***********************************************************************************)
 
-(* Lwt.return ();;*)
-
 let string_of_sockaddr (sa: sockaddr): string =
   match sa with
     | ADDR_UNIX str -> str

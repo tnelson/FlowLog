@@ -59,7 +59,7 @@ let get_fd (pt: int) : file_descr =
   else  
     raise (Invalid_argument "No file-descriptor stored for port");;
 
-let init_connection (sourceport: int) (dstip: inet_addr) (dstport: int): int = 
+let init_connection (swid: int64) (sourceport: int) (dstip: inet_addr) (dstport: int): int = 
   printf "opening connection...\n%!";
   let fd = socket PF_INET SOCK_STREAM 0 in
     setsockopt fd SO_REUSEADDR true;
@@ -69,11 +69,24 @@ let init_connection (sourceport: int) (dstip: inet_addr) (dstport: int): int =
       printf "initialized and bound\n%!";
       connect fd (ADDR_INET(dstip, dstport));
       printf "connected!\n%!";
+
+      (* register switch with the appropriate dpid. *)
+      (* step 1: send hello message *)
+      let hello_message = Hello(Cstruct.create 0) in      
+        send_to_switch_fd fd (Int32.of_int 0) hello_message;
+      
+      (* TODO step 2: hold and wait for HELLO reply, then features request *)
+      ();
+      ();
+      (* TODO step 3: send features reply with DPID *)
+      (); 
+
+      (* return the actual port used *)
       newport;;
     
 
 let test() = 
-  let srcpt = init_connection 0 Unix.inet_addr_loopback 9999 in 
+  let srcpt = init_connection (Int64.of_int 10) 0 Unix.inet_addr_loopback 9999 in 
   (* test multiple messages in one connection *)
   let _ = send_to_switch_fd (get_fd srcpt) (Int32.of_int 0) to_send_message1 in
   let _ = send_to_switch_fd (get_fd srcpt) (Int32.of_int 0) to_send_message2 in
@@ -91,7 +104,12 @@ let test() =
   Todo: no field modifications performed! (possible switch id change) 
 *)
 
+let last_packet_received_from_dp: (int64 * port * Packet.packet * int32 option) option ref = ref None;;
+
 let swid_to_port: (int * int) list ref = ref [];;
+
+let set_last_packet_received (sw: switchId) (pt: port) (pkt: Packet.packet) (buf: int32 option): unit =
+  last_packet_received_from_dp := Some (sw, pt, pkt, buf);;
 
 let doSendPacketIn (ev: event) (cpip: string) (cpport_s: string) : unit =
   let cpport = (int_of_string cpport_s) in
@@ -100,17 +118,25 @@ let doSendPacketIn (ev: event) (cpip: string) (cpport_s: string) : unit =
   let srcpt = if mem_assoc locsw !swid_to_port then
     assoc locsw !swid_to_port
   else begin    
-    let newport = init_connection 0 (Unix.inet_addr_of_string (Packet.string_of_ip (nwaddr_of_int_string cpip))) cpport in     
-    swid_to_port := (locsw, newport)::!swid_to_port;
+    let newport = init_connection (Int64.of_int locsw) 0 (Unix.inet_addr_of_string (Packet.string_of_ip (nwaddr_of_int_string cpip))) cpport in     
+    swid_to_port := (locsw, newport)::!swid_to_port;    
     newport
   end in
 
   (* Start with direct copy of packet (possible change of switchid) *)
   (* Assume: only triggered by packet arrival from OF. will not be correct even if packet arrives from CP. *)
   
+  printf "DEBUG: sending packet_in from source port = %d\n%!" srcpt;
+  let incsw, incpt, incpkt, incbuffid = match !last_packet_received_from_dp with 
+    | Some(a,b,c,d) -> (a, b, c, d) 
+    | _ -> failwith "no src packet" in
 
   (* let pktin_msg = !last_packet_arrived in*)
-  let pktin_msg = to_send_message1 in
+  let pktin_msg = PacketInMsg({input_payload = NotBuffered(Packet.marshal incpkt); 
+                                       total_len = Packet.len incpkt;
+                                       port = (int_of_string (get_field ev "locpt"));
+                                       reason = ExplicitSend}) in      
+
     let success = send_to_switch_fd (get_fd srcpt) (Int32.of_int 0) pktin_msg in  
       ();;
 
