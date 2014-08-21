@@ -4,7 +4,7 @@
 // always make declared reactives come from thrift, and reactives created by
 // event declarations will likewise come from Thrift.
 
-// TODO: add some flexibility. I
+// TODO (later): add some flexibility. I
 
 // Take this packet and flood it on all non-eq ports for the specified switch.
 // (This tests that the source portid and swid are taken into account.)
@@ -13,3 +13,13 @@ ON cp_ip_packet(p):
 
 // ^ This is a packet-triggered rule, but triggered from the CP, not the DP.
 // ^ Make sure it doesn't get compiled.
+
+
+// ^^ TODO: keepalive
+// ^^ TODO: deal with packet_outs, etc. from the controller (ignore?)
+
+// ^^ TODO Flowlog proxies switches to interface with other OF controllers on
+// different ports. Incoming will be packet_out, not packet_in!
+
+// ^^ TODO later: actions in packet_out. Can't currently represent records in a flowlog event,
+// so packet_outs are treated as normal packets, using the in_port field for the locPt. (pt=0 if none)

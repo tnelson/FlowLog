@@ -11,7 +11,7 @@ open Printf
 open Xsb_Communication
 open Flowlog_Thrift_Out
 open Partial_Eval_Validation
-open Flowlog_Packet_Out
+open Flowlog_Switch_Proxy
 
 let policy_recreation_thunk: (unit -> unit) option ref = ref None;;
 
@@ -894,7 +894,7 @@ let send_event (p: flowlog_program) (ev: event) (ip: string) (pt: string): unit 
   printf "sending: %s\n%!" (string_of_event p ev);
   write_log (sprintf ">>> sending: %s\n%!" (string_of_event p ev));
   if is_built_in_packet_typename ev.typeid then
-    doSendPacketIn ev ip pt
+    doSendPacketIn p ev ip pt
   else
     doBBnotify ev ip pt;;
 
