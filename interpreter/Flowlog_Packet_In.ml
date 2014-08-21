@@ -45,14 +45,14 @@ let init_with_port (port : int) : unit Lwt.t =
 
 let string_of_lwtfd (fd: Lwt_unix.file_descr): string =
   let ufd = unix_file_descr fd in
-    let st = Unix.fstat ufd in 
+    let st = Unix.fstat ufd in
       (* Many other fields here *)
       sprintf "dev: %d, inode: %d" st.st_dev st.st_ino;;
 
 
 let get_fd () : Lwt_unix.file_descr Lwt.t =
   match !listener_fd with
-    | Some fd ->    
+    | Some fd ->
       Lwt.return fd
     | None ->
       raise_lwt (Invalid_argument "Platform not initialized");;
@@ -61,7 +61,7 @@ type msg = Message.t;;
 
 (*let print_fd_status () =
   lwt fd = get_fd () in
-  printf "Listener FD Stats: %s\n%!" (string_of_lwtfd fd);      
+  printf "Listener FD Stats: %s\n%!" (string_of_lwtfd fd);
   match state fd with
     | Opened -> printf "opened\n%!"; Lwt.return();
     | Closed -> printf "closed\n%!"; Lwt.return();
@@ -76,7 +76,7 @@ let string_of_sockaddr (sa: sockaddr): string =
     | ADDR_UNIX str -> str
     | ADDR_INET(addr, pt) -> (Unix.string_of_inet_addr addr)^":"^(string_of_int pt);;
 
-let rec listen_for_packet_ins_thread (servicefd: Lwt_unix.file_descr): unit Lwt.t = 
+let rec listen_for_packet_ins_thread (servicefd: Lwt_unix.file_descr): unit Lwt.t =
   match_lwt (OpenFlow0x01_Switch.recv_from_switch_fd servicefd) with
     | Some (xid, msg) ->
       printf "received from descriptor: \n%!";
@@ -84,7 +84,7 @@ let rec listen_for_packet_ins_thread (servicefd: Lwt_unix.file_descr): unit Lwt.
       printf "  msg: %s\n%!" (Message.to_string msg);
       (match msg with
         | PacketInMsg(pin) ->
-          printf "  pkt_in: %s\n%!" (packetIn_to_string pin); 
+          printf "  pkt_in: %s\n%!" (packetIn_to_string pin);
           printf "TODO: SEND THIS PACKET TO FLOWLOG EVALUATION\n%!";
           listen_for_packet_ins_thread servicefd
         | _ -> listen_for_packet_ins_thread servicefd)
@@ -92,74 +92,74 @@ let rec listen_for_packet_ins_thread (servicefd: Lwt_unix.file_descr): unit Lwt.
       printf "recv_from_switch_fd returned None.\n%!";
       Lwt.return ();;
 
-let rec terminate_pin_connection_thread (servicefd: Lwt_unix.file_descr): unit Lwt.t = 
+let rec terminate_pin_connection_thread (servicefd: Lwt_unix.file_descr): unit Lwt.t =
   printf "Closing connection fd...\n%!";
   Lwt_unix.close servicefd;;
 
-let rec send_hello_reply (servicefd: Lwt_unix.file_descr) (sa: sockaddr): unit Lwt.t =  
-  let hello_message = Hello(Cstruct.create 0) in      
+let rec send_hello_reply (servicefd: Lwt_unix.file_descr) (sa: sockaddr): unit Lwt.t =
+  let hello_message = Hello(Cstruct.create 0) in
     match_lwt OpenFlow0x01_Switch.send_to_switch_fd servicefd (Int32.of_int 0) hello_message with
       | true -> Lwt.return ()
-      | false -> failwith "wait_for_hello";; 
+      | false -> failwith "wait_for_hello";;
 
-let rec send_features_request (servicefd: Lwt_unix.file_descr) (sa: sockaddr): unit Lwt.t =  
-  let features_message = SwitchFeaturesRequest in      
+let rec send_features_request (servicefd: Lwt_unix.file_descr) (sa: sockaddr): unit Lwt.t =
+  let features_message = SwitchFeaturesRequest in
     match_lwt OpenFlow0x01_Switch.send_to_switch_fd servicefd (Int32.of_int 0) features_message with
-      | true -> Lwt.return ()          
+      | true -> Lwt.return ()
       | false -> failwith "wait_for_features_reply";;
-  
-let rec wait_for_features_reply (servicefd: Lwt_unix.file_descr) (sa: sockaddr): int64 option Lwt.t =  
+
+let rec wait_for_features_reply (servicefd: Lwt_unix.file_descr) (sa: sockaddr): int64 option Lwt.t =
   match_lwt (OpenFlow0x01_Switch.recv_from_switch_fd servicefd) with
-    | Some (_, SwitchFeaturesReply(features)) ->    
+    | Some (_, SwitchFeaturesReply(features)) ->
       Lwt.return (Some features.switch_id)
-    | Some(_,_) -> 
+    | Some(_,_) ->
       wait_for_features_reply servicefd sa;
-    | None -> 
+    | None ->
       printf "recv_from_switch_fd returned None.\n%!";
-      Lwt.return None;;  
+      Lwt.return None;;
 
 let rec wait_for_hello (servicefd: Lwt_unix.file_descr): unit Lwt.t =
-  (* Expect hello -> send hello -> send features request -> expect features reply *) 
+  (* Expect hello -> send hello -> send features request -> expect features reply *)
   match_lwt (OpenFlow0x01_Switch.recv_from_switch_fd servicefd) with
-    | Some (_, Hello(_)) ->    
+    | Some (_, Hello(_)) ->
       Lwt.return();
-    | Some(_,_) -> 
+    | Some(_,_) ->
       wait_for_hello servicefd
-    | None -> 
+    | None ->
       printf "recv_from_switch_fd returned None.\n%!";
-      Lwt.return ();;  
+      Lwt.return ();;
 
 let rec listen_for_connections (): unit Lwt.t =
   (* use lwt instead of let to resolve "thread returning 'a" vs. "'a" *)
   printf "listening for connections. \n%!";
-  
+
   lwt fd = get_fd() in
   lwt (servicefd, sa) = Lwt_unix.accept fd in
-  printf "accepted from %s\n%!" (string_of_sockaddr sa);  
-  printf "Service FD Stats: %s\n%!" (string_of_lwtfd servicefd);      
-  
+  printf "accepted from %s\n%!" (string_of_sockaddr sa);
+  printf "Service FD Stats: %s\n%!" (string_of_lwtfd servicefd);
+
   Lwt_main.run (wait_for_hello servicefd);
   Lwt_main.run (send_hello_reply servicefd sa);
   Lwt_main.run (send_features_request servicefd sa);
-  
-  lwt swid = (match_lwt wait_for_features_reply servicefd sa with 
+
+  lwt swid = (match_lwt wait_for_features_reply servicefd sa with
     | None -> failwith "features reply returned None"
     | Some(id) -> Lwt.return id) in
 
   printf "Discovered switch with dpid=%Ld\n%!" swid;
-  
+
   Lwt.async (fun () -> listen_for_packet_ins_thread servicefd >> terminate_pin_connection_thread servicefd);
   (* continue listening *)
   listen_for_connections();;
 
 (***********************************************************************************)
 
-let shutdown_cp_listeners () = 
-    lwt fd = get_fd() in 
+let shutdown_cp_listeners () =
+    lwt fd = get_fd() in
       printf "shutting down listener FD\n%!";
       Lwt_unix.close fd;;
 
 let listen_for_cp_packets_thread (otherListenPort: int) =
     init_with_port otherListenPort >>
-    listen_for_connections () >> 
+    listen_for_connections () >>
     shutdown_cp_listeners ()

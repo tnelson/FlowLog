@@ -436,9 +436,9 @@ let rec disj_to_top ?(ignore_negation: bool = false) (f: formula): formula =
 let input_rel_to_eventname (p: flowlog_program) (rname: string): string =
   let evnames = (filter_map (function
         | ReactInc(e, src, r) when r=rname -> Some e
-        | _-> None) p.desugared_reacts) in 
-      if (length evnames) < 1 then raise (UndeclaredIncomingRelation rname);    
-      if (length evnames) > 1 then failwith "input_rel_to_eventname: more than one event type for an input relation";    
+        | _-> None) p.desugared_reacts) in
+      if (length evnames) < 1 then raise (UndeclaredIncomingRelation rname);
+      if (length evnames) > 1 then failwith "input_rel_to_eventname: more than one event type for an input relation";
       (hd evnames);;
 
   let get_event (prgm: flowlog_program) (evname: string) : event_def =
@@ -458,10 +458,10 @@ let input_rel_to_eventname (p: flowlog_program) (rname: string): string =
      with | Not_found -> false;;
 
   let is_incoming_table (prgm: flowlog_program) (relname: string): bool =
-    try ignore (get_event prgm (input_rel_to_eventname prgm relname)); 
-        true 
+    try ignore (get_event prgm (input_rel_to_eventname prgm relname));
+        true
     with | Not_found -> false | UndeclaredIncomingRelation(_) -> false;;
-    
+
   let is_outgoing_table (prgm: flowlog_program) (relname: string): bool =
     try ignore (get_outgoing prgm relname); true with | Not_found -> false;;
 
@@ -487,11 +487,11 @@ let input_rel_to_eventname (p: flowlog_program) (rname: string): string =
         typ
     with | Not_found -> failwith ("get_type_for_field: "^notif.typeid^" "^k^"; possibly missing built-in definitions in Flowlog_Packets?");;
 
-  (* What is the reactive decl for this input relation? 
+  (* What is the reactive decl for this input relation?
      (Formerly we could assume that the rname was the same as the event type name. No longer!) *)
   let get_valid_fields_for_input_rel (p: flowlog_program) (rname: string): (string list) =
-    try      
-        let evname = (input_rel_to_eventname p rname) in 
+    try
+        let evname = (input_rel_to_eventname p rname) in
          (* printf "event name: %s\n%!" evname;*)
           let result = map (fun (fname, _) -> fname) (get_event p evname).evfields in
             (*printf "result: %s\n%!" (string_of_list ";" identity result);*)
@@ -518,7 +518,7 @@ let input_rel_to_eventname (p: flowlog_program) (rname: string): string =
  * to handle IP addresses >= 128.0.0.0 (which will be received as >= 0x80000000)
  *)
 let nwaddr_of_int_string (s: string): Int32.t =
-  let n = Int64.of_string s in 
+  let n = Int64.of_string s in
     Int64.to_int32 n;;
 
 (* Note: This will result in negative integers for IP addr >= 128.0.0.0 *)
@@ -910,8 +910,8 @@ let string_of_astdeclaration (d: astdecl): string =
       | OutLoopback -> "loopback"
       | OutSend(evtype, ip, pt) -> "event("^evtype^") to "^ip^":"^pt;;
 
-  let string_of_eventsource (src: eventsource): string = 
-    match src with 
+  let string_of_eventsource (src: eventsource): string =
+    match src with
       | IncDP -> "dataplane"
       | IncCP -> "control plane"
       | IncThrift -> "thrift event";;
@@ -959,7 +959,7 @@ let get_trigger (p: flowlog_program) (cl: clause): (event_def * string * term li
   fold_left (fun acc at ->
     match at with
       | FAtom(_, relname, args) when is_incoming_table p relname ->
-        let evname = (input_rel_to_eventname p relname) in        
+        let evname = (input_rel_to_eventname p relname) in
         (Some ((get_event p evname), relname, args))
       | _ -> acc)
     None

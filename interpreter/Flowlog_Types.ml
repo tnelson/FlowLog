@@ -60,9 +60,9 @@ type typeid = string;;
       | OutPrint
       | OutSend of typeid * string * string;;
 
-  (* Where is the incoming event coming from? 
+  (* Where is the incoming event coming from?
      Used to disambiguate packets coming from the DP vs. coming from the CP. *)
-  type eventsource = 
+  type eventsource =
       | IncDP
       | IncCP
       | IncThrift;;
