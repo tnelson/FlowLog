@@ -165,6 +165,7 @@ let flow_removed_fields = [
 
 let flavor_to_typename (flav: packet_flavor): string = if flav.label = "packet" then "packet" else flav.label^"_packet";;
 let flavor_to_inrelname (flav: packet_flavor): string = if flav.label = "packet" then "packet" else flav.label^"_packet";;
+let flavor_to_cpinrelname (flav: packet_flavor): string = if flav.label = "packet" then "cp_packet" else "cp_"^flav.label^"_packet";;
 let flavor_to_emitrelname (flav: packet_flavor): string = if flav.label = "packet" then "emit" else "emit_"^flav.label;;
 
 (*************************************************************)
@@ -231,10 +232,12 @@ let built_in_where_for_variable (vart: term) (relname: string): formula =
 (*let create_id_assign (k: string): assignment = {afield=k; atupvar=k};;*)
 let build_flavor_decls (flav: packet_flavor): sdecl list =
   [DeclInc(flavor_to_inrelname flav, flavor_to_typename flav);
+   DeclInc(flavor_to_cpinrelname flav, flavor_to_typename flav);
    DeclEvent(flavor_to_typename flav, flavor_to_field_decls flav);
    DeclOut(flavor_to_emitrelname flav, FixedEvent(flavor_to_typename flav))];;
 let build_flavor_reacts (flav: packet_flavor): sreactive list =
-  [ReactInc(flavor_to_typename flav, flavor_to_inrelname flav);
+  [ReactInc(flavor_to_typename flav, IncDP, flavor_to_inrelname flav);
+   ReactInc(flavor_to_typename flav, IncCP, flavor_to_cpinrelname flav); 
    ReactOut(flavor_to_emitrelname flav, FixedEvent(flavor_to_typename flav),
             (*map create_id_assign (flavor_to_fields flav), *) OutEmit(flavor_to_typename flav))];;
 
@@ -249,10 +252,10 @@ let built_in_decls = [DeclInc(switch_reg_relname, "switch_port");
                       DeclEvent("flow_removed", flow_removed_fields)]
                     @ flatten (map build_flavor_decls packet_flavors);;
 
-let built_in_reacts = [ ReactInc("switch_port", switch_reg_relname);
-                        ReactInc("switch_down", switch_down_relname);
-                        ReactInc("flow_removed", "flow_removed");
-                        ReactInc("startup", startup_relname);
+let built_in_reacts = [ ReactInc("switch_port", IncDP, switch_reg_relname);
+                        ReactInc("switch_down", IncDP, switch_down_relname);
+                        ReactInc("flow_removed", IncDP, "flow_removed");
+                        ReactInc("startup", IncThrift, startup_relname);
                         ReactOut("forward", SameAsOnFields, OutForward);
                       ] @ flatten (map build_flavor_reacts packet_flavors);;
 

@@ -297,7 +297,8 @@ let well_formed_rule (p: flowlog_program) (r: srule): unit =
     iter (fun (_, f) -> (well_formed_atom outrelname outrelterms inrelname inrelarg f)) (get_equalities where);
     iter (well_formed_term ~inhead:true outrelname outrelterms inrelname inrelarg) outrelterms;
     try
-      ignore (get_event p inrelname)
+      (* Make sure this input relation is declared: go through reactives list *)
+      ignore (get_event p (input_rel_to_eventname p inrelname))
     with
       | Not_found -> raise (UndeclaredIncomingRelation inrelname)
   in
@@ -338,7 +339,7 @@ let well_formed_reacts (reacts: sreactive list): unit =
   ignore (fold_left (fun acc react ->
     match react with
       | ReactOut(relname, _, _)
-      | ReactInc(_, relname) ->
+      | ReactInc(_, _, relname) ->
         if mem relname acc then
           raise (RelationHadMultipleReacts(relname))
         else relname::acc
@@ -363,12 +364,13 @@ let well_formed_decls (decls: sdecl list): unit =
    really want to expand what reactive defns can do. *)
 
 let reacts_added_by_sugar (stmts: stmt list): sreactive list =
-  (* If we have an event decl X, return an incoming reactive defn X if X is undeclared. *)
-  let inc_events_with_react = filter_map (function SReactive(ReactInc(evname,_)) -> Some evname | _ -> None) stmts in
+  (* If we have an event decl X, return an incoming reactive defn X if X is undeclared. 
+     This sugared reactive assumes events coming from THRIFT. *)
+  let inc_events_with_react = filter_map (function SReactive(ReactInc(evname,_,_)) -> Some evname | _ -> None) stmts in
   let event_decls = filter_map (function SDecl(DeclEvent(_,_) as d) -> Some d     | _ -> None) stmts in
   fold_left (fun acc decl -> match decl with
                       | DeclEvent(ename, _) when not (mem ename inc_events_with_react) ->
-                          ReactInc(ename, ename)::acc
+                          ReactInc(ename, IncThrift, ename)::acc
                       | DeclEvent(_,_) -> acc
                       | _ -> failwith "reacts_added_by_sugar") [] event_decls;;
 

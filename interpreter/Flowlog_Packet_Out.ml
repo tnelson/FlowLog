@@ -149,7 +149,7 @@ let init_connection (swid: int64) (sourceport: int) (dstip: inet_addr) (dstport:
   let fd = socket PF_INET SOCK_STREAM 0 in
     setsockopt fd SO_REUSEADDR true;
     bind fd (ADDR_INET (Unix.inet_addr_any, sourceport));
-    let newport = (match getsockname fd with | ADDR_INET(_, p) -> p) in
+    let newport = (match getsockname fd with | ADDR_INET(_, p) -> p | _ -> failwith "init_connection: non ADDR_INET") in
       init_with_fd newport fd;
       printf "initialized and bound\n%!";
       connect fd (ADDR_INET(dstip, dstport));

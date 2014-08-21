@@ -1,9 +1,10 @@
-// Receive packet_ins from the control plane, not the data plane
-// For now, use built-in cp_packet pipes. TODO: add some flexibility.
+// Receive packet_ins from the control plane, not the data plane For now, use
+// built-in cp_packet pipes. INCOMING reactives now have a third datum:
+// whether the event comes via the DP, the CP, or Thrift. The parser will
+// always make declared reactives come from thrift, and reactives created by
+// event declarations will likewise come from Thrift.
 
-
-// Flood the packet on the DP
-// ... AND send a copy of it elsewhere on the CP.
+// TODO: add some flexibility. I
 
 // Take this packet and flood it on all non-eq ports for the specified switch.
 // (This tests that the source portid and swid are taken into account.)

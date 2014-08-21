@@ -111,7 +111,7 @@
               SEND TO NUMBER optional_colon NUMBER SEMICOLON
               {ReactOut($2, FixedEvent($4), OutSend($4, $9, $11))}
             | INCOMING NAME THEN INSERT INTO NAME SEMICOLON
-              {ReactInc($2, $6)};
+              {ReactInc($2, IncThrift, $6)};
 
   refresh_clause:
             | TIMEOUT NUMBER NAME {RefreshTimeout(int_of_string($2), $3)}

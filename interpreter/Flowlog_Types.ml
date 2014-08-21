@@ -60,13 +60,20 @@ type typeid = string;;
       | OutPrint
       | OutSend of typeid * string * string;;
 
+  (* Where is the incoming event coming from? 
+     Used to disambiguate packets coming from the DP vs. coming from the CP. *)
+  type eventsource = 
+      | IncDP
+      | IncCP
+      | IncThrift;;
+
   type sreactive =
         (* table name, query name, ip, port, refresh settings *)
       | ReactRemote of string * typeid list * string * string * string * refresh
         (* out relation name, outgoing type, spec*)
       | ReactOut of string * outgoing_fields * spec_out
         (* incoming event type, trigger relation name*)
-      | ReactInc of typeid * string;;
+      | ReactInc of typeid * eventsource * string;;
 
   type sdecl =
       | DeclTable of string * typeid list
@@ -338,7 +345,7 @@ let minus_prefix = "minus";;
 (* Avoid using strings for hard-coded type names and relation names.
    Use these definitions instead. *)
 let packet_in_relname = "packet_in";;
-let switch_reg_relname = "switch_port_in";;
+let switch_reg_relname = "switch_port";;
 let switch_down_relname = "switch_down";;
 let startup_relname = "startup";;
 

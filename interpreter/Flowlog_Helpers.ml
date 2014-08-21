@@ -433,8 +433,16 @@ let rec disj_to_top ?(ignore_negation: bool = false) (f: formula): formula =
         | RemoteTable(_,_,_) -> tbl
         | _ -> raise Not_found;;
 
-  let get_event (prgm: flowlog_program) (goalrel: string) : event_def =
-    Hashtbl.find prgm.memos.eventmap goalrel;;
+let input_rel_to_eventname (p: flowlog_program) (rname: string): string =
+  let evnames = (filter_map (function
+        | ReactInc(e, src, r) when r=rname -> Some e
+        | _-> None) p.desugared_reacts) in 
+      if (length evnames) < 1 then raise (UndeclaredIncomingRelation rname);    
+      if (length evnames) > 1 then failwith "input_rel_to_eventname: more than one event type for an input relation";    
+      (hd evnames);;
+
+  let get_event (prgm: flowlog_program) (evname: string) : event_def =
+    Hashtbl.find prgm.memos.eventmap evname;;
   let get_outgoing (prgm: flowlog_program) (goalrel: string) : outgoing_def =
     (*Hashtbl.iter (fun k v -> printf "%s %s %b\n%!" goalrel k (k = goalrel)) prgm.memos.outgoingmap;*)
     Hashtbl.find prgm.memos.outgoingmap goalrel;;
@@ -450,7 +458,10 @@ let rec disj_to_top ?(ignore_negation: bool = false) (f: formula): formula =
      with | Not_found -> false;;
 
   let is_incoming_table (prgm: flowlog_program) (relname: string): bool =
-    try ignore (get_event prgm relname); true with | Not_found -> false;;
+    try ignore (get_event prgm (input_rel_to_eventname prgm relname)); 
+        true 
+    with | Not_found -> false | UndeclaredIncomingRelation(_) -> false;;
+    
   let is_outgoing_table (prgm: flowlog_program) (relname: string): bool =
     try ignore (get_outgoing prgm relname); true with | Not_found -> false;;
 
@@ -476,11 +487,16 @@ let rec disj_to_top ?(ignore_negation: bool = false) (f: formula): formula =
         typ
     with | Not_found -> failwith ("get_type_for_field: "^notif.typeid^" "^k^"; possibly missing built-in definitions in Flowlog_Packets?");;
 
+  (* What is the reactive decl for this input relation? 
+     (Formerly we could assume that the rname was the same as the event type name. No longer!) *)
   let get_valid_fields_for_input_rel (p: flowlog_program) (rname: string): (string list) =
-    try
-      map (fun (fname, _) -> fname) (get_event p rname).evfields
+    try      
+        let evname = (input_rel_to_eventname p rname) in 
+         (* printf "event name: %s\n%!" evname;*)
+          let result = map (fun (fname, _) -> fname) (get_event p evname).evfields in
+            (*printf "result: %s\n%!" (string_of_list ";" identity result);*)
+            result
     with | Not_found -> raise (UndeclaredIncomingRelation rname);;
-
 
 
 
@@ -894,14 +910,20 @@ let string_of_astdeclaration (d: astdecl): string =
       | OutLoopback -> "loopback"
       | OutSend(evtype, ip, pt) -> "event("^evtype^") to "^ip^":"^pt;;
 
+  let string_of_eventsource (src: eventsource): string = 
+    match src with 
+      | IncDP -> "dataplane"
+      | IncCP -> "control plane"
+      | IncThrift -> "thrift event";;
+
   let string_of_reactive (r: sreactive): string =
     match r with
       | ReactRemote(tblname, argtypes, qname, ip, port, refresh) ->
         tblname^"TABLE (remote) = "^qname^"("^(String.concat "," argtypes)^") @ "^ip^" "^port;
       | ReactOut(outrel, outf, spec) ->
         outrel^"("^(string_of_outgoing_fields outf)^") (output rel) =  @ "^(string_of_outspec spec);
-      | ReactInc(evtype, relname) ->
-        relname^" (input rel) "^evtype;;
+      | ReactInc(evtype, src, relname) ->
+        relname^" (input rel) "^evtype^" when from "^(string_of_eventsource src);;
 
   let string_of_stmt (stmt: stmt): string =
     match stmt with
@@ -937,7 +959,8 @@ let get_trigger (p: flowlog_program) (cl: clause): (event_def * string * term li
   fold_left (fun acc at ->
     match at with
       | FAtom(_, relname, args) when is_incoming_table p relname ->
-        (Some ((get_event p relname), relname, args))
+        let evname = (input_rel_to_eventname p relname) in        
+        (Some ((get_event p evname), relname, args))
       | _ -> acc)
     None
     (get_atoms cl.body);;
@@ -1011,7 +1034,7 @@ let type_inference_of_vars (p: flowlog_program) (start_inferences: TypeIdSet.t T
           (* for every type in the table's arity, assert that type for the arg in that position *)
           fold_left add_infer acc (combine args tblarity)
       | FAtom(_, relname, args) when is_incoming_table p relname ->
-        let eventfieldnames, eventfieldtypes = split ((get_event p relname).evfields) in
+        let eventfieldnames, eventfieldtypes = split ((get_event p (input_rel_to_eventname p relname)).evfields) in
           fold_left add_infer acc (combine (expand_fields (hd args) eventfieldnames) eventfieldtypes)
       | FAtom(_, relname, args)  -> acc
       | _ -> failwith "infer_type_of_vars") start_inferences atoms in
@@ -1028,7 +1051,7 @@ let type_inference_of_vars (p: flowlog_program) (start_inferences: TypeIdSet.t T
           | SameAsOnFields ->
             (match (get_trigger p cl) with
               | Some(e,_,_) -> e
-              | None -> failwith "infer_type_of_vars head no trigger event")
+              | None -> failwith ("infer_type_of_vars head no trigger event in clause: "^(string_of_clause cl)))
           | _ -> failwith "infer_type_of_vars head AnyFields") in
         let headfieldnames, headfieldtypes = split (outevent.evfields) in
           fold_left add_infer base_body (combine (expand_fields (hd headargs) headfieldnames) headfieldtypes)

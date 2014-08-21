@@ -305,11 +305,12 @@ module Communication = struct
 
 
   (* in this IO relation, at index idx, there should be something of type T. What are T's fields, in order? *)
-  let get_io_fields_for_index (prgm: flowlog_program) (relname: string) (idx: int) (context_on: event_def option): (string list) option =
+  let get_io_fields_for_index (prgm: flowlog_program) (relname: string) (idx: int) (context_on: event_def option): (string list) option =  	
   	try
-  		Some (get_fields_for_type prgm relname)
+  		Some (get_fields_for_type prgm (input_rel_to_eventname prgm relname))
   	with
-  	| Not_found ->
+  	| Not_found 
+  	| UndeclaredIncomingRelation(_) ->
   	  	let out = get_outgoing prgm relname in
         		(match out.outarity with
         			| SameAsOnFields -> (match context_on with
@@ -423,7 +424,8 @@ module Communication = struct
 			iter retract_formula (inc_event_to_formulas p notif);;
 
 	let get_on_context (p: flowlog_program) (c: clause): event_def option =
-	  Some (get_event p c.orig_rule.onrel);;
+	  let trigger_relname = c.orig_rule.onrel in	  
+	  	Some (get_event p (input_rel_to_eventname p trigger_relname));;
 
 	let start_clause (prgm: flowlog_program) ?(forcepositive = false) (cls : clause) : unit =
 		(*if debug then print_endline ("start_clause: assert((" ^ (Type_Helpers.clause_to_string cls) ^ ")).");

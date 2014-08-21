@@ -35,7 +35,7 @@ ON switch_down(swd):
 ON startup(empty_event):
   DO start_timer(10, "tNIB");
 
-ON switch_port_in(swpt):
+ON switch_port(swpt):
   INSERT (swpt.sw, swpt.pt) INTO switch_has_port;
 
   DO emit(newpkt) WHERE

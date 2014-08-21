@@ -21,7 +21,7 @@ open Xsb_Communication
             | FAtom(modname, relname, tl) -> 
                 (* If this is a field variable, we need to say that every field is safe, not just a variable.
                    If this variable appears in a SameAsOn action pipe like forward(v), need to take into account the type of the trigger. *)
-printf "get immediate: %s\n%!" (string_of_formula f);
+
                 if is_incoming_table prgm relname then
                 begin
                   let on_context = (match cl_for_context with | None -> None | Some cl -> Communication.get_on_context prgm cl) in   
