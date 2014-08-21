@@ -318,7 +318,7 @@ module Communication = struct
         				| None -> failwith "get_io_fields_for_index: no On context given")
         			| FixedEvent(evname) -> Some(get_fields_for_type prgm evname) (* (nth flds idx)*)
         		    | AnyFields -> failwith "get_io_fields_for_index: unsupported AnyFields")
-        | _ -> failwith "get_io_fields_for_index";;
+        | _ -> failwith ("get_io_fields_for_index: neither input nor output relation: "^relname);;
 
    (* in modname.relname, the ith element has which fields? *)
   let decls_expand_fields (prgm: flowlog_program) (modname: string) (relname: string) (context_on: event_def option) (i: int) (t: term): term list =

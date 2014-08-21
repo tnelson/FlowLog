@@ -9,9 +9,12 @@ open OpenFlow0x01_Core
 open Message
 open Lwt_unix
 
-module Socket = Socket
+open OpenFlow0x01.SwitchFeatures.Capabilities;;
+open OpenFlow0x01.SwitchFeatures.SupportedActions;;
+open OpenFlow0x01.SwitchFeatures;;
+open OpenFlow0x01.PortDescription;;
 
-let otherListenPort = ref 9999;;
+module Socket = Socket
 
 (* number of simultaneous connections *)
 let max_pending : int = 64;;
@@ -56,14 +59,14 @@ let get_fd () : Lwt_unix.file_descr Lwt.t =
 
 type msg = Message.t;;
 
-let print_fd_status () =
+(*let print_fd_status () =
   lwt fd = get_fd () in
   printf "Listener FD Stats: %s\n%!" (string_of_lwtfd fd);      
   match state fd with
     | Opened -> printf "opened\n%!"; Lwt.return();
     | Closed -> printf "closed\n%!"; Lwt.return();
     | Aborted exn -> printf "aborted\n%!"; Lwt.return();;
-
+*)
 
 
 (***********************************************************************************)
@@ -82,6 +85,7 @@ let rec listen_for_packet_ins_thread (servicefd: Lwt_unix.file_descr): unit Lwt.
       (match msg with
         | PacketInMsg(pin) ->
           printf "  pkt_in: %s\n%!" (packetIn_to_string pin); 
+          printf "TODO: SEND THIS PACKET TO FLOWLOG EVALUATION\n%!";
           listen_for_packet_ins_thread servicefd
         | _ -> listen_for_packet_ins_thread servicefd)
     | None ->
@@ -128,16 +132,16 @@ let rec wait_for_hello (servicefd: Lwt_unix.file_descr): unit Lwt.t =
 let rec listen_for_connections (): unit Lwt.t =
   (* use lwt instead of let to resolve "thread returning 'a" vs. "'a" *)
   printf "listening for connections. \n%!";
-  print_fd_status ();
-
+  
   lwt fd = get_fd() in
   lwt (servicefd, sa) = Lwt_unix.accept fd in
   printf "accepted from %s\n%!" (string_of_sockaddr sa);  
   printf "Service FD Stats: %s\n%!" (string_of_lwtfd servicefd);      
   
-  wait_for_hello servicefd;
-  send_hello_reply servicefd sa;
-  send_features_request servicefd sa;
+  Lwt_main.run (wait_for_hello servicefd);
+  Lwt_main.run (send_hello_reply servicefd sa);
+  Lwt_main.run (send_features_request servicefd sa);
+  
   lwt swid = (match_lwt wait_for_features_reply servicefd sa with 
     | None -> failwith "features reply returned None"
     | Some(id) -> Lwt.return id) in
@@ -150,30 +154,12 @@ let rec listen_for_connections (): unit Lwt.t =
 
 (***********************************************************************************)
 
-let test_start (): unit =
-  let shutdown_listeners_thread () = 
+let shutdown_cp_listeners () = 
     lwt fd = get_fd() in 
       printf "shutting down listener FD\n%!";
-      Lwt_unix.close fd in
+      Lwt_unix.close fd;;
 
-  (* Taken from frenetic/Flowlog startup *)
-  let listen_for_packets_thread () =
-    init_with_port !otherListenPort >>
-    (* real version will have multiple picks, like flowlog.ml has *)
-    Lwt.pick [listen_for_connections ()] >> 
-    shutdown_listeners_thread () in
-
-    Sys.catch_break true;
-    try      
-      Lwt_main.run (listen_for_packets_thread ());
-    with exn ->
-      Printf.eprintf "unhandled exception: %s\n%s\n%!"
-        (Printexc.to_string exn)
-        (Printexc.get_backtrace ());
-      (* TN: No explicit shutdown of active connections? *)
-      Lwt_main.run(shutdown_listeners_thread ());
-      exit 1;;
-
-test_start()
-
-(* Should have close or shutdown explicitly above *)
+let listen_for_cp_packets_thread (otherListenPort: int) =
+    init_with_port otherListenPort >>
+    listen_for_connections () >> 
+    shutdown_cp_listeners ()

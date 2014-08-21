@@ -14,6 +14,10 @@ open Lwt_unix
 open ExtList.List
 open Packet
 
+open OpenFlow0x01.SwitchFeatures.Capabilities;;
+open OpenFlow0x01.SwitchFeatures.SupportedActions;;
+open OpenFlow0x01.PortDescription;;
+
 (* For marshalling *)
 open Flowlog_Packets
 
@@ -100,10 +104,6 @@ let rec wait_for_hello (servicefd: Lwt_unix.file_descr): unit Lwt.t =
       }
 *)
 
-open OpenFlow0x01.SwitchFeatures.Capabilities;;
-open OpenFlow0x01.SwitchFeatures.SupportedActions;;
-open OpenFlow0x01.PortDescription;;
-
 let nocaps = { flow_stats=false
       ; table_stats=false
       ; port_stats=false
@@ -169,14 +169,6 @@ let init_connection (swid: int64) (sourceport: int) (dstip: inet_addr) (dstport:
       (* return the actual port used *)
       newport;;
     
-
-let test() = 
-  let srcpt = init_connection (Int64.of_int 10) 0 Unix.inet_addr_loopback 9999 in 
-  (* test multiple messages in one connection *)
-  let _ = send_to_switch_fd (get_fd srcpt) (Int32.of_int 0) to_send_message1 in
-  let _ = send_to_switch_fd (get_fd srcpt) (Int32.of_int 0) to_send_message2 in
-  close (get_fd srcpt);;
-
 (* 
   Location of external controller is cpip:cpport 
   Assume: ev is a packet type
@@ -224,8 +216,21 @@ let doSendPacketIn (ev: event) (cpip: string) (cpport_s: string) : unit =
                                        port = (int_of_string (get_field ev "locpt"));
                                        reason = ExplicitSend}) in      
 
-    let success = send_to_switch_fd (get_fd srcpt) (Int32.of_int 0) pktin_msg in  
+    let _ = send_to_switch_fd (get_fd srcpt) (Int32.of_int 0) pktin_msg in  
       ();;
 
 let close_all_packet_connections () = 
   Lwt_main.run (Lwt_list.iter_p (fun (spt, sfd) -> Lwt_unix.close sfd) !source_fds);; 
+
+
+(********************************************************************)
+(* Test for Flowlog's CP packet reception. *)
+let test_send_packets () =
+  last_packet_received_from_dp := Some (Int64.of_int 1, Int32.of_int 1, to_send_packet1, None);  
+  doSendPacketIn {typeid="packet"; values=construct_map [("locsw", "1");("locpt", "2")]} 
+                 "127.0.0.1" "9999";
+  last_packet_received_from_dp := Some (Int64.of_int 1, Int32.of_int 2, to_send_packet2, None);  
+  doSendPacketIn {typeid="packet"; values=construct_map [("locsw", "1");("locpt", "2")]} 
+                 "127.0.0.1" "9999";
+  close_all_packet_connections();;
+

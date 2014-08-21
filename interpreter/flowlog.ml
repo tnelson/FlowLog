@@ -12,6 +12,7 @@ open Lwt
 open Flowlog_Parse_Helpers
 open Xsb_Communication
 open Flowlog_Chase
+open Flowlog_Packet_In
 
 (* Use ExtList.List instead -- provides filter_map, but also tail-recursive combine *)
 open ExtList.List
@@ -46,6 +47,7 @@ let speclist = [
   ];;
 
 let listenPort = ref 6633;;
+let listenCPPort = ref 9999;;
 
 let run_flowlog (p: flowlog_program): unit Lwt.t =
   (* Start up XSB, etc. *)
@@ -69,7 +71,9 @@ let run_flowlog (p: flowlog_program): unit Lwt.t =
       (* pick cancels all threads given if one terminates *)
       (* DO NOT attempt to copy ox/frenetic's switch connection detection code here. It will clash with
          Frenetic's. Instead, register a HandleSwitchEvent policy, which gives us a nice clean callback. *)
-      Lwt.pick [gen_stream; NetCore_Controller.start_controller pkt_stream stream];;
+      Lwt.pick [gen_stream; NetCore_Controller.start_controller pkt_stream stream
+      (* Listen for incoming CP packets (not via Thrift, so can use LWT) *)
+               ; listen_for_cp_packets_thread !listenCPPort];;
 
 
 let main () =
@@ -152,6 +156,7 @@ let main () =
         Format.printf "\nUnexpected exception: %s\n%s\n%!"
           (Printexc.to_string exn)
           (Printexc.get_backtrace ());
+        Lwt_main.run(shutdown_cp_listeners());
         close_log();
         exit 100;
     end;;
