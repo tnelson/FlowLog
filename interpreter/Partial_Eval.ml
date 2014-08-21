@@ -11,7 +11,6 @@ open Printf
 open Xsb_Communication
 open Flowlog_Thrift_Out
 open Partial_Eval_Validation
-open Flowlog_Switch_Proxy
 
 let policy_recreation_thunk: (unit -> unit) option ref = ref None;;
 
@@ -890,11 +889,21 @@ let emit_packet (p: flowlog_program) (ev: event): unit =
      At the moment, someone can emit_arp with dlTyp = 0x000 or something dumb like that. *)
   guarded_emit_push swid pt (OpenFlow0x01_Core.NotBuffered (marshal_packet ev));;
 
+let last_packet_received_from_dp: (int64 * int32 * Packet.packet * int32 option) option ref = ref None;;
+let set_last_packet_received (sw: switchId) (ncpt: NetCore_Pattern.port) (pkt: Packet.packet) (buf: int32 option): unit =
+  match ncpt with
+    | NetCore_Pattern.Physical(x) -> last_packet_received_from_dp := Some (sw, x, pkt, buf)
+    | _ -> failwith "set_last_packet_received";;
+
+let doSendPacketIn_ref: (flowlog_program -> event -> string -> string -> unit) option ref = ref None;;
+
 let send_event (p: flowlog_program) (ev: event) (ip: string) (pt: string): unit =
   printf "sending: %s\n%!" (string_of_event p ev);
   write_log (sprintf ">>> sending: %s\n%!" (string_of_event p ev));
   if is_built_in_packet_typename ev.typeid then
-    doSendPacketIn p ev ip pt
+    (match !doSendPacketIn_ref with
+      | Some(f) -> f p ev ip pt
+      | None -> failwith "Error: couldn't send packet_in because function not set.")
   else
     doBBnotify ev ip pt;;
 

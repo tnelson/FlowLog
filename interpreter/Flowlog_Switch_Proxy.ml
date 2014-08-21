@@ -13,6 +13,7 @@ open Message
 open Lwt_unix
 open ExtList.List
 open NetCore_Pattern
+open Partial_Eval
 
 open OpenFlow0x01.SwitchFeatures.Capabilities;;
 open OpenFlow0x01.SwitchFeatures.SupportedActions;;
@@ -46,14 +47,7 @@ let noacts = { output=false
       ; enqueue=false
       ; vendor=false};;
 
-let last_packet_received_from_dp: (int64 * int32 * Packet.packet * int32 option) option ref = ref None;;
-
 let swid_to_fd: (switchId * Lwt_unix.file_descr) list ref = ref [];;
-
-let set_last_packet_received (sw: switchId) (ncpt: NetCore_Pattern.port) (pkt: Packet.packet) (buf: int32 option): unit =
-  match ncpt with
-    | NetCore_Pattern.Physical(x) -> last_packet_received_from_dp := Some (sw, x, pkt, buf)
-    | _ -> failwith "set_last_packet_received";;
 
 let string_of_sockaddr (sa: sockaddr): string =
   match sa with

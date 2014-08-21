@@ -12,6 +12,7 @@ open Lwt
 open Flowlog_Parse_Helpers
 open Xsb_Communication
 open Flowlog_Chase
+open Flowlog_Switch_Proxy
 
 (* Use ExtList.List instead -- provides filter_map, but also tail-recursive combine *)
 open ExtList.List
@@ -99,6 +100,8 @@ let main () =
   let ast = read_ast filename in
   let program = (desugared_program_of_ast ast filename) in
     printf "-----------\n%!";
+
+    doSendPacketIn_ref := Some doSendPacketIn;
 
     (**********************************)
     if !alloy then

@@ -1,13 +1,14 @@
-// Receive packet_ins from the control plane, not the data plane For now, use
-// built-in cp_packet pipes. INCOMING reactives now have a third datum:
-// whether the event comes via the DP, the CP, or Thrift. The parser will
-// always make declared reactives come from thrift, and reactives created by
-// event declarations will likewise come from Thrift.
+// Receive packet_outs from the control plane (_out because Flowlog proxies a
+// switch). For now, use built-in cp_packet pipes. INCOMING reactives now have
+// a third datum: whether the event comes via the DP, the CP, or Thrift. The
+// parser will always make declared reactives come from thrift, and reactives
+// created by event declarations will likewise come from Thrift.
 
 // TODO (later): add some flexibility. I
 
 // Take this packet and flood it on all non-eq ports for the specified switch.
 // (This tests that the source portid and swid are taken into account.)
+// We currently ignore the actions given by the external controller.
 ON cp_ip_packet(p):
   DO forward(new) WHERE new.locPt != p.locPt;
 
@@ -16,10 +17,6 @@ ON cp_ip_packet(p):
 
 
 // ^^ TODO: keepalive
-// ^^ TODO: deal with packet_outs, etc. from the controller (ignore?)
-
-// ^^ TODO Flowlog proxies switches to interface with other OF controllers on
-// different ports. Incoming will be packet_out, not packet_in!
 
 // ^^ TODO later: actions in packet_out. Can't currently represent records in a flowlog event,
 // so packet_outs are treated as normal packets, using the in_port field for the locPt. (pt=0 if none)
