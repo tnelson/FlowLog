@@ -14,6 +14,7 @@ open Lwt_unix
 open ExtList.List
 open NetCore_Pattern
 open Partial_Eval
+open Packet
 
 open OpenFlow0x01.SwitchFeatures.Capabilities;;
 open OpenFlow0x01.SwitchFeatures.SupportedActions;;
@@ -87,9 +88,23 @@ let rec send_features_reply (servicefd: Lwt_unix.file_descr) (swid: int64): unit
        supported_capabilities=nocaps;
        supported_actions=noacts;
        ports=[];}) in
+    printf "Sending features reply...\n%!";
     match_lwt OpenFlow0x01_Switch.send_to_switch_fd servicefd (Int32.of_int 0) features_message with
       | true -> Lwt.return ()
       | false -> failwith "send_features_reply";;
+
+let rec send_barrier_reply (servicefd: Lwt_unix.file_descr) (swid: int64) (xid: int32): unit Lwt.t =
+    printf "Sending barrier reply...\n%!";
+    match_lwt OpenFlow0x01_Switch.send_to_switch_fd servicefd xid BarrierReply with
+      | true -> Lwt.return ()
+      | false -> failwith "send_barrier_reply";;
+
+
+let rec send_echo_reply (servicefd: Lwt_unix.file_descr) (swid: int64) (b: bytes): unit Lwt.t =
+    printf "Sending echo reply...\n%!";
+    match_lwt OpenFlow0x01_Switch.send_to_switch_fd servicefd (Int32.of_int 0) (EchoReply(b)) with
+      | true -> Lwt.return ()
+      | false -> failwith "send_barrier_reply";;
 
 let rec switch_listener (prgm: flowlog_program) (swid: switchId) (servicefd: Lwt_unix.file_descr): unit Lwt.t =
   match_lwt (OpenFlow0x01_Switch.recv_from_switch_fd servicefd) with
@@ -98,6 +113,21 @@ let rec switch_listener (prgm: flowlog_program) (swid: switchId) (servicefd: Lwt
       printf "  xid: %d\n%!" (Int32.to_int xid);
       printf "  msg: %s\n%!" (Message.to_string msg);
       (match msg with
+        | EchoRequest(bytes) ->
+          send_echo_reply servicefd swid;
+          switch_listener prgm swid servicefd
+        | EchoReply(bytes) ->
+          printf "DEBUG: received echo reply.\n%!";
+          switch_listener prgm swid servicefd;
+        | BarrierRequest ->
+          send_barrier_reply servicefd swid xid;
+          switch_listener prgm swid servicefd
+        | FlowModMsg(fm) ->
+          printf "fm: %s\n%!" (FlowMod.to_string fm);
+          switch_listener prgm swid servicefd
+        | SetConfig(swconf) ->
+          printf "swconf: %s\n%!" (SwitchConfig.to_string swconf);
+          switch_listener prgm swid servicefd
         | PacketInMsg(pin) ->
           printf "  pkt_in: %s\n%!" (packetIn_to_string pin);
           printf "(ignoring since packet_in unexpected as proxy switch\n%!";
