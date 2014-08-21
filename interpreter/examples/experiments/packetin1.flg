@@ -1,6 +1,8 @@
 
 // As this pipe takes packets, it will automatically package the notification
-// as a packet_in, not a Thrift RPC.
+// as a packet_in, not a Thrift RPC. Since the swid is not carried in the
+// packet_in, Flowlog will proxy as "Switches" of the appropriate ID with no
+// capabilities.
 
 OUTGOING send_to_cp(ip_packet) THEN
   SEND TO 127.0.0.1:9999;
@@ -15,7 +17,9 @@ ON ip_packet(p):
   // ???: Distinguish this from emit behavior later; for now assume forwarding, not creating new pkts
   DO send_to_cp(p);
 
+// TODO: distinguish forward and emit-type behaviors in these pipes (does the payload get copied?) 
 
+// TODO: one port per pipe problem; not an issue here but will come up in the
+// future. (No way to index pipe by a first-class value like swid)
 
-// NOTE: Do we need a separate source port for each switch id?  If so, avoid
-// one port per pipe issue by handling *source* port under the hood. 
+// TODO: Allow modification to nonsw, nonpt values in outgoing packet_in
