@@ -75,6 +75,7 @@ let rec wait_for_hello (servicefd: Lwt_unix.file_descr): unit Lwt.t =
   (* Expect hello -> send hello -> send features request -> expect features reply *)
   match_lwt (OpenFlow0x01_Switch.recv_from_switch_fd servicefd) with
     | Some (_, Hello(_)) ->
+      printf "received HELLO...\n%!";
       Lwt.return();
     | Some(_,_) ->
       wait_for_hello servicefd
@@ -88,19 +89,19 @@ let rec send_features_reply (servicefd: Lwt_unix.file_descr) (swid: int64): unit
        supported_capabilities=nocaps;
        supported_actions=noacts;
        ports=[];}) in
-    printf "Sending features reply...\n%!";
+    printf "Sending features reply from switch %Ld...\n%!" swid;
     match_lwt OpenFlow0x01_Switch.send_to_switch_fd servicefd (Int32.of_int 0) features_message with
       | true -> Lwt.return ()
       | false -> failwith "send_features_reply";;
 
 let rec send_barrier_reply (servicefd: Lwt_unix.file_descr) (swid: int64) (xid: int32): unit Lwt.t =
-    printf "Sending barrier reply...\n%!";
+    printf "Sending barrier reply from switch %Ld...\n%!" swid;
     match_lwt OpenFlow0x01_Switch.send_to_switch_fd servicefd xid BarrierReply with
       | true -> Lwt.return ()
       | false -> failwith "send_barrier_reply";;
 
 let rec send_echo_request (servicefd: Lwt_unix.file_descr) (swid: int64): unit Lwt.t =
-    printf "Sending echo request...\n%!";
+    printf "Sending echo request from switch id %Ld...\n%!" swid;
     let b = Cstruct.create(0) in
     match_lwt OpenFlow0x01_Switch.send_to_switch_fd servicefd (Int32.of_int 0) (EchoRequest(b)) with
       | true -> Lwt.return ()
@@ -154,7 +155,8 @@ let rec switch_listener (prgm: flowlog_program) (swid: switchId) (servicefd: Lwt
           let in_pt = (match pout.port_id with | None -> Physical(Int32.zero) | Some p -> Physical((Int32.of_int p))) in
 
           let notif = (pkt_to_event swid in_pt pkt) in
-            ignore (respond_to_notification prgm notif);
+            set_last_packet_received swid in_pt pkt None; (* in case we need to transfer to the DP *)
+            ignore (respond_to_notification prgm notif IncCP);
 
             (* may be multiple actions = multi-record problem with events *)
             printf "WARNING! ACTIONS IN PACKET_OUT WILL BE IGNORED BY FLOWLOG.\n%!";
@@ -210,8 +212,6 @@ let rec switch_keepalive (swid: switchId) (fd: Lwt_unix.file_descr): unit Lwt.t 
     Lwt_mutex.with_lock the_lock (fun () -> send_echo_request fd swid) >>
     switch_keepalive swid fd;;
 
-(* todo: mutex other output to switch *)
-
 let register_proxy_switch (prgm: flowlog_program) (swid: switchId) (ips: string) (pts: string): Lwt_unix.file_descr =
   match mem_assoc swid !swid_to_fd with
     | true ->
@@ -230,8 +230,9 @@ let register_proxy_switch (prgm: flowlog_program) (swid: switchId) (ips: string)
       let (newport, fd) = init_connection_as_switch swid (Unix.inet_addr_of_string ips_dotted) (int_of_string pts) in
         swid_to_fd := (swid, fd)::!swid_to_fd;
         swid_to_mutex := (swid, Lwt_mutex.create ())::!swid_to_mutex;
-        Lwt.async (fun () -> Lwt.pick [((switch_listener prgm swid fd) >> (shutdown_switch_listener swid));
-                                       switch_keepalive swid fd]);
+        Lwt.async (fun () -> Lwt.pick [((switch_listener prgm swid fd) >> (shutdown_switch_listener swid))
+                                      (* ;switch_keepalive swid fd*)
+                                     ]);
         fd;;
 
 (***********************************************************************************)
@@ -255,6 +256,7 @@ let doSendPacketIn (prgm: flowlog_program) (ev: event) (controller_ip: string) (
                                        reason = ExplicitSend}) in
 
     let _ = send_to_switch_fd fd (Int32.of_int 0) pktin_msg in
+      printf "DONE WITH DOSENDPACKETIN\n%!";
       ();;
 
 (***********************************************************************************)

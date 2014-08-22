@@ -294,22 +294,23 @@ module Communication = struct
 
   (* ASSUMED: We're dealing with one event at a time, and so each relation we populate gets only one tuple. *)
   (* raises Not_found if nothing to do for this event *)
-  let inc_event_to_formulas (p: flowlog_program) (notif: event): formula list =
+  let inc_event_to_formulas (p: flowlog_program) (notif: event) (from: eventsource): formula list =
     (* event contains k=v mappings and a type. convert to a formula via defns in program*)
     (*printf "Converting event to formula: %s. Supertypes: %s\n%!" (string_of_event notif) (String.concat "%s\n%!" (built_in_supertypes notif.typeid));*)
     map (fun typename ->
-          FAtom("", typename, map
+    	  let relname = inc_event_to_relname p typename from in
+          FAtom("", relname, map
           	         (fun fld -> try TConst(StringMap.find fld notif.values) with | Not_found -> failwith ("inc_event_to_formulas: "^fld))
                      (get_fields_for_type p typename)))
         (built_in_supertypes notif.typeid);;
 
 
   (* in this IO relation, at index idx, there should be something of type T. What are T's fields, in order? *)
-  let get_io_fields_for_index (prgm: flowlog_program) (relname: string) (idx: int) (context_on: event_def option): (string list) option =  	
+  let get_io_fields_for_index (prgm: flowlog_program) (relname: string) (idx: int) (context_on: event_def option): (string list) option =
   	try
   		Some (get_fields_for_type prgm (input_rel_to_eventname prgm relname))
   	with
-  	| Not_found 
+  	| Not_found
   	| UndeclaredIncomingRelation(_) ->
   	  	let out = get_outgoing prgm relname in
         		(match out.outarity with
@@ -417,14 +418,14 @@ module Communication = struct
 		if !global_verbose >= 1 then count_assert_formula := !count_assert_formula + 1;
 		ignore (send_message ("assert("^(Xsb.xsb_of_formula tup)^").") 0);;
 
-	let assert_event_and_subevents (p: flowlog_program) (notif: event): unit =
-			iter assert_formula (inc_event_to_formulas p notif);;
+	let assert_event_and_subevents (p: flowlog_program) (notif: event) (from: eventsource): unit =
+			iter assert_formula (inc_event_to_formulas p notif from);;
 
-	let retract_event_and_subevents (p: flowlog_program) (notif: event): unit =
-			iter retract_formula (inc_event_to_formulas p notif);;
+	let retract_event_and_subevents (p: flowlog_program) (notif: event) (from: eventsource): unit =
+			iter retract_formula (inc_event_to_formulas p notif from);;
 
 	let get_on_context (p: flowlog_program) (c: clause): event_def option =
-	  let trigger_relname = c.orig_rule.onrel in	  
+	  let trigger_relname = c.orig_rule.onrel in
 	  	Some (get_event p (input_rel_to_eventname p trigger_relname));;
 
 	let start_clause (prgm: flowlog_program) ?(forcepositive = false) (cls : clause) : unit =

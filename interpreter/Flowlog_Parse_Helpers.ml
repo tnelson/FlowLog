@@ -190,7 +190,7 @@ let safe_clause (p: flowlog_program) (cl: clause): unit =
          e.g. new.dlSrc = x, x = y, R(y). *)
 
       (* STEP 2: discover what terms are proven safe *)
-      let proven_safe = (get_safe_terms p (Some cl) cl.body) in      
+      let proven_safe = (get_safe_terms p (Some cl) cl.body) in
         (* STEP 3: are any terms that need to be proven safe, unsafe? *)
         if !global_verbose > 4 then
           printf "PROVEN SAFE: %s\n%!" (String.concat ", " (map (string_of_term ~verbose:Verbose) proven_safe));
@@ -364,7 +364,7 @@ let well_formed_decls (decls: sdecl list): unit =
    really want to expand what reactive defns can do. *)
 
 let reacts_added_by_sugar (stmts: stmt list): sreactive list =
-  (* If we have an event decl X, return an incoming reactive defn X if X is undeclared. 
+  (* If we have an event decl X, return an incoming reactive defn X if X is undeclared.
      This sugared reactive assumes events coming from THRIFT. *)
   let inc_events_with_react = filter_map (function SReactive(ReactInc(evname,_,_)) -> Some evname | _ -> None) stmts in
   let event_decls = filter_map (function SDecl(DeclEvent(_,_) as d) -> Some d     | _ -> None) stmts in
@@ -452,12 +452,13 @@ let rec expand_includes (ast : flowlog_ast) (prev_includes : string list) : flow
           expand_includes new_ast (prev_includes @ includes)
 
 (* some duplication here from Flowlog_Graphs for now. *)
-  let build_memos_for_program (rules: srule list) (tables: table_def list) (outgoings: outgoing_def list) (events: event_def list) (simp_clauses: clause list): program_memos =
+  let build_memos_for_program (reacts: sreactive list) (rules: srule list) (tables: table_def list) (outgoings: outgoing_def list) (events: event_def list) (simp_clauses: clause list): program_memos =
     let fmlas = map (fun cl -> cl.body) simp_clauses in
     let memos = {out_triggers = Hashtbl.create 5; insert_triggers = Hashtbl.create 5;
                  delete_triggers = Hashtbl.create 5;
                  tablemap = Hashtbl.create 5; eventmap = Hashtbl.create 5;
                  outgoingmap = Hashtbl.create 5;
+                 incomingmap = Hashtbl.create 5;
                  atoms_used_in_bodies = unique (fold_left (fun acc f -> (get_atoms f) @ acc) [] fmlas);
                  } in
     let depends_from_rule (r: srule): unit =
@@ -476,6 +477,7 @@ let rec expand_includes (ast : flowlog_ast) (prev_includes : string list) : flow
       iter (fun tdef -> Hashtbl.add memos.tablemap tdef.tablename tdef) tables;
       iter (fun odef -> Hashtbl.add memos.outgoingmap odef.outname odef) outgoings;
       iter (fun edef -> Hashtbl.add memos.eventmap edef.eventname edef) events;
+      iter (function | ReactInc(tid, src, relname) -> Hashtbl.add memos.incomingmap (tid, src) relname | _ -> ()) reacts;
       memos;;
 
 let make_tables (decls: sdecl list) (defns: sreactive list): table_def list =
@@ -668,7 +670,7 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
             (* pre_program contains everything but the clauses. It's used for *)
             (* clause-processing (because validation, etc. needs to know the *)
             (* reacts, decls, ...*)
-            let pre_program = 
+            let pre_program =
                 {desugared_decls = the_decls;
                  desugared_reacts = the_reacts;
                  vartablenames = vartblnames;
@@ -677,9 +679,9 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
                  events = the_events;
                  clauses = [];
                  weakened_cannot_compile_pt_clauses = [];
-                 can_fully_compile_to_fwd_clauses = [];                 
+                 can_fully_compile_to_fwd_clauses = [];
                  not_fully_compiled_clauses = [];
-                 memos = build_memos_for_program the_rules the_tables the_outgoings the_events []} in
+                 memos = build_memos_for_program the_reacts the_rules the_tables the_outgoings the_events []} in
 
             (***********************************)
             (* Now turn ~RULES~ into ~CLAUSES~ *)
@@ -720,15 +722,15 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
                 printf "REACTS: %s\n%!" (String.concat ",\n"(map string_of_reactive the_reacts));
               end;
 
-                (* Convert decls and defns syntax (with built ins) into a program *)                
-                let p = {pre_program with                  
+                (* Convert decls and defns syntax (with built ins) into a program *)
+                let p = {pre_program with
                  clauses = simplified_clauses;
                  weakened_cannot_compile_pt_clauses = weakened_cannot_compile_pt_clauses;
                  can_fully_compile_to_fwd_clauses = can_fully_compile_simplified;
                  (* Remember: these are unweakened, and so can be used by XSB. *)
                  not_fully_compiled_clauses = not_fully_compiled_clauses;
                  (* rebuild memos *)
-                 memos = build_memos_for_program the_rules the_tables the_outgoings the_events simplified_clauses} in
+                 memos = build_memos_for_program pre_program.desugared_reacts the_rules the_tables the_outgoings the_events simplified_clauses} in
 
                   (* Validation *)
                   iter (well_formed_rule p) the_rules;

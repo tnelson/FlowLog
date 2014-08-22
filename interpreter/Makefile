@@ -10,10 +10,6 @@ default: yacc flowlog.native
 tests: yacc Tests.native
 	@echo "Built Flowlog tests."
 
-testcp: yacc testcp.native	
-	@echo "Built program to test CP-packet reception"
-
-
 all: $(patsubst %.ml,%.native,$(wildcard *.ml))
 
 %.native: .force

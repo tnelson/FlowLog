@@ -879,6 +879,14 @@ let forward_packet (p: flowlog_program) (ev: event): unit =
       base_action (remove legal_to_modify_packet_fields "locpt"))
       :: !fwd_actions;;
 
+let last_packet_received_from_dp: (int64 * int32 * Packet.packet * int32 option) option ref = ref None;;
+let set_last_packet_received (sw: switchId) (ncpt: NetCore_Pattern.port) (pkt: Packet.packet) (buf: int32 option): unit =
+  match ncpt with
+    | NetCore_Pattern.Physical(x) -> last_packet_received_from_dp := Some (sw, x, pkt, buf)
+    | _ -> failwith "set_last_packet_received";;
+
+let doSendPacketIn_ref: (flowlog_program -> event -> string -> string -> unit) option ref = ref None;;
+
 let emit_packet (p: flowlog_program) (ev: event): unit =
   printf "emitting: %s\n%!" (string_of_event p ev);
   write_log (sprintf ">>> emitting: %s\n%!" (string_of_event p ev));
@@ -889,13 +897,16 @@ let emit_packet (p: flowlog_program) (ev: event): unit =
      At the moment, someone can emit_arp with dlTyp = 0x000 or something dumb like that. *)
   guarded_emit_push swid pt (OpenFlow0x01_Core.NotBuffered (marshal_packet ev));;
 
-let last_packet_received_from_dp: (int64 * int32 * Packet.packet * int32 option) option ref = ref None;;
-let set_last_packet_received (sw: switchId) (ncpt: NetCore_Pattern.port) (pkt: Packet.packet) (buf: int32 option): unit =
-  match ncpt with
-    | NetCore_Pattern.Physical(x) -> last_packet_received_from_dp := Some (sw, x, pkt, buf)
-    | _ -> failwith "set_last_packet_received";;
-
-let doSendPacketIn_ref: (flowlog_program -> event -> string -> string -> unit) option ref = ref None;;
+let forward_cp_packet (p: flowlog_program) (ev: event): unit =
+  printf "forwarding packet from CP: %s\n%!" (string_of_event p ev);
+  write_log (sprintf ">>> CP-forward (forward -> emit): %s\n%!" (string_of_event p ev));
+  let pt = (nwport_of_string (get_field ev "locpt")) in
+   let incsw, incpt, incpkt, incbuffid = match !last_packet_received_from_dp with
+    | Some(a,b,c,d) -> (a, b, c, d)
+    | _ -> failwith "no src packet" in
+   (*TODO: change fields besides locsw, locpt *)
+   (* OpenFlow0x01_Core.payload *)
+    guarded_emit_push incsw pt (OpenFlow0x01_Core.NotBuffered (Packet.marshal incpkt));;
 
 let send_event (p: flowlog_program) (ev: event) (ip: string) (pt: string): unit =
   printf "sending: %s\n%!" (string_of_event p ev);
@@ -914,7 +925,7 @@ let event_with_field (p: flowlog_program) (ev_so_far : event) (fieldn: string) (
     | TVar(x) -> {ev_so_far with values=(StringMap.add fieldn "" ev_so_far.values)}
     | _ -> failwith ("event_with_field:"^(string_of_term avalue));;
 
-let prepare_output (p: flowlog_program) (incoming_event: event) (defn: outgoing_def): (event * spec_out) list =
+let prepare_output (p: flowlog_program) (incoming_event: event) (from: eventsource) (defn: outgoing_def): (event * eventsource * spec_out) list =
     let arities = (match defn.outarity,defn.react with
                           | FixedEvent(evname),_ -> [get_fields_for_type p evname]
                           (*| AnyFields,OutPrint -> init (length tup) (fun i -> "x"^(string_of_int i))  *)
@@ -925,7 +936,7 @@ let prepare_output (p: flowlog_program) (incoming_event: event) (defn: outgoing_
 
                           | _ -> failwith "prepare_tuple") in
 
-    let prepare_tuple (fieldnames: string list) (tup: term list): (event * spec_out) =
+    let prepare_tuple (fieldnames: string list) (tup: term list): (event * eventsource * spec_out) =
       (*printf "PREPARING OUTPUT... tuple: %s\n%!" (String.concat ";" (map string_of_term tup));*)
       (* arglist orders the xsb results. assigns says how to use them, spec how to send them. *)
       let initev = (match defn.react with
@@ -935,9 +946,9 @@ let prepare_output (p: flowlog_program) (incoming_event: event) (defn: outgoing_
                 | OutPrint -> failwith "print unsupported currently"
                 | OutSend(outtype, _, _) -> {typeid=outtype; values=StringMap.empty}) in
       let ev = fold_left2 (event_with_field p) initev fieldnames tup in
-        (ev, defn.react) in
+        (ev, from, defn.react) in
 
-      let prepare_tuples (tupswithfields: string list * term list list): (event * spec_out) list =
+      let prepare_tuples (tupswithfields: string list * term list list): (event * eventsource * spec_out) list =
         let fieldnames, tups = tupswithfields in
           fold_left (fun acc tup -> (prepare_tuple fieldnames tup) :: acc) [] tups in
 
@@ -951,9 +962,13 @@ let prepare_output (p: flowlog_program) (incoming_event: event) (defn: outgoing_
       (* return the results to be executed later *)
       fold_left (fun acc tupswf -> (prepare_tuples tupswf) @ acc) [] xsb_results_with_fieldnames;;
 
-let execute_output (p: flowlog_program) ((ev, spec): event * spec_out) : unit =
+let execute_output (p: flowlog_program) ((ev, from, spec): event * eventsource * spec_out) : unit =
   match spec with
-   | OutForward -> forward_packet p ev
+   | OutForward ->
+     (* If "forwarding" a CP packet, we need to provide a new packet out, not a new forwarding action *)
+     (match from with
+        | IncCP -> forward_cp_packet p ev
+        | _ ->  forward_packet p ev)
    | OutEmit(_) -> emit_packet p ev
    | OutPrint -> printf "PRINT RULE FIRED: %s\n%!" (string_of_event p ev)
    | OutLoopback -> failwith "loopback unsupported currently"
@@ -1008,20 +1023,16 @@ let expire_remote_state_in_xsb (p: flowlog_program) : unit =
 
     FmlaMap.iter (expire_remote_if_time p) !remote_cache;;
 
-  (* ASSUMPTION: event ids all same as their incoming relation name*)
-let inc_event_to_relnames (p: flowlog_program) (notif: event): string list =
-  (built_in_supertypes notif.typeid);;
-
 (* Which definitions need triggering by this notification? *)
-let get_output_defns_triggered (p: flowlog_program) (notif: event): outgoing_def list =
-  let inrelnames = inc_event_to_relnames p notif in
-  let outrelnames = fold_left (fun acc inrel -> (Hashtbl.find_all p.memos.out_triggers inrel ) @ acc) [] inrelnames in
+let get_output_defns_triggered (p: flowlog_program) (notif: event) (src: eventsource): outgoing_def list =
+  let inrelnames = inc_event_to_relnames p notif src in
+  let outrelnames = fold_left (fun acc inrel -> (Hashtbl.find_all p.memos.out_triggers inrel) @ acc) [] inrelnames in
   let possibly_triggered = filter (fun def -> mem def.outname outrelnames) p.outgoings in
     (*printf "possibly triggered: %s\n%!" (String.concat ",\n" (map string_of_reactive possibly_triggered));*)
     possibly_triggered;;
 
-let get_local_tables_triggered (p: flowlog_program) (sign: bool) (notif: event): table_def list =
-  let inrelnames = inc_event_to_relnames p notif in
+let get_local_tables_triggered (p: flowlog_program) (sign: bool) (notif: event) (src: eventsource): table_def list =
+  let inrelnames = inc_event_to_relnames p notif src in
   let outrelnames = fold_left
     (fun acc inrel -> (Hashtbl.find_all
                         (if sign then p.memos.insert_triggers else p.memos.delete_triggers) inrel) @ acc) [] inrelnames in
@@ -1032,7 +1043,7 @@ let get_local_tables_triggered (p: flowlog_program) (sign: bool) (notif: event):
 (* Returns list of names of tables that have been modified *)
 (* DO NOT PASS suppress_new_policy = true unless it is safe to do so! It was added to prevent a single switch registration from
    rebuilding the policy once for each new port. *)
-let respond_to_notification (p: flowlog_program) ?(suppress_new_policy: bool = false) (notif: event): string list =
+let respond_to_notification (p: flowlog_program) ?(suppress_new_policy: bool = false) (notif: event) (from: eventsource): string list =
   try
       let startt = Unix.gettimeofday() in
       write_log "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<";
@@ -1044,7 +1055,7 @@ let respond_to_notification (p: flowlog_program) ?(suppress_new_policy: bool = f
   (*printf "~~~~ RESPONDING TO NOTIFICATION ABOVE ~~~~~~~~~~~~~~~~~~~\n%!";*)
 
   (* populate the EDB with event *)
-    Communication.assert_event_and_subevents p notif;
+    Communication.assert_event_and_subevents p notif from;
 
     (* Expire remote state if needed*)
     expire_remote_state_in_xsb p;
@@ -1062,8 +1073,8 @@ let respond_to_notification (p: flowlog_program) ?(suppress_new_policy: bool = f
       write_log (sprintf "Time after preload: %fs\n%!" (Unix.gettimeofday() -. startt));
 
     (* for all declared tables +/- *)
-    let triggered_insert_table_decls = get_local_tables_triggered p true notif in
-    let triggered_delete_table_decls = get_local_tables_triggered p false notif in
+    let triggered_insert_table_decls = get_local_tables_triggered p true notif from in
+    let triggered_delete_table_decls = get_local_tables_triggered p false notif from in
     let to_assert = flatten (map (change_table_how p true) triggered_insert_table_decls) in
     let to_retract = flatten (map (change_table_how p false) triggered_delete_table_decls) in
     if !global_verbose >= 2 && (length to_assert > 0 || length to_retract > 0) then
@@ -1083,15 +1094,17 @@ let respond_to_notification (p: flowlog_program) ?(suppress_new_policy: bool = f
    (* This must be done BEFORE xsb is updated (output + updates must
       be computed from same EDB, and BEFORE we retract the event *)
    (* for all potentially-triggered outgoing events ...*)
-    let outgoing_defns = (get_output_defns_triggered p notif) in
-    let prepared_output = flatten (map (prepare_output p notif) outgoing_defns) in
+    let outgoing_defns = (get_output_defns_triggered p notif from) in
+    let prepared_output = flatten (map (prepare_output p notif from) outgoing_defns) in
+    if !global_verbose >= 3 then
+      printf "There were %d prepared output actions.\n%!" (length prepared_output);
    (**********************************************************)
 
     if !global_verbose >= 3 then
       write_log (sprintf "Time after preparing output: %fs\n%!" (Unix.gettimeofday() -. startt));
 
     (* depopulate event EDB *)
-    Communication.retract_event_and_subevents p notif;
+    Communication.retract_event_and_subevents p notif from;
 
     if !global_verbose >= 3 then
       write_log (sprintf "Time after retracting event and subevents: %fs\n%!" (Unix.gettimeofday() -. startt));
@@ -1158,7 +1171,7 @@ let respond_to_notification (p: flowlog_program) ?(suppress_new_policy: bool = f
 
   with
    | Not_found ->
-       Communication.retract_event_and_subevents p notif;
+       Communication.retract_event_and_subevents p notif from;
        Mutex.unlock xsbmutex;
        if !global_verbose > 0 then printf "Nothing to do for this event.\n%!"; [];
    | exn ->
@@ -1208,9 +1221,9 @@ let make_policy_stream (p: flowlog_program)
         begin
           printf "SWITCH 0x%Lx connected. Flowlog events triggered: %s\n%!" sw (String.concat ", " (map (string_of_event p) notifs));
           (* Avoid re-computing policy for every port on the switch: *)
-          List.iter (fun notif -> ignore (respond_to_notification p ~suppress_new_policy:true notif)) (tl notifs);
+          List.iter (fun notif -> ignore (respond_to_notification p ~suppress_new_policy:true notif IncDP)) (tl notifs);
           (* Only recompute policy on the last (first) port: *)
-          ignore (respond_to_notification p (hd notifs));
+          ignore (respond_to_notification p (hd notifs) IncDP);
           if !global_verbose >= 1 then
           begin
             printf "Total time to process all switch_port events for switch 0x%Lx: %fs.\n%!" sw (Unix.gettimeofday() -. startt);
@@ -1227,7 +1240,7 @@ let make_policy_stream (p: flowlog_program)
         let sw_string = Int64.to_string swid in
         let notif = {typeid="switch_down"; values=construct_map [("sw", sw_string)]} in
           printf "SWITCH %Lx went down. Triggered: %s\n%!" swid (string_of_event p notif);
-          ignore(respond_to_notification p notif);
+          ignore(respond_to_notification p notif IncDP);
       | FlowRemoved(swid, frm) ->
 
       (* Because Flowlog has no option type in events, we use zero to indicate no constraint.*)
@@ -1266,7 +1279,7 @@ let make_policy_stream (p: flowlog_program)
         let sw_string = Int64.to_string swid in
         let notif = {typeid="flow_removed"; values=construct_map ([("sw", sw_string)]@(build_flow_removed_event frm))} in
           printf "Triggered event: %s\n%!" (string_of_event p notif);
-          ignore(respond_to_notification p notif);
+          ignore(respond_to_notification p notif IncDP);
     and
 
     reportPacketCallback (sw: switchId) (pt: port) (pkt: Packet.packet) (buf: int32 option) : NetCore_Types.action =
@@ -1343,7 +1356,7 @@ let make_policy_stream (p: flowlog_program)
       (* Parse the packet and send it to XSB. Deal with the results *)
       let notif = (pkt_to_event sw pt pkt) in
         printf "~~~ Incoming Notif:\n %s\n%!" (string_of_event p notif);
-        ignore (respond_to_notification p notif);
+        ignore (respond_to_notification p notif IncDP);
 
         if !global_verbose >= 1 then
         begin

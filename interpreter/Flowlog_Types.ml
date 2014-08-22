@@ -62,6 +62,7 @@ type typeid = string;;
 
   (* Where is the incoming event coming from?
      Used to disambiguate packets coming from the DP vs. coming from the CP. *)
+  (* TODO: this really ought to be part of every event, not standalone *)
   type eventsource =
       | IncDP
       | IncCP
@@ -143,6 +144,7 @@ type astdecl =
                         delete_triggers: (string, string) Hashtbl.t;
                         tablemap: (string, table_def) Hashtbl.t;
                         eventmap: (string, event_def) Hashtbl.t;
+                        incomingmap: ((string*eventsource),string) Hashtbl.t;
                         outgoingmap: (string, outgoing_def) Hashtbl.t;
                         atoms_used_in_bodies: formula list;
                        };;

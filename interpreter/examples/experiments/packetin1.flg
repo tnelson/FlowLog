@@ -11,7 +11,8 @@ OUTGOING send_to_cp(ip_packet) THEN
 // ... AND send a copy of it elsewhere on the CP.
 
 ON ip_packet(p):
-  DO forward(new) WHERE new.locPt != p.locPt;
+  // don't forward and then re-forward
+  //DO forward(new) WHERE new.locPt != p.locPt;
 
   // Want to copy everything, including the payload.
   // ???: Distinguish this from emit behavior later; for now assume forwarding, not creating new pkts

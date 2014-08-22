@@ -237,7 +237,7 @@ let build_flavor_decls (flav: packet_flavor): sdecl list =
    DeclOut(flavor_to_emitrelname flav, FixedEvent(flavor_to_typename flav))];;
 let build_flavor_reacts (flav: packet_flavor): sreactive list =
   [ReactInc(flavor_to_typename flav, IncDP, flavor_to_inrelname flav);
-   ReactInc(flavor_to_typename flav, IncCP, flavor_to_cpinrelname flav); 
+   ReactInc(flavor_to_typename flav, IncCP, flavor_to_cpinrelname flav);
    ReactOut(flavor_to_emitrelname flav, FixedEvent(flavor_to_typename flav),
             (*map create_id_assign (flavor_to_fields flav), *) OutEmit(flavor_to_typename flav))];;
 
@@ -262,14 +262,19 @@ let built_in_reacts = [ ReactInc("switch_port", IncDP, switch_reg_relname);
 (* All packet types must go here;
    these are the tables that flag a rule as being "packet-triggered".*)
 let built_in_packet_input_tables = map (fun flav -> flavor_to_inrelname flav) packet_flavors;;
+let built_in_cp_packet_input_tables = map (fun flav -> flavor_to_cpinrelname flav) packet_flavors;;
 
 let built_in_event_names = map (fun flav -> flavor_to_typename flav) packet_flavors;;
 
-let is_built_in_packet_typename (tname: string) = 
+let is_built_in_packet_typename (tname: string) =
   mem tname built_in_event_names;;
 
 let is_packet_in_table (relname: string): bool =
   mem relname built_in_packet_input_tables;;
+
+let is_cp_packet_in_table (relname: string): bool =
+  mem relname built_in_cp_packet_input_tables;;
+
 
 (* Ascend up the flavor tree looking for a default. Start with the event's type. *)
 let get_field (ev: event) (fldname: string): string =
@@ -512,7 +517,11 @@ let pkt_to_event (sw : switchId) (pt: port) (pkt : Packet.packet) : event =
 
 
 (* removes the packet_in atom (since that's meaningless here).
-   returns the var the old packet was bound to, and the trimmed fmla *)
+   returns the var the old packet was bound to, and the trimmed fmla
+
+   IMPORTANT: This function must remove cp_<x>_packet, not just <x>_packet.
+   Otherwise the Prolog program produced will be incorrect for CP-packet triggered rules
+   (it will have __locsw instead of p__locsw) *)
 let rec trim_packet_from_body (body: formula): (string * formula) =
   match body with
     | FTrue -> ("", body)
@@ -537,7 +546,15 @@ let rec trim_packet_from_body (body: formula): (string * formula) =
         (v, FNot(t))
     | FOr(f1, f2) -> failwith "trim_packet_from_clause"
     (* Don't remove non-packet input tables. Those flag caller that the clause is not packet-triggered *)
-    | FAtom("", relname, [TVar(varstr)]) when (is_packet_in_table relname) ->
+    | FAtom("", relname, [TVar(varstr)]) when (is_packet_in_table relname) || (is_cp_packet_in_table relname) ->
       (varstr, FTrue)
     | _ -> ("", body);;
+
+(***************************************************************************)
+(* Use reactives to look up appropriate output relation for this event/src *)
+let inc_event_to_relname (p: flowlog_program) (typename: string) (from: eventsource): string =
+    Hashtbl.find p.memos.incomingmap (typename, from);;
+let inc_event_to_relnames (p: flowlog_program) (notif: event) (from: eventsource): string list =
+  let supertypes = (built_in_supertypes notif.typeid) in
+    map (fun stype -> inc_event_to_relname p stype from) supertypes;;
 

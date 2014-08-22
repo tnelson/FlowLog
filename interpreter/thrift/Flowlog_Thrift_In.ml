@@ -60,7 +60,7 @@ object (self)
          [] fieldlist in
 
         let ev: event = {typeid = ntypestr; values = construct_map vals} in
-          ignore (respond_to_notification the_program ev);
+          ignore (respond_to_notification the_program ev IncThrift);
 
     with
       | Not_found -> (Printf.printf "   *** Nothing to be done with this notification.\n%!")

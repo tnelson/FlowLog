@@ -9,7 +9,7 @@ class LoggerSwitch (object):
 
   def __init__ (self, connection):
     self.connection = connection
-    self.seenTable = []
+    self.seenTable = set()
     connection.addListeners(self)
 
   def _handle_PacketIn (self, event):
@@ -34,7 +34,7 @@ class LoggerSwitch (object):
     do_flood()
 
     log.info("switch "+str(self.connection.dpid)+" received " + str(packet))
-    self.seenTable.append(packet.src)
+    self.seenTable.add(packet.src)
     log.info("new seenTable for switch "+str(self.connection.dpid)+" is: " + str(self.seenTable))
 
 
