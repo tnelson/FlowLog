@@ -99,12 +99,18 @@ let rec send_barrier_reply (servicefd: Lwt_unix.file_descr) (swid: int64) (xid: 
       | true -> Lwt.return ()
       | false -> failwith "send_barrier_reply";;
 
+let rec send_echo_request (servicefd: Lwt_unix.file_descr) (swid: int64): unit Lwt.t =
+    printf "Sending echo request...\n%!";
+    let b = Cstruct.create(0) in
+    match_lwt OpenFlow0x01_Switch.send_to_switch_fd servicefd (Int32.of_int 0) (EchoRequest(b)) with
+      | true -> Lwt.return ()
+      | false -> failwith "send_echo_request";;
 
 let rec send_echo_reply (servicefd: Lwt_unix.file_descr) (swid: int64) (b: bytes): unit Lwt.t =
     printf "Sending echo reply...\n%!";
     match_lwt OpenFlow0x01_Switch.send_to_switch_fd servicefd (Int32.of_int 0) (EchoReply(b)) with
       | true -> Lwt.return ()
-      | false -> failwith "send_barrier_reply";;
+      | false -> failwith "send_echo_reply";;
 
 let rec switch_listener (prgm: flowlog_program) (swid: switchId) (servicefd: Lwt_unix.file_descr): unit Lwt.t =
   match_lwt (OpenFlow0x01_Switch.recv_from_switch_fd servicefd) with
@@ -114,13 +120,13 @@ let rec switch_listener (prgm: flowlog_program) (swid: switchId) (servicefd: Lwt
       printf "  msg: %s\n%!" (Message.to_string msg);
       (match msg with
         | EchoRequest(bytes) ->
-          send_echo_reply servicefd swid;
+          let _ = send_echo_reply servicefd swid bytes in
           switch_listener prgm swid servicefd
         | EchoReply(bytes) ->
           printf "DEBUG: received echo reply.\n%!";
           switch_listener prgm swid servicefd;
         | BarrierRequest ->
-          send_barrier_reply servicefd swid xid;
+          let _ = send_barrier_reply servicefd swid xid in
           switch_listener prgm swid servicefd
         | FlowModMsg(fm) ->
           printf "fm: %s\n%!" (FlowMod.to_string fm);
@@ -148,7 +154,7 @@ let rec switch_listener (prgm: flowlog_program) (swid: switchId) (servicefd: Lwt
           let in_pt = (match pout.port_id with | None -> Physical(Int32.zero) | Some p -> Physical((Int32.of_int p))) in
 
           let notif = (pkt_to_event swid in_pt pkt) in
-            respond_to_notification prgm notif;
+            ignore (respond_to_notification prgm notif);
 
             (* may be multiple actions = multi-record problem with events *)
             printf "WARNING! ACTIONS IN PACKET_OUT WILL BE IGNORED BY FLOWLOG.\n%!";
@@ -165,24 +171,24 @@ let rec switch_listener (prgm: flowlog_program) (swid: switchId) (servicefd: Lwt
 (***********************************************************************************)
 
 let init_connection_as_switch (swid: int64) (dstip: inet_addr) (dstport: int): (int * Lwt_unix.file_descr) =
-  printf "Opening socket for proxy switch with id %Ld...\n%!";
+  printf "Opening socket for proxy switch with id %Ld...\n%!" swid;
   let fd = socket PF_INET SOCK_STREAM 0 in
     setsockopt fd SO_REUSEADDR true;
     bind fd (ADDR_INET (Unix.inet_addr_any, 0));
     let newport = (match getsockname fd with | ADDR_INET(_, p) -> p | _ -> failwith "init_connection: non ADDR_INET") in
-      connect fd (ADDR_INET(dstip, dstport));
+      let _ = connect fd (ADDR_INET(dstip, dstport)) in
       printf "connected to controller at %s port %d.\n%!" (Unix.string_of_inet_addr dstip) dstport;
 
       (* register switch with the appropriate dpid. *)
       (* step 1: send hello message *)
       let hello_message = Hello(Cstruct.create 0) in
-        send_to_switch_fd fd (Int32.of_int 0) hello_message;
+      let _ = send_to_switch_fd fd (Int32.of_int 0) hello_message in
 
       (* TODO step 2: hold and wait for HELLO reply, then features request *)
-      wait_for_hello fd;
-      wait_for_features_request fd;
+      let _ = wait_for_hello fd in
+      let _ = wait_for_features_request fd in
       (* TODO step 3: send features reply with DPID *)
-      send_features_reply fd swid;
+      let _ = send_features_reply fd swid in
 
       printf "switch registered.\n%!";
       (* return the actual port used *)
@@ -193,6 +199,18 @@ let shutdown_switch_listener (swid: switchId): unit Lwt.t =
     Lwt_unix.close (assoc swid !swid_to_fd)
   else
     Lwt.return ();;
+
+(* Send echo requests every X seconds. Otherwise the controller will disconnect. *)
+let keepalive_delay_sec: float ref = ref 5.0;;
+let swid_to_mutex: (switchId * Lwt_mutex.t) list ref = ref [];;
+
+let rec switch_keepalive (swid: switchId) (fd: Lwt_unix.file_descr): unit Lwt.t =
+  let the_lock = assoc swid !swid_to_mutex in
+    Lwt_unix.sleep !keepalive_delay_sec >>
+    Lwt_mutex.with_lock the_lock (fun () -> send_echo_request fd swid) >>
+    switch_keepalive swid fd;;
+
+(* todo: mutex other output to switch *)
 
 let register_proxy_switch (prgm: flowlog_program) (swid: switchId) (ips: string) (pts: string): Lwt_unix.file_descr =
   match mem_assoc swid !swid_to_fd with
@@ -211,7 +229,9 @@ let register_proxy_switch (prgm: flowlog_program) (swid: switchId) (ips: string)
 
       let (newport, fd) = init_connection_as_switch swid (Unix.inet_addr_of_string ips_dotted) (int_of_string pts) in
         swid_to_fd := (swid, fd)::!swid_to_fd;
-        Lwt.async (fun () -> (switch_listener prgm swid fd) >> (shutdown_switch_listener swid));
+        swid_to_mutex := (swid, Lwt_mutex.create ())::!swid_to_mutex;
+        Lwt.async (fun () -> Lwt.pick [((switch_listener prgm swid fd) >> (shutdown_switch_listener swid));
+                                       switch_keepalive swid fd]);
         fd;;
 
 (***********************************************************************************)
