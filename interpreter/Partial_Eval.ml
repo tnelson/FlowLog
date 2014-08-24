@@ -885,7 +885,7 @@ let set_last_packet_received (sw: switchId) (ncpt: NetCore_Pattern.port) (pkt: P
     | NetCore_Pattern.Physical(x) -> last_packet_received_from_dp := Some (sw, x, pkt, buf)
     | _ -> failwith "set_last_packet_received";;
 
-let doSendPacketIn_ref: (flowlog_program -> event -> string -> string -> unit) option ref = ref None;;
+let doSendPacketIn_ref: (flowlog_program -> event -> string -> string -> unit Lwt.t) option ref = ref None;;
 
 let emit_packet (p: flowlog_program) (ev: event): unit =
   printf "emitting: %s\n%!" (string_of_event p ev);
@@ -908,7 +908,7 @@ let forward_cp_packet (p: flowlog_program) (ev: event): unit =
    (* OpenFlow0x01_Core.payload *)
     guarded_emit_push incsw pt (OpenFlow0x01_Core.NotBuffered (Packet.marshal incpkt));;
 
-let send_event (p: flowlog_program) (ev: event) (ip: string) (pt: string): unit =
+let send_event (p: flowlog_program) (ev: event) (ip: string) (pt: string): unit Lwt.t =
   printf "sending: %s\n%!" (string_of_event p ev);
   write_log (sprintf ">>> sending: %s\n%!" (string_of_event p ev));
   if is_built_in_packet_typename ev.typeid then
@@ -962,15 +962,15 @@ let prepare_output (p: flowlog_program) (incoming_event: event) (from: eventsour
       (* return the results to be executed later *)
       fold_left (fun acc tupswf -> (prepare_tuples tupswf) @ acc) [] xsb_results_with_fieldnames;;
 
-let execute_output (p: flowlog_program) ((ev, from, spec): event * eventsource * spec_out) : unit =
+let execute_output (p: flowlog_program) ((ev, from, spec): event * eventsource * spec_out) : unit Lwt.t =
   match spec with
    | OutForward ->
      (* If "forwarding" a CP packet, we need to provide a new packet out, not a new forwarding action *)
      (match from with
-        | IncCP -> forward_cp_packet p ev
-        | _ ->  forward_packet p ev)
-   | OutEmit(_) -> emit_packet p ev
-   | OutPrint -> printf "PRINT RULE FIRED: %s\n%!" (string_of_event p ev)
+        | IncCP -> Lwt.return (forward_cp_packet p ev)
+        | _ ->  Lwt.return (forward_packet p ev))
+   | OutEmit(_) -> Lwt.return (emit_packet p ev)
+   | OutPrint -> Lwt.return (printf "PRINT RULE FIRED: %s\n%!" (string_of_event p ev))
    | OutLoopback -> failwith "loopback unsupported currently"
    | OutSend(_, ip, pt) -> send_event p ev ip pt;;
 
@@ -1040,16 +1040,27 @@ let get_local_tables_triggered (p: flowlog_program) (sign: bool) (notif: event) 
     (*printf "possibly triggered: %s\n%!" (String.concat ",\n" (map string_of_declaration possibly_triggered));*)
     possibly_triggered;;
 
+let lwt_respond_lock = Lwt_mutex.create ();;
+
 (* Returns list of names of tables that have been modified *)
 (* DO NOT PASS suppress_new_policy = true unless it is safe to do so! It was added to prevent a single switch registration from
    rebuilding the policy once for each new port. *)
-let respond_to_notification (p: flowlog_program) ?(suppress_new_policy: bool = false) (notif: event) (from: eventsource): string list =
+let respond_to_notification (p: flowlog_program) ?(suppress_new_policy: bool = false) (notif: event) (from: eventsource): string list Lwt.t =
   try
       let startt = Unix.gettimeofday() in
       write_log "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<";
       write_log (sprintf "<<< incoming: %s" (string_of_event p notif));
       counter_inc_all := !counter_inc_all + 1;
 
+      (* Yes, we need two layers of mutexes to account for the fact that the codebase uses two KINDS of thread-management:
+         NetCore (and the general program) uses Lwt. But Thrift uses standard OCaml Threads.
+
+         Suppose Lwt A is dealing with a dataplane packet, but meanwhile Lwt B, a switch-proxy listener, receives a packet_out.
+         If B hits the "real" mutex while A has it locked, the program deadlocks (the "real" thread is running B, and can never
+         switch to A). So we give Lwts a chance to yield here. *)
+
+      Lwt_mutex.with_lock lwt_respond_lock
+    (fun () ->
       Mutex.lock xsbmutex;
 
   (*printf "~~~~ RESPONDING TO NOTIFICATION ABOVE ~~~~~~~~~~~~~~~~~~~\n%!";*)
@@ -1154,7 +1165,7 @@ let respond_to_notification (p: flowlog_program) ?(suppress_new_policy: bool = f
 
    (**********************************************************)
    (* Finally actually send output *)
-    iter (execute_output p) prepared_output;
+    lwt _ = Lwt_list.iter_s (execute_output p) prepared_output in
 
    (**********************************************************)
 
@@ -1167,13 +1178,14 @@ let respond_to_notification (p: flowlog_program) ?(suppress_new_policy: bool = f
     if !global_verbose >= 3 then
       write_log (sprintf "Time to process event completely: %fs\n%!" (Unix.gettimeofday() -. startt));
 
-    modifications (* return tables that may have changed *)
+    Lwt.return modifications) (* return tables that may have changed *)
 
   with
    | Not_found ->
        Communication.retract_event_and_subevents p notif from;
        Mutex.unlock xsbmutex;
-       if !global_verbose > 0 then printf "Nothing to do for this event.\n%!"; [];
+       if !global_verbose > 0 then printf "Nothing to do for this event.\n%!";
+       Lwt.return []
    | exn ->
       begin
         Format.printf "Unexpected exception on event. Event was: %s\n Exception: %s\n----------\n%s\n%!"
