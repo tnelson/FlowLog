@@ -1,0 +1,34 @@
+// Test routeflow integration
+// Ignore non-IP DP traffic for now
+
+// TODO: better error msg if ip_packet here (will mismatch ARP packets)
+OUTGOING send_to_cp(packet) THEN
+  SEND TO 127.0.0.1:9999;
+
+REMOTE TABLE routes(switchid, ipaddr, ipaddr, portid)
+  FROM routes AT 127.0.0.1 10999;  // change address as needed
+
+// OSPF: IP protocol = decimal 89
+
+ON ip_packet(p) WHERE p.nwproto = 89:
+  DO send_to_cp(p);
+
+// Send all ARP replies up to RouteFlow
+ON arp_packet(p) WHERE p.arp_op = 2: // todo: integrate with arp cache
+  DO send_to_cp(p);
+
+// Flood OSPF from Routeflow (todo: stop doing this; at least send on external ports only!)
+ON cp_ip_packet(p) WHERE p.nwproto = 89:
+   DO forward(new) WHERE new.locPt != p.locPt;
+
+// Data-plane non-OSPF:
+ON ip_packet(p) WHERE p.nwproto != 89:
+  DO forward(new) WHERE
+    routes(p.locSw, prefix, mask, new.locPt) AND
+    p.nwDst IN prefix/mask;
+
+ // ^^ possible issues:
+
+ // (1) ARP, ICMP
+ // (2) not doing smallest-prefix (but extracting routes from the OpenFlow rules RF produces should mean it's safe not to?)
+ // (3) which components get asked for? Can't bind prefix and mask before asking for routes.

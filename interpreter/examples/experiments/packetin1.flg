@@ -14,8 +14,7 @@ ON ip_packet(p):
   // don't forward and then re-forward
   //DO forward(new) WHERE new.locPt != p.locPt;
 
-  // Want to copy everything, including the payload.
-  // ???: Distinguish this from emit behavior later; for now assume forwarding, not creating new pkts
+  // Want to copy everything, including the payload. ("forward"-style behavior for now)
   DO send_to_cp(p);
 
 // TODO: distinguish forward and emit-type behaviors in these pipes (does the payload get copied?)
@@ -33,7 +32,7 @@ ON ip_packet(p):
 // parser will always make declared reactives come from thrift, and reactives
 // created by event declarations will likewise come from Thrift.
 
-// TODO (later): add some flexibility.
+// TODO (later): add some flexibility for packet-out processing.
 
 // Take this packet and flood it on all non-eq ports for the specified switch.
 // (This tests that the source portid and swid are taken into account.)
@@ -42,14 +41,9 @@ ON ip_packet(p):
 ON cp_ip_packet(p):
   DO forward(new) WHERE new.locPt != p.locPt;
 
-// ^ This is a packet-triggered rule, but triggered from the CP, not the DP.
-// ^ Make sure it doesn't get compiled.
 
+// TODO: Keepalive doesn't seem to be required for Pox. What about Ryu?
+// TODO: Pox sends a barrier before it's ready to process packet_ins. Is Ryu the same?
 
-// TODO: where is the port set?
-
-
-// ^^ TODO: keepalive
-
-// ^^ TODO later: actions in packet_out. Can't currently represent records in a flowlog event,
+// TODO later: actions in packet_out. Can't currently represent records in a flowlog event,
 // so packet_outs are treated as normal packets, using the in_port field for the locPt. (pt=0 if none)
