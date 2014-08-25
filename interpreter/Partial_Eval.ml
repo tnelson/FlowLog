@@ -1063,6 +1063,13 @@ let respond_to_notification (p: flowlog_program) ?(suppress_new_policy: bool = f
     (fun () ->
       Mutex.lock xsbmutex;
 
+      (* TN: Not sure if Lwt_mutex locks work for *all* Lwt threads in the process, or merely all Lwt threads in the OCaml thread.
+         If the latter, this double-lock isn't enough to protect us if more than one OC thread splits via Lwt. If A1 locks, B1 and B2
+         will both get stopped at the OC mutex, and nothing will prevent them from executing simultaneously once A1 unlocks.
+
+         At the moment, only the main network thread splits via Lwt, so the above scenario shouldn't occur. *)
+
+
   (*printf "~~~~ RESPONDING TO NOTIFICATION ABOVE ~~~~~~~~~~~~~~~~~~~\n%!";*)
 
   (* populate the EDB with event *)
