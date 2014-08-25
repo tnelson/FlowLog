@@ -93,11 +93,10 @@ method doQuery qry =
     let relname = (sod (sod qry)#get_relName) in
     (*let args = (sod (sod qry)#get_arguments) in*)
     let rep = new queryReply in
-    let tbl = (Hashtbl.create 1) in
     printf "The _man_ answers to no one's queries! Was: %s\n%!" relname;
     rep#set_exception_code "2";
     rep#set_exception_message "The _man_ answers to no one's queries!";
-    rep#set_result tbl;
+    rep#set_result [];
     rep
 
 end

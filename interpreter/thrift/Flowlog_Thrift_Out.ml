@@ -38,16 +38,18 @@ let print_notif_values tbl =
     Note: each query opens a separate, new connection to the black-box.
 *)
 let doBBquery (qryname: string) (bbip: string) (bbport: string) (args: term list): string list list =
-    let cli = connect ~host:bbip (int_of_string bbport) in
+    let dotted_host = Packet.string_of_ip (nwaddr_of_int_string bbip) in
+    let cli = connect ~host:dotted_host (int_of_string bbport) in
     try
-      Printf.printf "Sending BB query...\n%!";
+      Printf.printf "Sending BB query to %s:%s...\n%!" dotted_host bbport;
       let qry = new query in
       qry#set_relName qryname;
       qry#set_arguments (map string_of_term args);
       let qresult = cli.bb#doQuery qry in
-      let result = Hashtbl.fold (fun k v sofar -> k :: sofar)
+      (*let result = Hashtbl.fold (fun k v sofar -> k :: sofar)
                                     (sod qresult#get_result)
-                                    [] in
+                                    [] in*)
+        let result = (sod qresult#get_result) in
         cli.trans#close;
         result
 
@@ -61,10 +63,11 @@ let doBBquery (qryname: string) (bbip: string) (bbport: string) (args: term list
 *)
 
 let doBBnotify (ev: event) (bbip: string) (bbport: string) : unit Lwt.t =
-            let cli = connect ~host:bbip (int_of_string bbport) in
+            let dotted_host = Packet.string_of_ip (nwaddr_of_int_string bbip) in
+            let cli = connect ~host:dotted_host (int_of_string bbport) in
             try
 
-              printf "Sending notification...\n%!";
+              printf "Sending notification to %s:%s...\n%!" dotted_host bbport;
               let notif = new notification in
               let tbl = (Hashtbl.create (StringMap.cardinal ev.values)) in
               notif#set_notificationType ev.typeid;

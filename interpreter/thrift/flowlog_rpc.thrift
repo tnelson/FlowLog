@@ -1,20 +1,17 @@
-/* Apache Thrift RPC definition for FlowLog
- *
- * THIS FILE IS A NON-FINAL TEST. DO NOT RELY UPON IT.
- */
+/* Apache Thrift RPC definition for FlowLog */
 
-////////////////////////////////////////////////////// 
+//////////////////////////////////////////////////////
 // What kinds of atomic values get passed back and forth?
 // Not necessarily just numbers! An FLValue represents
 // some FlowLog term, which is a constant or a variable.
-////////////////////////////////////////////////////// 
+//////////////////////////////////////////////////////
 
 typedef string FLValue
 
-////////////////////////////////////////////////////// 
+//////////////////////////////////////////////////////
 // A notification (from either a black-box to the
 // controller or vice versa) has this form: a string
-// describing the type of notification, and a map 
+// describing the type of notification, and a map
 // containing the fields for that type. E.g. an AppleTV
 // registration event would contain fields for the mac addresses
 // of the requesting machine and the apple tv in question.
@@ -25,9 +22,9 @@ typedef string FLValue
 struct Notification
 {
 	// Use a map to take field names to atomic values.
-        // (The Thrift format requires we assign a number to each field.)
-        1: required string notificationType;
-        2: required map<string, FLValue> values;
+    // (The Thrift format requires we assign a number to each field.)
+    1: required string notificationType;
+    2: required map<string, FLValue> values;
 }
 
 //////////////////////////////////////////////////////
@@ -35,7 +32,7 @@ struct Notification
 // "For what tuples <X_1, ..., X_n> is R(t_1, ..., t_m)
 //  true?" (where each t_1 is either a constant or an X_i).
 //
-// ASSUMPTION: Is this enough to cover all cases? 
+// ASSUMPTION: Is this enough to cover all cases?
 // It covers the Boolean case (where all terms are constant)
 // since the result will be either a singleton or non-empty.
 //////////////////////////////////////////////////////
@@ -48,11 +45,13 @@ struct Query
 
 //////////////////////////////////////////////////////
 // A reply to a query is a set of tuples. (See above.)
+// TN 8/25: Changed to be a list of lists instead of a set of lists
+//   to ease interaction with Python
 //////////////////////////////////////////////////////
 
 struct QueryReply
 {
-	1: required set<list<FLValue>> result;
+	1: required list<list<FLValue>> result;
 	2: optional string exception_code;
 	3: optional string exception_message;
 }
@@ -62,7 +61,7 @@ struct QueryReply
 // functions that implementors of the service provide.
 // Here the FlowLog interpreter has the ability to
 // receive notifications from external code.
-// 
+//
 // (Like in structs, Thrift makes us give a unique number
 //  ID for each argument to each function.)
 //////////////////////////////////////////////////////
@@ -73,7 +72,7 @@ service FlowLogInterpreter
 }
 
 //////////////////////////////////////////////////////
-// Likewise, a black-box has the power to receive 
+// Likewise, a black-box has the power to receive
 // notifications, but can also be queried.
 //////////////////////////////////////////////////////
 

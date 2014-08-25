@@ -1,7 +1,7 @@
 # OASIS_START
-# DO NOT EDIT (digest: 41f0e0c91cf15938c1d4c5d7763ad685)
-# Ignore VCS directories, you can use the same kind of rule outside 
-# OASIS_START/STOP if you want to exclude directories that contains 
+# DO NOT EDIT (digest: e96079101db877c1d1f0a94ae4751163)
+# Ignore VCS directories, you can use the same kind of rule outside
+# OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
 <**/.svn>: -traverse
 <**/.svn>: not_hygienic
@@ -15,23 +15,23 @@
 "_darcs": not_hygienic
 # Library flowlog_thrift
 "gen-ocaml/flowlog_thrift.cmxs": use_flowlog_thrift
-<gen-ocaml/*.ml{,i}>: pkg_thrift
 <gen-ocaml/*.ml{,i}>: pkg_threads
+<gen-ocaml/*.ml{,i}>: pkg_thrift
 # Executable notify
-<notify.{native,byte}>: use_flowlog_thrift
-<notify.{native,byte}>: pkg_thrift
-<notify.{native,byte}>: pkg_threads
 <notify.{native,byte}>: pkg_str
+<notify.{native,byte}>: pkg_threads
+<notify.{native,byte}>: pkg_thrift
+<notify.{native,byte}>: use_flowlog_thrift
 <*.ml{,i}>: pkg_str
 # Executable Timer
-<timer.{native,byte}>: use_flowlog_thrift
-<timer.{native,byte}>: pkg_thrift
 <timer.{native,byte}>: pkg_threads
+<timer.{native,byte}>: pkg_thrift
+<timer.{native,byte}>: use_flowlog_thrift
 # Executable Police
-<police_tipline.{native,byte}>: use_flowlog_thrift
-<police_tipline.{native,byte}>: pkg_thrift
 <police_tipline.{native,byte}>: pkg_threads
-<*.ml{,i}>: use_flowlog_thrift
-<*.ml{,i}>: pkg_thrift
+<police_tipline.{native,byte}>: pkg_thrift
+<police_tipline.{native,byte}>: use_flowlog_thrift
 <*.ml{,i}>: pkg_threads
+<*.ml{,i}>: pkg_thrift
+<*.ml{,i}>: use_flowlog_thrift
 # OASIS_STOP

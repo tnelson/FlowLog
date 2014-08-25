@@ -3,10 +3,12 @@
 
 // TODO: better error msg if ip_packet here (will mismatch ARP packets)
 OUTGOING send_to_cp(packet) THEN
-  SEND TO 127.0.0.1:9999;
+  SEND TO 192.168.1.102:6633; // another server's standard controller port
 
+ // change address as needed. 9090 LOCALHOST is where FL waits for its notifications
+ // but on different server, 9090 should be OK to use
 REMOTE TABLE routes(switchid, ipaddr, ipaddr, portid)
-  FROM routes AT 127.0.0.1 10999;  // change address as needed
+  FROM routes AT 192.168.1.102:9090;
 
 // OSPF: IP protocol = decimal 89
 

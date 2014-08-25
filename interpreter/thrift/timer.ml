@@ -96,7 +96,6 @@ object (self)
     let args = (sod (sod qry)#get_arguments) in
 
     let rep = new queryReply in
-    let tbl = (Hashtbl.create 1) in
     if relname = "time" then
     begin
       Printf.printf "handling time query\n%!";
@@ -114,15 +113,14 @@ object (self)
         end
         else if (List.hd args) = (String.capitalize (List.hd args)) then
         begin
-          Hashtbl.add tbl [thetime] true
+          rep#set_result [[thetime]]
         end
         else if (List.hd args) = thetime then
         begin
           (* for constant, only return a tuple of it's equal to the current time. *)
-          Hashtbl.add tbl [thetime] true
+          rep#set_result [[thetime]]
         end;
 
-        rep#set_result tbl;
         rep
     end
     else if relname = "nonce" then
@@ -144,15 +142,14 @@ object (self)
         end
         else if (List.hd args) = (String.capitalize (List.hd args)) then
         begin
-          Hashtbl.add tbl [nonce] true
+          rep#set_result [[nonce]]
         end
         else if (List.hd args) = nonce then
         begin
           (* for constant *)
-          Hashtbl.add tbl [nonce] true
+          rep#set_result [[nonce]]
         end;
 
-        rep#set_result tbl;
         rep
 
     end
@@ -161,7 +158,7 @@ object (self)
       Printf.printf "invalid query relation %s\n%!" relname;
       rep#set_exception_code "2";
       rep#set_exception_message "Timer only supports a single query relation: 'time'.";
-      rep#set_result tbl;
+      rep#set_result [];
       rep
     end
 end
