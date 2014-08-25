@@ -75,6 +75,7 @@ let rec wait_for_features_request (servicefd: Lwt_unix.file_descr): unit Lwt.t =
       printf "recv_from_switch_fd returned None.\n%!";
       Lwt.return ();;
 
+
 let rec wait_for_hello (servicefd: Lwt_unix.file_descr): unit Lwt.t =
   (* Expect hello -> send hello -> send features request -> expect features reply *)
   match_lwt (OpenFlow0x01_Switch.recv_from_switch_fd servicefd) with
@@ -103,6 +104,19 @@ let rec send_barrier_reply (servicefd: Lwt_unix.file_descr) (swid: int64) (xid: 
     match_lwt OpenFlow0x01_Switch.send_to_switch_fd servicefd xid BarrierReply with
       | true -> Lwt.return ()
       | false -> failwith "send_barrier_reply";;
+
+let rec wait_for_barrier_request_and_reply (servicefd: Lwt_unix.file_descr) (swid: switchId): unit Lwt.t =
+  (* Expect hello -> send hello -> send features request -> expect features reply *)
+  match_lwt (OpenFlow0x01_Switch.recv_from_switch_fd servicefd) with
+    | Some (xid, BarrierRequest) ->
+      printf "received BarrierRequest (was waiting)...\n%!";
+      send_barrier_reply servicefd swid xid >>
+      Lwt.return();
+    | Some(_,_) ->
+      wait_for_barrier_request_and_reply servicefd swid
+    | None ->
+      printf "wait_for_barrier_request_and_reply returned None.\n%!";
+      Lwt.return ();;
 
 let rec send_echo_request (servicefd: Lwt_unix.file_descr) (swid: int64): unit Lwt.t =
     printf "Sending echo request from switch id %Ld...\n%!" swid;
@@ -182,7 +196,7 @@ let init_connection_as_switch (swid: int64) (dstip: inet_addr) (dstport: int): (
     setsockopt fd SO_REUSEADDR true;
     bind fd (ADDR_INET (Unix.inet_addr_any, 0));
     let newport = (match getsockname fd with | ADDR_INET(_, p) -> p | _ -> failwith "init_connection: non ADDR_INET") in
-      let _ = connect fd (ADDR_INET(dstip, dstport)) in
+      lwt _ = connect fd (ADDR_INET(dstip, dstport)) in
       printf "connected to controller at %s port %d.\n%!" (Unix.string_of_inet_addr dstip) dstport;
 
       (* register switch with the appropriate dpid. *)
@@ -197,6 +211,10 @@ let init_connection_as_switch (swid: int64) (dstip: inet_addr) (dstport: int): (
       lwt _ = send_features_reply fd swid in
 
       printf "switch registered.\n%!";
+
+      printf "waiting for barrier and replying before starting listener\n%!";
+
+      lwt _ = wait_for_barrier_request_and_reply fd swid in
       (* return the actual port used *)
       Lwt.return (newport, fd);;
 
