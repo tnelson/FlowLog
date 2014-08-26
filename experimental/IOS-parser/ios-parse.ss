@@ -1203,6 +1203,7 @@
     (case (first line-tokens)
       [(ip) (parse-interface-details name input (parse-interface-IP (line-number input) name (rest line-tokens) config))]
       [(crypto) (parse-interface-details name input (parse-interface-crypto (line-number input) name (rest line-tokens) config))]
+      [(switchport) (parse-interface-details name input (parse-interface-switchport (line-number input) name (rest line-tokens) config))]      
       ; For now, terminate multi-line constructs with ! on its own line
       [(!) config]
       [(access-list crypto end hostname interface ip route-map router)
@@ -1211,6 +1212,16 @@
       [else (warning-unsupported (line-number input) (first line-tokens) '(ip crypto))
             (parse-interface-details name input config)])))
 
+;; num symbol (listof any) IOS-config% -> IOS-config%
+(define (parse-interface-switchport line name line-tokens config)
+  ; TODO(TN)
+  config)
+
+;; num symbol (listof any) IOS-config% -> IOS-config%
+(define (parse-interface-ip-ospf line name line-tokens config)
+  ; TODO(TN)
+  config)
+
 ;; symbol (listof any) IOS-config% -> IOS-config%
 (define (parse-interface-IP line name line-tokens config)
   (case (first line-tokens)
@@ -1218,6 +1229,7 @@
     [(address) (parse-interface-address name (rest line-tokens) config)]
     [(nat) (parse-interface-NAT name (rest line-tokens) config)]
     [(policy) (parse-interface-policy line name (rest line-tokens) config)]
+    [(ospf) (parse-interface-ip-ospf line name (rest line-tokens) config)]
     [else (warning-unsupported line (first line-tokens) '(access-group address nat policy))
                       config]))
 

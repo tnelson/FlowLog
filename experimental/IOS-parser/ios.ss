@@ -730,11 +730,83 @@
                 secondary-address
                 secondary-network
                 inbound-ACL-ID
-                outbound-ACL-ID
-                NAT-side
+                outbound-ACL-ID                
+                NAT-side                                
+                switchport-mode ; symbol: 'no 'trunk 'access 
+                switchport-vlans ; list of symbol (if mode is access, sizeof list = 1)
+                ospf-cost ; int (or 'no)
+                ospf-priority ; int (or 'no)
                 policy-route-map-ID
                 crypto-map-ID)
     (super-make-object)
+    
+    (define/public (set-switchport-mode m)
+      (make-object interface%
+        name
+        primary-address
+        primary-network
+        secondary-address
+        secondary-network
+        inbound-ACL-ID
+        outbound-ACL-ID
+        NAT-side
+        m
+        switchport-vlans
+        ospf-cost   
+        ospf-priority
+        policy-route-map-ID
+        crypto-map-ID))
+    
+    (define/public (set-switchport-vlans lst)
+      (make-object interface%
+        name
+        primary-address
+        primary-network
+        secondary-address
+        secondary-network
+        inbound-ACL-ID
+        outbound-ACL-ID
+        NAT-side
+        switchport-mode
+        lst
+        ospf-cost    
+        ospf-priority
+        policy-route-map-ID
+        crypto-map-ID))
+    
+    (define/public (set-ospf-cost cost)
+      (make-object interface%
+        name
+        primary-address
+        primary-network
+        secondary-address
+        secondary-network
+        inbound-ACL-ID
+        outbound-ACL-ID
+        NAT-side
+        switchport-mode
+        switchport-vlans        
+        cost
+        ospf-priority
+        policy-route-map-ID
+        crypto-map-ID))
+    
+    (define/public (set-ospf-priority pri)
+      (make-object interface%
+        name
+        primary-address
+        primary-network
+        secondary-address
+        secondary-network
+        inbound-ACL-ID
+        outbound-ACL-ID
+        NAT-side
+        switchport-mode
+        switchport-vlans        
+        ospf-cost
+        ospf-priority
+        policy-route-map-ID
+        crypto-map-ID))
     
     (define/public (get-primary-address)
       primary-address)
@@ -795,6 +867,10 @@
         inbound-ACL-ID
         outbound-ACL-ID
         NAT-side
+        switchport-mode 
+        switchport-vlans 
+        ospf-cost 
+        ospf-priority 
         policy-route-map-ID
         crypto-map-ID))
     
@@ -810,6 +886,10 @@
         inbound-ACL-ID
         outbound-ACL-ID
         NAT-side
+        switchport-mode 
+        switchport-vlans 
+        ospf-cost 
+        ospf-priority         
         policy-route-map-ID
         crypto-map-ID))
     
@@ -826,6 +906,10 @@
             ID
             outbound-ACL-ID
             NAT-side
+            switchport-mode 
+            switchport-vlans 
+            ospf-cost 
+            ospf-priority             
             policy-route-map-ID
             crypto-map-ID)
           (make-object interface%
@@ -837,6 +921,10 @@
             inbound-ACL-ID
             ID
             NAT-side
+            switchport-mode 
+            switchport-vlans 
+            ospf-cost 
+            ospf-priority             
             policy-route-map-ID
             crypto-map-ID)))
     
@@ -852,6 +940,10 @@
         inbound-ACL-ID
         outbound-ACL-ID
         side
+        switchport-mode 
+        switchport-vlans 
+        ospf-cost 
+        ospf-priority         
         policy-route-map-ID
         crypto-map-ID))
     
@@ -868,6 +960,10 @@
         inbound-ACL-ID
         outbound-ACL-ID
         NAT-side
+        switchport-mode 
+        switchport-vlans 
+        ospf-cost 
+        ospf-priority         
         ID
         crypto-map-ID))
     
@@ -883,6 +979,10 @@
         inbound-ACL-ID
         outbound-ACL-ID
         NAT-side
+        switchport-mode 
+        switchport-vlans 
+        ospf-cost 
+        ospf-priority 
         policy-route-map-ID
         ID))
     ))
