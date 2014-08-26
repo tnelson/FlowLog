@@ -1213,14 +1213,40 @@
             (parse-interface-details name input config)])))
 
 ;; num symbol (listof any) IOS-config% -> IOS-config%
-(define (parse-interface-switchport line name line-tokens config)
-  ; TODO(TN)
-  config)
+(define (parse-interface-switchport line name line-tokens config)  
+  (if (empty? line-tokens)
+      config ; turn on switchport mode, but expect a mode command
+      (case (first line-tokens)
+        [(mode) (send config set-switchport-mode name (second line-tokens))] ; access or trunk
+        [(trunk) (parse-switchport-trunk line name (rest line-tokens) config)] ; allowed vlan <comma separated list>        
+        [(access) (case (second line-tokens) 
+                    [(vlan) (send config set-switchport-vlans name (list (third line-tokens)))]
+                    [else (warning-unsupported line (second line-tokens) '(vlan))
+                          config])] ; access vlan <id>
+        [else (warning-unsupported line (first line-tokens) '(cost priority))
+              config])))
+
+; works so long as only comma (no whitespace) separate 
+(define (csl->list csl)
+  (define str (symbol->string csl))
+  (string-split str ","))
+
+(define (parse-switchport-trunk line name line-tokens config)  
+   (case (first line-tokens)
+     [(allowed) 
+      (when (> (length line-tokens) 3) ; allowed vlan <csl>
+        (printf "WARNING: improper parsing of vlan list: ~a~n" line-tokens))
+      (send config set-switchport-vlans name (csl->list (second line-tokens)))]
+     [else (warning-unsupported line (first line-tokens) '(allowed))
+           config]))
 
 ;; num symbol (listof any) IOS-config% -> IOS-config%
-(define (parse-interface-ip-ospf line name line-tokens config)
-  ; TODO(TN)
-  config)
+(define (parse-interface-ip-ospf line name line-tokens config)  
+   (case (first line-tokens)
+     [(cost) (send config set-ospf-cost name (second line-tokens))]
+     [(priority) (send config set-ospf-priority name (second line-tokens))]
+     [else (warning-unsupported line (first line-tokens) '(cost priority))
+           config]))
 
 ;; symbol (listof any) IOS-config% -> IOS-config%
 (define (parse-interface-IP line name line-tokens config)
@@ -1552,3 +1578,4 @@
         name
         sequence-num
         (make-object host-address% (first line-tokens))))
+
