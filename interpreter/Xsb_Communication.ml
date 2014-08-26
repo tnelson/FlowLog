@@ -440,7 +440,7 @@ module Communication = struct
 		   can just convert oldport != newport to an ALL action. *)
 		let new_body = if is_forward_clause cls then
 					   begin
-					   	 let (old, _) = trim_packet_from_body cls.body in
+					   	 let (_, old, _) = trim_packet_from_body cls.body in
 					   	 let newp = string_of_term (hd (get_head_vars cls)) in
 					   	 (* positive, binding atom needs to come BEFORE potential negated atom *)
 		                 FAnd(FAtom("", switch_has_port_relname, [TVar((String.uppercase old)^"__LOCSW");

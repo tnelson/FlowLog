@@ -143,7 +143,7 @@ let validate_and_process_pkt_triggered_clause (prgm: flowlog_program) (cl: claus
 	let newpkt = (match cl.head with
 		| FAtom("", "forward", [TVar(newpktname)]) -> newpktname
 		| _ -> "") in
-      let (_, trimmed) = (trim_packet_from_body cl.body) in
+      let (_, _, trimmed) = (trim_packet_from_body cl.body) in
       let strong_safe_list = get_safe_terms prgm None cl.body in
 
       if !global_verbose > 4 then
