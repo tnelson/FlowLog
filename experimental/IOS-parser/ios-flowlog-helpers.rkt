@@ -133,6 +133,13 @@
   (define sec-netw-obj (send iface get-secondary-network))
   (define nat-side (send iface get-nat-side))
     
+  (define switchport-mode (get-field switchport-mode iface))
+  (define switchport-vlans (get-field switchport-vlans iface))
+  (define ospf-cost (get-field ospf-cost iface))
+  (printf "iface ~a had switchport mode ~a~n" name switchport-mode)
+  (printf "iface ~a had switchport lans ~a~n" name switchport-vlans)
+  (printf "iface ~a had ospf cost ~a~n" name ospf-cost)  
+  
   (cond [(not prim-addr-obj) 
          (printf "extract-ifs IGNORING: ~v~n" name)
          #f]

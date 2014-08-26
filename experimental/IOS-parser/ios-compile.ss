@@ -262,7 +262,7 @@ namespace-for-template)
       ; Please keep and comment out. Useful to know immediately which config is failing:
       (printf "~nprocessing host config: ~v~n" hostname) ; DEBUG
       (define interfaces (send config get-interfaces))
-      (define interface-keys (hash-keys interfaces))      
+      (define interface-keys (hash-keys interfaces))                  
       
       ; Filter out interfaces that extract-ifs returns #f for. (for instance, ifs with no subnet)
       (define unfiltered-interface-defns (hash-map interfaces extract-ifs))

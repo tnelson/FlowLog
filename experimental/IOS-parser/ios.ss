@@ -718,6 +718,7 @@
                        set-NAT-side
                        set-switchport-mode
                        set-switchport-vlans
+                       add-switchport-vlans
                        set-ospf-cost
                        set-ospf-priority
                        set-policy-route-map-ID
@@ -772,7 +773,28 @@
         outbound-ACL-ID
         NAT-side
         switchport-mode
-        (if (equal? (list 'none) lst) empty lst)
+        (if (equal? (list 'none) lst)
+            empty 
+            lst)
+        ospf-cost    
+        ospf-priority
+        policy-route-map-ID
+        crypto-map-ID))
+    
+    (define/public (add-switchport-vlans lst)
+      (make-object interface%
+        name
+        primary-address
+        primary-network
+        secondary-address
+        secondary-network
+        inbound-ACL-ID
+        outbound-ACL-ID
+        NAT-side
+        switchport-mode
+        (if (equal? (list 'none) lst) 
+            switchport-vlans
+            (append switchport-vlans lst))
         ospf-cost    
         ospf-priority
         policy-route-map-ID
@@ -3136,7 +3158,7 @@
       insert-ACLs)
     
     ; Modifies switchport properties for an interface
-    (define/public (set-switchport-mode name m)
+    (define/public (set-switchport-mode name m)      
       (make-object IOS-config%
         hostname
         (hash-set interfaces
@@ -3146,6 +3168,7 @@
         ACLs insert-ACLs static-NAT dynamic-NAT static-routes route-maps networks 
         neighbors endpoints crypto-maps default-ACL-permit))
     (define/public (set-switchport-vlans name lst)
+      (printf "set switchp-vlans: ~a ~a~n" name lst)
       (make-object IOS-config%
         hostname
         (hash-set interfaces
@@ -3154,6 +3177,16 @@
                         set-switchport-vlans lst))
         ACLs insert-ACLs static-NAT dynamic-NAT static-routes route-maps networks 
         neighbors endpoints crypto-maps default-ACL-permit))    
+    
+    (define/public (add-switchport-vlans name lst)
+      (make-object IOS-config%
+        hostname
+        (hash-set interfaces
+                  name
+                  (send (hash-ref interfaces name (λ () (make-empty-interface name)))
+                        add-switchport-vlans lst))
+        ACLs insert-ACLs static-NAT dynamic-NAT static-routes route-maps networks 
+        neighbors endpoints crypto-maps default-ACL-permit))  
     
     (define/public (set-ospf-cost name c)
       (make-object IOS-config%

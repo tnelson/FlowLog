@@ -1228,17 +1228,48 @@
 
 ; works so long as only comma (no whitespace) separate 
 (define (csl->list csl)
-  (define str (symbol->string csl))
-  (string-split str ","))
+  ;(printf "csl to list: ~a~n" csl)
+  (cond
+    [(number? csl) (number->string csl)]
+    [(symbol? csl) 
+     (define str (symbol->string csl))
+     (define lst (string-split str ","))
+     (append* (map breakout-range lst))]))
+    
+(define (breakout-range r)  
+  (define sp (string-split r "-"))
+  ;(printf "breakout: ~a ~a~n" r sp)
+  (cond
+    [(equal? 1 (length sp)) sp]
+    [(equal? 2 (length sp)) 
+     ; e.g. '("10" "20")
+     (define start (string->number (first sp)))
+     (define end (string->number (second sp)))
+     (append (range start end) (list end))]
+    [else (raise "breakout-range got more than 2 symbols separated by dash")]))
 
 (define (parse-switchport-trunk line name line-tokens config)  
    (case (first line-tokens)
-     [(allowed) 
-      (when (> (length line-tokens) 3) ; allowed vlan <csl>
-        (printf "WARNING: improper parsing of vlan list: ~a~n" line-tokens))
-      (send config set-switchport-vlans name (csl->list (second line-tokens)))]
+     [(allowed) (parse-switchport-trunk-allowed line name (rest line-tokens) config)]      
      [else (warning-unsupported line (first line-tokens) '(allowed))
            config]))
+
+(define (parse-switchport-trunk-allowed line name line-tokens config)  
+   (case (first line-tokens)
+     [(vlan) (parse-switchport-trunk-allowed-vlan line name (rest line-tokens) config)]      
+     [else (warning-unsupported line (first line-tokens) '(allowed))
+           config]))
+
+(define (parse-switchport-trunk-allowed-vlan line name line-tokens config)
+  (case (first line-tokens)
+     [(add) 
+      (when (> (length line-tokens) 2) ; add <csl>
+        (printf "WARNING: improper parsing of vlan list: ~a~n" line-tokens))
+      (send config add-switchport-vlans name (csl->list (second line-tokens)))]      
+     [else 
+      (when (> (length line-tokens) 1) ; <csl>
+        (printf "WARNING: improper parsing of vlan list: ~a~n" line-tokens))
+      (send config set-switchport-vlans name (csl->list (first line-tokens)))]))     
 
 ;; num symbol (listof any) IOS-config% -> IOS-config%
 (define (parse-interface-ip-ospf line name line-tokens config)  
