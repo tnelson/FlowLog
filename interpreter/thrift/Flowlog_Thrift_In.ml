@@ -46,6 +46,7 @@ object (self)
   method notifyMe rpc_notif : unit =
     let ntypestr = sod ((sod rpc_notif)#get_notificationType) in
     let values = sod ((sod rpc_notif)#get_values) in
+
     Printf.printf "received notification. type=%s\n%!" ntypestr;
     lowercase_notif_values values;  (* case insensitive field names *)
     try
@@ -59,7 +60,8 @@ object (self)
              (fld, Hashtbl.find values fld) :: acc)
          [] fieldlist in
 
-        let ev: event = {typeid = ntypestr; values = construct_map vals} in
+        let xsb_vals = map (fun (fname, fval) -> (fname, flvalue_to_xsbable fval)) vals in
+        let ev: event = {typeid = ntypestr; values = construct_map xsb_vals} in
           ignore (respond_to_notification the_program ev IncThrift);
 
     with

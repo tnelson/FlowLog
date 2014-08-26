@@ -39,19 +39,22 @@ let print_notif_values tbl =
 *)
 let doBBquery (qryname: string) (bbip: string) (bbport: string) (args: term list): string list list =
     let dotted_host = Packet.string_of_ip (nwaddr_of_int_string bbip) in
+    Printf.printf "Sending BB query to %s:%s...\n%!" dotted_host bbport;
     let cli = connect ~host:dotted_host (int_of_string bbport) in
     try
-      Printf.printf "Sending BB query to %s:%s...\n%!" dotted_host bbport;
+      Printf.printf "Connected.\n%!";
       let qry = new query in
       qry#set_relName qryname;
       qry#set_arguments (map string_of_term args);
       let qresult = cli.bb#doQuery qry in
+      Printf.printf "doQuery called.\n%!";
       (*let result = Hashtbl.fold (fun k v sofar -> k :: sofar)
                                     (sod qresult#get_result)
                                     [] in*)
         let result = (sod qresult#get_result) in
+        let xsb_result = map (fun tup -> map flvalue_to_xsbable tup) result in
         cli.trans#close;
-        result
+        xsb_result
 
       with Transport.E (_,what) ->
         Printf.printf "ERROR sending query: %s\n%!" what;

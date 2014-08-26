@@ -1,3 +1,3 @@
-ON packet_in(pkt):
-  DO frozzle(pkt, pkt.locSw);
+ON packet(pkt):
+  DO forward(pkt) WHERE pkt = 1;
 

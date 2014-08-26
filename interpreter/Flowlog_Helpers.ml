@@ -1139,3 +1139,16 @@ let combine_inferences (i1: TypeIdSet.t TermMap.t) (i2: TypeIdSet.t TermMap.t): 
         | None,Some(x) -> Some(x)
         | None,None -> None)
     i1 i2;;
+
+(*****************************************************************************)
+(* Almost the inverse of pretty printing. If a notification or a query reply
+   includes, say, a dotted-quad IP, convert it to an intstring. *)
+let ip_regexp = Str.regexp "[0-9]?[0-9]?[0-9]\\.[0-9]?[0-9]?[0-9]\\.[0-9]?[0-9]?[0-9]\\.[0-9]?[0-9]?[0-9]";;
+let mac_regexp = Str.regexp "[0-9a-f]?[0-9a-f]:[0-9a-f]?[0-9a-f]:[0-9a-f]?[0-9a-f]:[0-9a-f]?[0-9a-f]:[0-9a-f]?[0-9a-f]:[0-9a-f]?[0-9a-f]";;
+let flvalue_to_xsbable (s: string): string =
+  if (Str.string_match ip_regexp s 0) then
+    nwaddr_to_int_string (Packet.ip_of_string s)
+  else if (Str.string_match mac_regexp s 0) then
+    macaddr_to_int_string (Packet.mac_of_string s)
+  else
+    s;;

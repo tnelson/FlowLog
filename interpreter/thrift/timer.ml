@@ -30,6 +30,9 @@ type connection = {
   fl : FlowLogInterpreter.client ;
 }
 
+let string_of_list (sep: string) (pro: 'a -> string) (alist: 'a list): string =
+  (String.concat sep (List.map pro alist));;
+
 (* The ~ denotes a keyword argument *)
 let connect ~host port =
   let tx = new TSocket.t host port in
@@ -90,7 +93,6 @@ object (self)
           printf "...but did not contain well-formed fields.\n%!";
       end
 
-
   method doQuery qry =
     let relname = (sod (sod qry)#get_relName) in
     let args = (sod (sod qry)#get_arguments) in
@@ -109,7 +111,8 @@ object (self)
         if (List.length args) != 1 then
         begin
           rep#set_exception_code "1";
-          rep#set_exception_message "Timer.time expects a single argument."
+          rep#set_exception_message "Timer.time expects a single argument.";
+          rep#set_result [];
         end
         else if (List.hd args) = (String.capitalize (List.hd args)) then
         begin
@@ -121,6 +124,7 @@ object (self)
           rep#set_result [[thetime]]
         end;
 
+        printf "sending result: {%s}\n%!" (string_of_list ";" (fun tup -> (string_of_list "," (fun x->x) tup)) (sod (rep#get_result)));
         rep
     end
     else if relname = "nonce" then

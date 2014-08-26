@@ -171,8 +171,8 @@ let cl8 = {orig_rule = dummy_rule;
            head = FAtom("", "forward", [newpkt]);
            body = FAnd(FAtom("", "R", [oldpktdlsrc; xvar]), FNot(FEquals(newpktlocpt,oldpktlocpt)))};;
 
-let the_outgoings = make_outgoings the_decls built_in_decls;;
-let the_events = make_events the_decls built_in_reacts;;
+let the_outgoings = make_outgoings built_in_decls built_in_reacts;;
+let the_events = make_events built_in_decls built_in_reacts;;
 let prog = {     desugared_decls = built_in_decls;
                  desugared_reacts = built_in_reacts;
                  vartablenames = [];
@@ -181,9 +181,9 @@ let prog = {     desugared_decls = built_in_decls;
                  events = [];
                  clauses = [];
                  weakened_cannot_compile_pt_clauses = [];
-                 can_fully_compile_to_fwd_clauses = [];                 
+                 can_fully_compile_to_fwd_clauses = [];
                  not_fully_compiled_clauses = [];
-                 memos = build_memos_for_program [] [] the_outgoings the_events []};;
+                 memos = build_memos_for_program built_in_reacts [] [] the_outgoings the_events []};;
 
 let test_pe_valid () =
 
@@ -278,6 +278,12 @@ let test_ip_conversion () =
     assert_equal ~msg:"contain2" (is_in_ip_range h1 a2 24) false;
   ();;
 
+let test_string_manip () =
+  assert_equal ~msg:"str1" (flvalue_to_xsbable "0.0.0.1") "1";
+  assert_equal ~msg:"str1" (flvalue_to_xsbable "192.168.1.102") "-1062731418";
+  assert_equal ~msg:"str1" (flvalue_to_xsbable "00:0:00:0:0:2") "2";
+  assert_equal ~msg:"str1" (flvalue_to_xsbable "ca:fe:00:0:0:01") "223192270503937";;
+
 (**********************************************************************)
 (* SUITE DEFINITION *)
 (**********************************************************************)
@@ -289,6 +295,7 @@ let test_ip_conversion () =
                                    "test_minimize_variables" >:: test_minimize_variables;
                                    "test_pe_valid" >:: test_pe_valid;
                                    "test_ip_conversion" >:: test_ip_conversion;
+                                   "test_string_mapip" >::  test_string_manip;
                                    (*"test_strip_to_valid" >:: test_strip_to_valid;*)
                                    (*"test_build_switch_pred" >:: test_build_switch_pred;*)
                                   ];;

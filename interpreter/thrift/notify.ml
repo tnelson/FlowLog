@@ -35,7 +35,7 @@ let tbl = (Hashtbl.create numargs);;
 Array.iter (fun str -> match (split (regexp "=") str) with
                        | [k;v] -> Printf.printf "Arg: %s -> %s\n%!" k v;
                                   Hashtbl.add tbl k v;
-                       | _ -> failwith "bad defn")
+                       | _ -> failwith "bad field (use fieldname=value)")
            (Array.sub Sys.argv 2 ((Array.length Sys.argv) - 2));;
 
 
