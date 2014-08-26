@@ -174,12 +174,11 @@ let rec switch_listener (prgm: flowlog_program) (swid: switchId) (servicefd: Lwt
           let in_pt = (match pout.port_id with | None -> Physical(Int32.zero) | Some p -> Physical((Int32.of_int p))) in
 
           let notif = (pkt_to_event swid in_pt pkt) in
-            set_last_packet_received swid in_pt pkt None; (* in case we need to transfer to the DP *)
 
             (* may be multiple actions = multi-record problem with events *)
             (*printf "WARNING! ACTIONS IN PACKET_OUT WILL BE IGNORED BY FLOWLOG.\n%!";*)
 
-            respond_to_notification prgm notif IncCP >>
+            respond_to_notification prgm ~full_packet:(make_last_packet swid in_pt pkt None) notif IncCP >>
             switch_listener prgm swid servicefd
         | _ -> switch_listener prgm swid servicefd)
     | None ->
@@ -255,7 +254,9 @@ let register_proxy_switch (prgm: flowlog_program) (swid: switchId) (ips: string)
 
 (***********************************************************************************)
 
-let doSendPacketIn (prgm: flowlog_program) (ev: event) (controller_ip: string) (controller_port_s: string) : unit Lwt.t =
+let doSendPacketIn (prgm: flowlog_program) (ev: event)
+    (controller_ip: string) (controller_port_s: string)
+    (full_packet: int64 * int32 * Packet.packet * int32 option): unit Lwt.t =
   let locsw = (Int64.of_string (get_field ev "locsw")) in
   lwt fd = register_proxy_switch prgm locsw controller_ip controller_port_s in
 
@@ -263,11 +264,8 @@ let doSendPacketIn (prgm: flowlog_program) (ev: event) (controller_ip: string) (
   (* Assume: only triggered by packet arrival from OF. will not be correct even if packet arrives from CP. *)
 
   printf "sending packet_in from switch id = %Ld\n%!" locsw;
-  let incsw, incpt, incpkt, incbuffid = match !last_packet_received_from_dp with
-    | Some(a,b,c,d) -> (a, b, c, d)
-    | _ -> failwith "no src packet" in
+  let incsw, incpt, incpkt, incbuffid = full_packet in
 
-  (* let pktin_msg = !last_packet_arrived in*)
   let pktin_msg = PacketInMsg({input_payload = NotBuffered(Packet.marshal incpkt);
                                        total_len = Packet.len incpkt;
                                        port = (int_of_string (get_field ev "locpt"));

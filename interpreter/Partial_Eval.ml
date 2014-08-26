@@ -45,6 +45,11 @@ let last_policy_pushed = ref (Action([]));;
 
 exception ContradictoryActions of (string * string);;
 
+let make_last_packet sw ncpt pkt buf =
+  match ncpt with
+    | NetCore_Pattern.Physical(x) -> Some (sw, x, pkt, buf)
+    | _ -> failwith "set_last_packet_received";;
+
 (***************************************************************************************)
 
 let rec refresh_remote_relation (p: flowlog_program) (f: formula): unit =
@@ -879,13 +884,7 @@ let forward_packet (p: flowlog_program) (ev: event): unit =
       base_action (remove legal_to_modify_packet_fields "locpt"))
       :: !fwd_actions;;
 
-let last_packet_received_from_dp: (int64 * int32 * Packet.packet * int32 option) option ref = ref None;;
-let set_last_packet_received (sw: switchId) (ncpt: NetCore_Pattern.port) (pkt: Packet.packet) (buf: int32 option): unit =
-  match ncpt with
-    | NetCore_Pattern.Physical(x) -> last_packet_received_from_dp := Some (sw, x, pkt, buf)
-    | _ -> failwith "set_last_packet_received";;
-
-let doSendPacketIn_ref: (flowlog_program -> event -> string -> string -> unit Lwt.t) option ref = ref None;;
+let doSendPacketIn_ref: (flowlog_program -> event -> string -> string -> (int64 * int32 * Packet.packet * int32 option) -> unit Lwt.t) option ref = ref None;;
 
 let emit_packet (p: flowlog_program) (ev: event): unit =
   printf "emitting: %s\n%!" (string_of_event p ev);
@@ -897,23 +896,25 @@ let emit_packet (p: flowlog_program) (ev: event): unit =
      At the moment, someone can emit_arp with dlTyp = 0x000 or something dumb like that. *)
   guarded_emit_push swid pt (OpenFlow0x01_Core.NotBuffered (marshal_packet ev));;
 
-let forward_cp_packet (p: flowlog_program) (ev: event): unit =
+let forward_packet_from_cp (p: flowlog_program) (ev: event) (full_packet: int64 * int32 * Packet.packet * int32 option): unit =
   printf "forwarding packet from CP: %s\n%!" (string_of_event p ev);
   write_log (sprintf ">>> CP-forward (forward -> emit): %s\n%!" (string_of_event p ev));
   let pt = (nwport_of_string (get_field ev "locpt")) in
-   let incsw, incpt, incpkt, incbuffid = match !last_packet_received_from_dp with
-    | Some(a,b,c,d) -> (a, b, c, d)
-    | _ -> failwith "no src packet" in
+   let incsw, incpt, incpkt, incbuffid = full_packet in
+
    (*TODO: change fields besides locsw, locpt *)
    (* OpenFlow0x01_Core.payload *)
     guarded_emit_push incsw pt (OpenFlow0x01_Core.NotBuffered (Packet.marshal incpkt));;
 
-let send_event (p: flowlog_program) (ev: event) (ip: string) (pt: string): unit Lwt.t =
+let send_event (p: flowlog_program) (ev: event) (ip: string) (pt: string) (full_packet: (int64 * int32 * Packet.packet * int32 option) option): unit Lwt.t =
   printf "sending: %s\n%!" (string_of_event p ev);
   write_log (sprintf ">>> sending: %s\n%!" (string_of_event p ev));
   if is_built_in_packet_typename ev.typeid then
     (match !doSendPacketIn_ref with
-      | Some(f) -> f p ev ip pt
+      | Some(f) ->
+        (match full_packet with
+          | None -> failwith "Error: send_event as packet_in failed because no orig packet was recorded"
+          | Some(fp) -> f p ev ip pt fp)
       | None -> failwith "Error: couldn't send packet_in because function not set.")
   else
     doBBnotify ev ip pt;;
@@ -962,17 +963,20 @@ let prepare_output (p: flowlog_program) (incoming_event: event) (from: eventsour
       (* return the results to be executed later *)
       fold_left (fun acc tupswf -> (prepare_tuples tupswf) @ acc) [] xsb_results_with_fieldnames;;
 
-let execute_output (p: flowlog_program) ((ev, from, spec): event * eventsource * spec_out) : unit Lwt.t =
+let execute_output (p: flowlog_program)
+                   (full_packet: (int64 * int32 * Packet.packet * int32 option) option)
+                   ((ev, from, spec): event * eventsource * spec_out) : unit Lwt.t =
   match spec with
    | OutForward ->
      (* If "forwarding" a CP packet, we need to provide a new packet out, not a new forwarding action *)
-     (match from with
-        | IncCP -> Lwt.return (forward_cp_packet p ev)
+     (match from,full_packet with
+        | IncCP,Some(fp) -> Lwt.return (forward_packet_from_cp p ev fp)
+        | IncCP,_ -> failwith "forward_packet_from_cp: None given as last packet seen."
         | _ ->  Lwt.return (forward_packet p ev))
    | OutEmit(_) -> Lwt.return (emit_packet p ev)
    | OutPrint -> Lwt.return (printf "PRINT RULE FIRED: %s\n%!" (string_of_event p ev))
    | OutLoopback -> failwith "loopback unsupported currently"
-   | OutSend(_, ip, pt) -> send_event p ev ip pt;;
+   | OutSend(_, ip, pt) -> send_event p ev ip pt full_packet;;
 
 (* XSB query on plus or minus for table *)
 let change_table_how (p: flowlog_program) (toadd: bool) (tbldecl: table_def): formula list =
@@ -1045,7 +1049,10 @@ let lwt_respond_lock = Lwt_mutex.create ();;
 (* Returns list of names of tables that have been modified *)
 (* DO NOT PASS suppress_new_policy = true unless it is safe to do so! It was added to prevent a single switch registration from
    rebuilding the policy once for each new port. *)
-let respond_to_notification (p: flowlog_program) ?(suppress_new_policy: bool = false) (notif: event) (from: eventsource): string list Lwt.t =
+let respond_to_notification
+  (p: flowlog_program) ?(suppress_new_policy: bool = false)
+  ?(full_packet: (int64 * int32 * Packet.packet * int32 option) option = None)
+  (notif: event) (from: eventsource): string list Lwt.t =
   try
       let startt = Unix.gettimeofday() in
       write_log "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<";
@@ -1172,7 +1179,7 @@ let respond_to_notification (p: flowlog_program) ?(suppress_new_policy: bool = f
 
    (**********************************************************)
    (* Finally actually send output *)
-    lwt _ = Lwt_list.iter_s (execute_output p) prepared_output in
+    lwt _ = Lwt_list.iter_s (execute_output p full_packet) prepared_output in
 
    (**********************************************************)
 
@@ -1360,9 +1367,7 @@ let make_policy_stream (p: flowlog_program)
 
     (* The callback to be invoked when the policy says to send pkt to controller *)
     (* callback here. *)
-    updateFromPacket (sw: switchId) (pt: port) (pkt: Packet.packet) (buf: int32 option) : NetCore_Types.action =
-      set_last_packet_received sw pt pkt buf;
-
+    updateFromPacket (sw: switchId) (pt: port) (pkt: Packet.packet) (buf: int32 option): NetCore_Types.action =
       (* Update the policy via the push function *)
       let startt = Unix.gettimeofday() in
       let buf_id = match buf with
@@ -1375,7 +1380,7 @@ let make_policy_stream (p: flowlog_program)
       (* Parse the packet and send it to XSB. Deal with the results *)
       let notif = (pkt_to_event sw pt pkt) in
         printf "~~~ Incoming Notif:\n %s\n%!" (string_of_event p notif);
-        ignore (respond_to_notification p notif IncDP);
+        ignore (respond_to_notification p ~full_packet:(make_last_packet sw pt pkt buf) notif IncDP);
 
         if !global_verbose >= 1 then
         begin
