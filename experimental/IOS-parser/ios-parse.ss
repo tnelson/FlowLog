@@ -62,7 +62,7 @@
       [(hostname) (parse-IOS-details input (parse-hostname (rest line-tokens) input config))]
       [(interface) (parse-IOS-details input (parse-interface (rest line-tokens) input config))]
       [(ip) (parse-IOS-details input (parse-ip (rest line-tokens) input config))]
-      [(route-map) (parse-IOS-details input (parse-route-map (rest line-tokens) input config))]
+      [(route-map) (parse-IOS-details input (parse-route-map (rest line-tokens) input config))]      
       [(router) (parse-IOS-details input (parse-router (rest line-tokens) input config))]
       
       ; Comments
@@ -1206,6 +1206,7 @@
       [(switchport) (parse-interface-details name input (parse-interface-switchport (line-number input) name (rest line-tokens) config))]      
       ; For now, terminate multi-line constructs with ! on its own line
       [(!) config]
+      [(shutdown)  (parse-interface-details name input (send config set-shutdown name #t))]
       [(access-list crypto end hostname interface ip route-map router)
        (warning-unsupported/ending-block (line-number input) (first line-tokens))
        (parse-IOS-details-for-line input config line-tokens)]

@@ -719,6 +719,7 @@
                        set-switchport-mode
                        set-switchport-vlans
                        add-switchport-vlans
+                       set-shutdown
                        set-ospf-cost
                        set-ospf-priority
                        set-policy-route-map-ID
@@ -742,9 +743,27 @@
                 ospf-cost ; int (or 'no)
                 ospf-priority ; int (or 'no)
                 policy-route-map-ID
-                crypto-map-ID)
+                crypto-map-ID
+                shutdown)
     (super-make-object)
     
+    (define/public (set-shutdown v)
+      (make-object interface%
+        name
+        primary-address
+        primary-network
+        secondary-address
+        secondary-network
+        inbound-ACL-ID
+        outbound-ACL-ID
+        NAT-side
+        switchport-mode
+        switchport-vlans
+        ospf-cost   
+        ospf-priority
+        policy-route-map-ID
+        crypto-map-ID
+        v))
     (define/public (set-switchport-mode m)
       (make-object interface%
         name
@@ -760,7 +779,8 @@
         ospf-cost   
         ospf-priority
         policy-route-map-ID
-        crypto-map-ID))
+        crypto-map-ID
+        shutdown))
     
     (define/public (set-switchport-vlans lst)
       ;(printf "set switchp-vlans: ~a ~a ~a ~a~n" name lst (equal? (list 'none) lst) (equal? (list "none") lst))
@@ -780,7 +800,8 @@
         ospf-cost    
         ospf-priority
         policy-route-map-ID
-        crypto-map-ID))
+        crypto-map-ID
+        shutdown))
     
     (define/public (add-switchport-vlans lst)
       (make-object interface%
@@ -799,7 +820,8 @@
         ospf-cost    
         ospf-priority
         policy-route-map-ID
-        crypto-map-ID))
+        crypto-map-ID
+        shutdown))
     
     (define/public (set-ospf-cost cost)
       (make-object interface%
@@ -816,7 +838,8 @@
         cost
         ospf-priority
         policy-route-map-ID
-        crypto-map-ID))
+        crypto-map-ID
+        shutdown))
     
     (define/public (set-ospf-priority pri)
       (make-object interface%
@@ -833,7 +856,8 @@
         ospf-cost
         ospf-priority
         policy-route-map-ID
-        crypto-map-ID))
+        crypto-map-ID
+        shutdown))
     
     (define/public (get-primary-address)
       primary-address)
@@ -899,7 +923,8 @@
         ospf-cost 
         ospf-priority 
         policy-route-map-ID
-        crypto-map-ID))
+        crypto-map-ID
+        shutdown))
     
     ;; host-address% network-address% -> interface<%>
     ;;   Sets the secondary address and network for this interface
@@ -918,7 +943,8 @@
         ospf-cost 
         ospf-priority         
         policy-route-map-ID
-        crypto-map-ID))
+        crypto-map-ID
+        shutdown))
     
     ;; symbol boolean -> interface<%>
     ;;   Sets the ID of the ACL for this interface
@@ -938,7 +964,8 @@
             ospf-cost 
             ospf-priority             
             policy-route-map-ID
-            crypto-map-ID)
+            crypto-map-ID
+            shutdown)
           (make-object interface%
             name
             primary-address
@@ -953,7 +980,8 @@
             ospf-cost 
             ospf-priority             
             policy-route-map-ID
-            crypto-map-ID)))
+            crypto-map-ID
+            shutdown)))
     
     ;; symbol -> interface%
     ;;   Sets the side of NAT rules on which this interface lies
@@ -972,7 +1000,8 @@
         ospf-cost 
         ospf-priority         
         policy-route-map-ID
-        crypto-map-ID))
+        crypto-map-ID
+        shutdown))
     
     ;; symbol -> interface%
     ;;   Sets the ID of the route map that this interface uses for
@@ -992,7 +1021,8 @@
         ospf-cost 
         ospf-priority         
         ID
-        crypto-map-ID))
+        crypto-map-ID
+        shutdown))
     
     ;; symbol -> interface%
     ;;   Sets the ID of the crypto map that this interfaces uses for VPN
@@ -1011,7 +1041,8 @@
         ospf-cost 
         ospf-priority 
         policy-route-map-ID
-        ID))
+        ID
+        shutdown))
     ))
 
 ;; symbol -> interface%
@@ -1031,7 +1062,8 @@
     'no ; ospf cost
     'no ; ospf priority
     'default
-    'default))
+    'default
+    #f))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -3148,6 +3180,13 @@
     (define/public (get-interfaces)
       interfaces)
     
+    ; Keep the non-shutdown interfaces
+    (define/public (get-non-shutdown-interfaces)
+      (for/fold 
+          ([acc (hash)]) 
+        ([(k v) interfaces])
+        (if (get-field shutdown v) acc (hash-set acc k v))))      
+    
     (define/public (get-dynamic-NAT)
       dynamic-NAT)
     (define/public (get-static-NAT)
@@ -3187,6 +3226,16 @@
                         add-switchport-vlans lst))
         ACLs insert-ACLs static-NAT dynamic-NAT static-routes route-maps networks 
         neighbors endpoints crypto-maps default-ACL-permit))  
+    
+    (define/public (set-shutdown name v)      
+      (make-object IOS-config%
+        hostname
+        (hash-set interfaces
+                  name
+                  (send (hash-ref interfaces name (λ () (make-empty-interface name)))
+                        set-shutdown v))
+        ACLs insert-ACLs static-NAT dynamic-NAT static-routes route-maps networks 
+        neighbors endpoints crypto-maps default-ACL-permit))
     
     (define/public (set-ospf-cost name c)
       (make-object IOS-config%

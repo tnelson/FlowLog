@@ -194,6 +194,7 @@ namespace-for-template)
          (define ospf-cost-inserts (val->ospf rnum ptnum ospf-cost))
          (define switchport-mode-inserts (val->spmode rnum ptnum switchport-mode))
          (define switchport-vlan-inserts (vals->vlans rnum ptnum switchport-vlans))                          
+         (define maybe-vlan-interface-inserts (vals->vlan-iface rnum ptnum name))
 
          ; Interface may be a switchport; if so it won't have an IP address.
          ; (Although vlan-interfaces will, since that's their purpose.)
@@ -259,7 +260,7 @@ namespace-for-template)
          ; Finally, return the result tuples (protobuf changes are side-effects)
          ; Keep the tuples that are non-#f         
                   
-         (filter (lambda (x) x) (list prim sec alias needs-nat acldefn natconfigs switchport-mode-inserts switchport-vlan-inserts ospf-cost-inserts))]
+         (filter (lambda (x) x) (list "\n" prim sec alias needs-nat acldefn natconfigs switchport-mode-inserts switchport-vlan-inserts ospf-cost-inserts maybe-vlan-interface-inserts))]
         [else (pretty-display i) (error (format "ifacedef->tuple: ~a" i))]))
  
     (define total-parsed-ace-count (box 0))      
@@ -270,9 +271,10 @@ namespace-for-template)
     (define (extract-hosts routers-msg config hostidx)      
       (define hostname (symbol->string (send (send config get-hostname) name)))
       ; Please keep and comment out. Useful to know immediately which config is failing:
-      (printf "~nprocessing host config: ~v~n" hostname) ; DEBUG
-      (define interfaces (send config get-interfaces))
-      (define interface-keys (hash-keys interfaces))                  
+      (printf "~nprocessing host config: ~v~n" hostname) ; DEBUG      
+      
+      (define interfaces (send config get-non-shutdown-interfaces)) ; IGNORE "shutdown" interfaces                     
+      (printf "#interfaces: ~v #non-shutdown: ~v~n" (hash-count (send config get-interfaces)) (hash-count interfaces))
       
       ; Filter out interfaces that extract-ifs returns #f for. (for instance, ifs with no subnet)
       (define unfiltered-interface-defns (hash-map interfaces extract-ifs))

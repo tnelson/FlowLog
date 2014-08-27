@@ -2,7 +2,7 @@
 #lang racket
 
 (require racket/string)
-(require (only-in srfi/13 string-pad))
+(require (only-in srfi/13 string-pad string-contains))
 (require "ios.ss")
 
 (provide (all-defined-out))
@@ -206,7 +206,12 @@
       (list (format "INSERT (~a,~a,\"~a\") INTO sp_modes;~n" rnum ptnum mode))))
 (define (vals->vlans rnum ptnum vlanlist)  
   (string-append* (map (lambda (vlan) (format "INSERT (~a,~a,~a) INTO sp_vlans;~n" rnum ptnum vlan)) vlanlist)))
-
+; TODO: "vlan" interfaces used by vlans to cross L3 boundries
+(define (vals->vlan-iface rnum ptnum name)
+  (define lcn (string-downcase name))
+  (if (string-contains lcn "vlan")
+      (format "INSERT (~a,~a,~a) INTO virtual_interfaces;~n" rnum ptnum (first (string-split lcn "vlan")))
+      ""))
 
 
 ; index is the 0-indexed count of this interface (i.e., index + 2 is the port on the "router")
