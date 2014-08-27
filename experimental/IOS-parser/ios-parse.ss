@@ -1194,8 +1194,17 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; (listof any) port IOS-config% -> IOS-config%
+;; interface vlan 20 and interface Vlan20 are both the same thing. support both.
+;; one is the proper command and one is the output from IOS when told to print the config
 (define (parse-interface line-tokens input config)
-  (parse-interface-details  (first line-tokens) input config))
+  (case (first line-tokens)
+    [(vlan) 
+     (when (< 2 (length line-tokens))
+       (error "interface vlan <id> without an <id>; need vlan id."))     
+     (unless (number? (second line-tokens))
+       (error "interface vlan <id> requires numeric vlan id."))     
+     (parse-interface-details (string->symbol (string-append "Vlan" (number->string (second line-tokens)))) input config)]
+    [else (parse-interface-details (first line-tokens) input config)]))
 
 ;; symbol port IOS-config% -> IOS-config%
 (define (parse-interface-details name input config)

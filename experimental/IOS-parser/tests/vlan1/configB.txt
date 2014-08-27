@@ -1,0 +1,34 @@
+hostname vlantestB
+
+! two vlans
+vlan 2
+ name test2
+vlan 3
+ name test3
+
+! a trunk
+interface TenGigabitEthernet2/1
+ switchport
+ switchport trunk encapsulation dot1q
+ switchport trunk allowed vlan 2,3
+ switchport mode trunk
+
+! access ports for the two vlans
+interface GigabitEthernet2/1
+ switchport
+ switchport access vlan 2
+ switchport mode access
+
+interface GigabitEthernet2/2
+ switchport
+ switchport access vlan 3
+ switchport mode access
+
+! virtual interfaces for the two vlans (allow routing)
+! A = .1, B = .2
+interface Vlan2
+ ip address 10.1.102.2 255.255.255.0
+interface Vlan3
+ ip address 10.1.103.2 255.255.255.0
+
+end

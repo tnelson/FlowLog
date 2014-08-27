@@ -5,6 +5,13 @@ INCLUDE "@|basename|/Mac_Learning.inc.flg";
 TABLE routerAlias(string, switchid);
 TABLE portAlias(string, string, portid);
 
+TABLE sp_vlans(switchid, portid, int);
+TABLE sp_modes(switchid, portid, string);
+TABLE ospf_costs(switchid, portid, int);
+
+// switched virtual interfaces (for inter-vlan traffic)
+TABLE virtual_interfaces(switchid, portid, int);
+
 // cached, switches_without_mac_learning, subnets: declared in INCLUDED files
 
 // Maps subnet number -> (host side, router side)

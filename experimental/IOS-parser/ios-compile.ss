@@ -376,7 +376,15 @@ namespace-for-template)
       (set-routers-routers! routers-msg (cons arouter (routers-routers routers-msg)))
 
       ; Return the gathered tuples. protobufs changes are side-effects
-      (string-append* (flatten (cons routertuple (cons iftuples (cons natinfo (cons trinfo aclinfo)))))))
+      (string-append* (flatten (list (format "~n// For router ~a (id = ~a)~n" hostname hostnum)                                      
+                                     iftuples
+                                     "\n"
+                                     aclinfo
+                                     trinfo
+                                     natinfo
+                                     routertuple
+                                     "\n"))))
+                                     ;(cons routertuple "\n" (cons iftuples (cons natinfo (cons trinfo aclinfo)))))))
   
     (define routers-msg (routers ""))
     (set-routers-subnet-base-dpid! routers-msg "300000000000")
