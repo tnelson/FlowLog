@@ -184,7 +184,7 @@ namespace-for-template)
     ; Need to assign an ID to the router and an ID to the interface
     (define (ifacedef->tuples arouter interface-defns nat-dpid rname rnum ifindex i ridx acl-dpid)
       (match i
-        [`(,name ,primaddr (,primnwa ,primnwm) ,secaddr (,secnwa ,secnwm) ,nat-side) 
+        [`(,name ,primaddr (,primnwa ,primnwm) ,secaddr (,secnwa ,secnwm) ,nat-side ,switchport-mode ,switchport-vlans ,ospf-cost) 
          (define inum (number->string (+ 1 ifindex)))
          ; offset the port number on the router by 1, since 1 is reserved for the attached NAT switch
          (define ptnum (number->string (+ 2 ifindex)))
@@ -249,11 +249,19 @@ namespace-for-template)
 
          ; Finally, return the result tuples (protobuf changes are side-effects)
          ; Keep the tuples that are non-#f
-         (filter (lambda (x) x) (list prim sec alias needs-nat acldefn natconfigs))]
+         ;(printf "iface ~a had switchport mode ~a~n" name switchport-mode)
+         ;(printf "iface ~a had switchport lans ~a~n" name switchport-vlans)
+         ;(printf "iface ~a had ospf cost ~a~n" name ospf-cost)  
+         
+         (define ospf-cost-inserts (list (val->ospf rnum ptnum ospf-cost)))
+         (define switchport-mode-inserts (list (val->spmode rnum ptnum switchport-mode)))
+         (define switchport-vlan-inserts (list (vals->vlans rnum ptnum switchport-vlans)))
+                  
+         (filter (lambda (x) x) (list prim sec alias needs-nat acldefn natconfigs switchport-mode-inserts switchport-vlan-inserts ospf-cost-inserts))]
         [else (pretty-display i) (error "ifacedef->tuple")]))
  
-      (define total-parsed-ace-count (box 0))      
-      (define total-used-ace-count (box 0))
+    (define total-parsed-ace-count (box 0))      
+    (define total-used-ace-count (box 0))
 
     
     ;;;;;;;;;;;;;;;;;;;

@@ -136,9 +136,6 @@
   (define switchport-mode (get-field switchport-mode iface))
   (define switchport-vlans (get-field switchport-vlans iface))
   (define ospf-cost (get-field ospf-cost iface))
-  (printf "iface ~a had switchport mode ~a~n" name switchport-mode)
-  (printf "iface ~a had switchport lans ~a~n" name switchport-vlans)
-  (printf "iface ~a had ospf cost ~a~n" name ospf-cost)  
   
   (cond [(not prim-addr-obj) 
          (printf "extract-ifs IGNORING: ~v~n" name)
@@ -158,7 +155,7 @@
            (error (format "extract-ifs: ~v vs. ~v" (symbol->string ifaceid) name)))
          `(,name 
            ,prim-addr ,prim-netw
-           ,sec-addr ,sec-netw ,nat-side)]))
+           ,sec-addr ,sec-netw ,nat-side ,switchport-mode ,switchport-vlans ,ospf-cost)]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Functions to produce startup insert tuples
@@ -193,6 +190,15 @@
   (string-append "INSERT (0x" acl-dpid ") INTO switches_without_mac_learning; // auto\n"
                  "INSERT (0x" acl-dpid ") INTO switches_without_arp; // auto\n"
                  "INSERT (" rnum ", 0x" acl-dpid ") INTO router_acl;\n"))
+
+(define (val->ospf rnum ptnum cost)
+  (format "INSERT (~a,~a,~a) INTO ospf_costs;~n" rnum ptnum cost))
+(define (val->spmode rnum ptnum mode)
+  (format "INSERT (~a,~a,~a) INTO sp_modes;~n" rnum ptnum mode))
+(define (vals->vlans rnum ptnum vlanlist)
+  (string-append* (map (lambda (vlan) (format "INSERT (~a,~a,~a) INTO sp_vlans;~n" rnum ptnum vlan)) vlanlist)))
+
+
 
 ; index is the 0-indexed count of this interface (i.e., index + 2 is the port on the "router")
 ; so the host of the ACL table will be: 2 * index + 1   (as OpenFlow ports are 1-indexed)
