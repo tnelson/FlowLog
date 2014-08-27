@@ -763,6 +763,7 @@
         crypto-map-ID))
     
     (define/public (set-switchport-vlans lst)
+      ;(printf "set switchp-vlans: ~a ~a ~a ~a~n" name lst (equal? (list 'none) lst) (equal? (list "none") lst))
       (make-object interface%
         name
         primary-address
@@ -773,7 +774,7 @@
         outbound-ACL-ID
         NAT-side
         switchport-mode
-        (if (equal? (list 'none) lst)
+        (if (or (equal? (list 'none) lst) (equal? (list "none") lst))                 
             empty 
             lst)
         ospf-cost    
@@ -792,7 +793,7 @@
         outbound-ACL-ID
         NAT-side
         switchport-mode
-        (if (equal? (list 'none) lst) 
+        (if (or (equal? (list 'none) lst) (equal? (list "none") lst))                 
             switchport-vlans
             (append switchport-vlans lst))
         ospf-cost    
@@ -3167,8 +3168,7 @@
                         set-switchport-mode m))
         ACLs insert-ACLs static-NAT dynamic-NAT static-routes route-maps networks 
         neighbors endpoints crypto-maps default-ACL-permit))
-    (define/public (set-switchport-vlans name lst)
-      (printf "set switchp-vlans: ~a ~a~n" name lst)
+    (define/public (set-switchport-vlans name lst)      
       (make-object IOS-config%
         hostname
         (hash-set interfaces

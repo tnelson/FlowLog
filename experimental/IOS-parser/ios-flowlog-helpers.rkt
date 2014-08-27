@@ -136,9 +136,11 @@
   (define switchport-mode (get-field switchport-mode iface))
   (define switchport-vlans (get-field switchport-vlans iface))
   (define ospf-cost (get-field ospf-cost iface))
-  
-  (cond [(not prim-addr-obj) 
-         (printf "extract-ifs IGNORING: ~v~n" name)
+    
+  (cond [(not (equal? switchport-mode 'no))
+         `(,name no (no no) no (no no) ,nat-side ,switchport-mode ,switchport-vlans ,ospf-cost)]
+        [(not prim-addr-obj) 
+         (printf "extract-ifs IGNORING: ~v; had neither a primary address nor a switchport mode~n" name)
          #f]
         [else    
   
@@ -162,9 +164,11 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (define (vals->subnet addr nwa nwm rnum inum ptnum ridx)
-  (define gwmac (string-append "ca:fe:00:" (string-pad (number->string ridx) 2 #\0) ":00:" (string-pad inum 2 #\0)))
-  (string-append "INSERT (" (string-join (list nwa nwm addr gwmac rnum ptnum) ", ") ") INTO subnets;\n"
-                 "INSERT (" (string-join (list addr gwmac) ", ") ") INTO cached; // auto\n"))
+  (cond [(equal? addr 'no) ""] 
+        [else
+         (define gwmac (string-append "ca:fe:00:" (string-pad (number->string ridx) 2 #\0) ":00:" (string-pad inum 2 #\0)))
+         (string-append "INSERT (" (string-join (list nwa nwm addr gwmac rnum ptnum) ", ") ") INTO subnets;\n"
+                        "INSERT (" (string-join (list addr gwmac) ", ") ") INTO cached; // auto\n")]))
 
 (define (vals->ifalias rname iname inum)
   (string-append "INSERT (" (string-join (list (string-append "\"" rname "\"") 
@@ -192,10 +196,15 @@
                  "INSERT (" rnum ", 0x" acl-dpid ") INTO router_acl;\n"))
 
 (define (val->ospf rnum ptnum cost)
-  (format "INSERT (~a,~a,~a) INTO ospf_costs;~n" rnum ptnum cost))
+  (if (equal? cost 'no)
+      empty
+      (list (format "INSERT (~a,~a,~a) INTO ospf_costs;~n" rnum ptnum cost))))
 (define (val->spmode rnum ptnum mode)
-  (format "INSERT (~a,~a,~a) INTO sp_modes;~n" rnum ptnum mode))
-(define (vals->vlans rnum ptnum vlanlist)
+  ;(printf "spmode: ~a ~a ~a~n" rnum ptnum mode)
+  (if (equal? mode 'no)
+      empty
+      (list (format "INSERT (~a,~a,\"~a\") INTO sp_modes;~n" rnum ptnum mode))))
+(define (vals->vlans rnum ptnum vlanlist)  
   (string-append* (map (lambda (vlan) (format "INSERT (~a,~a,~a) INTO sp_vlans;~n" rnum ptnum vlan)) vlanlist)))
 
 

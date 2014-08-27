@@ -1230,7 +1230,7 @@
 (define (csl->list csl)
   ;(printf "csl to list: ~a~n" csl)
   (cond
-    [(number? csl) (number->string csl)]
+    [(number? csl) (list (number->string csl))]
     [(symbol? csl) 
      (define str (symbol->string csl))
      (define lst (string-split str ","))

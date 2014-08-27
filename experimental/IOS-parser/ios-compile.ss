@@ -189,8 +189,15 @@ namespace-for-template)
          ; offset the port number on the router by 1, since 1 is reserved for the attached NAT switch
          (define ptnum (number->string (+ 2 ifindex)))
 
-         ;(printf "ridx=~v; rnum=~v; ifindex=~v; rname=~v;~n" ridx rnum ifindex rname) ; DEBUG
+         (printf "if name=~v; ridx=~v; rnum=~v; ifindex=~v; rname=~v; cost=~v mode=~v vlans=~v~n" name ridx rnum ifindex rname ospf-cost switchport-mode switchport-vlans) ; DEBUG
+         
+         (define ospf-cost-inserts (val->ospf rnum ptnum ospf-cost))
+         (define switchport-mode-inserts (val->spmode rnum ptnum switchport-mode))
+         (define switchport-vlan-inserts (vals->vlans rnum ptnum switchport-vlans))                          
 
+         ; Interface may be a switchport; if so it won't have an IP address.
+         ; (Although vlan-interfaces will, since that's their purpose.)
+         
          ;;;;;;;;;;;;;;;;         
          ; Produce tuples
          ; TODO: if secondary, need to increment tr_dpid
@@ -199,10 +206,11 @@ namespace-for-template)
          (define sec "")
          (define alias (vals->ifalias rname name inum))         
 
-         ; local subnets
-         (dict-set! dst-local-subnet-for-router rnum 
-                    (cons `(= pkt.nwDst ,(string-append primnwa "/" primnwm))
-                          (dict-ref dst-local-subnet-for-router rnum)))
+         ; local subnets (if any)
+         (when (not (equal? primnwa 'no))
+           (dict-set! dst-local-subnet-for-router rnum 
+                      (cons `(= pkt.nwDst ,(string-append primnwa "/" primnwm))
+                            (dict-ref dst-local-subnet-for-router rnum))))
          ;(when sec
          ;  (dict-set! dst-local-subnet-for-router rnum
          ;             (cons `(= pkt.nwDst ,(string-append secnwa "/" secnwm))
@@ -213,7 +221,7 @@ namespace-for-template)
                                (string-append (ifvals->needs-nat nn-for-router rnum rname primnwa primnwm) 
                                               (ifvals->needs-nat nn-for-router rnum rname secnwa secnwm))
                                empty))                 
-
+         
          (define acldefn (vals->ifacldefn acl-dpid ifindex rname name))
          (define natconfigs (if-pair->natconfig interface-defns nat-side nat-dpid))                                    
          ;;;;;;;;;;;;;;;;;
@@ -224,9 +232,10 @@ namespace-for-template)
          ; generate protobufs as well
          (define aninterf (subnet ""))
 
-         (set-subnet-addr! aninterf primnwa)
-         (set-subnet-mask! aninterf (string->number primnwm))
-         (set-subnet-gw! aninterf primaddr)
+         (when (not (equal? primnwa 'no))
+           (set-subnet-addr! aninterf primnwa)
+           (set-subnet-mask! aninterf (string->number primnwm))
+           (set-subnet-gw! aninterf primaddr))
 
          (set-router-subnets! arouter (cons aninterf (router-subnets arouter) ))
 
@@ -248,17 +257,10 @@ namespace-for-template)
          ;;;;;;;;;;;;;;;;;
 
          ; Finally, return the result tuples (protobuf changes are side-effects)
-         ; Keep the tuples that are non-#f
-         ;(printf "iface ~a had switchport mode ~a~n" name switchport-mode)
-         ;(printf "iface ~a had switchport lans ~a~n" name switchport-vlans)
-         ;(printf "iface ~a had ospf cost ~a~n" name ospf-cost)  
-         
-         (define ospf-cost-inserts (list (val->ospf rnum ptnum ospf-cost)))
-         (define switchport-mode-inserts (list (val->spmode rnum ptnum switchport-mode)))
-         (define switchport-vlan-inserts (list (vals->vlans rnum ptnum switchport-vlans)))
+         ; Keep the tuples that are non-#f         
                   
          (filter (lambda (x) x) (list prim sec alias needs-nat acldefn natconfigs switchport-mode-inserts switchport-vlan-inserts ospf-cost-inserts))]
-        [else (pretty-display i) (error "ifacedef->tuple")]))
+        [else (pretty-display i) (error (format "ifacedef->tuple: ~a" i))]))
  
     (define total-parsed-ace-count (box 0))      
     (define total-used-ace-count (box 0))
