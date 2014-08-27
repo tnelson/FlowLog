@@ -185,9 +185,11 @@ namespace-for-template)
     (define (ifacedef->tuples arouter interface-defns nat-dpid rname rnum ifindex i ridx acl-dpid)
       (match i
         [`(,name ,primaddr (,primnwa ,primnwm) ,secaddr (,secnwa ,secnwm) ,nat-side ,switchport-mode ,switchport-vlans ,ospf-cost) 
-         (define inum (number->string (+ 1 ifindex)))
+         
+         ; used for mac address
+         (define macnum (number->string ifindex))
          ; offset the port number on the router by 1, since 1 is reserved for the attached NAT switch
-         (define ptnum (number->string (+ 2 ifindex)))
+         (define ptnum (number->string (+ 1 ifindex)))
 
          (printf "if name=~v; ridx=~v; rnum=~v; ifindex=~v; rname=~v; cost=~v mode=~v vlans=~v~n" name ridx rnum ifindex rname ospf-cost switchport-mode switchport-vlans) ; DEBUG
          
@@ -202,10 +204,10 @@ namespace-for-template)
          ;;;;;;;;;;;;;;;;         
          ; Produce tuples
          ; TODO: if secondary, need to increment tr_dpid
-         (define prim (vals->subnet primaddr primnwa primnwm rnum inum ptnum ridx))
-         ;(define sec (if secaddr (vals->subnet secaddr secnwa secnwm rnum inum ptnum ridx) #f))
+         (define prim (vals->subnet primaddr primnwa primnwm rnum macnum ptnum ridx))
+         ;(define sec (if secaddr (vals->subnet secaddr secnwa secnwm rnum macnum ptnum ridx) #f))
          (define sec "")
-         (define alias (vals->ifalias rname name inum))         
+         (define alias (vals->ifalias rname name ptnum)) 
 
          ; local subnets (if any)
          (when (not (equal? primnwa 'no))
@@ -363,7 +365,7 @@ namespace-for-template)
       
       (define iftuples (for/list ([ifdef interface-defns] 
                                   [ifindex (build-list (length interface-defns) values)])                         
-                          (ifacedef->tuples arouter interface-defns nat-dpid hostname hostnum ifindex ifdef (+ hostidx 1) acl-dpid)))
+                          (ifacedef->tuples arouter interface-defns nat-dpid hostname hostnum (+ ifindex 1) ifdef (+ hostidx 1) acl-dpid)))
       (define routertuple (vals->routertuples hostname hostnum)) 
       (define natinfo (vals->nat (router-nat-dpid arouter) hostnum))      
       (define trinfo (vals->tr (router-tr-dpid arouter) hostnum))
@@ -376,7 +378,8 @@ namespace-for-template)
       (set-routers-routers! routers-msg (cons arouter (routers-routers routers-msg)))
 
       ; Return the gathered tuples. protobufs changes are side-effects
-      (string-append* (flatten (list (format "~n// For router ~a (id = ~a)~n" hostname hostnum)                                      
+      (string-append* (flatten (list (format "~n// For router ~a (id = ~a)~n" hostname hostnum)   
+                                     (format "// ACL = ~a; TR = ~a; NAT = ~a~n" (router-acl-dpid arouter) (router-tr-dpid arouter) (router-nat-dpid arouter))
                                      iftuples
                                      "\n"
                                      aclinfo
