@@ -178,39 +178,65 @@ namespace-for-template)
                    [s (string-append "  INSERT (" n ", " hstPt ", " rtrPt ") INTO router_portmap;\n")])
               (string-append s (make-routerportmap (sub1 num)))))))
 
-    (define warned-secondary (box #f))
+    (define warned-secondary (box #f)) 
+    (define last-physicalpt-used (box 0))
+    (define last-routingpt-used (box 1))
     
     ;;;;;;;;;;;;;;;;;;;
     ; Need to assign an ID to the router and an ID to the interface
+    ; (we are in the scope of compile-configurations)
     (define (ifacedef->tuples arouter interface-defns nat-dpid rname rnum ifindex i ridx acl-dpid)
-      (match i
-        [`(,name ,primaddr (,primnwa ,primnwm) ,secaddr (,secnwa ,secnwm) ,nat-side ,switchport-mode ,switchport-vlans ,ospf-cost) 
+      (define name (ifacedef-name i))
+      (define primaddr (ifacedef-prim-addr i))
+      (match-define (list primnwa primnwm) (ifacedef-prim-netw i))      
+      (define secaddr (ifacedef-sec-addr i))
+      (match-define (list secnwa secnwm) (ifacedef-sec-netw i))
+      (define nat-side (ifacedef-nat-side i))
+      (define switchport-mode (ifacedef-switchport-mode i))
+      (define switchport-vlans (ifacedef-switchport-vlans i))
+      (define ospf-cost (ifacedef-ospf-cost i))
+             
+         ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+         ; port IDs and NIC MAC addresses
+         ; - All interfaces (virtual, switchport, and L3 physical) have a MAC address
+         ; - There are two separate spaces of port IDs:
+         ;   + physical (L3 physical and switchport): these are used by the VLAN sub-router; represent physical connections to subnets 
+         ;   + routing (L3 physical and virtual): used by the internal sub-routers to handle traffic completing a L2 hop and being L3-routed.         
          
-         ; used for mac address
+         ; used for mac address; assign in sequence regardless of interface type
          (define macnum (number->string ifindex))
-         ; offset the port number on the router by 1, since 1 is reserved for the attached NAT switch
-         (define ptnum (number->string (+ 1 ifindex)))
-
+                          
+         ; use appropriate type. this means that we no longer have a single number that
+         ; can be followed through the pipeline, but we never had that anyway (rtr used pt1 for nat)
+         ; recall that in the router-table, port 1 is reserved for the attached NAT switch (hence starting with 1 in the box above)
+         (define physical-ptnum (cond [(is-virtual-interface? name) "0"] 
+                                      [else 
+                                       (set-box! last-physicalpt-used (+ 1 (unbox last-physicalpt-used)))
+                                       (number->string (+ 1 (unbox last-physicalpt-used)))]))
+         
+         (define routing-ptnum (cond [(equal? switchport-mode 'no) 
+                                      (set-box! last-routingpt-used (+ 1 (unbox last-routingpt-used)))
+                                      (number->string (+ 1 (unbox last-routingpt-used)))] 
+                                     [else "0"]))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+         
          (printf "if name=~v; ridx=~v; rnum=~v; ifindex=~v; rname=~v; cost=~v mode=~v vlans=~v~n" name ridx rnum ifindex rname ospf-cost switchport-mode switchport-vlans) ; DEBUG
          
-         (define ospf-cost-inserts (val->ospf rnum ptnum ospf-cost))
-         (define switchport-mode-inserts (val->spmode rnum ptnum switchport-mode))
-         (define switchport-vlan-inserts (vals->vlans rnum ptnum switchport-vlans))                          
-         (define maybe-vlan-interface-inserts (vals->vlan-iface rnum ptnum name))
-
-         ; Interface may be a switchport; if so it won't have an IP address.
-         ; (Although vlan-interfaces will, since that's their purpose.)
+         (define ospf-cost-inserts (val->ospf rnum routing-ptnum ospf-cost))
+         (define switchport-mode-inserts (val->spmode rnum physical-ptnum switchport-mode))
+         (define switchport-vlan-inserts (vals->vlans rnum physical-ptnum switchport-vlans))                          
+         (define maybe-vlan-interface-inserts (vals->vlan-iface rnum physical-ptnum name))
          
          ;;;;;;;;;;;;;;;;         
          ; Produce tuples
          ; TODO: if secondary, need to increment tr_dpid
-         (define prim (vals->subnet primaddr primnwa primnwm rnum macnum ptnum ridx))
+         (define prim (vals->subnet primaddr primnwa primnwm rnum macnum routing-ptnum ridx))
          ;(define sec (if secaddr (vals->subnet secaddr secnwa secnwm rnum macnum ptnum ridx) #f))
          (define sec "")
-         (define alias (vals->ifalias rname name ptnum)) 
+         (define alias (vals->ifalias rname name routing-ptnum)) 
 
          ; local subnets (if any)
-         (when (not (equal? primnwa 'no))
+         (when primnwa
            (dict-set! dst-local-subnet-for-router rnum 
                       (cons `(= pkt.nwDst ,(string-append primnwa "/" primnwm))
                             (dict-ref dst-local-subnet-for-router rnum))))
@@ -231,39 +257,46 @@ namespace-for-template)
 
          ;(printf "dst local: ~v~n~v~n" dst-local-subnet-for-router) ; DEBUG
 
-         ;;;;;;;;;;;;;;;;;
-         ; generate protobufs as well
+         ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+         ; generate data for protobufs "subnet" messages         
+         ; a virtual interface needs to know which physical port it is attached to
+                 
          (define aninterf (subnet ""))
-
-         (when (not (equal? primnwa 'no))
+         
+         ; This is a virtual interface. Extract the vlan it connects to and find the physical port id
+         ; ASSUMPTION: switchport interfaces have all already been processed and assigned a physical port.
+         ; string list-of(tuple) -> string
+         (define (get-physical-portnum name interface-defns)
+          ; (define vlaninterface (findf ))
+           "17"
+           )
+         
+         ; this interface declares a subnet (may be virtual, but won't be a switchport)
+         (when primnwa
            (set-subnet-addr! aninterf primnwa)
            (set-subnet-mask! aninterf (string->number primnwm))
-           (set-subnet-gw! aninterf primaddr))
-
-         (set-router-subnets! arouter (cons aninterf (router-subnets arouter) ))
-
+           (set-subnet-gw! aninterf primaddr)           
+                  
+           (set-subnet-ifname! aninterf name) ; for debugging. only records the L3 interface name (possibly virtual)   
+           (if (is-virtual-interface? name)
+               (set-subnet-physical-portid! aninterf (string->number (get-physical-portnum name interface-defns)))
+               (set-subnet-physical-portid! aninterf (string->number physical-ptnum)))
+           
+           (set-router-subnets! arouter (cons aninterf (router-subnets arouter) )))
+         ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+         
          ; Deal with secondary subnet, if there is one
          (when secaddr
            (unless (unbox warned-secondary)
              (printf "WARNING! Secondary interface(s) detected on ~v. Ignoring...~n" rname)
              (set-box! warned-secondary #t))
-           ;(define aninterf2 (subnet ""))
-           ;
-           ;(set-subnet-addr! aninterf2 secnwa)
-           ;(set-subnet-mask! aninterf2 (string->number secnwm))
-           ;(set-subnet-gw! aninterf2 secaddr)
-           ;
-           ;(printf "~v ~v ~v~n" secaddr secnwa secnwm)
-           ;       
-           ;(set-router-subnets! arouter (cons aninterf2 (router-subnets arouter) )))         
            )
          ;;;;;;;;;;;;;;;;;
 
          ; Finally, return the result tuples (protobuf changes are side-effects)
          ; Keep the tuples that are non-#f         
                   
-         (filter (lambda (x) x) (list "\n" prim sec alias needs-nat acldefn natconfigs switchport-mode-inserts switchport-vlan-inserts ospf-cost-inserts maybe-vlan-interface-inserts))]
-        [else (pretty-display i) (error (format "ifacedef->tuple: ~a" i))]))
+         (filter (lambda (x) x) (list "\n" prim sec alias needs-nat acldefn natconfigs switchport-mode-inserts switchport-vlan-inserts ospf-cost-inserts maybe-vlan-interface-inserts)))
  
     (define total-parsed-ace-count (box 0))      
     (define total-used-ace-count (box 0))
@@ -278,7 +311,7 @@ namespace-for-template)
       (define interfaces (send config get-non-shutdown-interfaces)) ; IGNORE "shutdown" interfaces                     
       (printf "#interfaces: ~v #non-shutdown: ~v~n" (hash-count (send config get-interfaces)) (hash-count interfaces))
       
-      ; Filter out interfaces that extract-ifs returns #f for. (for instance, ifs with no subnet)
+      ; Filter out interfaces that extract-ifs returns #f for. (for instance, ifs with no subnet)      
       (define unfiltered-interface-defns (hash-map interfaces extract-ifs))
       (define interface-defns (filter (lambda (i) i) unfiltered-interface-defns))
       (printf "Processed ~v interfaces; ~v had subnets and will be handled.~n" (length unfiltered-interface-defns) (length interface-defns)) ; DEBUG     
@@ -363,7 +396,13 @@ namespace-for-template)
       (set-router-tr-dpid! arouter tr-dpid)
       (set-router-acl-dpid! arouter acl-dpid)
       
-      (define iftuples (for/list ([ifdef interface-defns] 
+      (define (is-switchport-interface i)           
+        (not (equal? (ifacedef-switchport-mode i)'no)))
+              
+      ; Do switchport interfaces first
+      (define iftuples (for/list ([ifdef (sort interface-defns (lambda (i1 i2)
+                                                                 (or (is-switchport-interface i1)
+                                                                     (not (is-switchport-interface i2)))))] 
                                   [ifindex (build-list (length interface-defns) values)])                         
                           (ifacedef->tuples arouter interface-defns nat-dpid hostname hostnum (+ ifindex 1) ifdef (+ hostidx 1) acl-dpid)))
       (define routertuple (vals->routertuples hostname hostnum)) 

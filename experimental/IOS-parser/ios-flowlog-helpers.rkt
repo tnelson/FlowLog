@@ -5,7 +5,9 @@
 (require (only-in srfi/13 string-pad string-contains))
 (require "ios.ss")
 
-(provide (all-defined-out))
+(provide (all-defined-out) 
+         (struct-out ifacedef))
+; must provide struct export separately
   
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -125,6 +127,27 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Accept an interface ID and an interface%, produce a tuple with interface properties
 ; (Meant to be called with map-hash, hence the double-parameter)
+
+; struct contains some cleanup vs. the interface% class
+(define sorf? (or/c false? string?))
+(define-struct/contract ifacedef 
+  ([name string?]
+   [prim-addr sorf?]
+   ; "The number of elements in the list must match the number of arguments supplied to list/c"
+   [prim-netw (list/c sorf? sorf?)] ; addr mask
+   [sec-addr sorf?]
+   [sec-netw (list/c sorf? sorf?) ] ; addr mask
+   [nat-side symbol?]
+   [switchport-mode symbol?]
+   ; Listof is variable length
+   [switchport-vlans (listof string?)] ; vlan ids as strings
+   [ospf-cost (or/c symbol? string?)])) ; cost as string
+
+(define (->string x)
+  (cond [(number? x) (number->string x)]
+        [(symbol? x) (symbol->string x)]
+        [else x]))
+
 (define (extract-ifs ifaceid iface)
   (define name (symbol->string (send iface text)))
   (define prim-addr-obj (send iface get-primary-address))
@@ -134,11 +157,11 @@
   (define nat-side (send iface get-nat-side))
     
   (define switchport-mode (get-field switchport-mode iface))
-  (define switchport-vlans (get-field switchport-vlans iface))
-  (define ospf-cost (get-field ospf-cost iface))
+  (define switchport-vlans (map ->string (get-field switchport-vlans iface)))
+  (define ospf-cost (->string (get-field ospf-cost iface)))
     
   (cond [(not (equal? switchport-mode 'no))
-         `(,name no (no no) no (no no) ,nat-side ,switchport-mode ,switchport-vlans ,ospf-cost)]
+         (ifacedef name #f '(#f #f) #f '(#f #f) nat-side switchport-mode switchport-vlans ospf-cost)]
         [(not prim-addr-obj) 
          (printf "extract-ifs IGNORING: ~v; had neither a primary address nor a switchport mode~n" name)
          #f]
@@ -155,16 +178,15 @@
          
          (unless (equal? (string-uncapitalize (symbol->string ifaceid)) name)
            (error (format "extract-ifs: ~v vs. ~v" (symbol->string ifaceid) name)))
-         `(,name 
-           ,prim-addr ,prim-netw
-           ,sec-addr ,sec-netw ,nat-side ,switchport-mode ,switchport-vlans ,ospf-cost)]))
+         
+         (ifacedef name prim-addr prim-netw sec-addr sec-netw nat-side switchport-mode switchport-vlans ospf-cost)]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Functions to produce startup insert tuples
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (define (vals->subnet addr nwa nwm rnum inum ptnum ridx)
-  (cond [(equal? addr 'no) ""] 
+  (cond [(not addr) ""] 
         [else
          (define gwmac (string-append "ca:fe:00:" (string-pad (number->string ridx) 2 #\0) ":00:" (string-pad inum 2 #\0)))
          (string-append "INSERT (" (string-join (list nwa nwm addr gwmac rnum ptnum) ", ") ") INTO subnets;\n"
@@ -196,7 +218,7 @@
                  "INSERT (" rnum ", 0x" acl-dpid ") INTO router_acl;\n"))
 
 (define (val->ospf rnum ptnum cost)
-  (if (equal? cost 'no)
+  (if (not cost)
       empty
       (list (format "INSERT (~a,~a,~a) INTO ospf_costs;~n" rnum ptnum cost))))
 (define (val->spmode rnum ptnum mode)
@@ -206,13 +228,18 @@
       (list (format "INSERT (~a,~a,\"~a\") INTO sp_modes;~n" rnum ptnum mode))))
 (define (vals->vlans rnum ptnum vlanlist)  
   (string-append* (map (lambda (vlan) (format "INSERT (~a,~a,~a) INTO sp_vlans;~n" rnum ptnum vlan)) vlanlist)))
-; TODO: "vlan" interfaces used by vlans to cross L3 boundries
-(define (vals->vlan-iface rnum ptnum name)
-  (define lcn (string-downcase name))
-  (if (string-contains lcn "vlan")
-      (format "INSERT (~a,~a,~a) INTO virtual_interfaces;~n" rnum ptnum (first (string-split lcn "vlan")))
-      ""))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Switched Virtual Interfaces
+; "vlan" interfaces used by vlans to cross L3 boundries
+(define (is-virtual-interface? name)
+  (string-contains (string-downcase name) "vlan"))
+ 
+(define (vals->vlan-iface rnum ptnum name)  
+  (cond [(is-virtual-interface? name)         
+         (format "INSERT (~a,~a,~a) INTO virtual_interfaces;~n" rnum ptnum (first (string-split (string-downcase name) "vlan")))]
+        [else ""]))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ; index is the 0-indexed count of this interface (i.e., index + 2 is the port on the "router")
 ; so the host of the ACL table will be: 2 * index + 1   (as OpenFlow ports are 1-indexed)

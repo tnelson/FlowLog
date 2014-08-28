@@ -6,7 +6,9 @@
  subnet
  ((optional primitive:string addr 1)
   (optional primitive:int32 mask 2)
-  (optional primitive:string gw 3)))
+  (optional primitive:string gw 3)
+  (optional primitive:string ifname 6)
+  (optional primitive:int32 physical-portid 7)))
 (define-message-type
  network
  ((optional primitive:string addr 1) (optional primitive:int32 mask 2)))
