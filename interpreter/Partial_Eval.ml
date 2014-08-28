@@ -63,7 +63,7 @@ let rec refresh_remote_relation (p: flowlog_program) (f: formula): unit =
           | RemoteTable(qryname, (ip, port), refresh) ->
             (* qryname, not relname, when querying *)
             printf "REMOTE STATE --- REFRESHING: %s\n%!" (string_of_formula f);
-            let bb_results = Flowlog_Thrift_Out.doBBquery qryname ip port args in
+            let bb_results = Flowlog_Thrift_Out.doBBquery qryname ip port args remtbl.tablearity in
             let bb_termlists = (map (fun tlist -> map reassemble_xsb_term tlist) bb_results) in
             let bb_formulas = (map (fun tlist -> FAtom(modname, relname, tlist)) bb_termlists) in
               remote_cache := FmlaMap.add f (bb_termlists, Unix.time()) !remote_cache;
@@ -917,7 +917,10 @@ let send_event (p: flowlog_program) (ev: event) (ip: string) (pt: string) (full_
           | Some(fp) -> f p ev ip pt fp)
       | None -> failwith "Error: couldn't send packet_in because function not set.")
   else
-    doBBnotify ev ip pt;;
+  begin
+    let arity = (map (fun (n, t) -> t) (get_event p ev.typeid).evfields) in
+      doBBnotify ev ip pt arity
+  end;;
 
 let event_with_field (p: flowlog_program) (ev_so_far : event) (fieldn: string) (avalue: term) : event =
   match avalue with

@@ -37,7 +37,7 @@ let print_notif_values tbl =
 
     Note: each query opens a separate, new connection to the black-box.
 *)
-let doBBquery (qryname: string) (bbip: string) (bbport: string) (args: term list): string list list =
+let doBBquery (qryname: string) (bbip: string) (bbport: string) (args: term list) (types: typeid list): string list list =
     let dotted_host = Packet.string_of_ip (nwaddr_of_int_string bbip) in
     Printf.printf "Sending BB query to %s:%s...\n%!" dotted_host bbport;
     let cli = connect ~host:dotted_host (int_of_string bbport) in
@@ -65,7 +65,7 @@ let doBBquery (qryname: string) (bbip: string) (bbport: string) (args: term list
   Each notification opens a separate, new, connection to the black-box.
 *)
 
-let doBBnotify (ev: event) (bbip: string) (bbport: string) : unit Lwt.t =
+let doBBnotify (ev: event) (bbip: string) (bbport: string) (types: typeid list): unit Lwt.t =
             let dotted_host = Packet.string_of_ip (nwaddr_of_int_string bbip) in
             let cli = connect ~host:dotted_host (int_of_string bbport) in
             try
