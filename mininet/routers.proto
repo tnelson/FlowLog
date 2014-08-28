@@ -11,7 +11,7 @@ message Subnet {
   optional int32  mask		= 2;  // required
   optional string gw		= 3;  // required
   optional string ifname	= 6;
-  optional int32 physical_portid	= 7;
+  repeated int32 physical_portid	= 7;
 }
 
 
@@ -34,6 +34,7 @@ message Router {
   optional string nat_dpid  = 3;  // required
   optional string tr_dpid   = 6;  // required
   optional string acl_dpid  = 7;  // required
+  optional string vlan_dpid = 8;
 
   repeated Subnet subnets = 4;
   repeated Peer peers = 5;

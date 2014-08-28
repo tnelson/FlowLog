@@ -8,7 +8,7 @@
   (optional primitive:int32 mask 2)
   (optional primitive:string gw 3)
   (optional primitive:string ifname 6)
-  (optional primitive:int32 physical-portid 7)))
+  (repeated primitive:int32 physical-portid 7)))
 (define-message-type
  network
  ((optional primitive:string addr 1) (optional primitive:int32 mask 2)))
@@ -25,6 +25,7 @@
   (optional primitive:string nat-dpid 3)
   (optional primitive:string tr-dpid 6)
   (optional primitive:string acl-dpid 7)
+  (optional primitive:string vlan-dpid 8)
   (repeated struct:subnet subnets 4)
   (repeated struct:peer peers 5)))
 (define-message-type

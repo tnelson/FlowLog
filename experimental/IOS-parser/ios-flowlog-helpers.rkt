@@ -193,9 +193,10 @@
                         "INSERT (" (string-join (list addr gwmac) ", ") ") INTO cached; // auto\n")]))
 
 (define (vals->ifalias rname iname inum)
-  (string-append "INSERT (" (string-join (list (string-append "\"" rname "\"") 
-                                               (string-append "\"" iname "\"") 
-                                               inum) ", ") ") INTO portAlias;\n"))
+  ;(string-append "INSERT (" (string-join (list (string-append "\"" rname "\"") 
+  ;                                             (string-append "\"" iname "\"") 
+  ;                                             inum) ", ") ") INTO portAlias;\n")
+  (format "// Interface ~v~n" iname))
 
 (define (vals->routertuples rname rnum)
   (string-append "INSERT (" (string-join (list (string-append "\"" rname "\"")                                                    
@@ -218,7 +219,8 @@
                  "INSERT (" rnum ", 0x" acl-dpid ") INTO router_acl;\n"))
 
 (define (val->ospf rnum ptnum cost)
-  (if (not cost)
+  (printf "~v ~a~n" cost cost)
+  (if (or (not cost) (equal? cost "no"))
       empty
       (list (format "INSERT (~a,~a,~a) INTO ospf_costs;~n" rnum ptnum cost))))
 (define (val->spmode rnum ptnum mode)
@@ -244,11 +246,13 @@
 ; index is the 0-indexed count of this interface (i.e., index + 2 is the port on the "router")
 ; so the host of the ACL table will be: 2 * index + 1   (as OpenFlow ports are 1-indexed)
 ; and the router side of the ACL table will be: 2 * index + 2
-(define (vals->ifacldefn acl-dpid index rname iname)
+(define (vals->ifacldefn acl-dpid index rname iname switchport-mode)  
   (define alias-str (symbol->string (build-acl-name rname iname)))
   (define hside-pt (number->string (+ (* 2 index) 1)))
   (define rside-pt (number->string (+ (* 2 index) 2)))
-  (string-append "INSERT (\"" alias-str "\", 0x" acl-dpid ", " hside-pt ", " rside-pt ") INTO aclAlias;\n"))
+  (if (not (equal? switchport-mode 'no))
+    ""
+    (string-append "INSERT (\"" alias-str "\", 0x" acl-dpid ", " hside-pt ", " rside-pt ") INTO aclAlias;\n")))
 
 ; For this particular type of nat (source list overload dynamic):
 ; For each private interface (nat = inside), and each public interface (nat = outside)

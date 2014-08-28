@@ -5,12 +5,22 @@ INCLUDE "@|basename|/Mac_Learning.inc.flg";
 TABLE routerAlias(string, switchid);
 TABLE portAlias(string, string, portid);
 
+// Which VLAN ids are associate with which switchports
+// switch -> physical port id -> vlan id
 TABLE sp_vlans(switchid, portid, int);
+
+// Which physical ports are access or trunk ports for VLAN(s)
+// switch -> physical port id -> mode
 TABLE sp_modes(switchid, portid, string);
+
+// OSPF outgoing costs
+// switch -> routing port id -> cost
 TABLE ospf_costs(switchid, portid, int);
 
 // switched virtual interfaces (for inter-vlan traffic)
+// switch -> routing port id -> vlan id
 TABLE virtual_interfaces(switchid, portid, int);
+
 
 // cached, switches_without_mac_learning, subnets: declared in INCLUDED files
 

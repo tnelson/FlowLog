@@ -13,7 +13,7 @@ from google.protobuf import descriptor_pb2
 DESCRIPTOR = _descriptor.FileDescriptor(
   name='routers.proto',
   package='flowlog',
-  serialized_pb='\n\rrouters.proto\x12\x07\x66lowlog\"Y\n\x06Subnet\x12\x0c\n\x04\x61\x64\x64r\x18\x01 \x01(\t\x12\x0c\n\x04mask\x18\x02 \x01(\x05\x12\n\n\x02gw\x18\x03 \x01(\t\x12\x0e\n\x06ifname\x18\x06 \x01(\t\x12\x17\n\x0fphysical_portid\x18\x07 \x01(\x05\"%\n\x07Network\x12\x0c\n\x04\x61\x64\x64r\x18\x01 \x01(\t\x12\x0c\n\x04mask\x18\x02 \x01(\x05\"Q\n\x04Peer\x12\n\n\x02ip\x18\x01 \x01(\t\x12\x0c\n\x04mask\x18\x02 \x01(\x05\x12\x0b\n\x03mac\x18\x03 \x01(\t\x12\"\n\x08networks\x18\x04 \x03(\x0b\x32\x10.flowlog.Network\"\x9e\x01\n\x06Router\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x11\n\tself_dpid\x18\x02 \x01(\t\x12\x10\n\x08nat_dpid\x18\x03 \x01(\t\x12\x0f\n\x07tr_dpid\x18\x06 \x01(\t\x12\x10\n\x08\x61\x63l_dpid\x18\x07 \x01(\t\x12 \n\x07subnets\x18\x04 \x03(\x0b\x32\x0f.flowlog.Subnet\x12\x1c\n\x05peers\x18\x05 \x03(\x0b\x32\r.flowlog.Peer\"E\n\x07Routers\x12 \n\x07routers\x18\x01 \x03(\x0b\x32\x0f.flowlog.Router\x12\x18\n\x10subnet_base_dpid\x18\x02 \x01(\t')
+  serialized_pb='\n\rrouters.proto\x12\x07\x66lowlog\"Y\n\x06Subnet\x12\x0c\n\x04\x61\x64\x64r\x18\x01 \x01(\t\x12\x0c\n\x04mask\x18\x02 \x01(\x05\x12\n\n\x02gw\x18\x03 \x01(\t\x12\x0e\n\x06ifname\x18\x06 \x01(\t\x12\x17\n\x0fphysical_portid\x18\x07 \x03(\x05\"%\n\x07Network\x12\x0c\n\x04\x61\x64\x64r\x18\x01 \x01(\t\x12\x0c\n\x04mask\x18\x02 \x01(\x05\"Q\n\x04Peer\x12\n\n\x02ip\x18\x01 \x01(\t\x12\x0c\n\x04mask\x18\x02 \x01(\x05\x12\x0b\n\x03mac\x18\x03 \x01(\t\x12\"\n\x08networks\x18\x04 \x03(\x0b\x32\x10.flowlog.Network\"\xb1\x01\n\x06Router\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x11\n\tself_dpid\x18\x02 \x01(\t\x12\x10\n\x08nat_dpid\x18\x03 \x01(\t\x12\x0f\n\x07tr_dpid\x18\x06 \x01(\t\x12\x10\n\x08\x61\x63l_dpid\x18\x07 \x01(\t\x12\x11\n\tvlan_dpid\x18\x08 \x01(\t\x12 \n\x07subnets\x18\x04 \x03(\x0b\x32\x0f.flowlog.Subnet\x12\x1c\n\x05peers\x18\x05 \x03(\x0b\x32\r.flowlog.Peer\"E\n\x07Routers\x12 \n\x07routers\x18\x01 \x03(\x0b\x32\x0f.flowlog.Router\x12\x18\n\x10subnet_base_dpid\x18\x02 \x01(\t')
 
 
 
@@ -55,8 +55,8 @@ _SUBNET = _descriptor.Descriptor(
       options=None),
     _descriptor.FieldDescriptor(
       name='physical_portid', full_name='flowlog.Subnet.physical_portid', index=4,
-      number=7, type=5, cpp_type=1, label=1,
-      has_default_value=False, default_value=0,
+      number=7, type=5, cpp_type=1, label=3,
+      has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
@@ -201,14 +201,21 @@ _ROUTER = _descriptor.Descriptor(
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
-      name='subnets', full_name='flowlog.Router.subnets', index=5,
+      name='vlan_dpid', full_name='flowlog.Router.vlan_dpid', index=5,
+      number=8, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=unicode("", "utf-8"),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+    _descriptor.FieldDescriptor(
+      name='subnets', full_name='flowlog.Router.subnets', index=6,
       number=4, type=11, cpp_type=10, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
-      name='peers', full_name='flowlog.Router.peers', index=6,
+      name='peers', full_name='flowlog.Router.peers', index=7,
       number=5, type=11, cpp_type=10, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
@@ -224,7 +231,7 @@ _ROUTER = _descriptor.Descriptor(
   is_extendable=False,
   extension_ranges=[],
   serialized_start=240,
-  serialized_end=398,
+  serialized_end=417,
 )
 
 
@@ -258,8 +265,8 @@ _ROUTERS = _descriptor.Descriptor(
   options=None,
   is_extendable=False,
   extension_ranges=[],
-  serialized_start=400,
-  serialized_end=469,
+  serialized_start=419,
+  serialized_end=488,
 )
 
 _PEER.fields_by_name['networks'].message_type = _NETWORK

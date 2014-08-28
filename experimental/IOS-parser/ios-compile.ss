@@ -181,6 +181,7 @@ namespace-for-template)
     (define warned-secondary (box #f)) 
     (define last-physicalpt-used (box 0))
     (define last-routingpt-used (box 1))
+    (define vlan-iname-to-physicalport (box empty))
     
     ;;;;;;;;;;;;;;;;;;;
     ; Need to assign an ID to the router and an ID to the interface
@@ -225,7 +226,7 @@ namespace-for-template)
          (define ospf-cost-inserts (val->ospf rnum routing-ptnum ospf-cost))
          (define switchport-mode-inserts (val->spmode rnum physical-ptnum switchport-mode))
          (define switchport-vlan-inserts (vals->vlans rnum physical-ptnum switchport-vlans))                          
-         (define maybe-vlan-interface-inserts (vals->vlan-iface rnum physical-ptnum name))
+         (define maybe-vlan-interface-inserts (vals->vlan-iface rnum routing-ptnum name))
          
          ;;;;;;;;;;;;;;;;         
          ; Produce tuples
@@ -251,7 +252,7 @@ namespace-for-template)
                                               (ifvals->needs-nat nn-for-router rnum rname secnwa secnwm))
                                empty))                 
          
-         (define acldefn (vals->ifacldefn acl-dpid ifindex rname name))
+         (define acldefn (vals->ifacldefn acl-dpid ifindex rname name switchport-mode))
          (define natconfigs (if-pair->natconfig interface-defns nat-side nat-dpid))                                    
          ;;;;;;;;;;;;;;;;;
 
@@ -266,21 +267,30 @@ namespace-for-template)
          ; This is a virtual interface. Extract the vlan it connects to and find the physical port id
          ; ASSUMPTION: switchport interfaces have all already been processed and assigned a physical port.
          ; string list-of(tuple) -> string
-         (define (get-physical-portnum name interface-defns)
-          ; (define vlaninterface (findf ))
-           "17"
-           )
+         (define (get-physical-portnums name interface-defns)
+           (define vlanid (first (string-split (string-downcase name) "vlan")))
+           (filter-map (lambda (pr) (if (equal? (first pr) vlanid) (second pr) #f)) (unbox vlan-iname-to-physicalport)))
          
+      ; Remember ifacename -> vlans connected (we need to tell mininet which physical ports for each subnet)
+      (case (ifacedef-switchport-mode i)
+        [(access trunk)
+         (for-each (lambda (vlanid)                  
+                 (set-box! vlan-iname-to-physicalport (cons (list vlanid (string->number physical-ptnum)) (unbox vlan-iname-to-physicalport)))) 
+               (ifacedef-switchport-vlans i))] 
+        [else void])
+                  
          ; this interface declares a subnet (may be virtual, but won't be a switchport)
          (when primnwa
            (set-subnet-addr! aninterf primnwa)
            (set-subnet-mask! aninterf (string->number primnwm))
            (set-subnet-gw! aninterf primaddr)           
                   
-           (set-subnet-ifname! aninterf name) ; for debugging. only records the L3 interface name (possibly virtual)   
+           ; for debugging. only records the L3 interface name (possibly virtual)   
+           (set-subnet-ifname! aninterf name) 
+           
            (if (is-virtual-interface? name)
-               (set-subnet-physical-portid! aninterf (string->number (get-physical-portnum name interface-defns)))
-               (set-subnet-physical-portid! aninterf (string->number physical-ptnum)))
+               (set-subnet-physical-portid! aninterf (get-physical-portnums name interface-defns))
+               (set-subnet-physical-portid! aninterf (string->number physical-ptnum)))                      
            
            (set-router-subnets! arouter (cons aninterf (router-subnets arouter) )))
          ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -296,7 +306,7 @@ namespace-for-template)
          ; Finally, return the result tuples (protobuf changes are side-effects)
          ; Keep the tuples that are non-#f         
                   
-         (filter (lambda (x) x) (list "\n" prim sec alias needs-nat acldefn natconfigs switchport-mode-inserts switchport-vlan-inserts ospf-cost-inserts maybe-vlan-interface-inserts)))
+         (filter (lambda (x) x) (list "\n" alias prim sec needs-nat acldefn natconfigs switchport-mode-inserts switchport-vlan-inserts ospf-cost-inserts maybe-vlan-interface-inserts)))
  
     (define total-parsed-ace-count (box 0))      
     (define total-used-ace-count (box 0))
@@ -315,6 +325,12 @@ namespace-for-template)
       (define unfiltered-interface-defns (hash-map interfaces extract-ifs))
       (define interface-defns (filter (lambda (i) i) unfiltered-interface-defns))
       (printf "Processed ~v interfaces; ~v had subnets and will be handled.~n" (length unfiltered-interface-defns) (length interface-defns)) ; DEBUG     
+      
+      ; reset per router
+      (set-box! last-physicalpt-used 0)
+      (set-box! last-routingpt-used 1)
+      (set-box! vlan-iname-to-physicalport empty)
+
       
       ;;;;;;;;;;;;;;;;;;;;
       ;; to be moved to helper module
@@ -372,9 +388,10 @@ namespace-for-template)
       ;(pretty-display interface-defns) ; DEBUG
       (define hostnum (string-append "0x1000000000" (string-pad (number->string (+ hostidx 1)) 2 #\0)))
       (define self-dpid (string-append "1000000000" (string-pad hostnum 2 #\0))) ; TODO(adf): cleanup
-      (define nat-dpid (string-append "4000000000" (string-pad hostnum 2 #\0)))
-      (define tr-dpid (string-append "2000000000" (string-pad hostnum 2 #\0)))
-      (define acl-dpid (string-append "5000000000" (string-pad hostnum 2 #\0)))
+      (define nat-dpid  (string-append "4000000000" (string-pad hostnum 2 #\0)))
+      (define tr-dpid   (string-append "2000000000" (string-pad hostnum 2 #\0)))
+      (define acl-dpid  (string-append "5000000000" (string-pad hostnum 2 #\0)))
+      (define vlan-dpid (string-append "6000000000" (string-pad hostnum 2 #\0)))
       ; Prepare this list of needs-nat expressions
       (dict-set! nn-for-router hostnum empty)
       (dict-set! dst-local-subnet-for-router hostnum empty)
@@ -395,6 +412,7 @@ namespace-for-template)
       (set-router-nat-dpid! arouter nat-dpid)
       (set-router-tr-dpid! arouter tr-dpid)
       (set-router-acl-dpid! arouter acl-dpid)
+      (set-router-vlan-dpid! arouter vlan-dpid)
       
       (define (is-switchport-interface i)           
         (not (equal? (ifacedef-switchport-mode i)'no)))
