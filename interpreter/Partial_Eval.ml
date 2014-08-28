@@ -918,7 +918,7 @@ let send_event (p: flowlog_program) (ev: event) (ip: string) (pt: string) (full_
       | None -> failwith "Error: couldn't send packet_in because function not set.")
   else
   begin
-    let arity = (map (fun (n, t) -> t) (get_event p ev.typeid).evfields) in
+    let arity = (get_event p ev.typeid).evfields in
       doBBnotify ev ip pt arity
   end;;
 

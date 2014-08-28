@@ -30,7 +30,7 @@ let sod = function
 
 let print_notif_values tbl =
   Hashtbl.iter (fun k v ->
-                Printf.printf "%s -> %s\n%!" k v) tbl
+                printf "%s -> %s\n%!" k v) tbl
 
 
 (*  The resulting list contains all the tuples (as string lists) returned.
@@ -39,25 +39,26 @@ let print_notif_values tbl =
 *)
 let doBBquery (qryname: string) (bbip: string) (bbport: string) (args: term list) (types: typeid list): string list list =
     let dotted_host = Packet.string_of_ip (nwaddr_of_int_string bbip) in
-    Printf.printf "Sending BB query to %s:%s...\n%!" dotted_host bbport;
+    printf "Sending BB query to %s:%s...\n%!" dotted_host bbport;
     let cli = connect ~host:dotted_host (int_of_string bbport) in
     try
-      Printf.printf "Connected.\n%!";
+      printf "Connected.\n%!";
       let qry = new query in
       qry#set_relName qryname;
-      qry#set_arguments (map string_of_term args);
+
+      let arguments = (map2 (fun t typid -> (pretty_print_value typid (string_of_term t))) args types) in
+      printf "Args: %s\n%!" (string_of_list "," identity arguments);
+      qry#set_arguments arguments;
+
       let qresult = cli.bb#doQuery qry in
-      Printf.printf "doQuery called.\n%!";
-      (*let result = Hashtbl.fold (fun k v sofar -> k :: sofar)
-                                    (sod qresult#get_result)
-                                    [] in*)
+      printf "doQuery called.\n%!";
         let result = (sod qresult#get_result) in
         let xsb_result = map (fun tup -> map flvalue_to_xsbable tup) result in
         cli.trans#close;
         xsb_result
 
       with Transport.E (_,what) ->
-        Printf.printf "ERROR sending query: %s\n%!" what;
+        printf "ERROR sending query: %s\n%!" what;
         raise (Failure what);;
 
 (*
@@ -65,24 +66,24 @@ let doBBquery (qryname: string) (bbip: string) (bbport: string) (args: term list
   Each notification opens a separate, new, connection to the black-box.
 *)
 
-let doBBnotify (ev: event) (bbip: string) (bbport: string) (types: typeid list): unit Lwt.t =
+let doBBnotify (ev: event) (bbip: string) (bbport: string) (evfields: (string * typeid) list): unit Lwt.t =
             let dotted_host = Packet.string_of_ip (nwaddr_of_int_string bbip) in
             let cli = connect ~host:dotted_host (int_of_string bbport) in
             try
-
               printf "Sending notification to %s:%s...\n%!" dotted_host bbport;
               let notif = new notification in
               let tbl = (Hashtbl.create (StringMap.cardinal ev.values)) in
               notif#set_notificationType ev.typeid;
               notif#set_values tbl;
-              StringMap.iter (fun k v -> Hashtbl.add tbl k v) ev.values;
+              StringMap.iter (fun k v -> Hashtbl.add tbl k (pretty_print_value (assoc k evfields) v)) ev.values;
+              Hashtbl.iter (fun k v -> printf "    %s -> %s\n%!" k v) tbl;
               printf "Making RPC invocation...\n%!";
               cli.bb#notifyMe notif;
               cli.trans#close;
               printf "RPC invocation complete. Socket closed.\n%!";
               Lwt.return ();
             with | Transport.E (_,what) ->
-                     Printf.printf "ERROR sending notification: %s\n%!" what;
+                     printf "ERROR sending notification: %s\n%!" what;
                      raise (Failure what)
                  | _ -> printf "Unknown problem sending event.\n%!";
             Lwt.return ();;
