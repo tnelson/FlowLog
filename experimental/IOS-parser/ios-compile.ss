@@ -212,16 +212,19 @@ namespace-for-template)
          ; recall that in the router-table, port 1 is reserved for the attached NAT switch (hence starting with 1 in the box above)
          (define physical-ptnum (cond [(is-virtual-interface? name) "0"] 
                                       [else 
-                                       (set-box! last-physicalpt-used (+ 1 (unbox last-physicalpt-used)))
-                                       (number->string (+ 1 (unbox last-physicalpt-used)))]))
+                                       (define v (+ 1 (unbox last-physicalpt-used)))
+                                       (set-box! last-physicalpt-used v)
+                                       (number->string v)]))
          
          (define routing-ptnum (cond [(equal? switchport-mode 'no) 
-                                      (set-box! last-routingpt-used (+ 1 (unbox last-routingpt-used)))
-                                      (number->string (+ 1 (unbox last-routingpt-used)))] 
+                                      (define v (+ 1 (unbox last-routingpt-used)))
+                                      (set-box! last-routingpt-used v )
+                                      (number->string v)] 
                                      [else "0"]))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
          
-         (printf "if name=~v; ridx=~v; rnum=~v; ifindex=~v; rname=~v; cost=~v mode=~v vlans=~v~n" name ridx rnum ifindex rname ospf-cost switchport-mode switchport-vlans) ; DEBUG
+         (printf "if name=~v; ridx=~v; rnum=~v; ifindex=~v; rname=~v; cost=~v mode=~v vlans=~v ppt=~v rpt=~v~n"
+                 name ridx rnum ifindex rname ospf-cost switchport-mode switchport-vlans physical-ptnum routing-ptnum) ; DEBUG
          
          (define ospf-cost-inserts (val->ospf rnum routing-ptnum ospf-cost))
          (define switchport-mode-inserts (val->spmode rnum physical-ptnum switchport-mode))
@@ -252,7 +255,7 @@ namespace-for-template)
                                               (ifvals->needs-nat nn-for-router rnum rname secnwa secnwm))
                                empty))                 
          
-         (define acldefn (vals->ifacldefn acl-dpid ifindex rname name switchport-mode))
+         (define acldefn (vals->ifacldefn acl-dpid (string->number routing-ptnum) rname name switchport-mode))
          (define natconfigs (if-pair->natconfig interface-defns nat-side nat-dpid))                                    
          ;;;;;;;;;;;;;;;;;
 
@@ -290,7 +293,7 @@ namespace-for-template)
            
            (if (is-virtual-interface? name)
                (set-subnet-physical-portid! aninterf (get-physical-portnums name interface-defns))
-               (set-subnet-physical-portid! aninterf (string->number physical-ptnum)))                      
+               (set-subnet-physical-portid! aninterf (list (string->number physical-ptnum))))
            
            (set-router-subnets! arouter (cons aninterf (router-subnets arouter) )))
          ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -306,7 +309,8 @@ namespace-for-template)
          ; Finally, return the result tuples (protobuf changes are side-effects)
          ; Keep the tuples that are non-#f         
                   
-         (filter (lambda (x) x) (list "\n" alias prim sec needs-nat acldefn natconfigs switchport-mode-inserts switchport-vlan-inserts ospf-cost-inserts maybe-vlan-interface-inserts)))
+      (define p2r (val->p2r rnum physical-ptnum routing-ptnum))
+         (filter (lambda (x) x) (list "\n" alias p2r prim sec needs-nat acldefn natconfigs switchport-mode-inserts switchport-vlan-inserts ospf-cost-inserts maybe-vlan-interface-inserts)))
  
     (define total-parsed-ace-count (box 0))      
     (define total-used-ace-count (box 0))

@@ -218,8 +218,7 @@
                  "INSERT (0x" acl-dpid ") INTO switches_without_arp; // auto\n"
                  "INSERT (" rnum ", 0x" acl-dpid ") INTO router_acl;\n"))
 
-(define (val->ospf rnum ptnum cost)
-  (printf "~v ~a~n" cost cost)
+(define (val->ospf rnum ptnum cost)  
   (if (or (not cost) (equal? cost "no"))
       empty
       (list (format "INSERT (~a,~a,~a) INTO ospf_costs;~n" rnum ptnum cost))))
@@ -230,6 +229,9 @@
       (list (format "INSERT (~a,~a,\"~a\") INTO sp_modes;~n" rnum ptnum mode))))
 (define (vals->vlans rnum ptnum vlanlist)  
   (string-append* (map (lambda (vlan) (format "INSERT (~a,~a,~a) INTO sp_vlans;~n" rnum ptnum vlan)) vlanlist)))
+(define (val->p2r rnum ppt rpt)    
+  (list (format "INSERT (~a,~a,~a) INTO p2r;~n" rnum ppt rpt)))
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Switched Virtual Interfaces
@@ -246,10 +248,12 @@
 ; index is the 0-indexed count of this interface (i.e., index + 2 is the port on the "router")
 ; so the host of the ACL table will be: 2 * index + 1   (as OpenFlow ports are 1-indexed)
 ; and the router side of the ACL table will be: 2 * index + 2
-(define (vals->ifacldefn acl-dpid index rname iname switchport-mode)  
+(define (vals->ifacldefn acl-dpid rpt rname iname switchport-mode)  
   (define alias-str (symbol->string (build-acl-name rname iname)))
-  (define hside-pt (number->string (+ (* 2 index) 1)))
-  (define rside-pt (number->string (+ (* 2 index) 2)))
+  ; compute host-side and router-side port ids (both "routing" port number context)
+  ; rpt starts with *2* already; need to subtract 2 to get the base
+  (define hside-pt (number->string (+ (* 2 (- rpt 2)) 1)))
+  (define rside-pt (number->string (+ (* 2 (- rpt 2)) 2)))
   (if (not (equal? switchport-mode 'no))
     ""
     (string-append "INSERT (\"" alias-str "\", 0x" acl-dpid ", " hside-pt ", " rside-pt ") INTO aclAlias;\n")))
@@ -257,21 +261,20 @@
 ; For this particular type of nat (source list overload dynamic):
 ; For each private interface (nat = inside), and each public interface (nat = outside)
 ; insert a row into natconfig
-;; TODO(tn)+TODO(adf): more kinds of NAT? To get at the "global" NAT lines, use: 
+
+; To get at the "global" NAT lines, use: 
 ;(define static-NAT (send config get-static-NAT)) 
 ;(define dynamic-NAT (send config get-dynamic-NAT))
 
 (define (if-pair->natconfig interface-defns nat-side nat-dpid)
   (if (equal? nat-side 'inside)
-      (for/list ([ifdef2 interface-defns]
-                 [ifindex2 (build-list (length interface-defns) values)])                 
-        (match ifdef2 
-          [`(,name2 ,primaddr2 (,primnwa2 ,primnwm2) ,secaddr2 (,secnwa2 ,secnwm2) ,nat-side2)                    
-           (if (equal? nat-side2 'outside)
-               (string-append "INSERT (0x" nat-dpid "," "1" "," "1" "," primaddr2 ") INTO natconfig;\n"
-                              "INSERT (" primaddr2 ", 0x6, 10000) INTO seqpt; // auto \n"
-                              "INSERT (" primaddr2 ", 0x11, 10000) INTO seqpt; // auto \n")
-               "")]))
+      (for/list ([ifdef2 interface-defns])      
+        (define primaddr2 (ifacedef-prim-addr ifdef2))          
+        (if (equal? (ifacedef-nat-side ifdef2) 'outside)
+            (string-append "INSERT (0x" nat-dpid "," "1" "," "1" "," primaddr2 ") INTO natconfig;\n"
+                           "INSERT (" primaddr2 ", 0x6, 10000) INTO seqpt; // auto \n"
+                           "INSERT (" primaddr2 ", 0x11, 10000) INTO seqpt; // auto \n")
+            ""))
       empty))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
