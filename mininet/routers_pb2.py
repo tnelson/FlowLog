@@ -13,7 +13,7 @@ from google.protobuf import descriptor_pb2
 DESCRIPTOR = _descriptor.FileDescriptor(
   name='routers.proto',
   package='flowlog',
-  serialized_pb='\n\rrouters.proto\x12\x07\x66lowlog\"Y\n\x06Subnet\x12\x0c\n\x04\x61\x64\x64r\x18\x01 \x01(\t\x12\x0c\n\x04mask\x18\x02 \x01(\x05\x12\n\n\x02gw\x18\x03 \x01(\t\x12\x0e\n\x06ifname\x18\x06 \x01(\t\x12\x17\n\x0fphysical_portid\x18\x07 \x03(\x05\"%\n\x04Port\x12\n\n\x02id\x18\x01 \x01(\x05\x12\x11\n\tvlan_type\x18\x02 \x01(\t\"L\n\nConnection\x12\x0f\n\x07router1\x18\x01 \x01(\t\x12\x0f\n\x07router2\x18\x02 \x01(\t\x12\r\n\x05port1\x18\x03 \x01(\x05\x12\r\n\x05port2\x18\x04 \x01(\x05\"%\n\x07Network\x12\x0c\n\x04\x61\x64\x64r\x18\x01 \x01(\t\x12\x0c\n\x04mask\x18\x02 \x01(\x05\"Q\n\x04Peer\x12\n\n\x02ip\x18\x01 \x01(\t\x12\x0c\n\x04mask\x18\x02 \x01(\x05\x12\x0b\n\x03mac\x18\x03 \x01(\t\x12\"\n\x08networks\x18\x04 \x03(\x0b\x32\x10.flowlog.Network\"\xe5\x01\n\x06Router\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x11\n\tself_dpid\x18\x02 \x01(\t\x12\x10\n\x08nat_dpid\x18\x03 \x01(\t\x12\x0f\n\x07tr_dpid\x18\x06 \x01(\t\x12\x10\n\x08\x61\x63l_dpid\x18\x07 \x01(\t\x12\x11\n\tvlan_dpid\x18\x08 \x01(\t\x12\x14\n\x0cnum_physical\x18\n \x01(\x05\x12 \n\x07subnets\x18\x04 \x03(\x0b\x32\x0f.flowlog.Subnet\x12\x1c\n\x05peers\x18\x05 \x03(\x0b\x32\r.flowlog.Peer\x12\x1c\n\x05ports\x18\t \x03(\x0b\x32\r.flowlog.Port\"o\n\x07Routers\x12 \n\x07routers\x18\x01 \x03(\x0b\x32\x0f.flowlog.Router\x12\x18\n\x10subnet_base_dpid\x18\x02 \x01(\t\x12(\n\x0b\x63onnections\x18\x03 \x03(\x0b\x32\x13.flowlog.Connection')
+  serialized_pb='\n\rrouters.proto\x12\x07\x66lowlog\"Y\n\x06Subnet\x12\x0c\n\x04\x61\x64\x64r\x18\x01 \x01(\t\x12\x0c\n\x04mask\x18\x02 \x01(\x05\x12\n\n\x02gw\x18\x03 \x01(\t\x12\x0e\n\x06ifname\x18\x06 \x01(\t\x12\x17\n\x0fphysical_portid\x18\x07 \x03(\x05\"3\n\x04Port\x12\n\n\x02id\x18\x01 \x01(\x05\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x11\n\tvlan_type\x18\x03 \x01(\t\"N\n\nConnection\x12\x0f\n\x07router1\x18\x01 \x01(\t\x12\x0f\n\x07router2\x18\x02 \x01(\t\x12\x0e\n\x06iface1\x18\x03 \x01(\t\x12\x0e\n\x06iface2\x18\x04 \x01(\t\"%\n\x07Network\x12\x0c\n\x04\x61\x64\x64r\x18\x01 \x01(\t\x12\x0c\n\x04mask\x18\x02 \x01(\x05\"Q\n\x04Peer\x12\n\n\x02ip\x18\x01 \x01(\t\x12\x0c\n\x04mask\x18\x02 \x01(\x05\x12\x0b\n\x03mac\x18\x03 \x01(\t\x12\"\n\x08networks\x18\x04 \x03(\x0b\x32\x10.flowlog.Network\"\xe5\x01\n\x06Router\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x11\n\tself_dpid\x18\x02 \x01(\t\x12\x10\n\x08nat_dpid\x18\x03 \x01(\t\x12\x0f\n\x07tr_dpid\x18\x06 \x01(\t\x12\x10\n\x08\x61\x63l_dpid\x18\x07 \x01(\t\x12\x11\n\tvlan_dpid\x18\x08 \x01(\t\x12\x14\n\x0cnum_physical\x18\n \x01(\x05\x12 \n\x07subnets\x18\x04 \x03(\x0b\x32\x0f.flowlog.Subnet\x12\x1c\n\x05peers\x18\x05 \x03(\x0b\x32\r.flowlog.Peer\x12\x1c\n\x05ports\x18\t \x03(\x0b\x32\r.flowlog.Port\"o\n\x07Routers\x12 \n\x07routers\x18\x01 \x03(\x0b\x32\x0f.flowlog.Router\x12\x18\n\x10subnet_base_dpid\x18\x02 \x01(\t\x12(\n\x0b\x63onnections\x18\x03 \x03(\x0b\x32\x13.flowlog.Connection')
 
 
 
@@ -89,8 +89,15 @@ _PORT = _descriptor.Descriptor(
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
-      name='vlan_type', full_name='flowlog.Port.vlan_type', index=1,
+      name='name', full_name='flowlog.Port.name', index=1,
       number=2, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=unicode("", "utf-8"),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+    _descriptor.FieldDescriptor(
+      name='vlan_type', full_name='flowlog.Port.vlan_type', index=2,
+      number=3, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=unicode("", "utf-8"),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
@@ -105,7 +112,7 @@ _PORT = _descriptor.Descriptor(
   is_extendable=False,
   extension_ranges=[],
   serialized_start=117,
-  serialized_end=154,
+  serialized_end=168,
 )
 
 
@@ -131,16 +138,16 @@ _CONNECTION = _descriptor.Descriptor(
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
-      name='port1', full_name='flowlog.Connection.port1', index=2,
-      number=3, type=5, cpp_type=1, label=1,
-      has_default_value=False, default_value=0,
+      name='iface1', full_name='flowlog.Connection.iface1', index=2,
+      number=3, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=unicode("", "utf-8"),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
-      name='port2', full_name='flowlog.Connection.port2', index=3,
-      number=4, type=5, cpp_type=1, label=1,
-      has_default_value=False, default_value=0,
+      name='iface2', full_name='flowlog.Connection.iface2', index=3,
+      number=4, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=unicode("", "utf-8"),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
@@ -153,8 +160,8 @@ _CONNECTION = _descriptor.Descriptor(
   options=None,
   is_extendable=False,
   extension_ranges=[],
-  serialized_start=156,
-  serialized_end=232,
+  serialized_start=170,
+  serialized_end=248,
 )
 
 
@@ -188,8 +195,8 @@ _NETWORK = _descriptor.Descriptor(
   options=None,
   is_extendable=False,
   extension_ranges=[],
-  serialized_start=234,
-  serialized_end=271,
+  serialized_start=250,
+  serialized_end=287,
 )
 
 
@@ -237,8 +244,8 @@ _PEER = _descriptor.Descriptor(
   options=None,
   is_extendable=False,
   extension_ranges=[],
-  serialized_start=273,
-  serialized_end=354,
+  serialized_start=289,
+  serialized_end=370,
 )
 
 
@@ -328,8 +335,8 @@ _ROUTER = _descriptor.Descriptor(
   options=None,
   is_extendable=False,
   extension_ranges=[],
-  serialized_start=357,
-  serialized_end=586,
+  serialized_start=373,
+  serialized_end=602,
 )
 
 
@@ -370,8 +377,8 @@ _ROUTERS = _descriptor.Descriptor(
   options=None,
   is_extendable=False,
   extension_ranges=[],
-  serialized_start=588,
-  serialized_end=699,
+  serialized_start=604,
+  serialized_end=715,
 )
 
 _PEER.fields_by_name['networks'].message_type = _NETWORK

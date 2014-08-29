@@ -12,6 +12,7 @@
 (require "ios-compile.ss")
 
 (define path ".")
+(define connfilename #f)
 (define default-permit #f)
 
 (command-line
@@ -23,6 +24,8 @@
                    (set! default-permit #f))
  ("--path" input "Directory path to IOS files [default: .]"
            (set! path input))
+ ("--conn" input "Name of file (in --path) with L2 connections spec"
+           (set! connfilename input))
  #:args files
  (when (> (length files) 0)
-     (compile-configurations path files default-permit)))
+     (compile-configurations path files default-permit connfilename)))

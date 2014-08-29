@@ -11,13 +11,15 @@
   (repeated primitive:int32 physical-portid 7)))
 (define-message-type
  port
- ((optional primitive:int32 id 1) (optional primitive:string vlan-type 2)))
+ ((optional primitive:int32 id 1)
+  (optional primitive:string name 2)
+  (optional primitive:string vlan-type 3)))
 (define-message-type
  connection
  ((optional primitive:string router1 1)
   (optional primitive:string router2 2)
-  (optional primitive:int32 port1 3)
-  (optional primitive:int32 port2 4)))
+  (optional primitive:string iface1 3)
+  (optional primitive:string iface2 4)))
 (define-message-type
  network
  ((optional primitive:string addr 1) (optional primitive:int32 mask 2)))

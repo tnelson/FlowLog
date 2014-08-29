@@ -71,7 +71,7 @@ namespace-for-template)
 
 ;; string (listof string) boolean -> void
 ;; pass filename only if there is more than one configuration to do
-(define (compile-configurations root-path filenames default-ACL-permit)
+(define (compile-configurations root-path filenames default-ACL-permit connfilename)
   
   ; Let user errors through; catch all other errors and give a "friendly" error message.
   (with-handlers ([(lambda (e) (and #f (exn:fail? e) (not (exn:fail:user? e))))
@@ -300,6 +300,7 @@ namespace-for-template)
          (unless (equal? physical-ptnum "0")
            (define aport (port ""))
            (set-port-id! aport (string->number physical-ptnum))
+           (set-port-name! aport name)
            (unless (equal? switchport-mode 'no)
              (set-port-vlan-type! aport (symbol->string switchport-mode)))
            (set-router-ports! arouter (cons aport (router-ports arouter))))
@@ -469,6 +470,9 @@ namespace-for-template)
     
     (printf "total parsed ACL elements: ~v. total used ACL elements: ~v~n" (unbox total-parsed-ace-count) (unbox total-used-ace-count))
         
+    ; prepare any fixed connection info for mininet
+    (set-routers-connections! routers-msg (handle-connections-file root-path connfilename))
+    
     ; output the router message for this router
     (call-with-output-file (make-path root-path "IOS.pb.bin") #:exists 'replace
       (lambda (out) 
@@ -556,6 +560,19 @@ namespace-for-template)
 ;; string string -> path
 (define (make-path base file)
   (build-path (string->path base) (string->path file)))
+
+(define (handle-connections-file root-path connfilename)
+  (when connfilename ; #f if none provided
+    (define lines (file->lines (build-path root-path connfilename)))
+    (for/list ([line lines])
+      (define pieces (string-split line))      
+      (match-define (list r1 p1 r2 p2) pieces)
+      (define c (connection ""))
+      (set-connection-router1! c r1)
+      (set-connection-router2! c r2)
+      (set-connection-iface1! c p1)
+      (set-connection-iface2! c p2)
+      c)))
 
 ;; any path -> void
 (define (store contents path)
