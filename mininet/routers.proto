@@ -14,6 +14,19 @@ message Subnet {
   repeated int32 physical_portid	= 7;
 }
 
+message Port {
+  optional int32 id = 1;
+
+  // "access" or "trunk" or not present (i.e., L3-visible physical port)
+  optional string vlan_type = 2;
+}
+
+message Connection {
+  optional string router1 = 1;
+  optional string router2 = 2;
+  optional int32 port1 = 3;
+  optional int32 port2 = 4;
+}
 
 message Network {
   optional string addr = 1;  // required
@@ -35,13 +48,17 @@ message Router {
   optional string tr_dpid   = 6;  // required
   optional string acl_dpid  = 7;  // required
   optional string vlan_dpid = 8;
+  optional int32 num_physical = 10;
 
   repeated Subnet subnets = 4;
   repeated Peer peers = 5;
+  repeated Port ports = 9;
 }
 
 message Routers {
   repeated Router routers = 1;
 
   optional string subnet_base_dpid = 2;  // required
+
+  repeated Connection connections = 3;
 }

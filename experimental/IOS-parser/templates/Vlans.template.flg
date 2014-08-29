@@ -1,0 +1,78 @@
+/* Exodus VLAN module
+   Handles the VLAN sub-switch (including non-VLAN traffic passing through).
+
+
+~~~  From declarations in main file:
+
+// Which VLAN ids are associate with which switchports
+// switch -> physical port id -> vlan id
+TABLE sp_vlans(switchid, portid, int);
+
+// Which physical ports are access or trunk ports for VLAN(s)
+// switch -> physical port id -> mode
+TABLE sp_modes(switchid, portid, string);
+
+// OSPF outgoing costs
+// switch -> routing port id -> cost
+TABLE ospf_costs(switchid, portid, int);
+
+// switched virtual interfaces (for inter-vlan traffic)
+// switch -> routing port id -> vlan id
+TABLE virtual_interfaces(switchid, portid, int);
+
+// for non-vlan interfaces: physicalport -> routing port
+TABLE p2r(switchid, portid, portid);
+
+// subnets
+INSERT (10.1.103.0, 24, 10.1.103.1, ca:fe:00:01:00:04, 0x100000000001, 2) INTO subnets;
+*/
+
+
+///////////////////////////////////////////////////////////////////////////////
+// Non-vlan traffic: passthrough in both directions (translate between physical <--> L3-visible)
+
+ON packet(p) WHERE NOT sp_vlans(p.locSw, p.locPt, ANY):
+  DO forward(new) WHERE
+  // assumes partition of ports between physical and routing.
+  // L3-pts will always satisfy the NOT sp_vlans and take 2nd branch:
+    p2r(p.locSw, p.locPt, new.locPt) OR p2r(p.locSw, new.locPt, p.locPt);
+
+///////////////////////////////////////////////////////////////////////////////
+// Intra-vlan traffic: not to any gateway MAC
+// Tagged and untagged cases
+// *** TODO: add macl, spanning tree
+
+ON packet(p) WHERE sp_vlans(p.locSw, p.locPt, vlanid) AND
+                   NOT subnets(ANY,ANY,ANY,p.dlDst,rtrid,ANY) AND
+                   rid2vid(rtrid, p.locSw) AND
+                   p.dlvlan = -1: // coming in UNTAGGED
+  // *** TODO: send along spanning tree; MAC learning
+  DO forward(new) WHERE
+    sp_vlans(p.locSw, new.locPt, vlanid) AND
+    p.locPt != new.locPt AND
+    (
+      // don't tag if sending out an access port
+      sp_modes(p.locSw, new.locPt, "access")
+    ) OR (
+      sp_modes(p.locSw, new.locPt, "trunk") AND
+      p.dlvlan = vlanid
+    );
+
+// *** TODO ^^ missing for tagged case (better to separate by incoming trunk/access rather than incoming tagged/untagged?)
+
+///////////////////////////////////////////////////////////////////////////////
+// INTER-vlan traffic: finishing a L2 hop at some gateway mac
+
+// coming from host side: tag doesn't matter; this L2 journey has ended.
+// from router side: handled by "non-vlan traffic"
+ON packet(p) WHERE sp_vlans(p.locSw, p.locPt, vlanid) AND
+                   subnets(ANY,ANY,ANY,p.dlDst,rtrid,ANY) AND
+                   rid2vid(rtrid, p.locSw):
+  // send up to the ACL and begin the routing process
+  DO forward(new) WHERE
+    p2r(p.locSw, p.locPt, new.locPt);
+
+
+    // *** TODO
+    // return from router out some L3 port. may be real or virtual. if virtual, may be multiple output ports (for that vlan)
+    // we should apply mac learning/spanning-tree at that point

@@ -296,6 +296,13 @@ namespace-for-template)
                (set-subnet-physical-portid! aninterf (list (string->number physical-ptnum))))
            
            (set-router-subnets! arouter (cons aninterf (router-subnets arouter) )))
+      
+         (unless (equal? physical-ptnum "0")
+           (define aport (port ""))
+           (set-port-id! aport (string->number physical-ptnum))
+           (unless (equal? switchport-mode 'no)
+             (set-port-vlan-type! aport (symbol->string switchport-mode)))
+           (set-router-ports! arouter (cons aport (router-ports arouter))))
          ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
          
          ; Deal with secondary subnet, if there is one
@@ -416,7 +423,7 @@ namespace-for-template)
       (set-router-nat-dpid! arouter nat-dpid)
       (set-router-tr-dpid! arouter tr-dpid)
       (set-router-acl-dpid! arouter acl-dpid)
-      (set-router-vlan-dpid! arouter vlan-dpid)
+      (set-router-vlan-dpid! arouter vlan-dpid)      
       
       (define (is-switchport-interface i)           
         (not (equal? (ifacedef-switchport-mode i)'no)))
@@ -438,6 +445,9 @@ namespace-for-template)
       (set-router-subnets! arouter (reverse (router-subnets arouter)))      
       (set-routers-routers! routers-msg (cons arouter (routers-routers routers-msg)))
 
+      ; report to mininet how many physical ports this router has
+      (set-router-num-physical! arouter (unbox last-physicalpt-used))
+      
       ; Return the gathered tuples. protobufs changes are side-effects
       (string-append* (flatten (list (format "~n// For router ~a (id = ~a)~n" hostname hostnum)   
                                      (format "// ACL = ~a; TR = ~a; NAT = ~a~n" (router-acl-dpid arouter) (router-tr-dpid arouter) (router-nat-dpid arouter))
@@ -458,7 +468,7 @@ namespace-for-template)
             
     
     (printf "total parsed ACL elements: ~v. total used ACL elements: ~v~n" (unbox total-parsed-ace-count) (unbox total-used-ace-count))
-    
+        
     ; output the router message for this router
     (call-with-output-file (make-path root-path "IOS.pb.bin") #:exists 'replace
       (lambda (out) 
@@ -509,6 +519,9 @@ namespace-for-template)
     (store (render-template "templates/L3acl.template.flg" acl-vars)
            (make-path root-path "L3acl.flg"))
 
+    (store (render-template "templates/Vlans.template.flg" router-vars)
+           (make-path root-path "Vlans.flg"))
+    
     ; Finally, we copy the template files which just need their INCLUDE line set properly
 
     (define basename-only (make-hash))

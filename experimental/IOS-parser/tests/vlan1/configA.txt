@@ -35,4 +35,24 @@ interface vlan 2
 interface Vlan3
  ip address 10.1.103.1 255.255.255.0
 
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+! a physical L3 interface; no vlan
+interface GigabitEthernet1/3
+  ip address 192.168.1.1 255.255.255.0
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+! a pair of LAN ports with no subnet
+interface FastEthernet0/1
+  switchport
+  switchport access vlan 4
+  switchport mode access
+
+interface FastEthernet0/2
+  switchport
+  switchport access vlan 4
+  switchport mode access
+
+
 end
