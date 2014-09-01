@@ -30,17 +30,18 @@ INSERT (10.1.103.0, 24, 10.1.103.1, ca:fe:00:01:00:04, 0x100000000001, 2) INTO s
 
 ///////////////////////////////////////////////////////////////////////////////
 // Non-vlan traffic: passthrough in both directions (translate between physical <--> L3-visible)
+// Disregard traffic from (host-side) vlan physical or (router-side) virtual L3-visible
 
-ON packet(p) WHERE NOT sp_vlans(p.locSw, p.locPt, ANY):
+ON packet(p) WHERE rid2vid(_,p.locSw) AND // at a vlan sub-switch
+                   NOT sp_vlans(p.locSw, p.locPt, ANY) AND
+                   NOT virtual_interfaces(p.locSw, p.locPt, _):
   DO forward(new) WHERE
-  // assumes partition of ports between physical and routing.
-  // L3-pts will always satisfy the NOT sp_vlans and take 2nd branch:
+  // branching here assumes partition of ports between physical and routing.
     p2r(p.locSw, p.locPt, new.locPt) OR p2r(p.locSw, new.locPt, p.locPt);
 
 ///////////////////////////////////////////////////////////////////////////////
 // Intra-vlan traffic: not to any gateway MAC
 // Tagged and untagged cases
-// *** TODO: add macl, spanning tree
 
 ON packet(p) WHERE sp_vlans(p.locSw, p.locPt, vlanid) AND
                    NOT subnets(ANY,ANY,ANY,p.dlDst,rtrid,ANY) AND
@@ -58,13 +59,28 @@ ON packet(p) WHERE sp_vlans(p.locSw, p.locPt, vlanid) AND
       p.dlvlan = vlanid
     );
 
-// *** TODO ^^ missing for tagged case (better to separate by incoming trunk/access rather than incoming tagged/untagged?)
+// If comes in tagged, then we need to send for that single vlan
+ON packet(p) WHERE sp_vlans(p.locSw, p.locPt, vlanid) AND
+                   NOT subnets(ANY,ANY,ANY,p.dlDst,rtrid,ANY) AND
+                   rid2vid(rtrid, p.locSw) AND
+                   p.dlvlan = vlanid: // comes in tagged (tag should be allowed on the incoming interface)
+  // *** TODO: send along spanning tree; MAC learning
+  DO forward(new) WHERE
+    sp_vlans(p.locSw, new.locPt, vlanid) AND
+    p.locPt != new.locPt AND
+    (
+      // actively de-tag if sending out an access port
+      sp_modes(p.locSw, new.locPt, "access") AND
+      p.dlvlan = -1
+    ) OR (
+      sp_modes(p.locSw, new.locPt, "trunk") AND
+      p.dlvlan = vlanid
+    );
 
 ///////////////////////////////////////////////////////////////////////////////
 // INTER-vlan traffic: finishing a L2 hop at some gateway mac
 
 // coming from host side: tag doesn't matter; this L2 journey has ended.
-// from router side: handled by "non-vlan traffic"
 ON packet(p) WHERE sp_vlans(p.locSw, p.locPt, vlanid) AND
                    subnets(ANY,ANY,ANY,p.dlDst,rtrid,ANY) AND
                    rid2vid(rtrid, p.locSw):
@@ -73,6 +89,11 @@ ON packet(p) WHERE sp_vlans(p.locSw, p.locPt, vlanid) AND
     p2r(p.locSw, p.locPt, new.locPt);
 
 
-    // *** TODO
-    // return from router out some L3 port. may be real or virtual. if virtual, may be multiple output ports (for that vlan)
-    // we should apply mac learning/spanning-tree at that point
+// coming from router side: convert back from virtual interface to (possibly multiple) physical switchports
+ON packet(p) WHERE virtual_interfaces(p.locSw, p.locPt, _):
+  DO forward(new) WHERE
+    p2r(p.locSw, new.locPt, p.locPt);
+
+    // TODO ^ apply MAC learning or spanning tree here, based on dlDst. Right now it floods on all physicals for that vlan
+
+
