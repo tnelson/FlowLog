@@ -504,6 +504,10 @@ namespace-for-template)
     (store (render-template "templates/L3router.template.flg" router-vars)
            (make-path root-path "L3router.flg"))
 
+    
+    (store (render-template "templates/NIB.template.flg" router-vars)
+           (make-path root-path "NIB.flg"))
+    
     ; generate L3acl
     ; IP rules to the IP block. Will also apply to TCP packets. So don't duplicate!
     (dict-set! acl-vars "inboundacl-tcp" (sexpr-to-flowlog `(or ,@inboundacl-tcp) #t))
@@ -541,7 +545,7 @@ namespace-for-template)
     (copy-with-basename "Arp_Cache")
     (copy-with-basename "Mac_Learning.inc")
     (copy-with-basename "NATgeneric")
-    (copy-with-basename "NIB.inc")
+    (copy-with-basename "NIB")
 
     (printf "Template values:~n~n")
     (printf "~ndst-local-subnet: ~a~n" (dict-ref router-vars "dst-local-subnet"))    

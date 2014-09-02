@@ -1,6 +1,7 @@
 INCLUDE "@|basename|/L3router.flg";
 INCLUDE "@|basename|/L3acl.flg";
 INCLUDE "@|basename|/Mac_Learning.inc.flg";
+INCLUDE "@|basename|/NIB.flg";
 INCLUDE "@|basename|/Vlans.flg";
 
 TABLE routerAlias(string, switchid);
