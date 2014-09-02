@@ -218,6 +218,11 @@
                  "INSERT (0x" acl-dpid ") INTO switches_without_arp; // auto\n"
                  "INSERT (" rnum ", 0x" acl-dpid ") INTO router_acl;\n"))
 
+(define (vals->vlan vlan-dpid rnum)
+  (string-append "INSERT (0x" vlan-dpid ") INTO switches_without_mac_learning; // auto\n"
+                 "INSERT (0x" vlan-dpid ") INTO switches_without_arp; // auto\n"
+                 "INSERT (" rnum ", 0x" vlan-dpid ") INTO router_vlan;\n"))
+
 (define (val->ospf rnum ptnum cost)  
   (if (or (not cost) (equal? cost "no"))
       empty

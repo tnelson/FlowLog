@@ -439,6 +439,7 @@ namespace-for-template)
       (define natinfo (vals->nat (router-nat-dpid arouter) hostnum))      
       (define trinfo (vals->tr (router-tr-dpid arouter) hostnum))
       (define aclinfo (vals->acl (router-acl-dpid arouter) hostnum))
+      (define vlaninfo (vals->vlan vlan-dpid hostnum))
       
       ; TODO(tn)+TODO(adf): secondary subnets on interfaces with nat?      
       
@@ -454,6 +455,7 @@ namespace-for-template)
                                      (format "// ACL = ~a; TR = ~a; NAT = ~a~n" (router-acl-dpid arouter) (router-tr-dpid arouter) (router-nat-dpid arouter))
                                      iftuples
                                      "\n"
+                                     vlaninfo
                                      aclinfo
                                      trinfo
                                      natinfo
