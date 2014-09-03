@@ -6,7 +6,6 @@
  *
  *
  * TODO:
- *  - expose routes as an external table which is managed by Quagga
  *  - should issue ARP requests for every nexthop (gateway) IP
  *    automatically, rather than requiring they be entered into the cached
  *    relation by hand at startup.
@@ -19,10 +18,13 @@
  ******************************************************************************/
 
 // Routing table for non-directly attached subnets
-//
-// Column values:
 // subnet, mask, next-hop IP
-TABLE routes(ipaddr, int, ipaddr);
+// TABLE routes(ipaddr, int, ipaddr);
+
+// router id, prefix, mask, outport
+REMOTE TABLE ospfRoutes(switchid, ipaddr, int, portid)
+  FROM routes AT 127.0.0.1 9999
+  TIMEOUT 15 seconds;
 
 /*******************************************************************************
  *
@@ -33,6 +35,7 @@ TABLE routes(ipaddr, int, ipaddr);
  ******************************************************************************/
 
 // packets destined to outside whose source does NOT need NATing
+// (NAT is handled by L3router.flg, even for non-local traffic)
 
 ON ip_packet(pkt):
   DO forward(new) WHERE
@@ -61,6 +64,8 @@ ON ip_packet(pkt):
  *
  * Per-subnet translators: outbound path to nexthop MAC addr where destination
  * MAC address is already set.
+ *
+ * TN note: the _inbound_ path for TR switches is handled in L3router.flg
  *
  ******************************************************************************/
 

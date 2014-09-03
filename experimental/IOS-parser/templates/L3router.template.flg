@@ -12,11 +12,6 @@ INCLUDE "@|basename|/Arp_Cache.flg";
 INCLUDE "@|basename|/NATgeneric.flg";
 INCLUDE "@|basename|/L3external.flg";
 
-// router id, prefix, mask, outport
-REMOTE TABLE ospfRoutes(switchid, ipaddr, int, portid)
-  FROM routes AT 127.0.0.1 9999
-  TIMEOUT 15 seconds;
-
 /*******************************************************************************
  *
  * Data Structures
@@ -73,7 +68,8 @@ ON ip_packet(pkt):
     and router_nat(pkt.locSw, natid)
     and NOT natconfig(natid, ANY, ANY, pkt.nwDst);
 
-// on the router, send all NAT-destined traffic to the NAT
+///////////////////////////////////////////////////
+// on the router, send all NAT-destined traffic (dest = NAT address) to the NAT
 ON ip_packet(pkt):
   DO forward(new) WHERE
     natconfig(natid, ANY, ANY, pkt.nwDst)
@@ -82,7 +78,8 @@ ON ip_packet(pkt):
     and pkt.locPt != 1
     and new.locPt = 1; // TODO(adf): make magic NAT port configurable?
 
-// packets destined whose source says they need NATing
+///////////////////////////////////////////////////
+// packets destined anywhere (local or not) whose source says they need NATing
 
 ON ip_packet(pkt):
   DO forward(new) WHERE
