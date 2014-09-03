@@ -71,7 +71,7 @@ let build_chase_containment (prgm1: flowlog_program) (prgm2: flowlog_program): p
   (* reset XSB *)
   Xsb.halt_xsb();
   (* Hand XSB the clauses of the program we're leaving intact *)
-  Communication.start_program prgm2 ~forcepositive:true true;
+  Communication.start_program prgm2 ~forcepositive:true true [];
 
   (* Hand XSB "xor" axioms for relations *)
 

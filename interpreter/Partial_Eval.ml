@@ -52,6 +52,8 @@ let make_last_packet sw ncpt pkt buf =
 
 (***************************************************************************************)
 
+(***************************************************************************************)
+
 let rec refresh_remote_relation (p: flowlog_program) (f: formula): unit =
   match f with
     | FAtom(modname, relname, args) when (is_remote_table p relname) ->
@@ -206,7 +208,7 @@ let partial_evaluation_helper (positive_f: formula): formula list list =
   (* Consider formulas like: seqpt(PUBLICIP,0x11,X) -- need to remove constants from tlargs before reassembling equalities *)
   let terms_used_no_constants_or_any = get_terms (fun t -> not (is_ANY_term t) && match t with | TConst(_) -> false | _ -> true) positive_f in
 
-  let xsbresults = Communication.get_state positive_f in
+  let xsbresults = Communication.get_state ~compiler:true positive_f in
     let conjuncts = map
       (fun tl ->
            if !global_verbose >= 4 then
@@ -223,10 +225,24 @@ let partial_evaluation_helper (positive_f: formula): formula list list =
   end;;
 
 let stage_2_partial_eval (incpkt: string) (atoms_or_neg: formula list): formula list =
+  if !global_verbose > 9 then printf "stage_2_partial_eval...\n%!";
   (map (fun subf -> match subf with
     (* If a negated atom, leave the disjunction *)
     | FNot(FTrue) -> FFalse
     | FNot(FFalse) -> FTrue
+
+    (* Kludge... TN *)
+    | FNot(FAtom(_,"haslongerprefixmatch",[sw;dst;pre;mask])) ->
+      let xsbresults = Communication.get_state ~compiler:true (FAtom("", "getPossibleLongerPrefixMasks",
+                                                             [sw;pre;mask;TVar("P2");TVar("M2")])) in
+        if !global_verbose > 9 then printf "KLUDGE: haslongerprefixmatch: %s\n%!" (string_of_list_list ";" "," string_of_term xsbresults);
+        let to_negate = map (fun tl -> match tl with
+            | [p2;m2] -> FIn(dst, p2, m2)
+            | _ -> failwith (sprintf "bad haslongerprefixmatch: %s\n%!" (string_of_list "," string_of_term tl)))
+          xsbresults in
+        FNot(build_or to_negate)
+
+
     | FNot(FAtom(_,_,_) as inner) ->
         let peresults = partial_evaluation_helper inner in
         (*write_log (sprintf "s2pe: %s\n%!" (String.concat ", " (map string_of_formula peresults)));*)

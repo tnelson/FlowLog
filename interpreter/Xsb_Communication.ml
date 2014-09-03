@@ -208,7 +208,8 @@ exit(1);;
 						then (f :: f1) :: r1
 						else [f] :: (f1 :: r1);;
 *)
-  let rec xsb_of_formula ?(mode:xsbmode = Xsb) (f: formula): string =
+
+  let rec xsb_of_formula ?(mode:xsbmode = Xsb) ?(compiler: bool = false) (f: formula): string =
     match f with
       | FTrue -> "true"
       | FFalse -> "false"
@@ -219,8 +220,10 @@ exit(1);;
         (match mode with
           | XsbForcePositive -> "not_"^(xsb_of_formula ~mode:mode f)
           | _ -> "(not "^(xsb_of_formula ~mode:mode f)^")")
+
       | FAtom("", relname, tlargs) when Flowlog_Builtins.is_built_in relname ->
-          Flowlog_Builtins.xsb_for_built_in mode relname tlargs
+        Flowlog_Builtins.xsb_for_built_in mode relname tlargs
+
       | FAtom("", relname, tlargs) ->
           relname^"("^(String.concat "," (map (xsb_of_term ~mode:mode) tlargs))^")"
       | FAtom(modname, relname, tlargs) ->
@@ -231,14 +234,14 @@ exit(1);;
 	(* For variables not proceeded with underscore, XSB prints binding sets and requires a semicolon between them.
 	   This is problematic since we have no way of knowing how many semicolons to enter. Instead, tell XSB
 	   exactly how to print the results, with no semicolons between binding sets. *)
-	let build_xsb_query_string (f: formula) : (int * string) =
+	let build_xsb_query_string ?(compiler: bool = false) (f: formula) : (int * string) =
 		let allvars = (get_vars_and_fieldvars f) in
 		(* anys need _ added here; the others get their _ added in xsb_of_formula*)
 		let anystrs = map (xsb_of_term ~mode:XsbAddUnderscoreVars) (filter is_ANY_term allvars) in
 		let varstrs = map xsb_of_term (filter (fun v -> not (is_ANY_term v)) allvars) in
 		let varoutfrags = map (fun varstr -> sprintf "write('%s='), writeln(_%s)" varstr varstr) varstrs in
 		let anystr = if (length anystrs) > 0 then (String.concat "^" anystrs)^"^" else "" in
-		let fstr = (xsb_of_formula ~mode:XsbAddUnderscoreVars f) in
+		let fstr = (xsb_of_formula ~mode:XsbAddUnderscoreVars ~compiler:compiler f) in
 		    (* printf "%s\n(%s, %s, fail).\n%!" (string_of_formula f) fstr (String.concat "," varoutfrags);*)
 		    (* The setof construct wrapped around the formula prevents duplicate results *)
 		    (* We wrap the fmla in parens in case it has more than one conjunct in it*)
@@ -350,9 +353,9 @@ module Communication = struct
 
 	(* Perfectly valid to ask "r(X, 2)" here.
 	   Note that ANYs will be auto-removed! *)
-	let get_state (f: formula): (term list) list =
+	let get_state ?(compiler: bool = false) (f: formula): (term list) list =
 		(*send_message ((string_of_formula ~verbose:Xsb f)^".") (length (get_vars_and_fieldvars f));;		*)
-		let num_non_any_vars, qstr = Xsb.build_xsb_query_string f in
+		let num_non_any_vars, qstr = Xsb.build_xsb_query_string ~compiler:compiler f in
 		send_message qstr num_non_any_vars ;;
 
 	(* Extract the entire local controller state from XSB. This lets us do pretty-printing, rather
@@ -461,7 +464,7 @@ module Communication = struct
 				                 (length (get_all_clause_vars subs_cls)));;
 
 	(* assuming all implicitly defined clauses have been added to list of clauses *)
-	let start_program (prgm : flowlog_program) ?(forcepositive = false) (notables: bool): unit =
+	let start_program (prgm : flowlog_program) ?(forcepositive = false) (notables: bool) (additional: string list): unit =
 		printf "-------------------\nStarting Flowlog Program...\n%!";
 
 		(* prevent XSB from locking up if unknown relation seen. will assume false if unknown now.*)
@@ -485,6 +488,11 @@ module Communication = struct
         (* FOR IP ADDRESS MASKING: Is Target in the range Addr/Mask? (Lshift+and to mask out host address portion)
            Remember to flip the mask (i.e., shift by 32-Mask). The mask covers bits we want to _keep_. *)
 	    ignore (send_message "assert((in_ipv4_range(_Target, _Addr, _Mask) :- _X is ((2^32-1) << (32-_Mask)) /\\ _Target, _X is ((2^32-1) << (32-_Mask)) /\\ _Addr))." 0);
+
+
+	    (* For every built-in predicate, there may be some helper rules to send: *)
+	    iter (fun (str) -> ignore (send_message str 0))
+	      additional;
 
 		(* remember that if the string contains >1 ., the error may come in the next read *)
 

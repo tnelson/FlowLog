@@ -1,0 +1,34 @@
+TABLE routes(switchid, ipaddr, int, portid);
+
+ON startup(e):
+  INSERT (1, 10.0.0.0, 16, 1) INTO routes;
+  INSERT (1, 10.0.0.2, 32, 2) INTO routes;
+  INSERT (2, 10.0.0.0, 24, 3) INTO routes;
+
+ON ip_packet(p):
+  DO forward(new) WHERE
+
+  //  TODO: right now, need routes BEFORE the ipv4 range. why?
+  // With that ordering, works fine with -notables, now
+
+    routes(p.locSw, pre, mask, new.locPt) AND
+    p.nwDst IN pre/mask AND
+    NOT hasLongerPrefixMatch(p.locSw, p.nwDst, pre, mask);
+
+
+/*
+
+WANT:
+  p.nwDst IN X/Y AND NOT (p.nwDst IN x'/y' OR ...)
+ISSUE:
+  compiler produces only equalities inside NOTs at the moment
+  (and desugar converts to NNF)
+
+SOLUTION: Brittle special-case in Partial_Eval that produces special compiler result for hasLongerPrefixMatch
+  when it occurs in *NEGATED* form. Will break if invoked positively.
+
+*/
+
+
+
+

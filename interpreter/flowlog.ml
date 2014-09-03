@@ -13,6 +13,7 @@ open Flowlog_Parse_Helpers
 open Xsb_Communication
 open Flowlog_Chase
 open Flowlog_Switch_Proxy
+open Flowlog_Builtins
 
 (* Use ExtList.List instead -- provides filter_map, but also tail-recursive combine *)
 open ExtList.List
@@ -51,7 +52,11 @@ let listenCPPort = ref 9999;;
 
 let run_flowlog (p: flowlog_program): unit Lwt.t =
   (* Start up XSB, etc. *)
-  Communication.start_program p !notables;
+  let additional_xsb = (fold_left (fun acc (n, dec) -> match dec.bip_prepare with
+      | Some(strlst) -> strlst@acc
+      | _ -> acc)
+    [] builtin_predicates) in
+  Communication.start_program p !notables additional_xsb;
 
   (* Listen for incoming notifications via RPC *)
   Flowlog_Thrift_In.start_listening p;

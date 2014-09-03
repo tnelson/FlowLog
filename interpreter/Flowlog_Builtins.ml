@@ -12,16 +12,22 @@ open ExtList.List
    arity (types),
    XSB definition,
    can-compile? predicate on specific fmla,
-   fmla->netcore predicate (for when can-compile? returns true) *)
-type builtin_predicate = { bipid: string;
+   prepare: run this once in xsb at startup
+   compile: this is the expression to give to XSB
+    *)
+type builtin_predicate = { (* ID must be lowercase *)
+                           bipid: string;
                            biparity: typeid list;
                            bipxsb: xsbmode -> term list -> string;
-                           bip_compile: (term list -> pred) option};;
+                           (* PREFIX ALL VARIABLES WITH UNDERSCORE IN PREPARE, OR XSB INTERFACE WILL FREEZE *)
+                           bip_prepare: (string list) option;
+                           bip_compile: unit option};;
 
 (* TODO: concern about types here: add has arity (int,int,int) but also should apply to
    any other numeric type, like tpport or macaddr. *)
 
 exception BIPAddException of term list;;
+exception BIPPrefixException of term list;;
 
 (* FAtom("", "add", ...) -->
    *)
@@ -41,11 +47,36 @@ let bip_add_xsb (mode:xsbmode) (tl: term list): string =
 let bip_add = { bipid="add";
 				biparity = ["int"; "int"; "int"];
 				bipxsb = bip_add_xsb;
+        bip_prepare = None;
 				bip_compile = None};;
 
+(* hasLongerPrefixMatch(p.locSw, pre, mask)
+   HARD CODED to use a SPECIFIC table name and arity! *)
+
+let bip_has_longer_xsb (mode:xsbmode) (tl: term list) : string =
+  match tl with
+    | [sw;dst;pre;mask] ->
+      printf "\nInvoked: hasLongerPrefix: %s %s %s %s\n%!" (string_of_term sw) (string_of_term dst) (string_of_term pre) (string_of_term mask);
+      sprintf "hasLongerPrefix(%s, %s, %s, %s)"
+           (xsb_of_term ~mode:mode sw) (xsb_of_term ~mode:mode dst)  (xsb_of_term ~mode:mode pre) (xsb_of_term ~mode:mode mask)
+    | _ -> raise (BIPPrefixException(tl));;
+
+(* Note the hard-coded relation name (routes) and arity.
+   Dest is in this new range, and the new range is smaller, and in the old range *)
+let bip_prepare_prefix_xsb =
+  ["assert((hasLongerPrefix(_SW, _DST, _PRE, _MASK) :- routes(_SW, _P2, _M2, _), _M2 > _MASK, in_ipv4_range(_P2, _PRE, _MASK), in_ipv4_range(_DST, _P2, _M2))).";
+   "assert((getPossibleLongerPrefixMasks(_SW, _PRE, _MASK, _P2, _M2) :- routes(_SW, _P2, _M2, _), _M2 > _MASK, in_ipv4_range(_P2, _PRE, _MASK)))."];;
+
+let bip_hasLongerPrefixMatch = {bipid = "haslongerprefixmatch";
+          biparity = ["switchid"; "ipaddr"; "ipaddr"; "int"];
+          bipxsb = bip_has_longer_xsb;
+          bip_prepare = Some bip_prepare_prefix_xsb;
+          bip_compile = Some ()
+          }
 
 (**************************************)
-let builtin_predicates = [(bip_add.bipid, bip_add)];;
+let builtin_predicates = [(bip_add.bipid, bip_add);
+                          (bip_hasLongerPrefixMatch.bipid, bip_hasLongerPrefixMatch)];;
 
 
 let is_built_in (relname: string): bool =
