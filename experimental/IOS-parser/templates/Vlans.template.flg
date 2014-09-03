@@ -50,7 +50,7 @@ ON packet(p) WHERE sp_vlans(p.locSw, p.locPt, vlanid) AND
     sp_vlans(p.locSw, new.locPt, vlanid) AND // iface for this vlan
     //p.locPt != new.locPt AND // never backflow
     (
-    	(VLANSpanningTree(p.locSw, new.locPt) AND NOT learned(p.locSw, ANY, p.dlDst)) // TODO: build this
+    	(spanningTree(p.locSw, new.locPt) AND NOT learned(p.locSw, ANY, p.dlDst)) // TODO: build this
     	OR learned(p.locSw, new.locPt, p.dlDst)
     ) AND
     ((
@@ -71,7 +71,7 @@ ON packet(p) WHERE sp_vlans(p.locSw, p.locPt, vlanid) AND
     sp_vlans(p.locSw, new.locPt, vlanid) AND
     //p.locPt != new.locPt AND // never backflow
     (
-    	(VLANSpanningTree(p.locSw, new.locPt) AND NOT learned(p.locSw, ANY, p.dlDst)) // TODO: build this
+    	(spanningTree(p.locSw, new.locPt) AND NOT learned(p.locSw, ANY, p.dlDst)) // TODO: build this
     	OR learned(p.locSw, new.locPt, p.dlDst)
     ) AND
     ((
@@ -99,7 +99,7 @@ ON packet(p) WHERE sp_vlans(p.locSw, p.locPt, vlanid) AND
 ON packet(p) WHERE virtual_interfaces(p.locSw, p.locPt, ANY):
   DO forward(new) WHERE
     p2r(p.locSw, new.locPt, p.locPt) AND
-    ((VLANSpanningTree(p.locSw, new.locPt) AND NOT learned(p.locSw, ANY, p.dlDst)) OR
+    ((spanningTree(p.locSw, new.locPt) AND NOT learned(p.locSw, ANY, p.dlDst)) OR
      learned(p.locSw, new.locPt, p.dlDst));
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -108,6 +108,7 @@ ON packet(p) WHERE virtual_interfaces(p.locSw, p.locPt, ANY):
 
 ON packet(p) WHERE router_vlan(rtrid, p.locSw) AND
                    sp_modes(p.locSw, p.locPt, ANY) AND
+                   p.dlTyp != 0x1001 AND // not a probe
 
 					// Taken from MACL module
 					p.dlTyp != 0x0806 and // ARP
@@ -118,7 +119,5 @@ ON packet(p) WHERE router_vlan(rtrid, p.locSw) AND
 
   INSERT (p.locSw, p.locPt, p.dlSrc) INTO learned;
   DELETE (p.locSw, pt, p.dlSrc) FROM learned WHERE pt != p.locPt;
-
-TABLE vlanspanningtree(switchid, portid);
 
 

@@ -1,0 +1,95 @@
+///////////////////////////////////////////////////////////
+// Before panicking, make sure that you aren't testing with single,n.
+// There's no topology to learn there!
+//
+// Moreover: pkt.dlTyp = 0x1001 represents a NIB test packet
+///////////////////////////////////////////////////////////
+
+
+EVENT start_timer {seconds: int, id: string};
+EVENT timer_expired {id: int};
+//EVENT down_alert {sw1: switchid, pt1: portid, sw2: switchid, pt2: portid};
+
+TABLE ucSwTopo(switchid, portid, switchid, portid);
+TABLE switchTopology(switchid, portid, switchid, portid);
+TABLE ucTree(switchid, portid);
+TABLE spanningTree(switchid, portid);
+TABLE ucTC(switchid, switchid);
+
+OUTGOING start_timer_out(start_timer) THEN
+  SEND TO 127.0.0.1 9091;
+
+//OUTGOING dummy_down_alert(down_alert) THEN
+//  SEND TO 127.0.0.1 9091;
+
+/////////////////////////////////////////////////
+
+ON startup(empty_event):
+  DO start_timer_out(st) WHERE
+    st.seconds = 5 AND st.id = "tNIB";
+
+// Send probe packets out of layer-2 ports only:
+ON switch_port(swpt) WHERE router_vlan(ANY, swpt.sw) AND
+                           sp_mode(swpt.sw, swpt.pt, ANY):
+  DO emit(newpkt) WHERE
+    newpkt.locSw = swpt.sw AND
+    newpkt.locPt = swpt.pt AND
+    newpkt.dlTyp = 0x1001 AND
+    newpkt.dlSrc = swpt.sw AND
+    newpkt.dlDst = swpt.pt;
+
+/////////////////////////////////////////////////
+
+ON timer_expired(timer) WHERE timer.id = "tNIB":
+  // Send a fresh probe packet (out of layer-2 ports only):
+  DO emit(newpkt) WHERE
+    switch_has_port(newpkt.locSw, newpkt.locPt) AND
+    router_vlan(ANY, newpkt.locSw) AND
+    sp_mode(newpkt.locSw, newpkt.locPt, ANY) AND
+    newpkt.dlTyp = 0x1001 AND
+    newpkt.dlSrc = newpkt.locSw AND newpkt.dlDst = newpkt.locPt;
+
+  // Restart the timer
+  DO start_timer_out(st) WHERE st.seconds = 10 AND st.id = "tNIB";
+
+  // Update the concrete relations, empty the under-construction ones
+  DELETE (sw1, pt1, sw2, pt2) FROM ucSwTopo WHERE
+    ucSwTopo(sw1, pt1, sw2, pt2); // <-- to constrain
+  DELETE (sw1, pt1, sw2, pt2) FROM switchTopology WHERE
+    switchTopology(sw1, pt1, sw2, pt2); // <-- to constrain
+  INSERT (sw1, pt1, sw2, pt2) INTO switchTopology WHERE
+    ucSwTopo(sw1, pt1, sw2, pt2);
+  DELETE (sw, pt) FROM nonSwitchPorts WHERE
+    nonSwitchPorts(sw, pt);
+  DELETE (sw1, sw2) FROM ucTC WHERE
+    ucTC(sw1, sw2);
+  DELETE (sw, pt) FROM ucTree WHERE
+    ucTree(sw, pt);
+  DELETE (sw, pt) FROM spanningTree WHERE
+    spanningTree(sw, pt);
+  INSERT (sw, pt) INTO spanningTree WHERE
+    ucTree(sw, pt);
+  INSERT (sw, pt) INTO nonSwitchPorts WHERE
+    switch_has_port(sw, pt) AND // <--- constrain below vars
+    NOT ucSwTopo(sw, pt, someothersw, someotherpt); // vital to use ucSwTopo here
+
+  // Send an alert in case anyone is listening
+  //DO dummy_down_alert(al) WHERE
+//    switchTopology(al.sw1, al.pt1, al.sw2, al.pt2) AND
+    //not ucSwTopo(al.sw1, al.pt1, al.sw2, al.pt2);
+
+/////////////////////////////////////////////////
+
+// Deal with probe packets by updating topology, transitive closure, and initial spanning tree
+ON packet(pkt) WHERE pkt.dlTyp = 0x1001:
+  INSERT (pkt.dlSrc, pkt.dlDst, pkt.locSw, pkt.locPt) INTO ucSwTopo;
+  INSERT (pkt.dlSrc, pkt.locSw) INTO ucTC;
+  INSERT (sw, pkt.locSw) INTO ucTC WHERE ucTC(sw, pkt.dlSrc);
+  INSERT (pkt.dlSrc, sw) INTO ucTC WHERE ucTC(pkt.locSw, sw);
+  INSERT (sw1, sw2) INTO ucTC WHERE ucTC(sw1, pkt.dlSrc) AND ucTC(pkt.locSw, sw2);
+
+  // recall: smuggling (orig sw, orig pt) in (dlSrc, dlDst)
+  INSERT (pkt.dlSrc, pkt.dlDst) INTO ucTree WHERE
+    NOT ucTC(pkt.dlSrc, pkt.locSw) AND NOT ucTC(pkt.locSw, pkt.dlSrc);
+  INSERT (pkt.locSw, pkt.locPt) INTO ucTree WHERE
+    NOT ucTC(pkt.dlSrc, pkt.locSw) AND NOT ucTC(pkt.locSw, pkt.dlSrc);
