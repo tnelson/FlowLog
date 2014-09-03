@@ -96,6 +96,7 @@ ON packet(p) WHERE sp_vlans(p.locSw, p.locPt, vlanid) AND
 
 
 // coming from router side: convert back from virtual interface to (possibly multiple) physical switchports
+// (Once has learned the adjacent gateway MACs, will not flood on multiple VLAN physical interfaces.)
 ON packet(p) WHERE virtual_interfaces(p.locSw, p.locPt, ANY):
   DO forward(new) WHERE
     p2r(p.locSw, new.locPt, p.locPt) AND

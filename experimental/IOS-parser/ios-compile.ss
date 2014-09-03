@@ -550,6 +550,8 @@ namespace-for-template)
     (printf "Template values:~n~n")
     (printf "~ndst-local-subnet: ~a~n" (dict-ref router-vars "dst-local-subnet"))    
     (printf "~nneeds-nat-disj: ~a~n" (dict-ref router-vars "needs-nat-disj"))
+    (printf "~nnext-hop-fragment: ~a~n" (dict-ref router-vars "nexthop-fragment"))
+    (printf "~nnext-hop-fragment-for-tr: ~a~n" (dict-ref router-vars "nexthop-fragment-for-tr"))
     
     ; For debugging purposes:
     (store inboundacl (make-path root-path "InboundACL.p"))

@@ -1,0 +1,16 @@
+Questions and concerns
+----------------------
+
+Do we need to keep a spanning tree per Vlan?
+
+For tree-flood, do we need to send out host interfaces as well as those on the
+spanning tree?
+
+Will MAC learning on the Vlan switches avoid sending rtr -> physical packets
+out ALL interfaces for the appropriate vlan?
+
+Does a static routing command just add routes to the table (with next hop?)
+
+
+
+subnets table may be too large for analysis
