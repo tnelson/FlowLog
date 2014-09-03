@@ -12,6 +12,11 @@ INCLUDE "@|basename|/Arp_Cache.flg";
 INCLUDE "@|basename|/NATgeneric.flg";
 INCLUDE "@|basename|/L3external.flg";
 
+// router id, prefix, mask, outport
+REMOTE TABLE ospfRoutes(switchid, ipaddr, int, portid)
+  FROM routes AT 127.0.0.1 9999
+  TIMEOUT 15 seconds;
+
 /*******************************************************************************
  *
  * Data Structures

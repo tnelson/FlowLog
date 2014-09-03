@@ -30,7 +30,7 @@ ON startup(empty_event):
 
 // Send probe packets out of layer-2 ports only:
 ON switch_port(swpt) WHERE router_vlan(ANY, swpt.sw) AND
-                           sp_mode(swpt.sw, swpt.pt, ANY):
+                           sp_modes(swpt.sw, swpt.pt, ANY):
   DO emit(newpkt) WHERE
     newpkt.locSw = swpt.sw AND
     newpkt.locPt = swpt.pt AND
@@ -45,7 +45,7 @@ ON timer_expired(timer) WHERE timer.id = "tNIB":
   DO emit(newpkt) WHERE
     switch_has_port(newpkt.locSw, newpkt.locPt) AND
     router_vlan(ANY, newpkt.locSw) AND
-    sp_mode(newpkt.locSw, newpkt.locPt, ANY) AND
+    sp_modes(newpkt.locSw, newpkt.locPt, ANY) AND
     newpkt.dlTyp = 0x1001 AND
     newpkt.dlSrc = newpkt.locSw AND newpkt.dlDst = newpkt.locPt;
 
@@ -59,8 +59,6 @@ ON timer_expired(timer) WHERE timer.id = "tNIB":
     switchTopology(sw1, pt1, sw2, pt2); // <-- to constrain
   INSERT (sw1, pt1, sw2, pt2) INTO switchTopology WHERE
     ucSwTopo(sw1, pt1, sw2, pt2);
-  DELETE (sw, pt) FROM nonSwitchPorts WHERE
-    nonSwitchPorts(sw, pt);
   DELETE (sw1, sw2) FROM ucTC WHERE
     ucTC(sw1, sw2);
   DELETE (sw, pt) FROM ucTree WHERE
@@ -69,9 +67,6 @@ ON timer_expired(timer) WHERE timer.id = "tNIB":
     spanningTree(sw, pt);
   INSERT (sw, pt) INTO spanningTree WHERE
     ucTree(sw, pt);
-  INSERT (sw, pt) INTO nonSwitchPorts WHERE
-    switch_has_port(sw, pt) AND // <--- constrain below vars
-    NOT ucSwTopo(sw, pt, someothersw, someotherpt); // vital to use ucSwTopo here
 
   // Send an alert in case anyone is listening
   //DO dummy_down_alert(al) WHERE
