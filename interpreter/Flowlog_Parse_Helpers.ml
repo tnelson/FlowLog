@@ -619,21 +619,21 @@ let add_shp_if_needed (r: srule): srule =
   IMPORTANT: These extras must NOT make it into XSB, however, as they can mess up our semantics if so.
   Consider replacing the value of T1 with the value of T2. We want to insert everything
   in T2, even if it's in T1, because we're deleting everything in T1 in the same cycle! *)
-let add_id_protection_cl (tcl: triggered_clause): triggered_clause =
-  let r = tcl.clause.orig_rule in
+let add_id_protection_cl (cl: clause): clause =
+  let r = cl.orig_rule in
   let newbody = (match r.action with
     | ADelete(s, t, where) ->
       let protect = FAtom("", s, t) in
-        if mem protect (conj_to_list tcl.clause.body) then tcl.clause.body
-        else FAnd(tcl.clause.body, protect)
+        if mem protect (conj_to_list cl.body) then cl.body
+        else FAnd(cl.body, protect)
 
     | AInsert(s, t, where) ->
       let protect = FNot(FAtom("", s, t)) in
-        if mem protect (conj_to_list tcl.clause.body) then tcl.clause.body
-        else FAnd(tcl.clause.body, protect)
+        if mem protect (conj_to_list cl.body) then cl.body
+        else FAnd(cl.body, protect)
 
-    | _ -> tcl.clause.body) in
-      {tcl with clause = {tcl.clause with body = newbody}};;
+    | _ -> cl.body) in
+      {cl with body = newbody};;
 
 let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_program =
   let expanded_ast = expand_includes ast [filename] in
@@ -709,9 +709,13 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
                                      if (v = "") || (mem inrel built_in_cp_packet_input_tables) then
                                        (acc_comp, acc_weaken, cl::acc_unweakened)
                                      else
-                                     (* DP-packet-triggered; may be weakened or unweakened *)
+
+                                     (* DP-packet-triggered; may be weakened or unweakened.
+                                       The result of this block goes to the COMPILER ONLY, not XSB *)
                                      begin
-                                      let (newcl, fully_compiled) = validate_and_process_pkt_triggered_clause pre_program cl in
+                                      let (newcl, fully_compiled) = validate_and_process_pkt_triggered_clause
+                                                                      pre_program
+                                                                      (add_id_protection_cl cl) in
 
                                         (* fully compilable *)
                                         if fully_compiled then
@@ -741,8 +745,8 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
                  clauses = simplified_clauses; (* *without* insert/delete helpers*)
 
                  (* with insert/delete helpers. these fields should be used by the compiler. NEVER by XSB *)
-                 weakened_cannot_compile_pt_clauses = (map add_id_protection_cl weakened_cannot_compile_pt_clauses);
-                 can_fully_compile_to_fwd_clauses = (map add_id_protection_cl can_fully_compile_simplified);
+                 weakened_cannot_compile_pt_clauses = weakened_cannot_compile_pt_clauses;
+                 can_fully_compile_to_fwd_clauses = can_fully_compile_simplified;
 
                  (* These will go to XSB instead of p.clauses if "unsafe" mode is active.
                     Should NOT be used by the compiler *)

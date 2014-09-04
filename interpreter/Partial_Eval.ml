@@ -225,7 +225,6 @@ let partial_evaluation_helper (positive_f: formula): formula list list =
   end;;
 
 let stage_2_partial_eval (incpkt: string) (atoms_or_neg: formula list): formula list =
-  if !global_verbose > 9 then printf "stage_2_partial_eval...\n%!";
   (map (fun subf -> match subf with
     (* If a negated atom, leave the disjunction *)
     | FNot(FTrue) -> FFalse
