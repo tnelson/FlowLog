@@ -186,7 +186,7 @@ namespace-for-template)
     ;;;;;;;;;;;;;;;;;;;
     ; Need to assign an ID to the router and an ID to the interface
     ; (we are in the scope of compile-configurations)
-    (define (ifacedef->tuples arouter interface-defns nat-dpid rname rnum ifindex i ridx acl-dpid)
+    (define (ifacedef->tuples arouter interface-defns nat-dpid rname rnum ifindex i ridx acl-dpid vlan-dpid)
       (define name (ifacedef-name i))
       (define primaddr (ifacedef-prim-addr i))
       (match-define (list primnwa primnwm) (ifacedef-prim-netw i))      
@@ -227,9 +227,9 @@ namespace-for-template)
                  name ridx rnum ifindex rname ospf-cost switchport-mode switchport-vlans physical-ptnum routing-ptnum) ; DEBUG
          
          (define ospf-cost-inserts (val->ospf rnum routing-ptnum ospf-cost))
-         (define switchport-mode-inserts (val->spmode rnum physical-ptnum switchport-mode))
-         (define switchport-vlan-inserts (vals->vlans rnum physical-ptnum switchport-vlans))                          
-         (define maybe-vlan-interface-inserts (vals->vlan-iface rnum routing-ptnum name))
+         (define switchport-mode-inserts (val->spmode vlan-dpid physical-ptnum switchport-mode))
+         (define switchport-vlan-inserts (vals->vlans vlan-dpid physical-ptnum switchport-vlans))                          
+         (define maybe-vlan-interface-inserts (vals->vlan-iface vlan-dpid routing-ptnum name))
          
          ;;;;;;;;;;;;;;;;         
          ; Produce tuples
@@ -317,7 +317,7 @@ namespace-for-template)
          ; Finally, return the result tuples (protobuf changes are side-effects)
          ; Keep the tuples that are non-#f         
                   
-      (define p2r (val->p2r rnum physical-ptnum routing-ptnum))
+      (define p2r (val->p2r vlan-dpid physical-ptnum routing-ptnum))
          (filter (lambda (x) x) (list "\n" alias p2r prim sec needs-nat acldefn natconfigs switchport-mode-inserts switchport-vlan-inserts ospf-cost-inserts maybe-vlan-interface-inserts)))
  
     (define total-parsed-ace-count (box 0))      
@@ -434,7 +434,7 @@ namespace-for-template)
                                                                  (or (is-switchport-interface i1)
                                                                      (not (is-switchport-interface i2)))))] 
                                   [ifindex (build-list (length interface-defns) values)])                         
-                          (ifacedef->tuples arouter interface-defns nat-dpid hostname hostnum (+ ifindex 1) ifdef (+ hostidx 1) acl-dpid)))
+                          (ifacedef->tuples arouter interface-defns nat-dpid hostname hostnum (+ ifindex 1) ifdef (+ hostidx 1) acl-dpid vlan-dpid)))
       (define routertuple (vals->routertuples hostname hostnum)) 
       (define natinfo (vals->nat (router-nat-dpid arouter) hostnum))      
       (define trinfo (vals->tr (router-tr-dpid arouter) hostnum))

@@ -226,16 +226,16 @@
 (define (val->ospf rnum ptnum cost)  
   (if (or (not cost) (equal? cost "no"))
       empty
-      (list (format "INSERT (~a,~a,~a) INTO ospf_costs;~n" rnum ptnum cost))))
-(define (val->spmode rnum ptnum mode)
+      (list (string-append "INSERT (0x" rnum "," ptnum "," cost ") INTO ospf_costs;\n" rnum ptnum cost))))
+(define (val->spmode vlanswnum ptnum mode)
   ;(printf "spmode: ~a ~a ~a~n" rnum ptnum mode)
   (if (equal? mode 'no)
       empty
-      (list (format "INSERT (~a,~a,\"~a\") INTO sp_modes;~n" rnum ptnum mode))))
-(define (vals->vlans rnum ptnum vlanlist)  
-  (string-append* (map (lambda (vlan) (format "INSERT (~a,~a,~a) INTO sp_vlans;~n" rnum ptnum vlan)) vlanlist)))
-(define (val->p2r rnum ppt rpt)    
-  (list (format "INSERT (~a,~a,~a) INTO p2r;~n" rnum ppt rpt)))
+      (list (string-append "INSERT (0x" vlanswnum "," ptnum ", \"" (symbol->string mode) "\") INTO sp_modes;\n"))))
+(define (vals->vlans vlanswnum ptnum vlanlist)  
+  (string-append* (map (lambda (vlan) (string-append "INSERT (0x" vlanswnum "," ptnum "," vlan ") INTO sp_vlans;\n")) vlanlist)))
+(define (val->p2r vlanswnum ppt rpt)    
+  (list (string-append "INSERT (0x" vlanswnum "," ppt "," rpt ") INTO p2r;\n")))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -244,9 +244,9 @@
 (define (is-virtual-interface? name)
   (string-contains (string-downcase name) "vlan"))
  
-(define (vals->vlan-iface rnum ptnum name)  
-  (cond [(is-virtual-interface? name)         
-         (format "INSERT (~a,~a,~a) INTO virtual_interfaces;~n" rnum ptnum (first (string-split (string-downcase name) "vlan")))]
+(define (vals->vlan-iface vlanswnum ptnum name)  
+  (cond [(is-virtual-interface? name)          
+         (string-append "INSERT (0x" vlanswnum "," ptnum "," (first (string-split (string-downcase name) "vlan")) ") INTO virtual_interfaces;\n")]
         [else ""]))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 

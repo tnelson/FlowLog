@@ -7,14 +7,16 @@
 TABLE sp_vlans(switchid, portid, int);
 
 // Which physical ports are access or trunk ports for VLAN(s)
-// switch -> physical port id -> mode
+// VLAN sub-switch -> physical port id -> mode
+// (note: NOT the router id, the vlan switch id)
 TABLE sp_modes(switchid, portid, string);
 
 // switched virtual interfaces (for inter-vlan traffic)
-// switch -> routing port id -> vlan id
+// VLAN sub-switch -> routing port id -> vlan id
 TABLE virtual_interfaces(switchid, portid, int);
 
 // for non-vlan interfaces: physicalport -> routing port
+// switchid is the VLAN sub-switch
 TABLE p2r(switchid, portid, portid);
 
 // ^ mininet doesn't need this because it just establishes a 1-1 map between
