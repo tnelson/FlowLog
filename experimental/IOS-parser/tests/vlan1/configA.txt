@@ -1,4 +1,4 @@
-hostname vlantestA
+hostname vltA
 
 ! two vlans
 vlan 2

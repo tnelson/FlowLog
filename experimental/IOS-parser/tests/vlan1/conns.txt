@@ -1,1 +1,1 @@
-vlantestA TenGigabitEthernet1/1 vlantestB TenGigabitEthernet2/1
+vltA TenGigabitEthernet1/1 vltB TenGigabitEthernet2/1

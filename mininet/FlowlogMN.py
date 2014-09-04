@@ -56,6 +56,7 @@ class FlowlogDemo(object):
       self.globalPeerCount = 0
       self.globalEdgeSwCount = 0
       self.networksToLaunch = {}
+      self.trunkPorts = {}
 
       self.parseArgs()
       lg.setLogLevel('info')
@@ -142,6 +143,8 @@ class FlowlogDemo(object):
                                      dpid=self.padDpid(r.tr_dpid))
       acl_table = network.addSwitch(r.name + '-acl',
                                     dpid=self.padDpid(r.acl_dpid))
+      vlan = network.addSwitch(r.name + '-vlan',
+                                    dpid=self.padDpid(r.vlan_dpid))
 
       for (i, s) in enumerate(r.subnets):
         s.gw = s.gw.encode('ascii', 'ignore')
@@ -150,6 +153,8 @@ class FlowlogDemo(object):
         outPt = 2 * N
         rtrPt = N + 1
 
+        network.addLink(vlan, acl_table, port1=r.num_physical+N, port2=inPt,
+                        **self.linkopts)
         network.addLink(acl_table, translator, port1=outPt, port2=inPt,
                         **self.linkopts)
         network.addLink(translator, router, port1=outPt, port2=rtrPt,
@@ -158,35 +163,65 @@ class FlowlogDemo(object):
         if not create_srs:
           continue
 
-        srs = self.subnetRootSwitch[subnetStr(s.addr, s.mask)]
-        network.addLink(srs, acl_table, port2=inPt, **self.linkopts)
+      for p in r.ports:
+        # Not a vlan tag
+        if p.vlan_type == '':
 
-        # if there's room for hosts, add an edge switch with some hosts!
-        if s.mask < 30 and create_edge:
-          self.globalEdgeSwCount += 1
-          edge_switch = network.addSwitch('s' + str(self.globalEdgeSwCount))
-          network.addLink(srs, edge_switch, **self.linkopts)
+            s = filter(lambda x: p.id in x.physical_portid, r.subnets)[0]
 
-          for h in irange(1, self.numHostsPerSubnet):
-            self.globalHostCount += 1
-            name = "host%d" % self.globalHostCount
-            ip = self.nextSubnetHost(s.addr, s.mask, s.gw)
+            srs = self.subnetRootSwitch[subnetStr(s.addr, s.mask)]
+            network.addLink(srs, vlan, port2=p.id, **self.linkopts)
 
-            host = network.addHost(name, ip='%s/%d' % (ip, s.mask),
-                                   defaultRoute='dev %s-eth0 via %s'
-                                   % (name, s.gw))
-            network.addLink(host, edge_switch, **self.linkopts)
+            # if there's room for hosts, add an edge switch with some hosts!
+            if s.mask < 30 and create_edge:
+              self.globalEdgeSwCount += 1
+              edge_switch = network.addSwitch('s' + str(self.globalEdgeSwCount))
+              network.addLink(srs, edge_switch, **self.linkopts)
 
-      # Finally, add hosts which represents our BGP peers
+              for h in irange(1, self.numHostsPerSubnet):
+                self.globalHostCount += 1
+                name = "host%d" % self.globalHostCount
+                ip = self.nextSubnetHost(s.addr, s.mask, s.gw)
 
-      for p in r.peers:
-        self.globalPeerCount += 1
-        name = "peer%d" % self.globalPeerCount
-        peer = network.addHost(name, ip='%s/%d' % (p.ip, p.mask),
-                               mac=p.mac)
-        network.addLink(router, peer, **self.linkopts)
+                host = network.addHost(name, ip='%s/%d' % (ip, s.mask),
+                                       defaultRoute='dev %s-eth0 via %s'
+                                       % (name, s.gw))
+                network.addLink(host, edge_switch, **self.linkopts)
 
-        self.networksToLaunch[name] = p.networks
+        elif p.vlan_type.lower() == 'access':
+            s = filter(lambda x: p.id in x.physical_portid, r.subnets)
+
+            if len(s) == 0:
+                print "Warning! %s:%s is not in a subnet!" % (r.name, p.name)
+                continue
+            s = s[0]
+
+            if s.mask < 30 and create_edge:
+                self.globalHostCount += 1
+                name = "host%d" % self.globalHostCount
+                ip = self.nextSubnetHost(s.addr, s.mask, s.gw)
+
+
+                host = network.addHost(name, ip='%s/%d' % (ip, s.mask),
+                                           defaultRoute='dev %s-eth0 via %s'
+                                           % (name, s.gw))
+
+                network.addLink(host, vlan, port2 = p.id, **self.linkopts)
+
+        elif p.vlan_type.lower() == 'trunk':
+            self.trunkPorts[r.name.lower(), p.name.lower()] = p.id
+
+    def connectRouters(self, network, routers):
+        for link in routers.connections:
+            r1_name = link.router1.encode('ascii', 'ignore')
+            r2_name = link.router2.encode('ascii', 'ignore')
+            r1_portName = link.iface1.encode('ascii', 'ignore')
+            r2_portName = link.iface2.encode('ascii', 'ignore')
+            r1_portid = self.trunkPorts[r1_name.lower(), r1_portName.lower()]
+            r2_portid = self.trunkPorts[r2_name.lower(), r2_portName.lower()]
+            r1 = network.getNodeByName(r1_name + '-vlan')
+            r2 = network.getNodeByName(r2_name + '-vlan')
+            network.addLink(r1, r2, port1 = r1_portid, port2 = r2_portid, **self.linkopts)
 
     def buildNetwork(self, network, routers, create_edge, create_srs):
       self.subnetRootSwitch = defaultdict(lambda: self.nextSubnetRootSwitch(network))
@@ -261,10 +296,13 @@ class FlowlogDemo(object):
         self.buildNetwork(network, routers, CREATE_EDGE[self.options.create_edge],
                                             CREATE_SRS[self.options.create_srs])
 
+        self.connectRouters(network, routers)
         self.launchNetwork(network, host_cmd, host_cmd_opts)
 
+        '''
         for key in self.networksToLaunch:
           self.launchHttpdOnInternets(network, key, self.networksToLaunch[key])
+        '''
 
         self.demo(network)
         self.teardownNetwork(network, host_cmd)
