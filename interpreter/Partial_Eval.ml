@@ -253,7 +253,7 @@ let stage_2_partial_eval (incpkt: string) (atoms_or_neg: formula list): formula 
 (* Replace state references with constant matrices.
    ASSUMPTION: f is a conjunction of atoms. *)
 (* list of lists: outer list: new clauses; inner list: conjunctions of atoms in the clauses *)
-let rec partial_evaluation (p: flowlog_program) (incpkt: string) (f: formula): formula list list =
+let partial_evaluation (p: flowlog_program) (incpkt: string) (f: formula): formula list list =
   (* we have may R(X) and P(y) and Q(z) and ...
       If these relations are heavily populated, we could wind up with many, many clauses as a PE result.
       Instead, use XSB as much as possible to avoid contradictions (and thus junk clauses)
@@ -495,6 +495,7 @@ let field_to_masked_pattern (fld: string) (aval:string) (maskstr:string): NetCor
     | _ -> failwith ("field_to_maskeD_pattern: "^fld^" -> "^aval^" / "^maskstr) in
 
   let rec eq_to_pred (eqf: formula): pred option =
+  (*printf "eq to pred: %s; oldpkt=%s\n%!" (string_of_formula eqf) oldpkt;*)
     match eqf with
       | FNot(innerf) ->
         (match eq_to_pred innerf with
@@ -553,6 +554,7 @@ let field_to_masked_pattern (fld: string) (aval:string) (maskstr:string): NetCor
 
   (* After PE, should be only equalities and negated equalities. Should be just a conjunction *)
     let predlist = unique (filter_map eq_to_pred eqlist) in
+
     (* MUST be fold_right, to preserve ordering! *)
       fold_right (fun pred acc -> match pred with
               | Nothing -> Nothing
@@ -645,6 +647,7 @@ let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_h
         let startt = Unix.gettimeofday() in
 
         let bodies = partial_evaluation p tcl.oldpkt tcl.clause.body in
+
         if !global_verbose >= 1 then count_clauses_pe := !count_clauses_pe + 1;
 
         if !global_verbose > 2 then
@@ -657,7 +660,7 @@ let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_h
 
 
         (*printf "BODIES: %s" (String.concat ",\n" (map string_of_formula bodies));*)
-         (*printf "BODIES from PE of single clause: %d\n%!" (length bodies);       *)
+         (*printf "BODIES from PE of single clause: %d\n%!" (length bodies);*)
 
         let unsafe_result =
           match callback with
@@ -666,12 +669,15 @@ let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_h
                 let unsafe_acts = build_unsafe_switch_actions tcl.oldpkt abodylist in
                   (* Need to deal with cases where all-ports and physical(x)
                      coexist. Remember that all-ports FORBIDS input port! *)
+
                   handle_all_and_port_together tcl.oldpkt unsafe_pred unsafe_acts)
                           bodies
             | Some(f) ->
               (* Action is always sending to controller. So don't extract action *)
               let bigpred = fold_left (fun acc abodylist -> Or(acc, build_unsafe_switch_pred tcl.oldpkt abodylist)) Nothing bodies in
                 [(bigpred, [ControllerAction(f)])] in
+
+
 
           (* add context: the rule for this clause*)
           let result = (map (fun (apred, anact) -> (apred, anact, tcl.clause.orig_rule)) unsafe_result) in

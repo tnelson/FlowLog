@@ -61,6 +61,8 @@ let run_flowlog (p: flowlog_program): unit Lwt.t =
   (* Listen for incoming notifications via RPC *)
   Flowlog_Thrift_In.start_listening p;
 
+  try_lwt
+
   (* Start the policy stream *)
   (* >> is from Lwt's Pa_lwt. But you MUST have -syntax camlp4o or it won't be recoginized. *)
   OpenFlow0x01_Platform.init_with_port !listenPort >>
@@ -70,13 +72,19 @@ let run_flowlog (p: flowlog_program): unit Lwt.t =
     let (pkt_stream, push_pkt) = Lwt_stream.create () in
     emit_push := Some push_pkt;
 
-    (* Send the "startup" notification. Enables initialization, etc. in programs *)
-    ignore (respond_to_notification p {typeid="startup"; values=StringMap.empty} IncThrift);
+      (* Note use of LWT here! *)
+      (* Send the "startup" notification. Enables initialization, etc. in programs *)
+      (respond_to_notification p {typeid="startup"; values=StringMap.empty} IncThrift) >>
 
       (* pick cancels all threads given if one terminates *)
       (* DO NOT attempt to copy ox/frenetic's switch connection detection code here. It will clash with
          Frenetic's. Instead, register a HandleSwitchEvent policy, which gives us a nice clean callback. *)
-      Lwt.pick [gen_stream; NetCore_Controller.start_controller pkt_stream stream];;
+      Lwt.pick [gen_stream; NetCore_Controller.start_controller pkt_stream stream]
+
+   with | Failure(x) ->
+   printf "Received failure; exiting LWT.\n%!";
+   printf "Failure was %s\n%!" x;
+   Lwt.return ();;
 
       (* switch proxy listeners are started later *)
 

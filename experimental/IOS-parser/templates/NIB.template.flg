@@ -8,7 +8,6 @@
 
 EVENT start_timer {seconds: int, id: string};
 EVENT timer_expired {id: int};
-//EVENT down_alert {sw1: switchid, pt1: portid, sw2: switchid, pt2: portid};
 
 TABLE ucSwTopo(switchid, portid, switchid, portid);
 TABLE switchTopology(switchid, portid, switchid, portid);
@@ -18,9 +17,6 @@ TABLE ucTC(switchid, switchid);
 
 OUTGOING start_timer_out(start_timer) THEN
   SEND TO 127.0.0.1 9091;
-
-//OUTGOING dummy_down_alert(down_alert) THEN
-//  SEND TO 127.0.0.1 9091;
 
 /////////////////////////////////////////////////
 

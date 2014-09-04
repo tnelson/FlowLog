@@ -567,16 +567,6 @@ let desugar_rule (r: srule) (vartblnames: string list): srule =
     end;
     {r with action=newact};;
 
-(* For INSERT and DELETE rules, help out the proactive compiler by adding a
-   "if something will even change..." subformula to the WHERE clause. For instance,
-   INSERT (p.dlSrc) INTO seen;  would become INSERT (p.dlSrc) INTO seen WHERE NOT seen(p.dlSrc). *)
-let add_id_filters (r: srule): srule =
-  let a' = (match r.action with
-    | ADelete(s, t, where) -> ADelete(s, t, FAnd(where, FAtom("", s, t)))
-    | AInsert(s, t, where) -> AInsert(s, t, FAnd(where, FNot(FAtom("", s, t))))
-    | _ -> r.action) in
-      {r with action = a'};;
-
 (* If new.locPt appears in a FORWARD rule's WHERE outside of "new.locPt != p.locPt"
    then add switch_has_port(p.locSw, new.locPt) to make new.locPt safe. *)
 let add_shp_if_needed (r: srule): srule =
@@ -622,6 +612,29 @@ let add_shp_if_needed (r: srule): srule =
       end
     | _ -> r;;
 
+
+(* For INSERT and DELETE rules, help out the proactive compiler by adding a
+   "if something will even change..." subformula to the WHERE clause. For instance,
+   INSERT (p.dlSrc) INTO seen;  would become INSERT (p.dlSrc) INTO seen WHERE NOT seen(p.dlSrc).
+  IMPORTANT: These extras must NOT make it into XSB, however, as they can mess up our semantics if so.
+  Consider replacing the value of T1 with the value of T2. We want to insert everything
+  in T2, even if it's in T1, because we're deleting everything in T1 in the same cycle! *)
+let add_id_protection_cl (tcl: triggered_clause): triggered_clause =
+  let r = tcl.clause.orig_rule in
+  let newbody = (match r.action with
+    | ADelete(s, t, where) ->
+      let protect = FAtom("", s, t) in
+        if mem protect (conj_to_list tcl.clause.body) then tcl.clause.body
+        else FAnd(tcl.clause.body, protect)
+
+    | AInsert(s, t, where) ->
+      let protect = FNot(FAtom("", s, t)) in
+        if mem protect (conj_to_list tcl.clause.body) then tcl.clause.body
+        else FAnd(tcl.clause.body, protect)
+
+    | _ -> tcl.clause.body) in
+      {tcl with clause = {tcl.clause with body = newbody}};;
+
 let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_program =
   let expanded_ast = expand_includes ast [filename] in
   let ast_stmts = expanded_ast.statements in
@@ -647,11 +660,9 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
                                                 (* Rule desugaring process: *)
                                                 (* Where we see packet types, add filters on ethtyp, nwproto field *)
                                                 let rule_with_type_constraints = (add_packet_type_constraints r) in
-                                                (* Filters, e.g., adding WHERE NOT R(t) to INSERT (t) INTO R. *)
-                                                let rule_with_insert_delete_filters = (add_id_filters rule_with_type_constraints) in
 
                                                 (* Make sure forwarding behavior is strongly safe. *)
-                                                let safe_if_fwd_rule = (add_shp_if_needed rule_with_insert_delete_filters) in
+                                                let safe_if_fwd_rule = (add_shp_if_needed rule_with_type_constraints) in
 
                                                   (* Misc. other final desugaring, for instance dealing with VARs
                                                      and turning them into proper table refs *)
@@ -689,6 +700,7 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
             (* Create and simplify clauses. Test for what can be compiled. Weaken as needed. *)
             let clauses = (fold_left (fun acc r -> (clauses_of_rule r) @ acc) [] the_rules) in
             let simplified_clauses = (map simplify_clause clauses) in
+
             (* pre-determine what can be fully compiled. pre-determine weakened versions of other packet-triggered clauses*)
             let can_fully_compile_simplified, weakened_cannot_compile_pt_clauses, not_fully_compiled_clauses =
               fold_left (fun (acc_comp, acc_weaken, acc_unweakened) cl ->
@@ -726,11 +738,16 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
 
                 (* Convert decls and defns syntax (with built ins) into a program *)
                 let p = {pre_program with
-                 clauses = simplified_clauses;
-                 weakened_cannot_compile_pt_clauses = weakened_cannot_compile_pt_clauses;
-                 can_fully_compile_to_fwd_clauses = can_fully_compile_simplified;
-                 (* Remember: these are unweakened, and so can be used by XSB. *)
+                 clauses = simplified_clauses; (* *without* insert/delete helpers*)
+
+                 (* with insert/delete helpers. these fields should be used by the compiler. NEVER by XSB *)
+                 weakened_cannot_compile_pt_clauses = (map add_id_protection_cl weakened_cannot_compile_pt_clauses);
+                 can_fully_compile_to_fwd_clauses = (map add_id_protection_cl can_fully_compile_simplified);
+
+                 (* These will go to XSB instead of p.clauses if "unsafe" mode is active.
+                    Should NOT be used by the compiler *)
                  not_fully_compiled_clauses = not_fully_compiled_clauses;
+
                  (* rebuild memos *)
                  memos = build_memos_for_program pre_program.desugared_reacts the_rules the_tables the_outgoings the_events simplified_clauses} in
 
