@@ -50,9 +50,13 @@ ON packet(p) WHERE sp_vlans(p.locSw, p.locPt, vlanid) AND
                    p.dlvlan = -1: // coming in UNTAGGED
   DO forward(new) WHERE
     sp_vlans(p.locSw, new.locPt, vlanid) AND // iface for this vlan
-    //p.locPt != new.locPt AND // never backflow
+    p.locPt != new.locPt AND // never backflow
     (
-    	(spanningTree(p.locSw, new.locPt) AND NOT learned(p.locSw, ANY, p.dlDst)) // TODO: build this
+    // Spanning tree covers only the switch topology. Need to make sure we send to any (possibly hitherto silent) hosts
+    // (restricted to layer 2, of course!)
+    	(NOT learned(p.locSw, ANY, p.dlDst) AND
+    	  (spanningTree(p.locSw, new.locPt) OR (NOT switchTopology(p.locSw, new.locPt, ANY, ANY) AND
+    	                                        sp_modes(p.locSw, new.locPt, "access"))))
     	OR learned(p.locSw, new.locPt, p.dlDst)
     ) AND
     ((
@@ -97,12 +101,13 @@ ON packet(p) WHERE sp_vlans(p.locSw, p.locPt, vlanid) AND
                    NOT subnets(ANY,ANY,ANY,p.dlDst,rtrid,ANY) AND
                    router_vlan(rtrid, p.locSw) AND
                    p.dlvlan = vlanid: // comes in tagged (tag should be allowed on the incoming interface)
-  // *** TODO: send along spanning tree; MAC learning
   DO forward(new) WHERE
     sp_vlans(p.locSw, new.locPt, vlanid) AND
-    //p.locPt != new.locPt AND // never backflow
+    p.locPt != new.locPt AND // never backflow
     (
-    	(spanningTree(p.locSw, new.locPt) AND NOT learned(p.locSw, ANY, p.dlDst)) // TODO: build this
+    	(NOT learned(p.locSw, ANY, p.dlDst) AND
+    	  (spanningTree(p.locSw, new.locPt) OR (NOT switchTopology(p.locSw, new.locPt, ANY, ANY) AND
+    	                                        sp_modes(p.locSw, new.locPt, "access"))))
     	OR learned(p.locSw, new.locPt, p.dlDst)
     ) AND
     ((
@@ -113,6 +118,20 @@ ON packet(p) WHERE sp_vlans(p.locSw, p.locPt, vlanid) AND
       sp_modes(p.locSw, new.locPt, "trunk") AND
       new.dlvlan = vlanid
     ));
+
+/*
+    // empty!
+  insert (pt) into debugvlan1 where
+    p.locPt != pt AND // never backflow
+    (
+    	(NOT learned(p.locSw, ANY, p.dlDst) AND
+    	  (spanningTree(p.locSw, pt) OR (NOT switchTopology(p.locSw, pt, ANY, ANY) AND
+    	                                        sp_modes(p.locSw, pt, "access"))))
+    	OR learned(p.locSw, pt, p.dlDst)
+    );
+
+TABLE debugvlan1(portid);
+*/
 
 ///////////////////////////////////////////////////////////////////////////////
 // INTER-vlan traffic: finishing a L2 hop at some gateway mac

@@ -10,10 +10,11 @@ EVENT start_timer {seconds: int, id: string};
 EVENT timer_expired {id: int};
 
 TABLE ucSwTopo(switchid, portid, switchid, portid);
-TABLE switchTopology(switchid, portid, switchid, portid);
 TABLE ucTree(switchid, portid);
-TABLE spanningTree(switchid, portid);
 TABLE ucTC(switchid, switchid);
+
+TABLE switchTopology(switchid, portid, switchid, portid);
+TABLE spanningTree(switchid, portid);
 
 OUTGOING start_timer_out(start_timer) THEN
   SEND TO 127.0.0.1 9091;
