@@ -60,8 +60,37 @@ ON packet(p) WHERE sp_vlans(p.locSw, p.locPt, vlanid) AND
       sp_modes(p.locSw, new.locPt, "access")
     ) OR (
       sp_modes(p.locSw, new.locPt, "trunk") AND
-      p.dlvlan = vlanid
+      new.dlvlan = vlanid
     ));
+
+/*
+  Here's a cool debugging technique. Since Flowlog has no printf action (sadness),
+  do debugging-by-logging. Figure out which part of these rules fail us by breaking
+  different parts into different insert statements.
+
+  The FIRST bug here was: I had used p.dlvlan instead of new.dlvlan for trunk mode.
+  The SECOND bug was: spanning tree doesn't send down host ports.
+
+  insert (0) into debugvlan1 where p.dldst = 5;
+  insert (pt) into debugvlan2 where
+    p.dldst = 5 and
+    sp_vlans(p.locSw, pt, vlanid); // iface for this vlan
+  insert (pt, vlanid) into debugvlan3 where
+    p.dldst = 5 and
+    sp_vlans(p.locSw, pt, vlanid) and // iface for this vlan
+    ((
+      // don't tag if sending out an access port
+      sp_modes(p.locSw, pt, "access")
+    ) OR (
+      sp_modes(p.locSw, pt, "trunk")
+    ));
+
+TABLE debugvlan1(portid);
+TABLE debugvlan2(portid);
+TABLE debugvlan3(portid,int);
+
+*/
+
 
 // If comes in tagged, then we need to send for that single vlan
 ON packet(p) WHERE sp_vlans(p.locSw, p.locPt, vlanid) AND
@@ -79,10 +108,10 @@ ON packet(p) WHERE sp_vlans(p.locSw, p.locPt, vlanid) AND
     ((
       // actively de-tag if sending out an access port
       sp_modes(p.locSw, new.locPt, "access") AND
-      p.dlvlan = -1
+      new.dlvlan = -1
     ) OR (
       sp_modes(p.locSw, new.locPt, "trunk") AND
-      p.dlvlan = vlanid
+      new.dlvlan = vlanid
     ));
 
 ///////////////////////////////////////////////////////////////////////////////
