@@ -146,6 +146,8 @@ ON ip_packet(pkt) WHERE subnets(addr, mask, gwip, gwmac, router, rport)
   // Send requests out of every ACL sub-router (avoid burdening the core)
   DO emit_arp(new) WHERE
     not router_queued(pkt.nwDst) and
+    // TODO(TN): should this be router_acl(ANY, new.locSw)? right now, it is limiting only to THIS ACL sub-router
+    //           since router is bound in the ON clause above
     router_acl(router, new.locSw) and
     new.locPt = hside and
     new.dlDst = ff:ff:ff:ff:ff:ff and
