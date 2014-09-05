@@ -133,6 +133,11 @@ ON packet(p) WHERE sp_vlans(p.locSw, p.locPt, vlanid) AND
   DO forward(new) WHERE
     p2r(p.locSw, p.locPt, new.locPt);
 
+  // DEBUG
+  insert (0,0,0) into testvlan where p.dltyp = 0x800;
+
+table testvlan(switchid, portid, portid);
+
 
 // coming from router side: convert back from virtual interface to (possibly multiple) physical switchports
 // (Once has learned the adjacent gateway MACs, will not flood on multiple VLAN physical interfaces.)

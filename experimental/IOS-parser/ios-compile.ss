@@ -314,11 +314,29 @@ namespace-for-template)
            )
          ;;;;;;;;;;;;;;;;;
 
-         ; Finally, return the result tuples (protobuf changes are side-effects)
-         ; Keep the tuples that are non-#f         
-                  
-      (define p2r (val->p2r vlan-dpid physical-ptnum routing-ptnum))
-         (filter (lambda (x) x) (list "\n" alias p2r prim sec needs-nat acldefn natconfigs switchport-mode-inserts switchport-vlan-inserts ospf-cost-inserts maybe-vlan-interface-inserts)))
+      ; WARNING: routing-ptnum is a separate counter from physical-ptnum, used for producing ACL alias, etc.
+      ; Relations used by the VLAN sub-router need to start their routing ports from (#physicals)+1
+
+      (define adjusted-routing-ptnum (->string (+ (string->number routing-ptnum) (- (unbox last-physicalpt-used) 1))))
+      (printf "Processing port. Physical: ~a. Get-phys: ~a. Routing: ~a. Incr routing by # physical: ~a~n" 
+              physical-ptnum
+              (get-physical-portnums name interface-defns)
+              routing-ptnum
+              adjusted-routing-ptnum)
+              
+      
+      (define p2r (val->p2r vlan-dpid
+                            (cond [(equal? physical-ptnum "0")                                   
+                                   (get-physical-portnums name interface-defns)]
+                                  [else                                 
+                                   (list physical-ptnum)])
+                            routing-ptnum
+                            adjusted-routing-ptnum))
+      
+      ; Finally, return the result tuples (protobuf changes are side-effects)
+      ; Keep the tuples that are non-#f         
+
+      (filter (lambda (x) x) (list "\n" alias p2r prim sec needs-nat acldefn natconfigs switchport-mode-inserts switchport-vlan-inserts ospf-cost-inserts maybe-vlan-interface-inserts)))
  
     (define total-parsed-ace-count (box 0))      
     (define total-used-ace-count (box 0))

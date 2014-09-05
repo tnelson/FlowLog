@@ -235,8 +235,10 @@
       (list (string-append "INSERT (0x" vlanswnum "," ptnum ", \"" (symbol->string mode) "\") INTO sp_modes;\n"))))
 (define (vals->vlans vlanswnum ptnum vlanlist)  
   (string-append* (map (lambda (vlan) (string-append "INSERT (0x" vlanswnum "," ptnum "," vlan ") INTO sp_vlans;\n")) vlanlist)))
-(define (val->p2r vlanswnum ppt rpt)    
-  (list (string-append "INSERT (0x" vlanswnum "," ppt "," rpt ") INTO p2r;\n")))
+(define (val->p2r vlanswnum pptlist rpt adjusted-rpt)
+  (cond [(equal? rpt "0") empty]
+        [else 
+         (map (lambda (ppt) (string-append "INSERT (0x" (->string vlanswnum) "," (->string ppt) "," adjusted-rpt ") INTO p2r;\n")) pptlist)]))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
