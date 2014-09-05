@@ -685,7 +685,8 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
                 {desugared_decls = the_decls;
                  desugared_reacts = the_reacts;
                  vartablenames = vartblnames;
-                 tables = the_tables;
+                 (* Sort tables in order by name; this way printing state will be prettier *)
+                 tables = (sort ~cmp:(fun td1 td2 -> Pervasives.compare td1.tablename td2.tablename) the_tables);
                  outgoings = the_outgoings;
                  events = the_events;
                  clauses = [];
