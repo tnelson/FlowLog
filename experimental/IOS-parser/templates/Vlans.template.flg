@@ -117,6 +117,8 @@ ON packet(p) WHERE router_vlan(rtrid, p.locSw) AND
 					p.dlTyp != 0x0806 and // ARP
                     p.dlDst != 0x01005e000016 and // IGMP ethernet multicast.
                                                     // this should be an explicit drop in AppleTV.flg.
+                    //p.dlDst != 0x333300000000 and // more multicasts (the entire 4byte/3byte range is mcast)
+                    //p.dlDst != 0x01005e000000 and
                     p.dlDst != 0x3333000000fb and // mDNS IPv6 ethernet multicast
                     p.dlDst != 0x01005e0000fb:    // mDNS IPv4 ethernet multicast
 

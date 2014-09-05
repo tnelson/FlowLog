@@ -220,7 +220,8 @@
 
 (define (vals->vlan vlan-dpid rnum)
   (string-append "INSERT (0x" vlan-dpid ") INTO switches_without_mac_learning; // auto\n"
-                 "INSERT (0x" vlan-dpid ") INTO switches_without_arp; // auto\n"
+                 ; Need switchports on vlan switch to process ARP packets. (They will be stopped at the ACL in any case)
+                 ;"INSERT (0x" vlan-dpid ") INTO switches_without_arp; // auto\n"
                  "INSERT (" rnum ", 0x" vlan-dpid ") INTO router_vlan;\n"))
 
 (define (val->ospf rnum ptnum cost)  

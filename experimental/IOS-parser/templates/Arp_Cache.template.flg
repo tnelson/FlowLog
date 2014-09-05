@@ -14,6 +14,14 @@
  *    (requires FlowLog improvements).
  */
 
+
+ /*
+  * TN notes:
+  *  -- We can't only have the root-switches send up the ARP requests, since VLAN traffic will arrive
+  *     at switchports. Therefore, the VLAN sub-switch is not in switches_without_arp.
+  *
+  */
+
 INCLUDE "@|basename|/NIB.inc.flg";
 
 TABLE switches_without_arp(switchid);

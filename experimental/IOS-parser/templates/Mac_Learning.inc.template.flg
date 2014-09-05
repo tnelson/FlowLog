@@ -32,6 +32,7 @@ TABLE switches_without_mac_learning(switchid);
 // More complex rules involving vlans on routers: see Vlans.template.flg
 
 ON packet(pkt) WHERE pkt.dlTyp != 0x0806 and // ARP
+ 				     pkt.dlTyp != 0x1001 AND // not a probe
                      pkt.dlDst != 0x01005e000016 and // IGMP ethernet multicast.
                                                      // this should be an explicit drop in AppleTV.flg.
                      pkt.dlDst != 0x3333000000fb and // mDNS IPv6 ethernet multicast
