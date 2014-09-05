@@ -133,20 +133,19 @@ ON packet(p) WHERE sp_vlans(p.locSw, p.locPt, vlanid) AND
   DO forward(new) WHERE
     p2r(p.locSw, p.locPt, new.locPt);
 
-  // DEBUG
-  insert (0,0,0) into testvlan where p.dltyp = 0x800;
-
-table testvlan(switchid, portid, portid);
-
-
 // coming from router side: convert back from virtual interface to (possibly multiple) physical switchports
 // (Once has learned the adjacent gateway MACs, will not flood on multiple VLAN physical interfaces.)
 ON packet(p) WHERE virtual_interfaces(p.locSw, p.locPt, ANY) and
                    p.dltyp != 0x806: // don't do this for arp:
   DO forward(new) WHERE
     p2r(p.locSw, new.locPt, p.locPt) AND
-    ((spanningTree(p.locSw, new.locPt) AND NOT learned(p.locSw, ANY, p.dlDst)) OR
-     learned(p.locSw, new.locPt, p.dlDst));
+
+    // apply standard MAC learning resolution here, too. tree+non-topo access ports
+    ((NOT learned(p.locSw, ANY, p.dlDst) AND
+    	  (spanningTree(p.locSw, new.locPt) OR (NOT switchTopology(p.locSw, new.locPt, ANY, ANY) AND
+    	                                        sp_modes(p.locSw, new.locPt, "access"))))
+    	OR learned(p.locSw, new.locPt, p.dlDst)
+    );
 
 ///////////////////////////////////////////////////////////////////////////////
 // Learn MACs for Traffic arriving on switch-ports
