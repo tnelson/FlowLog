@@ -32,7 +32,8 @@ TABLE router_vlan(switchid, switchid);
 
 ON packet(p) WHERE router_vlan(ANY,p.locSw) AND // at a vlan sub-switch
                    NOT sp_vlans(p.locSw, p.locPt, ANY) AND
-                   NOT virtual_interfaces(p.locSw, p.locPt, ANY):
+                   NOT virtual_interfaces(p.locSw, p.locPt, ANY) AND
+                   p.dltyp != 0x806: // don't do this for arp
   DO forward(new) WHERE
   // branching here assumes partition of ports between physical and routing.
     p2r(p.locSw, p.locPt, new.locPt) OR p2r(p.locSw, new.locPt, p.locPt);
@@ -47,6 +48,7 @@ ON packet(p) WHERE router_vlan(ANY,p.locSw) AND // at a vlan sub-switch
 ON packet(p) WHERE sp_vlans(p.locSw, p.locPt, vlanid) AND
                    NOT subnets(ANY,ANY,ANY,p.dlDst,rtrid,ANY) AND
                    router_vlan(rtrid, p.locSw) AND
+                   p.dltyp != 0x806 AND // don't do this for arp
                    p.dlvlan = -1: // coming in UNTAGGED
   DO forward(new) WHERE
     sp_vlans(p.locSw, new.locPt, vlanid) AND // iface for this vlan
@@ -100,6 +102,7 @@ TABLE debugvlan3(portid,int);
 ON packet(p) WHERE sp_vlans(p.locSw, p.locPt, vlanid) AND
                    NOT subnets(ANY,ANY,ANY,p.dlDst,rtrid,ANY) AND
                    router_vlan(rtrid, p.locSw) AND
+                   p.dltyp != 0x806 AND // don't do this for arp
                    p.dlvlan = vlanid: // comes in tagged (tag should be allowed on the incoming interface)
   DO forward(new) WHERE
     sp_vlans(p.locSw, new.locPt, vlanid) AND
@@ -119,20 +122,6 @@ ON packet(p) WHERE sp_vlans(p.locSw, p.locPt, vlanid) AND
       new.dlvlan = vlanid
     ));
 
-/*
-    // empty!
-  insert (pt) into debugvlan1 where
-    p.locPt != pt AND // never backflow
-    (
-    	(NOT learned(p.locSw, ANY, p.dlDst) AND
-    	  (spanningTree(p.locSw, pt) OR (NOT switchTopology(p.locSw, pt, ANY, ANY) AND
-    	                                        sp_modes(p.locSw, pt, "access"))))
-    	OR learned(p.locSw, pt, p.dlDst)
-    );
-
-TABLE debugvlan1(portid);
-*/
-
 ///////////////////////////////////////////////////////////////////////////////
 // INTER-vlan traffic: finishing a L2 hop at some gateway mac
 
@@ -147,7 +136,8 @@ ON packet(p) WHERE sp_vlans(p.locSw, p.locPt, vlanid) AND
 
 // coming from router side: convert back from virtual interface to (possibly multiple) physical switchports
 // (Once has learned the adjacent gateway MACs, will not flood on multiple VLAN physical interfaces.)
-ON packet(p) WHERE virtual_interfaces(p.locSw, p.locPt, ANY):
+ON packet(p) WHERE virtual_interfaces(p.locSw, p.locPt, ANY) and
+                   p.dltyp != 0x806: // don't do this for arp:
   DO forward(new) WHERE
     p2r(p.locSw, new.locPt, p.locPt) AND
     ((spanningTree(p.locSw, new.locPt) AND NOT learned(p.locSw, ANY, p.dlDst)) OR

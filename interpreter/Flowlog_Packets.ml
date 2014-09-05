@@ -124,7 +124,7 @@ let field_is_defined (ev: event) (fldname: string): bool =
 let defaults_table = [
   (("packet", "dlsrc"), "0");
   (("packet", "dldst"), "0");
-  (("packet", "dlvlan"), "0");
+  (("packet", "dlvlan"), "-1"); (* un-tagged *)
   (("ip_packet", "nwfrag"), "0");
   (("ip_packet", "nwttl"), "255");
   (("ip_packet", "nwtos"), "0");
