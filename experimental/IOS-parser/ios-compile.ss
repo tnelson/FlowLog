@@ -223,8 +223,8 @@ namespace-for-template)
                                      [else "0"]))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
          
-         (printf "if name=~v; ridx=~v; rnum=~v; ifindex=~v; rname=~v; cost=~v mode=~v vlans=~v ppt=~v rpt=~v~n"
-                 name ridx rnum ifindex rname ospf-cost switchport-mode switchport-vlans physical-ptnum routing-ptnum) ; DEBUG
+         (printf "if name=~v; ridx=~v; rnum=~v; ifindex=~v; rname=~v; cost=~v mode=~v vlans=~v ppt=~v rpt=~v cost=~v~n"
+                 name ridx rnum ifindex rname ospf-cost switchport-mode switchport-vlans physical-ptnum routing-ptnum ospf-cost) ; DEBUG
          
          (define ospf-cost-inserts (val->ospf rnum routing-ptnum ospf-cost))
          (define switchport-mode-inserts (val->spmode vlan-dpid physical-ptnum switchport-mode))

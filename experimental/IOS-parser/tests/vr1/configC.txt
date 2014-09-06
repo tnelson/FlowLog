@@ -1,0 +1,13 @@
+hostname vltC
+
+! a physical L3 interface; no vlan
+interface GigabitEthernet2/1
+  ip address 192.168.1.1 255.255.255.0
+  ospf cost 20
+
+interface GigabitEthernet2/2
+  ip address 192.168.2.0 255.255.255.0
+  ospf cost 10
+
+
+end
