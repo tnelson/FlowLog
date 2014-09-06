@@ -22,7 +22,6 @@
   *
   */
 
-INCLUDE "@|basename|/NIB.inc.flg";
 
 TABLE switches_without_arp(switchid);
 
@@ -51,7 +50,11 @@ TABLE queued(ipaddr, macaddr, ipaddr, switchid, portid);
 ON arp_packet(request) WHERE request.dlSrc = 00:00:ca:fe:ca:fe // Controller MAC
                              and not switches_without_arp(request.locSw):
    DO forward(new) WHERE
-     new.locPt != request.locPt;
+     // this will be a vlan sub-router or a subnet switch.
+     // for vlan, out physical ports
+     (router_vlan(ANY, request.locSw) AND p2r(request.locSw, new.locPt, ANY) AND new.locPt != request.locPt) OR
+     // for others, flood forward
+     (NOT router_vlan(ANY, request.locSw) AND new.locPt != request.locPt);
 
 /*******************************************************************************
  *
@@ -128,8 +131,11 @@ ON arp_packet(request) WHERE request.arp_op = 1 AND
     new.arp_spa = 10.10.10.1 and // Controller IP addr (10.10.10.1)
 
     // positively constrain new.locPt. A valid port, but don't backflow.
-    switch_has_port(new.locSw, new.locPt) AND
-    // TODO(TN): restrict which switches this comes from? e.g., don't emit from ACL *and* VLAN...
+    // restrict which switches this comes from: emit from physical ports of vlans
+    //switch_has_port(new.locSw, new.locPt) AND
+    router_vlan(ANY, new.locSw) AND
+    p2r(new.locSw, new.locPt, ANY) AND
+
     (new.locSw != request.locSw OR new.locPt != request.locPt);
 
   //

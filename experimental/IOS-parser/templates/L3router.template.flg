@@ -132,7 +132,8 @@ ON ip_packet(pkt):
     and router_portmap(rport, new.locPt, pkt.locPt); // router -> host
 
 // Alternate path: send an ARP request for IPs we can't translate and queue the pkt
-
+// Since we can't queue the packet, there will be an initial ping lost to ARP resolution
+// That's not so unusual: it seems that some Cisco switches will also lose the first pkt to ARP.
 ON ip_packet(pkt) WHERE subnets(addr, mask, gwip, gwmac, router, rport)
                         and router_tr(router, pkt.locSw)
                         and pkt.nwDst IN addr/mask
@@ -145,10 +146,9 @@ ON ip_packet(pkt) WHERE subnets(addr, mask, gwip, gwmac, router, rport)
 
   // Send requests out of every ACL sub-router (avoid burdening the core)
   DO emit_arp(new) WHERE
-    not router_queued(pkt.nwDst) and
-    // TODO(TN): should this be router_acl(ANY, new.locSw)? right now, it is limiting only to THIS ACL sub-router
-    //           since router is bound in the ON clause above
-    router_acl(router, new.locSw) and
+    not router_queued(pkt.nwDst) and // only send the request once
+    // don't use router_acl(router, new.locSw), since since router is bound in the ON clause above
+    router_acl(ANY, new.locSw) and
     new.locPt = hside and
     new.dlDst = ff:ff:ff:ff:ff:ff and
     new.dlSrc = 00:00:ca:fe:ca:fe and // controller mac addr
@@ -156,12 +156,13 @@ ON ip_packet(pkt) WHERE subnets(addr, mask, gwip, gwmac, router, rport)
     new.arp_op = 1 and // ARP request
     new.arp_tpa = pkt.nwDst and
     new.arp_sha = 00:00:CA:FE:CA:FE and // Controller MAC
-    new.arp_spa = 10.10.10.1 // Controller IP addr
+    new.arp_spa = 10.10.10.1; // Controller IP addr
 
-    // This is NOT needed since new.locSw and new.locPt are both constrained positively
-    // and switch_has_port(new.locSw, new.locPt)
-    ;
-
+// don't keep in the router queue
+// not strictly needed, but good to clean up
+ON arp_packet(reply) WHERE reply.arp_op = 2 AND router_queued(reply.arp_spa):
+  DELETE (reply.arp_spa) FROM router_queued;
+ // TODO(tn): here is where we'd unqueue the packet and send with appropriate MAC
 
 // with the above physically wired translators, we are trying to achieve
 // sequential composition with what is, logically, this program:
