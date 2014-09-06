@@ -227,7 +227,8 @@
 (define (val->ospf rnum ptnum cost)  
   (if (or (not cost) (equal? cost "no"))
       empty
-      (list (string-append "INSERT (0x" rnum "," ptnum "," cost ") INTO ospf_costs;\n" rnum ptnum cost))))
+      (list (string-append "INSERT (" rnum "," ptnum "," cost ") INTO ospf_costs;\n"))))
+
 (define (val->spmode vlanswnum ptnum mode)
   ;(printf "spmode: ~a ~a ~a~n" rnum ptnum mode)
   (if (equal? mode 'no)

@@ -77,6 +77,7 @@ namespace-for-template)
   (with-handlers ([(lambda (e) (and #f (exn:fail? e) (not (exn:fail:user? e))))
                    (lambda (e) (raise-user-error (format "Unrecoverable error parsing IOS configurations. Please report this error to the Margrave maintainers. The internal error was: ~a.~n" e)))])
     (define configurations (map (λ (filename)                                
+                                  (printf "Parsing: ~a~n" filename)
                                   (parse-IOS (open-input-file (make-path root-path filename)
                                                               #:mode
                                                               'text)
@@ -223,10 +224,9 @@ namespace-for-template)
                                      [else "0"]))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
          
-         (printf "if name=~v; ridx=~v; rnum=~v; ifindex=~v; rname=~v; cost=~v mode=~v vlans=~v ppt=~v rpt=~v cost=~v~n"
+         (printf "if name=~v; ridx=~v; rnum=~v; ifindex=~v; rname=~v; cost=~v mode=~v vlans=~v ppt=~v rpt=~v~n"
                  name ridx rnum ifindex rname ospf-cost switchport-mode switchport-vlans physical-ptnum routing-ptnum ospf-cost) ; DEBUG
-         
-         (define ospf-cost-inserts (val->ospf rnum routing-ptnum ospf-cost))
+      
          (define switchport-mode-inserts (val->spmode vlan-dpid physical-ptnum switchport-mode))
          (define switchport-vlan-inserts (vals->vlans vlan-dpid physical-ptnum switchport-vlans))                          
          (define maybe-vlan-interface-inserts (vals->vlan-iface vlan-dpid routing-ptnum name))
@@ -323,7 +323,8 @@ namespace-for-template)
               (get-physical-portnums name interface-defns)
               routing-ptnum
               adjusted-routing-ptnum)
-              
+      
+      (define ospf-cost-inserts (val->ospf rnum routing-ptnum ospf-cost))              
       
       (define p2r (val->p2r vlan-dpid
                             (cond [(equal? physical-ptnum "0")                                   
@@ -335,7 +336,7 @@ namespace-for-template)
       
       ; Finally, return the result tuples (protobuf changes are side-effects)
       ; Keep the tuples that are non-#f         
-
+      
       (filter (lambda (x) x) (list "\n" alias p2r prim sec needs-nat acldefn natconfigs switchport-mode-inserts switchport-vlan-inserts ospf-cost-inserts maybe-vlan-interface-inserts)))
  
     (define total-parsed-ace-count (box 0))      

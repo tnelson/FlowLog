@@ -123,10 +123,10 @@
   (unless disable-keyword-warnings 
     (printf "WARNING: Ignoring unexpected keyword on line ~a. Did not have ~a, so expected keywords among: ~a. Got ~a. Moving to next line...~n" line no-condition allowed-tokens token)))
 
-(define (warning-unsupported/ending-block line token)
+(define (warning-unsupported/ending-block line token allowed-tokens)
   ; Strongly suggest that we leave this type of warning enabled.
   (unless disable-restart-warnings
-    (printf "WARNING: Unexpected top-level keyword: ~a on line ~a. Terminating block and moving to next line...~n" token line )))
+    (printf "WARNING: Unexpected top-level keyword: ~a on line ~a. Expected one of ~a. Terminating block and moving to next line...~n" token line allowed-tokens )))
 
 (define (warning-unsupported/tcp line not-tcp-protocol)
   (unless disable-keyword-warnings
@@ -539,7 +539,7 @@
       
       [(!) config]
       [(access-list crypto end hostname interface ip route-map router)
-       (warning-unsupported/ending-block (line-number input) (first line-tokens))
+       (warning-unsupported/ending-block (line-number input) (first line-tokens) '(permit deny evaluate))
        (parse-IOS-details-for-line input config line-tokens)]
       [else 
        (warning-unsupported (line-number input) (first line-tokens) '(permit deny evaluate))
@@ -1213,11 +1213,12 @@
       [(ip) (parse-interface-details name input (parse-interface-IP (line-number input) name (rest line-tokens) config))]
       [(crypto) (parse-interface-details name input (parse-interface-crypto (line-number input) name (rest line-tokens) config))]
       [(switchport) (parse-interface-details name input (parse-interface-switchport (line-number input) name (rest line-tokens) config))]      
+      [(ospf) (parse-interface-details name input (parse-interface-ip-ospf (line-number input) name (rest line-tokens) config))]
       ; For now, terminate multi-line constructs with ! on its own line
       [(!) config]
       [(shutdown)  (parse-interface-details name input (send config set-shutdown name #t))]
       [(access-list crypto end hostname interface ip route-map router)
-       (warning-unsupported/ending-block (line-number input) (first line-tokens))
+       (warning-unsupported/ending-block (line-number input) (first line-tokens) '(ip crypto switchport ! shutdown ospf))
        (parse-IOS-details-for-line input config line-tokens)]
       [else (warning-unsupported (line-number input) (first line-tokens) '(ip crypto))
             (parse-interface-details name input config)])))
@@ -1282,7 +1283,7 @@
       (send config set-switchport-vlans name (csl->list (first line-tokens)))]))     
 
 ;; num symbol (listof any) IOS-config% -> IOS-config%
-(define (parse-interface-ip-ospf line name line-tokens config)  
+(define (parse-interface-ip-ospf line name line-tokens config)    
    (case (first line-tokens)
      [(cost) (send config set-ospf-cost name (second line-tokens))]
      [(priority) (send config set-ospf-priority name (second line-tokens))]
@@ -1295,8 +1296,7 @@
     [(access-group) (parse-interface-ACL name (rest line-tokens) config)]
     [(address) (parse-interface-address name (rest line-tokens) config)]
     [(nat) (parse-interface-NAT name (rest line-tokens) config)]
-    [(policy) (parse-interface-policy line name (rest line-tokens) config)]
-    [(ospf) (parse-interface-ip-ospf line name (rest line-tokens) config)]
+    [(policy) (parse-interface-policy line name (rest line-tokens) config)]    
     [else (warning-unsupported line (first line-tokens) '(access-group address nat policy))
                       config]))
 
@@ -1390,7 +1390,7 @@
       ; For now, terminate multiline construct with !
       [(!) config]
       [(access-list crypto end hostname interface ip route-map router)
-       (warning-unsupported/ending-block (line-number input) (first line-tokens))
+       (warning-unsupported/ending-block (line-number input) (first line-tokens) '(match set !))
        (parse-IOS-details-for-line input config line-tokens)]
       [else (warning-unsupported (line-number input) (first line-tokens) '(match set))
             (parse-route-map-details name sequence-num input config)])))
@@ -1506,7 +1506,7 @@
       ; for now...
       [(!) config]
       [(access-list crypto end hostname interface ip route-map router)
-       (warning-unsupported/ending-block (line-number input) (first line-tokens))
+       (warning-unsupported/ending-block (line-number input) (first line-tokens) '(network neighbor !))
        (parse-IOS-details-for-line input config line-tokens)]
       [else (warning-unsupported (line-number input) (first line-tokens) '(network neighbor))
             (parse-BGP as-num input config)])))
@@ -1583,7 +1583,7 @@
       ; for now...
       [(!) config]
             [(access-list crypto end hostname interface ip route-map router)
-       (warning-unsupported/ending-block (line-number input) (first line-tokens))
+       (warning-unsupported/ending-block (line-number input) (first line-tokens) '(match set !))
        (parse-IOS-details-for-line input config line-tokens)]
       [else 
        (warning-unsupported (line-number input) (first line-tokens) '(match set))

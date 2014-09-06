@@ -32,6 +32,7 @@ interface GigabitEthernet1/2
 ! can either be "interface vlan id or interface Vlanid"
 interface vlan 2
  ip address 10.1.102.1 255.255.255.0
+! parser requires a comment between interfaces
 interface Vlan3
  ip address 10.1.103.1 255.255.255.0
 

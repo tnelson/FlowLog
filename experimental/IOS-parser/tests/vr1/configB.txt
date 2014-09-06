@@ -28,6 +28,7 @@ interface GigabitEthernet2/2
 ! A = .1, B = .2
 interface Vlan2
  ip address 10.1.102.2 255.255.255.0
+! parser requires a comment between interfaces
 interface Vlan3
  ip address 10.1.103.2 255.255.255.0
 
