@@ -22,6 +22,11 @@ TABLE ospf_costs(switchid, portid, int);
 //
 TABLE router_portmap(portid, portid, portid);
 
+// Static routes declared in configuration
+// Will be joined with subnets to find port for next hop in 4th column
+// and unioned with OSPF results for external routing
+TABLE static_routes_nh(switchid, ipaddr, int, ipaddr);
+
 /*******************************************************************************
  *
  * Startup values

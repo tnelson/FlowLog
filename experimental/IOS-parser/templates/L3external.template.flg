@@ -37,28 +37,40 @@ REMOTE TABLE ospfRoutes(switchid, ipaddr, int, portid)
 // packets destined to outside whose source does NOT need NATing
 // (NAT is handled by L3router.flg, even for non-local traffic)
 
+// POLICY ROUTING
 ON ip_packet(pkt):
   DO forward(new) WHERE
-
-    // generic nexthop IP selection
-    // routes(addr, mask, nexthop)
-    // and pkt.nwDst IN addr/mask
-
-    // templated nexthop IP selection
-    @nexthop-fragment
-    AND
     // not in a local subnet for this router
     NOT (@dst-local-subnet)
+    // don't route packets which need NAT'ing (must send them to NAT first: see L3router)
+    and NOT @needs-nat-disj
 
+    // next-hop obtained from policy routing
+    @policyroute-route
     and subnets(nexthop_subnet, nexthop_mask, ANY, new.dlSrc, pkt.locSw, new.locPt)
     and nexthop IN nexthop_subnet/nexthop_mask
-    and cached(nexthop, new.dlDst) // MAC addr of nexthop IP
+    and cached(nexthop, new.dlDst); // MAC addr of nexthop IP
 
-    // don't route packets which need NAT'ing
+// STATIC OR OSPF ROUTING
+// (no support for default-policy routing)
+ON ip_packet(pkt):
+  DO forward(new) WHERE
+    // not in a local subnet for this router
+    NOT (@dst-local-subnet)
+    // don't route packets which need NAT'ing (must send them to NAT first: see L3router)
     and NOT @needs-nat-disj
-    //and needs_nat(needs_nat_subnet, needs_nat_mask)
-    //and NOT (pkt.nwSrc IN needs_nat_subnet/needs_nat_mask)
-    ;
+
+    routes(p.locSw, pre, mask, new.locPt) AND
+    p.nwDst IN pre/mask AND
+    // special predicate with special compilation "routes" is hard-coded, do not change!
+    NOT hasLongerPrefixMatch(p.locSw, p.nwDst, pre, mask);
+
+    // no policy route available
+    and @policyroute-pass
+
+    and subnets(ANY, ANY, ANY, new.dlSrc, pkt.locSw, new.locPt)
+    and cached(nexthop, new.dlDst); // MAC addr of nexthop IP
+
 
 /*******************************************************************************
  *
@@ -68,6 +80,8 @@ ON ip_packet(pkt):
  * TN note: the _inbound_ path for TR switches is handled in L3router.flg
  *
  ******************************************************************************/
+
+// TODO(tn) what happens to this block?
 
 ON ip_packet(pkt):
   DO forward(new) WHERE

@@ -141,7 +141,8 @@ namespace-for-template)
                 (or ,@staticroute-route))
            (and (or ,@policyroute-pass)
                 (or ,@staticroute-pass)
-                (or ,@defaultpolicyroute-route))))
+                (or ,@defaultpolicyroute-route))))    
+    
     ;(printf "next hop fragment: ~v~n" next-hop-fragment) ; debug
     ; Caveat: these will use flat router-names 
     ; Caveat: these will use flat interface names
@@ -225,7 +226,7 @@ namespace-for-template)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
          
          (printf "if name=~v; ridx=~v; rnum=~v; ifindex=~v; rname=~v; cost=~v mode=~v vlans=~v ppt=~v rpt=~v~n"
-                 name ridx rnum ifindex rname ospf-cost switchport-mode switchport-vlans physical-ptnum routing-ptnum ospf-cost) ; DEBUG
+                 name ridx rnum ifindex rname ospf-cost switchport-mode switchport-vlans physical-ptnum routing-ptnum) ; DEBUG
       
          (define switchport-mode-inserts (val->spmode vlan-dpid physical-ptnum switchport-mode))
          (define switchport-vlan-inserts (vals->vlans vlan-dpid physical-ptnum switchport-vlans))                          
@@ -514,6 +515,10 @@ namespace-for-template)
     (dict-set! router-vars "nexthop-fragment-for-tr" (string-replace (sexpr-to-flowlog next-hop-fragment #f)
                                                                      "pkt.locSw" "router"))
     
+    ; For embedding policy in FL rule
+    (dict-set! router-vars "policyroute-route" (sexpr-to-flowlog policyroute-route #f))
+    (dict-set! router-vars "policyroute-pass" (sexpr-to-flowlog policyroute-pass #f))
+    
     (dict-set! router-vars "needs-nat-disj" (build-per-router-fmla-from-hash nn-for-router))         
     (dict-set! router-vars "dst-local-subnet" (build-per-router-fmla-from-hash dst-local-subnet-for-router))
 
@@ -571,6 +576,8 @@ namespace-for-template)
     (printf "~nneeds-nat-disj: ~a~n" (dict-ref router-vars "needs-nat-disj"))
     (printf "~nnext-hop-fragment: ~a~n" (dict-ref router-vars "nexthop-fragment"))
     (printf "~nnext-hop-fragment-for-tr: ~a~n" (dict-ref router-vars "nexthop-fragment-for-tr"))
+    (printf "~npolicyroute-route: ~a~n" (dict-ref router-vars "policyroute-route"))
+    (printf "~npolicyroute-pass: ~a~n" (dict-ref router-vars "policyroute-pass"))
     
     ; For debugging purposes:
     (store inboundacl (make-path root-path "InboundACL.p"))
