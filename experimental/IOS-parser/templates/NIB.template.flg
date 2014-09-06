@@ -21,6 +21,41 @@ OUTGOING start_timer_out(start_timer) THEN
 
 /////////////////////////////////////////////////
 
+// For OSPF external server
+
+EVENT linkstate_up {srcsw: switchid, srcpt: portid, dstsw: switchid, dstpt: portid, cost: int};
+EVENT linkstate_down {srcsw: switchid, srcpt: portid, dstsw: switchid, dstpt: portid};
+EVENT switch_config {swid: switchid, ptid: portid, prefix: ipaddr, mask: int};
+
+OUTGOING send_linkstate_up(linkstate_up) THEN
+  SEND TO 127.0.0.1:9999;
+OUTGOING send_linkstate_down(linkstate_down) THEN
+  SEND TO 127.0.0.1:9999;
+OUTGOING send_switch_config(switch_config) THEN
+  SEND TO 127.0.0.1:9999;
+
+// table "ospfRoutes" declared in L3external will query the server
+
+// send updates
+ON timer_expired(timer) WHERE timer.id = "tNIB":
+  DO send_linkstate_up(lsu) WHERE
+    NOT switchTopology(lsu.srcsw, lsu.srcpt, lsu.dstsw, lsu.dstpt) AND
+    ucSwTopo(lsu.srcsw, lsu.srcpt, lsu.dstsw, lsu.dstpt) AND
+    ospf_costs(lsu.srcsw, lsu.srcpt, lsu.cost);
+
+  DO send_linkstate_down(lsd) WHERE
+    switchTopology(lsd.srcsw, lsd.srcpt, lsd.dstsw, lsd.dstpt) AND
+    NOT ucSwTopo(lsd.srcsw, lsd.srcpt, lsd.dstsw, lsd.dstpt);
+
+// subnets(192.168.1.0, 24, 192.168.1.1, ca:fe:00:01:00:06, 0x100000000001, 2).
+TABLE sentConfig(int);
+ON timer_expired(timer) WHERE timer.id = "tNIB" AND NOT sentConfig(0):
+  INSERT (0) INTO sentConfig;
+  DO send_switch_config(sc) WHERE
+    subnets(sc.prefix, sc.mask, ANY, ANY, sc.swid, sc.ptid);
+
+/////////////////////////////////////////////////
+
 // Give the switches some time to register
 ON startup(empty_event):
   DO start_timer_out(st) WHERE
