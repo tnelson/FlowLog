@@ -89,9 +89,10 @@ ON timer_expired(timer) WHERE timer.id = "tNIB" AND NOT sentConfig(0):
 /////////////////////////////////////////////////
 
 // Give the switches some time to register
+// TODO(tn): this is a very long time! can we hold back until all expected switches register?
 ON startup(empty_event):
   DO start_timer_out(st) WHERE
-    st.seconds = 15 AND st.id = "tNIB";
+    st.seconds = 40 AND st.id = "tNIB";
 
 /////////////////////////////////////////////////
 
@@ -104,7 +105,7 @@ ON timer_expired(timer) WHERE timer.id = "tNIB":
     newpkt.dlSrc = newpkt.locSw AND newpkt.dlDst = newpkt.locPt;
 
   // Restart the timer
-  DO start_timer_out(st) WHERE st.seconds = 10 AND st.id = "tNIB";
+  DO start_timer_out(st) WHERE st.seconds = 20 AND st.id = "tNIB";
 
   // Update the concrete relations, empty the under-construction ones
   DELETE (sw1, pt1, sw2, pt2) FROM ucSwTopo WHERE

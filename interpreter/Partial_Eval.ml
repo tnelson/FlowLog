@@ -1081,9 +1081,7 @@ let respond_to_notification
   ?(full_packet: (int64 * int32 * Packet.packet * int32 option) option = None)
   (notif: event) (from: eventsource): string list Lwt.t =
   try_lwt (* needs to be this, not try, otherwise a failure will freeze the program *)
-      let startt = Unix.gettimeofday() in
       write_log "<<< respond_to_notification... ";
-      counter_inc_all := !counter_inc_all + 1;
 
       (* Yes, we need two layers of mutexes to account for the fact that the codebase uses two KINDS of thread-management:
          NetCore (and the general program) uses Lwt. But Thrift uses standard OCaml Threads.
@@ -1095,6 +1093,11 @@ let respond_to_notification
       Lwt_mutex.with_lock lwt_respond_lock
     (fun () ->
       Mutex.lock xsbmutex;
+
+      (* Timer etc. need to be protected by the mutex. *)
+      let startt = Unix.gettimeofday() in
+      counter_inc_all := !counter_inc_all + 1;
+
 
       (* announce nature of event being processed inside the mutex, for maintaing sanity when reading the log*)
       write_log "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<";
@@ -1110,8 +1113,14 @@ let respond_to_notification
 
   (*printf "~~~~ RESPONDING TO NOTIFICATION ABOVE ~~~~~~~~~~~~~~~~~~~\n%!";*)
 
+  if !global_verbose >= 3 then
+      write_log (sprintf "Time after locking mutexes: %fs\n%!" (Unix.gettimeofday() -. startt));
+
   (* populate the EDB with event *)
     Communication.assert_event_and_subevents p notif from;
+
+    if !global_verbose >= 3 then
+      write_log (sprintf "Time after asserting event: %fs\n%!" (Unix.gettimeofday() -. startt));
 
     (* Expire remote state if needed*)
     expire_remote_state_in_xsb p;
