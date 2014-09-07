@@ -51,7 +51,12 @@ ON timer_expired(timer) WHERE timer.id = "tNIB":
     NOT allTopology(lsu.srcsw, lsu.srcpt, lsu.dstsw, lsu.dstpt) AND
     ucAllTopo(lsu.srcsw, lsu.srcpt, lsu.dstsw, lsu.dstpt) AND
     router_vlan(rtrid, lsu.srcsw) AND
-    ospf_costs(rtrid, lsu.srcpt, lsu.cost);
+    // connect to the router id and the routing port number (p2r isn't enough here)
+    // lsu.srcpt = physical port on vlan subswitch.
+    // this gets the max physical port plus the right id: p2r(lsu.srcsw, lsu.srcpt, x)
+    // TODO(tn)
+
+    ospf_costs(rtrid, ???, lsu.cost);
 
   DO send_linkstate_down(lsd) WHERE
     allTopology(lsd.srcsw, lsd.srcpt, lsd.dstsw, lsd.dstpt) AND
