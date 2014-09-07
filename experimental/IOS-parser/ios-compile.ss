@@ -190,7 +190,7 @@ namespace-for-template)
     ;;;;;;;;;;;;;;;;;;;
     ; Need to assign an ID to the router and an ID to the interface
     ; (we are in the scope of compile-configurations)
-    (define (ifacedef->tuples arouter interface-defns nat-dpid rname rnum ifindex i ridx acl-dpid vlan-dpid)
+    (define (ifacedef->tuples arouter interface-defns nat-dpid rname rnum ifindex i ridx acl-dpid vlan-dpid num-physical-ports)
       (define name (ifacedef-name i))
       (define primaddr (ifacedef-prim-addr i))
       (match-define (list primnwa primnwm) (ifacedef-prim-netw i))      
@@ -227,8 +227,8 @@ namespace-for-template)
                                      [else "0"]))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
          
-         (printf "if name=~v; ridx=~v; rnum=~v; ifindex=~v; rname=~v; cost=~v mode=~v vlans=~v ppt=~v rpt=~v~n"
-                 name ridx rnum ifindex rname ospf-cost switchport-mode switchport-vlans physical-ptnum routing-ptnum) ; DEBUG
+         (printf "if name=~v; ridx=~v; rnum=~v; ifindex=~v; rname=~v; cost=~v mode=~v vlans=~v ppt=~v rpt=~v (total physical ports=~v)~n"
+                 name ridx rnum ifindex rname ospf-cost switchport-mode switchport-vlans physical-ptnum routing-ptnum num-physical-ports) ; DEBUG
       
          (define switchport-mode-inserts (val->spmode vlan-dpid physical-ptnum switchport-mode))
          (define switchport-vlan-inserts (vals->vlans vlan-dpid physical-ptnum switchport-vlans))                          
@@ -239,8 +239,7 @@ namespace-for-template)
          ; TODO: if secondary, need to increment tr_dpid
          (define prim (vals->subnet primaddr primnwa primnwm rnum macnum routing-ptnum ridx))
          ;(define sec (if secaddr (vals->subnet secaddr secnwa secnwm rnum macnum ptnum ridx) #f))
-         (define sec "")
-         (define alias (vals->ifalias rname name routing-ptnum)) 
+         (define sec "")         
 
          ; local subnets (if any)
          (when primnwa
@@ -319,14 +318,17 @@ namespace-for-template)
 
       ; WARNING: routing-ptnum is a separate counter from physical-ptnum, used for producing ACL alias, etc.
       ; Relations used by the VLAN sub-router need to start their routing ports from (#physicals)+1
+                                               ; num-physical-ports
 
-      (define adjusted-routing-ptnum (->string (+ (string->number routing-ptnum) (- (unbox last-physicalpt-used) 1))))
+      ; not safe to just look at the unboxed last physical port used (may not be done with all physicals yet)
+      (define adjusted-routing-ptnum (->string (+ (string->number routing-ptnum) (- num-physical-ports 1))))
       (printf "Processing port. Physical: ~a. Get-phys: ~a. Routing: ~a. Incr routing by # physical: ~a~n" 
               physical-ptnum
               (get-physical-portnums name interface-defns)
               routing-ptnum
               adjusted-routing-ptnum)
       
+      (define alias (vals->ifalias rname name physical-ptnum routing-ptnum adjusted-routing-ptnum)) 
       (define ospf-cost-inserts (val->ospf rnum routing-ptnum ospf-cost))           
       (define static-nexthops-inserts (val->statics rnum routing-ptnum statics))
            
@@ -363,12 +365,14 @@ namespace-for-template)
       (define unfiltered-interface-defns (hash-map interfaces extract-ifs))
       (define interface-defns (filter (lambda (i) i) unfiltered-interface-defns))
       (printf "Processed ~v interfaces; ~v had subnets and will be handled.~n" (length unfiltered-interface-defns) (length interface-defns)) ; DEBUG     
-      
+            
       ; reset per router
       (set-box! last-physicalpt-used 0)
       (set-box! last-routingpt-used 1)
       (set-box! vlan-iname-to-physicalport empty)
 
+      ; used for proper port mapping in vlan/router subswitches
+      (define num-physical-ports (length (filter (lambda (i) (not (is-virtual-interface? (ifacedef-name i)))) interface-defns)))
       
       ;;;;;;;;;;;;;;;;;;;;
       ;; to be moved to helper module
@@ -453,14 +457,14 @@ namespace-for-template)
       (set-router-vlan-dpid! arouter vlan-dpid)      
       
       (define (is-switchport-interface i)           
-        (not (equal? (ifacedef-switchport-mode i)'no)))
-              
+        (not (equal? (ifacedef-switchport-mode i)'no)))                    
+      
       ; Do switchport interfaces first
       (define iftuples (for/list ([ifdef (sort interface-defns (lambda (i1 i2)
                                                                  (or (is-switchport-interface i1)
                                                                      (not (is-switchport-interface i2)))))] 
                                   [ifindex (build-list (length interface-defns) values)])                         
-                          (ifacedef->tuples arouter interface-defns nat-dpid hostname hostnum (+ ifindex 1) ifdef (+ hostidx 1) acl-dpid vlan-dpid)))
+                          (ifacedef->tuples arouter interface-defns nat-dpid hostname hostnum (+ ifindex 1) ifdef (+ hostidx 1) acl-dpid vlan-dpid num-physical-ports)))
       (define routertuple (vals->routertuples hostname hostnum)) 
       (define natinfo (vals->nat (router-nat-dpid arouter) hostnum))      
       (define trinfo (vals->tr (router-tr-dpid arouter) hostnum))
@@ -474,7 +478,7 @@ namespace-for-template)
       (set-routers-routers! routers-msg (cons arouter (routers-routers routers-msg)))
 
       ; report to mininet how many physical ports this router has
-      (set-router-num-physical! arouter (unbox last-physicalpt-used))
+      (set-router-num-physical! arouter num-physical-ports)
       
       ; Return the gathered tuples. protobufs changes are side-effects
       (string-append* (flatten (list (format "~n// For router ~a (id = ~a)~n" hostname hostnum)   

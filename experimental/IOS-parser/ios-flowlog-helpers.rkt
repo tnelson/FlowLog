@@ -195,11 +195,11 @@
          (string-append "INSERT (" (string-join (list nwa nwm addr gwmac rnum ptnum) ", ") ") INTO subnets;\n"
                         "INSERT (" (string-join (list addr gwmac) ", ") ") INTO cached; // auto\n")]))
 
-(define (vals->ifalias rname iname inum)
+(define (vals->ifalias rname iname pnum rnum adjrnum)
   ;(string-append "INSERT (" (string-join (list (string-append "\"" rname "\"") 
   ;                                             (string-append "\"" iname "\"") 
   ;                                             inum) ", ") ") INTO portAlias;\n")
-  (format "// Interface ~v~n" iname))
+  (format "// Interface ~v; pnum=~v; rnum=~v; adjusted rnum=~v~n" iname pnum rnum adjrnum))
 
 (define (vals->routertuples rname rnum)
   (string-append "INSERT (" (string-join (list (string-append "\"" rname "\"")                                                    
