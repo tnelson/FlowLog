@@ -45,16 +45,16 @@ OUTGOING send_static_route(static_route) THEN
 
 // table "routes" declared in L3external will query the server
 
-// send updates
+// send updates to linkstate (use "all" topology table to include links via subnets)
 ON timer_expired(timer) WHERE timer.id = "tNIB":
   DO send_linkstate_up(lsu) WHERE
-    NOT switchTopology(lsu.srcsw, lsu.srcpt, lsu.dstsw, lsu.dstpt) AND
-    ucSwTopo(lsu.srcsw, lsu.srcpt, lsu.dstsw, lsu.dstpt) AND
+    NOT allTopology(lsu.srcsw, lsu.srcpt, lsu.dstsw, lsu.dstpt) AND
+    ucAllTopo(lsu.srcsw, lsu.srcpt, lsu.dstsw, lsu.dstpt) AND
     ospf_costs(lsu.srcsw, lsu.srcpt, lsu.cost);
 
   DO send_linkstate_down(lsd) WHERE
-    switchTopology(lsd.srcsw, lsd.srcpt, lsd.dstsw, lsd.dstpt) AND
-    NOT ucSwTopo(lsd.srcsw, lsd.srcpt, lsd.dstsw, lsd.dstpt);
+    allTopology(lsd.srcsw, lsd.srcpt, lsd.dstsw, lsd.dstpt) AND
+    NOT ucAllTopo(lsd.srcsw, lsd.srcpt, lsd.dstsw, lsd.dstpt);
 
 // subnets(192.168.1.0, 24, 192.168.1.1, ca:fe:00:01:00:06, 0x100000000001, 2).
 TABLE sentConfig(int);
