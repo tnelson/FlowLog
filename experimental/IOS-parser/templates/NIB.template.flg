@@ -50,7 +50,8 @@ ON timer_expired(timer) WHERE timer.id = "tNIB":
   DO send_linkstate_up(lsu) WHERE
     NOT allTopology(lsu.srcsw, lsu.srcpt, lsu.dstsw, lsu.dstpt) AND
     ucAllTopo(lsu.srcsw, lsu.srcpt, lsu.dstsw, lsu.dstpt) AND
-    ospf_costs(lsu.srcsw, lsu.srcpt, lsu.cost);
+    router_vlan(rtrid, lsu.srcsw) AND
+    ospf_costs(rtrid, lsu.srcpt, lsu.cost);
 
   DO send_linkstate_down(lsd) WHERE
     allTopology(lsd.srcsw, lsd.srcpt, lsd.dstsw, lsd.dstpt) AND
@@ -113,14 +114,16 @@ ON timer_expired(timer) WHERE timer.id = "tNIB":
 // All other sub-switches are in switches_without_maclearning (which means normal MACL, not our modified version for VLANs)
 
 // flood forward (routers will not pass them along, so we avoid loops)
-ON packet(p) WHERE p.dlTyp = 0x1001 AND NOT switches_without_mac_learning(p.locSw):
+ON packet(p) WHERE p.dlTyp = 0x1001 AND
+                   NOT switches_without_mac_learning(p.locSw):
   DO forward(new) WHERE new.locPt != p.locPt;
 
 /////////////////////////////////////////////////
 
-// Probe packets, regardless of whether arrival is a switchport
+// Probe packets incoming on a router, regardless of whether arrival is a switchport
 
-ON packet(pkt) WHERE pkt.dlTyp = 0x1001:
+ON packet(pkt) WHERE pkt.dlTyp = 0x1001 AND
+                     router_vlan(ANY, pkt.locSw):
   INSERT (pkt.dlSrc, pkt.dlDst, pkt.locSw, pkt.locPt) INTO ucAllTopo;
 
 /////////////////////////////////////////////////
