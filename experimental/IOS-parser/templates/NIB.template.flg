@@ -76,11 +76,10 @@ ON startup(empty_event):
 /////////////////////////////////////////////////
 
 ON timer_expired(timer) WHERE timer.id = "tNIB":
-  // Send a fresh probe packet (out of layer-2 ports only):
+  // Send a fresh probe packet from all physical ports
   DO emit(newpkt) WHERE
-    switch_has_port(newpkt.locSw, newpkt.locPt) AND
     router_vlan(ANY, newpkt.locSw) AND
-    sp_modes(newpkt.locSw, newpkt.locPt, ANY) AND
+    p2r(newpkt.locSw, newpkt.locPt, ANY) AND
     newpkt.dlTyp = 0x1001 AND
     newpkt.dlSrc = newpkt.locSw AND newpkt.dlDst = newpkt.locPt;
 
@@ -111,14 +110,11 @@ ON timer_expired(timer) WHERE timer.id = "tNIB":
 
 // Allow probe packets through purely L2 switches (root and subnet)
 // This will let us detect links that pass through subnets
+// All other sub-switches are in switches_without_maclearning (which means normal MACL, not our modified version for VLANs)
 
-// TODO(tn)
-
-/ ************* ROUTING WILL NOT WORK WITHOUT THIS, NEED TO ADD IT! ***************
-
-
-
-
+// flood forward (routers will not pass them along, so we avoid loops)
+ON packet(p) WHERE p.dlTyp = 0x1001 AND NOT switches_without_mac_learning(p.locSw):
+  DO forward(new) WHERE new.locPt != p.locPt;
 
 /////////////////////////////////////////////////
 

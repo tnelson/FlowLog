@@ -46,7 +46,7 @@ ON ip_packet(pkt):
     and NOT @needs-nat-disj
 
     // next-hop obtained from policy routing
-    @policyroute-route
+    and @policyroute-route
     and subnets(nexthop_subnet, nexthop_mask, ANY, new.dlSrc, pkt.locSw, new.locPt)
     and nexthop IN nexthop_subnet/nexthop_mask
     and cached(nexthop, new.dlDst); // MAC addr of nexthop IP
@@ -60,10 +60,10 @@ ON ip_packet(pkt):
     // don't route packets which need NAT'ing (must send them to NAT first: see L3router)
     and NOT @needs-nat-disj
 
-    routes(p.locSw, pre, mask, new.locPt) AND
-    p.nwDst IN pre/mask AND
+    and routes(pkt.locSw, pre, mask, new.locPt) AND
+    pkt.nwDst IN pre/mask AND
     // special predicate with special compilation "routes" is hard-coded, do not change!
-    NOT hasLongerPrefixMatch(p.locSw, p.nwDst, pre, mask);
+    NOT hasLongerPrefixMatch(pkt.locSw, pkt.nwDst, pre, mask)
 
     // no policy route available
     and @policyroute-pass
@@ -86,9 +86,6 @@ ON ip_packet(pkt):
 
 ON ip_packet(pkt):
   DO forward(new) WHERE
-
-    // templated nexthop IP selection
-    //@nexthop-fragment-for-tr
 
     // not in a local subnet for this router
     // (prevent overlap with L3router.flg)
