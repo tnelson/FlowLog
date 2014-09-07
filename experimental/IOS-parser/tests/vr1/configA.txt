@@ -31,17 +31,24 @@ interface GigabitEthernet1/2
 !
 ! can either be "interface vlan id or interface Vlanid"
 interface vlan 2
- ip address 10.1.102.1 255.255.255.0
+ ip address 10.5.102.1 255.255.255.0
 ! parser requires a comment between interfaces
 interface Vlan3
- ip address 10.1.103.1 255.255.255.0
+ ip address 10.5.103.1 255.255.255.0
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 ! a physical L3 interface; no vlan
+// To C
 interface GigabitEthernet1/3
   ip address 192.168.1.1 255.255.255.0
   ospf cost 20
+
+// To D
+interface GigabitEthernet1/4
+  ip address 192.168.2.1 255.255.255.0
+  ospf cost 5
+
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 

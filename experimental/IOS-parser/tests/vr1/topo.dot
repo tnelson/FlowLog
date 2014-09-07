@@ -1,0 +1,107 @@
+graph vr1 {
+  subgraph cluster_routers {
+    A;
+    B;
+    C;
+    D;
+    int;
+    ext;
+    // root switches live in the top cluster for pretty-display
+    sr1;
+    sr2;
+    sr3;
+    sr4;
+    sr5;
+    sr6;
+  }
+
+  subgraph cluster_vlan2 {
+  	color=blue;
+  	h1;
+  	h5;
+  	label = "vlan 2\n(10.5.102.0/24)"
+  };
+
+  subgraph cluster_vlan3 {
+  	color=blue;
+  	h2;
+  	h6;
+  	label = "vlan 3\n(10.5.103.0/24)"
+  };
+
+  // A to C
+  subgraph cluster_subnet1 {
+  	color=blue;
+	h3 -- s1
+    h4 -- s1
+    s1 -- sr1
+  	label = "A to C\n(192.168.1.0/24)" // cost 20
+  };
+  sr1 -- A
+  sr1 -- C
+
+  // A to D
+  subgraph cluster_subnet2 {
+  	color=blue;
+	h7 -- s2
+    h8 -- s2
+    s2 -- sr2
+  	label = "A to D\n(192.168.2.0/24)"
+  };
+  sr2 -- A
+  sr2 -- D
+
+  // C to D
+  subgraph cluster_subnet3 {
+  	color=blue;
+	h9 -- s3
+    h10 -- s3
+    s3 -- sr3
+  	label = "C to D\n(192.168.3.0/24)"
+  };
+  sr3 -- C
+  sr3 -- D
+
+  A -- B [label = "tr: 2,3"];
+  h1 -- B [label = "acc: 2"];
+  h2 -- B [label = "acc: 3"];
+  h5 -- A [label = "acc: 2"];
+  h6 -- A [label = "acc: 3"];
+
+ // A -- C [label ="cost: 20"];
+ // A -- D [label ="cost: 5"];
+ // C -- D [label ="cost: 10"];
+
+  // C to ext
+  subgraph cluster_subnet4 {
+  	color=blue;
+	h11 -- s4
+    h12 -- s4
+    s4 -- sr4
+  	label = "C to ext\n(10.200.0.0/16)"
+  };
+  C -- sr4
+  ext -- sr4
+
+  // int to ext
+  subgraph cluster_subnet5 {
+  	color=blue;
+	h13 -- s5
+    h14 -- s5
+    s5 -- sr5
+  	label = "int to ext\n(10.100.0.0/16)"
+  };
+  ext -- sr5
+  int -- sr5
+
+  // int corporate LAN
+  subgraph cluster_subnet6 {
+  	color=blue;
+	h15 -- s6
+    h16 -- s6
+    s6 -- sr6
+  	label = "int lan\n(10.1.0.0/16)"
+  };
+  int -- sr6
+
+}
