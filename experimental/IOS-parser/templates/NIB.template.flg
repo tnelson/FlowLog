@@ -108,22 +108,19 @@ ON timer_expired(timer) WHERE timer.id = "tNIB":
   DO start_timer_out(st) WHERE st.seconds = 20 AND st.id = "tNIB";
 
   // Update the concrete relations, empty the under-construction ones
-  DELETE (sw1, pt1, sw2, pt2) FROM ucSwTopo WHERE
-    ucSwTopo(sw1, pt1, sw2, pt2); // <-- to constrain
-  DELETE (sw1, pt1, sw2, pt2) FROM switchTopology WHERE
-    switchTopology(sw1, pt1, sw2, pt2); // <-- to constrain
+  DELETE (sw1, sw2) FROM ucTC;
+  DELETE (sw1, pt1, sw2, pt2) FROM ucSwTopo;
+  DELETE (sw1, pt1, sw2, pt2) FROM switchTopology;
   INSERT (sw1, pt1, sw2, pt2) INTO switchTopology WHERE
     ucSwTopo(sw1, pt1, sw2, pt2);
-  DELETE (sw1, sw2) FROM ucTC WHERE
-    ucTC(sw1, sw2);
-  DELETE (sw, pt) FROM ucTree WHERE
-    ucTree(sw, pt);
-  DELETE (sw, pt) FROM spanningTree WHERE
-    spanningTree(sw, pt);
+
+  DELETE (sw, pt) FROM ucTree;
+  DELETE (sw, pt) FROM spanningTree;
   INSERT (sw, pt) INTO spanningTree WHERE
     ucTree(sw, pt);
 
   DELETE (ANY,ANY,ANY,ANY) FROM ucAllTopo;
+  DELETE (ANY,ANY,ANY,ANY) FROM allTopology;
   INSERT (sw1, pt1, sw2, pt2) INTO allTopology WHERE
     ucAllTopo(sw1, pt1, sw2, pt2);
 
