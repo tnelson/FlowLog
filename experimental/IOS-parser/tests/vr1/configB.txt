@@ -25,11 +25,11 @@ interface GigabitEthernet2/2
  switchport mode access
 
 ! virtual interfaces for the two vlans (allow routing)
-! A = .1, B = .2
+! gateways: A = .1, B = .2
 interface Vlan2
- ip address 10.1.102.2 255.255.255.0
+ ip address 10.5.102.2 255.255.255.0
 ! parser requires a comment between interfaces
 interface Vlan3
- ip address 10.1.103.2 255.255.255.0
+ ip address 10.5.103.2 255.255.255.0
 
 end

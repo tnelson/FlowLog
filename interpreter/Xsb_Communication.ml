@@ -377,10 +377,23 @@ module Communication = struct
   (**************)
 
   let pretty_print_fact (tdecl: table_def) (f: formula): string =
+    (*printf "pretty print fact: %s %s\n%!" (string_of_formula f) (string_of_list "," identity tdecl.tablearity);*)
     match f with
       | FAtom(_, rname, rargs) when (length rargs) = (length tdecl.tablearity) ->
-        sprintf "%s(%s)." rname (String.concat ", " (map2 pretty_print_constant tdecl.tablearity rargs))
+        sprintf "%s(%s)." rname (String.concat ", " (map2 pretty_print_term tdecl.tablearity rargs))
       | _ -> failwith ("pretty_print_fact: "^(string_of_formula f));;
+
+  let pretty_print_formula (p: flowlog_program) (f: formula): string =
+    (*printf "pretty print formula: %s\n%!" (string_of_formula f);*)
+    try
+   	(match f with
+   	  | FAtom(_, rname, rargs) when is_table p rname ->
+     	let tbl = get_table p rname in
+     	  let result = pretty_print_fact tbl f in
+     	    printf "result: %s\n%!" result;
+     	    result
+      | _ -> failwith ("pretty_print_formula: "^(string_of_formula f)))
+    with | _ -> failwith "pretty_print_formula failed";;
 
   let get_and_print_xsb_state (p: flowlog_program): unit =
     let currstate = get_full_state_for_program p in

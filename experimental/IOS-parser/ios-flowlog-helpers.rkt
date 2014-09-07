@@ -242,10 +242,11 @@
 (define (val->p2r vlanswnum pptlist rpt adjusted-rpt)
   (cond [(equal? rpt "0") empty]
         [else 
-         (map (lambda (ppt) (string-append "INSERT (0x" (->string vlanswnum) "," (->string ppt) "," adjusted-rpt ") INTO p2r;\n")) pptlist)]))
+         (map (lambda (ppt) (string-append "INSERT (0x" (->string vlanswnum) "," (->string ppt) "," adjusted-rpt ") INTO p2r;\n"
+                                           "INSERT (0x" (->string vlanswnum) "," (->string adjusted-rpt) "," rpt ") INTO vr2rr;\n")) pptlist)]))
 
 
-(define (val->statics rnum rpt statics)         
+(define (val->statics rnum statics)         
   (string-append* (map (lambda (s) 
                          (define da (get-field dest-addr-in s))
                          (define nh (get-field nexthop s))

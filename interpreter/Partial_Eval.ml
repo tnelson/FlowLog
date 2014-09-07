@@ -887,9 +887,11 @@ let program_to_netcore (p: flowlog_program) (callback: get_packet_handler): (pol
 
     result;;
 
-let forward_packet (p: flowlog_program) (ev: event): unit =
-  printf "forwarding: %s\n%!" (string_of_event p ev);
-  write_log (sprintf ">>> forwarding from XSB-constructed event: %s\n%!" (string_of_event p ev));
+let forward_packet (p: flowlog_program) (ev: event) (full_packet: int64 * int32 * Packet.packet * int32 option): unit =
+  let incsw, incpt, incpkt, incbuffid = full_packet in
+
+  printf "forwarding: %s from switch %Ld\n%!" (string_of_event p ev) incsw;
+  write_log (sprintf ">>> forwarding from XSB-constructed event: %s from switch %Ld\n%!" (string_of_event p ev) incsw);
   (* TODO use allpackets here. compilation uses it, but XSB returns every port individually. *)
   let base_action = SwitchAction({id with outPort = Physical(nwport_of_string (get_field ev "locpt"))}) in
     (* add modifications to fields as prescribed in the event *)
@@ -996,7 +998,8 @@ let execute_output (p: flowlog_program)
      (match from,full_packet with
         | IncCP,Some(fp) -> Lwt.return (forward_packet_from_cp p ev fp)
         | IncCP,_ -> failwith "forward_packet_from_cp: None given as last packet seen."
-        | _ ->  Lwt.return (forward_packet p ev))
+        | IncDP,Some(fp) ->  Lwt.return (forward_packet p ev fp)
+        | _ -> failwith "forward_packet: None given as last packet seen.")
    | OutEmit(_) -> Lwt.return (emit_packet p ev)
    | OutPrint -> Lwt.return (printf "PRINT RULE FIRED: %s\n%!" (string_of_event p ev))
    | OutLoopback -> failwith "loopback unsupported currently"
@@ -1077,10 +1080,9 @@ let respond_to_notification
   (p: flowlog_program) ?(suppress_new_policy: bool = false)
   ?(full_packet: (int64 * int32 * Packet.packet * int32 option) option = None)
   (notif: event) (from: eventsource): string list Lwt.t =
-  try
+  try_lwt (* needs to be this, not try, otherwise a failure will freeze the program *)
       let startt = Unix.gettimeofday() in
-      write_log "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<";
-      write_log (sprintf "<<< incoming: %s" (string_of_event p notif));
+      write_log "<<< respond_to_notification... ";
       counter_inc_all := !counter_inc_all + 1;
 
       (* Yes, we need two layers of mutexes to account for the fact that the codebase uses two KINDS of thread-management:
@@ -1093,6 +1095,11 @@ let respond_to_notification
       Lwt_mutex.with_lock lwt_respond_lock
     (fun () ->
       Mutex.lock xsbmutex;
+
+      (* announce nature of event being processed inside the mutex, for maintaing sanity when reading the log*)
+      write_log "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<";
+      write_log (sprintf "<<< incoming: %s" (string_of_event p notif));
+
 
       (* TN: Not sure if Lwt_mutex locks work for *all* Lwt threads in the process, or merely all Lwt threads in the OCaml thread.
          If the latter, this double-lock isn't enough to protect us if more than one OC thread splits via Lwt. If A1 locks, B1 and B2
@@ -1128,15 +1135,17 @@ let respond_to_notification
     let to_retract = flatten (map (change_table_how p false) triggered_delete_table_decls) in
     if !global_verbose >= 2 && (length to_assert > 0 || length to_retract > 0) then
     begin
-      printf "  *** WILL ADD: %s\n%!" (String.concat " ; " (map string_of_formula to_assert));
-      printf "  *** WILL DELETE: %s\n%!" (String.concat " ; " (map string_of_formula to_retract));
+      printf "  *** WILL ADD: %s\n%!" (String.concat " ; " (map (Communication.pretty_print_formula p) to_assert));
+      printf "  *** WILL DELETE: %s\n%!" (String.concat " ; " (map (Communication.pretty_print_formula p) to_retract));
     end;
-    write_log (sprintf "  *** WILL ADD: %s\n%!" (String.concat " ; " (map string_of_formula to_assert)));
-    write_log (sprintf "  *** WILL DELETE: %s\n%!" (String.concat " ; " (map string_of_formula to_retract)));
+    write_log (sprintf "  *** WILL ADD: %s\n%!" (String.concat " ; " (map (Communication.pretty_print_formula p) to_assert)));
+    write_log (sprintf "  *** WILL DELETE: %s\n%!" (String.concat " ; " (map (Communication.pretty_print_formula p) to_retract)));
 
     if !global_verbose >= 3 then
+    begin
       write_log (sprintf "Time after calculating to_assert and to_retract: %fs\n%!" (Unix.gettimeofday() -. startt));
-
+      printf "Time after calculating to_assert and to_retract: %fs\n%!" (Unix.gettimeofday() -. startt);
+    end;
 
    (**********************************************************)
    (* Prepare packets/events to be sent. *)

@@ -128,9 +128,7 @@ namespace-for-template)
     (define default-policy-route (policy '(forward route pass) (combine-rules configurations default-policy-routing-rules)))           
     (define defaultpolicyroute-forward (assoc2 'forward default-policy-route))
     (define defaultpolicyroute-route (assoc2 'route default-policy-route))
-    (define defaultpolicyroute-pass (assoc2 'pass default-policy-route))    
-
-    (define statics (combine-rules configurations get-static-routes))    
+    (define defaultpolicyroute-pass (assoc2 'pass default-policy-route))     
     
     ;;;;;;;;;;;;; Get next-hop ;;;;;;;;;;;;;;
     ; IN: p[fields]
@@ -329,8 +327,7 @@ namespace-for-template)
               adjusted-routing-ptnum)
       
       (define alias (vals->ifalias rname name physical-ptnum routing-ptnum adjusted-routing-ptnum)) 
-      (define ospf-cost-inserts (val->ospf rnum routing-ptnum ospf-cost))           
-      (define static-nexthops-inserts (val->statics rnum routing-ptnum statics))
+      (define ospf-cost-inserts (val->ospf rnum routing-ptnum ospf-cost))                 
            
       (define p2r (val->p2r vlan-dpid
                             (cond [(equal? physical-ptnum "0")                                   
@@ -346,7 +343,7 @@ namespace-for-template)
       
       (filter (lambda (x) x) (list "\n" alias p2r prim sec needs-nat acldefn natconfigs
                                    switchport-mode-inserts switchport-vlan-inserts ospf-cost-inserts
-                                   maybe-vlan-interface-inserts static-nexthops-inserts)))
+                                   maybe-vlan-interface-inserts)))
  
     (define total-parsed-ace-count (box 0))      
     (define total-used-ace-count (box 0))
@@ -480,10 +477,15 @@ namespace-for-template)
       ; report to mininet how many physical ports this router has
       (set-router-num-physical! arouter num-physical-ports)
       
+      ; finally, insert the static routes into the table                  
+      (define static-nexthops-inserts (val->statics hostnum (send config get-static-routes)))
+      
       ; Return the gathered tuples. protobufs changes are side-effects
       (string-append* (flatten (list (format "~n// For router ~a (id = ~a)~n" hostname hostnum)   
                                      (format "// ACL = ~a; TR = ~a; NAT = ~a~n" (router-acl-dpid arouter) (router-tr-dpid arouter) (router-nat-dpid arouter))
                                      iftuples
+                                     "\n"
+                                     static-nexthops-inserts
                                      "\n"
                                      vlaninfo
                                      aclinfo

@@ -20,9 +20,16 @@ INCLUDE "@|basename|/Vlans.flg";
      Same number as the router ports, but offset by the number of physical ports
      on the subswitch. (1...n = physical; n+1...n+m = adjusted router)
 
-   The p2r relation holds each vlan's physical<--->adjusted router mapping.
+   So the "router port" should be used in relations like subnet, that operate at the
+   router-subswitch level, but the "adjusted" port should be used to talk about the router's
+   counterparts on the vlan switch.
 
-   TODO: we also need a relation for vlan's physical<----> router mapping.
+   There won't always be a 1-1 relationship between these! For instance, a vlan with 2 physical ports but one
+   subnet will have a single switched virtual interface (a single routing port visible at L3).
+
+   The p2r relation holds each vlan's physical<--->adjusted router mapping.
+   The vr2rr relation holds each vlan's adjusted router <----> router mapping.
+
 */
 
 

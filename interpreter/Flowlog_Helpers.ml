@@ -457,6 +457,11 @@ let input_rel_to_eventname (p: flowlog_program) (rname: string): string =
        match (get_table prgm relname).source with | LocalTable -> false | RemoteTable(_,_,_) -> true
      with | Not_found -> false;;
 
+  let is_table (prgm: flowlog_program) (relname: string): bool =
+    try
+      match (get_table prgm relname).source with | _ -> true
+    with | Not_found -> false;;
+
   let is_incoming_table (prgm: flowlog_program) (relname: string): bool =
     try ignore (get_event prgm (input_rel_to_eventname prgm relname));
         true
@@ -567,10 +572,10 @@ let hex_str_to_int_string (s: string): string = Int64.to_string (Int64.of_string
     (* Account for BB queries sending variable names instead of, say, IP addresses *)
     | _ -> strval;;
 
- let pretty_print_constant (typename: string) (c: term): string =
+ let pretty_print_term (typename: string) (c: term): string =
       pretty_print_value typename
                          (match c with | TConst(s) -> s
-                                       | _ -> failwith ("pretty_print_constant: non constant"));;
+                                       | _ -> string_of_term c);;
 
   (* This function needs to know the program context, because that is where the type of each field is stored.
      Even if we stored values as ints, etc. that might not be enough either, since there is a

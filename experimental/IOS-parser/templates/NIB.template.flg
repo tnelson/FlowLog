@@ -46,21 +46,35 @@ OUTGOING send_static_route(static_route) THEN
 // table "routes" declared in L3external will query the server
 
 // send updates to linkstate (use "all" topology table to include links via subnets)
+// (use router ids, not vlan switch ids, which are what the topo relations store)
 ON timer_expired(timer) WHERE timer.id = "tNIB":
   DO send_linkstate_up(lsu) WHERE
-    NOT allTopology(lsu.srcsw, lsu.srcpt, lsu.dstsw, lsu.dstpt) AND
-    ucAllTopo(lsu.srcsw, lsu.srcpt, lsu.dstsw, lsu.dstpt) AND
-    router_vlan(rtrid, lsu.srcsw) AND
-    // connect to the router id and the routing port number (p2r isn't enough here)
-    // lsu.srcpt = physical port on vlan subswitch.
-    // this gets the max physical port plus the right id: p2r(lsu.srcsw, lsu.srcpt, x)
-    // TODO(tn)
-
-    ospf_costs(rtrid, ???, lsu.cost);
+    ////////////////// new tuple in topology
+    NOT allTopology(vlansrcsw, physrcpt, vlandstsw, phydstpt) AND
+    ucAllTopo(vlansrcsw, physrcpt, vlandstsw, phydstpt) AND
+    ////////////////// get the corresponding router ports (physrcpt --> vlanrouterside --> lsu.srcpt)
+    p2r(vlansrcsw, physrcpt, vlanroutersidesrc) AND
+    vr2rr(vlansrcsw, vlanroutersidesrc, lsu.srcpt) AND
+    p2r(vlandstsw, phydstpt, vlanroutersidedst) AND
+    vr2rr(vlandstsw, vlanroutersidedst, lsu.dstpt) AND
+    ////////////////// get the corresponding router sub-switch ids
+    router_vlan(lsu.srcsw, vlansrcsw) AND
+    router_vlan(lsu.dstsw, vlandstsw) AND
+    ////////////////// get the corresponding cost for that router port
+    ospf_costs(lsu.srcsw, lsu.srcpt, lsu.cost);
 
   DO send_linkstate_down(lsd) WHERE
-    allTopology(lsd.srcsw, lsd.srcpt, lsd.dstsw, lsd.dstpt) AND
-    NOT ucAllTopo(lsd.srcsw, lsd.srcpt, lsd.dstsw, lsd.dstpt);
+    ////////////////// lost a tuple in topology
+    allTopology(vlansrcsw, physrcpt, vlandstsw, phydstpt) AND
+    NOT ucAllTopo(vlansrcsw, physrcpt, vlandstsw, phydstpt) AND
+    ////////////////// get the corresponding router ports (physrcpt --> vlanrouterside --> lsd.srcpt)
+    p2r(vlansrcsw, physrcpt, vlanroutersidesrc) AND
+    vr2rr(vlansrcsw, vlanroutersidesrc, lsd.srcpt) AND
+    p2r(vlandstsw, phydstpt, vlanroutersidedst) AND
+    vr2rr(vlandstsw, vlanroutersidedst, lsd.dstpt) AND
+    ////////////////// get the corresponding router sub-switch ids
+    router_vlan(lsd.srcsw, vlansrcsw) AND
+    router_vlan(lsd.dstsw, vlandstsw);
 
 // subnets(192.168.1.0, 24, 192.168.1.1, ca:fe:00:01:00:06, 0x100000000001, 2).
 TABLE sentConfig(int);
