@@ -1,4 +1,4 @@
-hostname vltC
+hostname vltD
 
 // To A (A uses .1)
 interface GigabitEthernet2/1
