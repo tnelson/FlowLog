@@ -78,6 +78,7 @@ ON ip_packet(pkt):
  * MAC address is already set.
  *
  * TN note: the _inbound_ path for TR switches is handled in L3router.flg
+ * This isn't just passthrough: we need to make sure the packet has been hit by the above rule.
  *
  ******************************************************************************/
 
@@ -86,21 +87,21 @@ ON ip_packet(pkt):
 ON ip_packet(pkt):
   DO forward(new) WHERE
 
-    // generic nexthop IP selection
-    // routes(addr, mask, nexthop)
-    // and pkt.nwDst IN addr/mask
-
     // templated nexthop IP selection
-    @nexthop-fragment-for-tr
+    //@nexthop-fragment-for-tr
 
     // not in a local subnet for this router
     // (prevent overlap with L3router.flg)
-    and NOT (@dst-local-subnet)
+    NOT (@dst-local-subnet)
 
-    and subnets(nexthop_subnet, nexthop_mask, ANY, gwmac, router, rport)
-    and router_tr(router, pkt.locSw)
-    and nexthop IN nexthop_subnet/nexthop_mask
-    and cached(nexthop, pkt.dlDst)
-    and pkt.dlSrc = gwmac
-    and pkt.nwDst != nexthop // this case is handled by internal routing
+// TODO(tn): test this. seems that we may not need all this extra stuff.
+//  not a local subnet, on translator headed toward host; we have the out-port already
+// so get the in-port from the portmap
+
+    //and subnets(nexthop_subnet, nexthop_mask, ANY, gwmac, router, rport)
+    //and router_tr(router, pkt.locSw)
+    //and nexthop IN nexthop_subnet/nexthop_mask
+    //and cached(nexthop, pkt.dlDst)
+    //and pkt.dlSrc = gwmac
+    //and pkt.nwDst != nexthop // this case is handled by internal routing
     and router_portmap(rport, new.locPt, pkt.locPt); // router -> host

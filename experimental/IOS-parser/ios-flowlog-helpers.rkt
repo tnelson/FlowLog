@@ -13,7 +13,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Functions to convert sexprs to Flowlog text
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
+; CALLER MUST FILTER OUT EMPTY-LIST CASE = FALSE
 (define (simplify-sexpr sexpr positive scrubdltyp)
   (match sexpr    
     [`(or ,args ...)
@@ -57,8 +57,10 @@
 
     [`(,(? symbol? predname) ,args ...)
      `(,predname ,@(map (lambda (x) (simplify-sexpr x positive scrubdltyp)) args))] 
-    ; implicit and:
+  
+    ; implicit and ***WITHIN RULE***:
     [(list args ...) (simplify-sexpr `(and ,@args) positive scrubdltyp)]
+    
     [(? string? x) x]
     [(? symbol? x) 
      ; Midway I realized that we could just turn "src-addr-in"
@@ -78,7 +80,8 @@
 (define debug-include-comments #f)
 
 (define (sexpr-to-flowlog sexpr scrubdltyp)
-  (sexpr-to-flowlog-helper (simplify-sexpr sexpr #t scrubdltyp)))
+  (cond [(empty? sexpr) 'false]
+        [else (sexpr-to-flowlog-helper (simplify-sexpr sexpr #t scrubdltyp))]))
 
 (define (reflexive-rule-to-flowlog sexpr)
   (match (simplify-sexpr sexpr #t #t)

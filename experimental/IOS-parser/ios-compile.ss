@@ -143,7 +143,7 @@ namespace-for-template)
                 (or ,@staticroute-route))
            (and (or ,@policyroute-pass)
                 (or ,@staticroute-pass)
-                (or ,@defaultpolicyroute-route))))    
+                (or ,@defaultpolicyroute-route))))            
     
     ;(printf "next hop fragment: ~v~n" next-hop-fragment) ; debug
     ; Caveat: these will use flat router-names 
