@@ -211,10 +211,10 @@
     (super-make-object)
     
     (inherit dotted-octet->number)
-    (inherit number->dashed-octet)       
+    (inherit number->dashed-octet)               
     
     ;; The host address
-    (define host (dotted-octet->number symbolic-address))
+    (define host (dotted-octet->number symbolic-address))        
     
     (define/public (pretty-print) (text))
     
@@ -4017,6 +4017,9 @@
                   'networkswitching)))
             (hash-filter interfaces (λ (name interf)
                                       (get-field secondary-address interf))))))
+    
+    (define/public (get-static-routes)
+      static-routes)    
     
     ;; -> (listof rule%)
     ;;   Returns a list of the static routing rules

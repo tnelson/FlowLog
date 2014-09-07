@@ -32,6 +32,7 @@ OUTGOING start_timer_out(start_timer) THEN
 EVENT linkstate_up {srcsw: switchid, srcpt: portid, dstsw: switchid, dstpt: portid, cost: int};
 EVENT linkstate_down {srcsw: switchid, srcpt: portid, dstsw: switchid, dstpt: portid};
 EVENT switch_config {swid: switchid, ptid: portid, prefix: ipaddr, mask: int};
+EVENT static_route {swid: switchid, outport: portid, prefix: ipaddr, mask: int};
 
 OUTGOING send_linkstate_up(linkstate_up) THEN
   SEND TO 127.0.0.1:9999;
@@ -39,8 +40,10 @@ OUTGOING send_linkstate_down(linkstate_down) THEN
   SEND TO 127.0.0.1:9999;
 OUTGOING send_switch_config(switch_config) THEN
   SEND TO 127.0.0.1:9999;
+OUTGOING send_static_route(static_route) THEN
+  SEND TO 127.0.0.1:9999;
 
-// table "ospfRoutes" declared in L3external will query the server
+// table "routes" declared in L3external will query the server
 
 // send updates
 ON timer_expired(timer) WHERE timer.id = "tNIB":
@@ -59,6 +62,9 @@ ON timer_expired(timer) WHERE timer.id = "tNIB" AND NOT sentConfig(0):
   INSERT (0) INTO sentConfig;
   DO send_switch_config(sc) WHERE
     subnets(sc.prefix, sc.mask, ANY, ANY, sc.swid, sc.ptid);
+  DO send_static_route(sr) WHERE
+    static_nexthops(sr.swid, sr.prefix, sr.mask, nexthop) AND
+    subnets(ANY, ANY, nexthop, ANY, sr.swid, sr.outport);
 
 /////////////////////////////////////////////////
 

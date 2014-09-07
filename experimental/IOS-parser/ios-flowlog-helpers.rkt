@@ -242,6 +242,13 @@
          (map (lambda (ppt) (string-append "INSERT (0x" (->string vlanswnum) "," (->string ppt) "," adjusted-rpt ") INTO p2r;\n")) pptlist)]))
 
 
+(define (val->statics rnum rpt statics)         
+  (string-append* (map (lambda (s) 
+                         (define da (get-field dest-addr-in s))
+                         (define nh (get-field nexthop s))
+                         (string-append "INSERT (" rnum ", " (send da text-address)  ", " (send da text-mask) ", " (send nh text-address)  ") INTO static_nexthops;\n" )) statics)))
+      
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Switched Virtual Interfaces
 ; "vlan" interfaces used by vlans to cross L3 boundries

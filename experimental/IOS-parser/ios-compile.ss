@@ -130,6 +130,8 @@ namespace-for-template)
     (define defaultpolicyroute-route (assoc2 'route default-policy-route))
     (define defaultpolicyroute-pass (assoc2 'pass default-policy-route))    
 
+    (define statics (combine-rules configurations get-static-routes))    
+    
     ;;;;;;;;;;;;; Get next-hop ;;;;;;;;;;;;;;
     ; IN: p[fields]
     ; OUT: next-hop [existential variable]
@@ -325,8 +327,9 @@ namespace-for-template)
               routing-ptnum
               adjusted-routing-ptnum)
       
-      (define ospf-cost-inserts (val->ospf rnum routing-ptnum ospf-cost))              
-      
+      (define ospf-cost-inserts (val->ospf rnum routing-ptnum ospf-cost))           
+      (define static-nexthops-inserts (val->statics rnum routing-ptnum statics))
+           
       (define p2r (val->p2r vlan-dpid
                             (cond [(equal? physical-ptnum "0")                                   
                                    (get-physical-portnums name interface-defns)]
@@ -338,7 +341,10 @@ namespace-for-template)
       ; Finally, return the result tuples (protobuf changes are side-effects)
       ; Keep the tuples that are non-#f         
       
-      (filter (lambda (x) x) (list "\n" alias p2r prim sec needs-nat acldefn natconfigs switchport-mode-inserts switchport-vlan-inserts ospf-cost-inserts maybe-vlan-interface-inserts)))
+      
+      (filter (lambda (x) x) (list "\n" alias p2r prim sec needs-nat acldefn natconfigs
+                                   switchport-mode-inserts switchport-vlan-inserts ospf-cost-inserts
+                                   maybe-vlan-interface-inserts static-nexthops-inserts)))
  
     (define total-parsed-ace-count (box 0))      
     (define total-used-ace-count (box 0))
