@@ -4,6 +4,29 @@ INCLUDE "@|basename|/Mac_Learning.inc.flg";
 INCLUDE "@|basename|/NIB.flg";
 INCLUDE "@|basename|/Vlans.flg";
 
+/* Explanation of port number types:
+
+   Because Exodus splits a router into multiple sub-switches with different notions of "port",
+   different namespaces can get confusing.
+
+   PHYSICAL PORTS: on the "host" side of the vlan sub-switch.
+     These include switchport interfaces and normal interfaces that aren't virtual
+
+   ROUTER PORTS: on the "host" side of the router sub-switch
+     These include all interfaces visible from L3, including virtuals.
+     The indices start with 2, because the
+
+   ADJUSTED ROUTER PORTS: these are the "router" side ports on the vlan-subswitch.
+     Same number as the router ports, but offset by the number of physical ports
+     on the subswitch. (1...n = physical; n+1...n+m = adjusted router)
+
+   The p2r relation holds each vlan's physical<--->adjusted router mapping.
+
+   TODO: we also need a relation for vlan's physical<----> router mapping.
+*/
+
+
+
 TABLE routerAlias(string, switchid);
 
 // OSPF outgoing costs
