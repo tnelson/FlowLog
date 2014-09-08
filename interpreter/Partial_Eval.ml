@@ -17,7 +17,8 @@ let policy_recreation_thunk: (unit -> unit) option ref = ref None;;
 (* Map query formula to results and time obtained (floating pt in seconds) *)
 let remote_cache: (term list list* float) FmlaMap.t ref = ref FmlaMap.empty;;
 
-(* action_atom list = atom *)
+(* action_atom list = atom
+   Used internally to ease respond_to_notification; should not be accessed outside mutex! *)
 let fwd_actions = ref [];;
 
 (* Now that we added the suppress_new_policy parameter of respond_to_notification,
@@ -891,7 +892,7 @@ let forward_packet (p: flowlog_program) (ev: event) (full_packet: int64 * int32 
   let incsw, incpt, incpkt, incbuffid = full_packet in
 
   printf "forwarding: %s from switch %Ld\n%!" (string_of_event p ev) incsw;
-  write_log (sprintf ">>> forwarding from XSB-constructed event: %s from switch %Ld\n%!" (string_of_event p ev) incsw);
+  write_log (sprintf ">>> queueing forward action from XSB-constructed event: %s from switch %Ld\n%!" (string_of_event p ev) incsw);
   (* TODO use allpackets here. compilation uses it, but XSB returns every port individually. *)
   let base_action = SwitchAction({id with outPort = Physical(nwport_of_string (get_field ev "locpt"))}) in
     (* add modifications to fields as prescribed in the event *)
@@ -1073,15 +1074,15 @@ let get_local_tables_triggered (p: flowlog_program) (sign: bool) (notif: event) 
 
 let lwt_respond_lock = Lwt_mutex.create ();;
 
-(* Returns list of names of tables that have been modified *)
+(* Returns list of names of tables that have been modified, plus forwarding actions if any *)
 (* DO NOT PASS suppress_new_policy = true unless it is safe to do so! It was added to prevent a single switch registration from
    rebuilding the policy once for each new port. *)
 let respond_to_notification
   (p: flowlog_program) ?(suppress_new_policy: bool = false)
   ?(full_packet: (int64 * int32 * Packet.packet * int32 option) option = None)
-  (notif: event) (from: eventsource): string list Lwt.t =
+  (notif: event) (from: eventsource): (string list * 'a list) Lwt.t =
   try_lwt (* needs to be this, not try, otherwise a failure will freeze the program *)
-      write_log "<<< respond_to_notification... ";
+      write_log "<<< respond_to_notification... (outside mutex) ";
 
       (* Yes, we need two layers of mutexes to account for the fact that the codebase uses two KINDS of thread-management:
          NetCore (and the general program) uses Lwt. But Thrift uses standard OCaml Threads.
@@ -1220,9 +1221,10 @@ let respond_to_notification
    (**********************************************************)
 
    (**********************************************************)
-   (* Finally actually send output *)
+   (* Finally actually send output (except forward actions; those just get queued) *)
     lwt _ = Lwt_list.iter_s (execute_output p full_packet) prepared_output in
 
+    let forward_actions_todo = !fwd_actions in
    (**********************************************************)
 
     printf "~~~~~~~~~~~~~~~~~~~FINISHED EVENT (%d total, %d packets) ~~~~~~~~~~~~~~~\n%!"
@@ -1234,14 +1236,14 @@ let respond_to_notification
     if !global_verbose >= 3 then
       write_log (sprintf "Time to process event completely: %fs\n%!" (Unix.gettimeofday() -. startt));
 
-    Lwt.return modifications) (* return tables that may have changed *)
+    Lwt.return (modifications, forward_actions_todo)) (* return tables that may have changed *)
 
   with
    | Not_found ->
        Communication.retract_event_and_subevents p notif from;
        Mutex.unlock xsbmutex;
        if !global_verbose > 0 then printf "Nothing to do for this event.\n%!";
-       Lwt.return []
+       Lwt.return ([],[])
    | exn ->
       begin
         Format.printf "Unexpected exception on event. Event was: %s\n Exception: %s\n----------\n%s\n%!"
@@ -1415,14 +1417,23 @@ let make_policy_stream (p: flowlog_program)
       let buf_id = match buf with
                     | Some id -> id
                     | None -> Int32.of_int (-1) in
-      printf "Packet in on switch %Ld in buffer %ld.\n%s\n%!" sw buf_id (Packet.to_string pkt);
+      printf "[Outside mutex] Packet in on switch %Ld in buffer %ld.\n%s\n%!" sw buf_id (Packet.to_string pkt);
       counter_inc_pkt := !counter_inc_pkt + 1;
       fwd_actions := []; (* populated by things respond_to_notification calls *)
 
       (* Parse the packet and send it to XSB. Deal with the results *)
       let notif = (pkt_to_event sw pt pkt) in
-        printf "~~~ Incoming Notif:\n %s\n%!" (string_of_event p notif);
-        ignore (respond_to_notification p ~full_packet:(make_last_packet sw pt pkt buf) notif IncDP);
+        printf "~~~ [Outside mutex] Incoming Notif:\n %s\n%!" (string_of_event p notif);
+
+        (* respond_to_notification needs to return actions in a thread-safe way.
+           So no more using a !fwd_actions ref. ;-) *)
+        (* TODO: concern: this needs to be lwt, not let, in order to force full evaluation before LWT switch.
+           But NetCore requires a function of this type, not a thread!
+
+           TODO: WORSE---can't get the fwd_actions_todo without being inside Lwt.t.
+              and this callback is fixed by type/netcore reqs to be not inside Lwt.t *)
+
+        let _, fwd_actions_todo = respond_to_notification p ~full_packet:(make_last_packet sw pt pkt buf) notif IncDP in
 
         if !global_verbose >= 1 then
         begin
@@ -1449,9 +1460,12 @@ let make_policy_stream (p: flowlog_program)
             end
         end;
         if !global_verbose >= 2 then
+        begin
           printf "actions will be = %s\n%!" (NetCore_Pretty.string_of_action !fwd_actions);
+          write_log (sprintf "actions will be = %s\n%!" (NetCore_Pretty.string_of_action !fwd_actions));
+        end;
         (* This callback returns an action set to Frenetic. *)
-        !fwd_actions in
+        fwd_actions_todo in
 
     (* For use elsewhere: call this to trigger policy update on switches. *)
     policy_recreation_thunk := Some trigger_policy_recreation_thunk;
