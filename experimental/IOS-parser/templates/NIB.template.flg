@@ -92,7 +92,7 @@ ON timer_expired(timer) WHERE timer.id = "tNIB" AND NOT sentConfig(0):
 // TODO(tn): this is a very long time! can we hold back until all expected switches register?
 ON startup(empty_event):
   DO start_timer_out(st) WHERE
-    st.seconds = 40 AND st.id = "tNIB";
+    st.seconds = 30 AND st.id = "tNIB";
 
 /////////////////////////////////////////////////
 

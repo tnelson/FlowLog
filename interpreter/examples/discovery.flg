@@ -1,0 +1,28 @@
+///////////////////////////////////////////////////////////
+// Send discovery packets. Used to detect errors in mininet topologies.
+///////////////////////////////////////////////////////////
+
+
+EVENT start_timer {seconds: int, id: string};
+EVENT timer_expired {id: int};
+
+OUTGOING start_timer_out(start_timer) THEN
+  SEND TO 127.0.0.1 9091;
+
+TABLE topo(switchid, portid, switchid, portid);
+
+/////////////////////
+
+ON startup(empty_event):
+  DO start_timer_out(st) WHERE
+    st.seconds = 15 AND st.id = "tNIB";
+
+ON packet(p) WHERE p.dltyp = 0x1001:
+  insert (p.dlsrc, p.dldst, p.locsw, p.locpt) into topo;
+
+ON timer_expired(timer) WHERE timer.id = "tNIB":
+  DO emit(newpkt) WHERE
+    switch_has_port(newpkt.locSw, newpkt.locPt) AND
+    newpkt.dlTyp = 0x1001 AND
+    newpkt.dlSrc = newpkt.locSw AND newpkt.dlDst = newpkt.locPt;
+
