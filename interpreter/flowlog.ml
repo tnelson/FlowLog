@@ -114,7 +114,8 @@ let main () =
   let program = (desugared_program_of_ast ast filename) in
     printf "-----------\n%!";
 
-    doSendPacketIn_ref := Some doSendPacketIn;
+    (* CP packet in/out currently unsupported *)
+    (* doSendPacketIn_ref := Some doSendPacketIn;*)
 
     (**********************************)
     if !alloy then

@@ -908,7 +908,7 @@ let forward_packet (p: flowlog_program) (ev: event) (full_packet: int64 * int32 
       base_action (remove legal_to_modify_packet_fields "locpt"))
       :: !fwd_actions;;
 
-let doSendPacketIn_ref: (flowlog_program -> event -> string -> string -> (int64 * int32 * Packet.packet * int32 option) -> unit) option ref = ref None;;
+let doSendPacketIn_ref: (flowlog_program -> event -> string -> string -> (int64 * int32 * Packet.packet * int32 option) -> unit Lwt.t) option ref = ref None;;
 
 let emit_packet (p: flowlog_program) (ev: event): unit =
   printf "emitting: %s\n%!" (string_of_event p ev);
@@ -938,8 +938,8 @@ let send_event (p: flowlog_program) (ev: event) (ip: string) (pt: string) (full_
       | Some(f) ->
         (match full_packet with
           | None -> failwith "Error: send_event as packet_in failed because no orig packet was recorded"
-          | Some(fp) -> f p ev ip pt fp)
-      | None -> failwith "Error: couldn't send packet_in because function not set.")
+          | Some(fp) -> ignore (f p ev ip pt fp))
+      | None -> failwith "Error: couldn't send packet_in because function not set. Sending on CP not supported at present.")
   else
   begin
     let arity = (get_event p ev.typeid).evfields in
@@ -999,7 +999,7 @@ let execute_output (p: flowlog_program)
      (match from,full_packet with
         | IncCP,Some(fp) -> forward_packet_from_cp p ev fp
         | IncCP,_ -> failwith "forward_packet_from_cp: None given as last packet seen."
-        | IncDP,Some(fp) -> forward_packet p ev fp
+        | IncDP,Some(fp) -> (forward_packet p ev fp)
         | _ -> failwith "forward_packet: None given as last packet seen.")
    | OutEmit(_) -> emit_packet p ev
    | OutPrint -> printf "PRINT RULE FIRED: %s\n%!" (string_of_event p ev)
@@ -1081,7 +1081,7 @@ let respond_to_notification
   (p: flowlog_program) ?(suppress_new_policy: bool = false)
   ?(full_packet: (int64 * int32 * Packet.packet * int32 option) option = None)
   (notif: event) (from: eventsource): (string list * 'a list) =
-  try
+  try (* IF THIS FUNCTION RETURNS LWT.T, needs to be try_lwt, not try, otherwise a failure will freeze the program *)
       write_log "<<< respond_to_notification... (outside mutex) ";
 
       (* Yes, we need two layers of mutexes to account for the fact that the codebase uses two KINDS of thread-management:
@@ -1222,7 +1222,7 @@ let respond_to_notification
 
    (**********************************************************)
    (* Finally actually send output (except forward actions; those just get queued) *)
-    iter (execute_output p full_packet) prepared_output;
+   iter(execute_output p full_packet) prepared_output;
 
     let forward_actions_todo = !fwd_actions in
    (**********************************************************)
@@ -1236,7 +1236,9 @@ let respond_to_notification
     if !global_verbose >= 3 then
       write_log (sprintf "Time to process event completely: %fs\n%!" (Unix.gettimeofday() -. startt));
 
-    (modifications, forward_actions_todo) (* return tables that may have changed *)
+    (modifications, forward_actions_todo)
+(* ) *)
+(* return tables that may have changed *)
 
   with
    | Not_found ->
@@ -1254,6 +1256,7 @@ let respond_to_notification
         Mutex.unlock xsbmutex;
         exit(101);
       end;;
+
 
 (* Ignore the switch's non-physical ports (pp. 18-19 of OpenFlow 1.0 spec). *)
 let ofpp_max_port = nwport_of_string "0xff00";;
@@ -1424,6 +1427,7 @@ let make_policy_stream (p: flowlog_program)
       (* Parse the packet and send it to XSB. Deal with the results *)
       let notif = (pkt_to_event sw pt pkt) in
         printf "~~~ [Outside mutex] Incoming Notif:\n %s\n%!" (string_of_event p notif);
+        printf "lock status: %b\n%!" (Lwt_mutex.is_locked NetCore_Controller.controller_mutex);
 
         (* respond_to_notification needs to return actions in a thread-safe way.
            So no more using a !fwd_actions ref. ;-) *)

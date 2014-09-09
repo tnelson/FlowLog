@@ -84,7 +84,9 @@ ON timer_expired(timer) WHERE timer.id = "tNIB" AND NOT sentConfig(0):
     subnets(sc.prefix, sc.mask, ANY, ANY, sc.swid, sc.ptid);
   DO send_static_route(sr) WHERE
     static_nexthops(sr.swid, sr.prefix, sr.mask, nexthop) AND
-    subnets(ANY, ANY, nexthop, ANY, sr.swid, sr.outport);
+    subnets(nhprefix, nhmask, ANY, ANY, sr.swid, sr.outport) and
+    // nexthop is gateway on THE OTHER ROUTER, not this one. this line has to be *after* nhprefix/nhmask get bound.
+    nexthop IN nhprefix/nhmask;
 
 /////////////////////////////////////////////////
 
@@ -130,9 +132,10 @@ ON timer_expired(timer) WHERE timer.id = "tNIB":
 // This will let us detect links that pass through subnets
 // All other sub-switches are in switches_without_maclearning (which means normal MACL, not our modified version for VLANs)
 
-// flood forward (routers will not pass them along, so we avoid loops)
+// flood forward on root-switches and switches (routers will not pass them along, so we avoid loops)
 ON packet(p) WHERE p.dlTyp = 0x1001 AND
-                   NOT switches_without_mac_learning(p.locSw):
+                   NOT switches_without_mac_learning(p.locSw) AND
+                   NOT router_vlan(ANY, p.locSw):
   DO forward(new) WHERE new.locPt != p.locPt;
 
 /////////////////////////////////////////////////
