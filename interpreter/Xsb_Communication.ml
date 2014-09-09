@@ -390,7 +390,6 @@ module Communication = struct
    	  | FAtom(_, rname, rargs) when is_table p rname ->
      	let tbl = get_table p rname in
      	  let result = pretty_print_fact tbl f in
-     	    printf "result: %s\n%!" result;
      	    result
       | _ -> failwith ("pretty_print_formula: "^(string_of_formula f)))
     with | _ -> failwith "pretty_print_formula failed";;
