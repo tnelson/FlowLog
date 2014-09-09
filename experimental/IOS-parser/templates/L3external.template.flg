@@ -90,6 +90,7 @@ ON ip_packet(pkt):
 // TODO(tn): test and debug the above.
 // issue: multiple copies, one to each gateway on the trunk!
 
+/*
   insert (pkt.locSw, pkt.nwSrc, pkt.nwDst, newpt, newdlsrc, currvlsw, currphysport, nextvlansw, nextphyspt) into testrouter
     where routes(pkt.locSw, pre, mask, newpt) AND
       pkt.nwDst IN pre/mask AND
@@ -101,6 +102,7 @@ ON ip_packet(pkt):
       AND allTopology(currvlsw, currphysport, nextvlansw, nextphyspt)
 ;
 table testrouter(switchid, ipaddr, ipaddr, portid, macaddr, switchid, portid, switchid, portid, switchid);
+*/
 
 // gets this far (up to alltopo)
 // testrouter(0x100000000002, 10.5.102.3, 192.168.1.5, 3, ca:fe:00:02:00:05, 0x600000000002, 3, 0x600000000001, 5).
