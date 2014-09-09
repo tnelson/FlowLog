@@ -131,6 +131,7 @@ ON ip_packet(pkt) WHERE router_tr(router, pkt.locSw):
     // (prevent overlap with L3router.flg; avoiding universal quantification issue)
     NOT (@dst-local-subnet)
 
+    and router_portmap(ANY, new.locPt, pkt.locPt); // router -> host (only one instance of this number in the table)
     // router already set the destination MAC, so use that to find the output port
-    and subnets(ANY, ANY, ANY, pkt.dlDst, router, rport)
-    and router_portmap(rport, new.locPt, pkt.locPt); // router -> host
+   // and subnets(ANY, ANY, ANY, pkt.dlDst, router, rport)
+//and router_portmap(rport, new.locPt, pkt.locPt); // router -> host
