@@ -126,8 +126,8 @@ ON ip_packet(pkt):
   DO forward(new) WHERE
     subnets(addr, mask, gwip, ANY, router, rport)
     and router_tr(router, pkt.locSw)
-    and pkt.nwDst IN addr/mask
-    and cached(pkt.nwDst, new.dlDst)
+    and pkt.nwDst IN addr/mask // MAKING FINAL HOP
+    and cached(pkt.nwDst, new.dlDst) // set final dlDst
     and pkt.nwDst != gwip
     and router_portmap(rport, new.locPt, pkt.locPt); // router -> host
 

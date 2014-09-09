@@ -135,13 +135,13 @@ namespace-for-template)
     ; OUT: next-hop [existential variable]
     ; policyroute-route || pr-pass and sr-route || pr-pass and sr-pass and defpol-route 
     ; since these policies were first-applicable, decorrelation within pols is already done
-    (define next-hop-fragment 
-      `(or ,@policyroute-route
-           (and (or ,@policyroute-pass)
-                (or ,@staticroute-route))
-           (and (or ,@policyroute-pass)
-                (or ,@staticroute-pass)
-                (or ,@defaultpolicyroute-route))))            
+    ;(define next-hop-fragment 
+    ;  `(or ,@policyroute-route
+    ;       (and (or ,@policyroute-pass)
+    ;            (or ,@staticroute-route))
+    ;       (and (or ,@policyroute-pass)
+    ;            (or ,@staticroute-pass)
+    ;            (or ,@defaultpolicyroute-route))))            
     
     ;(printf "next hop fragment: ~v~n" next-hop-fragment) ; debug
     ; Caveat: these will use flat router-names 
@@ -523,11 +523,12 @@ namespace-for-template)
     ; generate L3external and L3router
 
     (dict-set! router-vars "basename" root-path)
-    (dict-set! router-vars "nexthop-fragment" (sexpr-to-flowlog next-hop-fragment #f))
-    (dict-set! router-vars "nexthop-fragment-for-tr" (string-replace (sexpr-to-flowlog next-hop-fragment #f)
-                                                                     "pkt.locSw" "router"))
+    ;(dict-set! router-vars "nexthop-fragment" (sexpr-to-flowlog next-hop-fragment #f))
+    ;(dict-set! router-vars "nexthop-fragment-for-tr" (string-replace (sexpr-to-flowlog next-hop-fragment #f)
+    ;                                                                 "pkt.locSw" "router"))
     
     ; For embedding policy in FL rule
+    (printf "policyroute-pass: ~a~n" policyroute-pass)
     (dict-set! router-vars "policyroute-route" (sexpr-to-flowlog policyroute-route #f))
     (dict-set! router-vars "policyroute-pass" (sexpr-to-flowlog policyroute-pass #f))
     
@@ -586,8 +587,8 @@ namespace-for-template)
     (printf "Template values:~n~n")
     (printf "~ndst-local-subnet: ~a~n" (dict-ref router-vars "dst-local-subnet"))    
     (printf "~nneeds-nat-disj: ~a~n" (dict-ref router-vars "needs-nat-disj"))
-    (printf "~nnext-hop-fragment: ~a~n" (dict-ref router-vars "nexthop-fragment"))
-    (printf "~nnext-hop-fragment-for-tr: ~a~n" (dict-ref router-vars "nexthop-fragment-for-tr"))
+    ;(printf "~nnext-hop-fragment: ~a~n" (dict-ref router-vars "nexthop-fragment"))
+    ;(printf "~nnext-hop-fragment-for-tr: ~a~n" (dict-ref router-vars "nexthop-fragment-for-tr"))
     (printf "~npolicyroute-route: ~a~n" (dict-ref router-vars "policyroute-route"))
     (printf "~npolicyroute-pass: ~a~n" (dict-ref router-vars "policyroute-pass"))
     

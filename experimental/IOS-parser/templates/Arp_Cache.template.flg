@@ -44,7 +44,7 @@ TABLE queued(ipaddr, macaddr, ipaddr, switchid, portid);
 /*******************************************************************************
  *
  * Only flood ARP requests from the controller
- * Only propagate the request if we don't have that addr queued (otherwise could loop!)
+ * Only propagate the request if we don't have that addr already (otherwise could loop!)
  *
  ******************************************************************************/
 

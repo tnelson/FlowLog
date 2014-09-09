@@ -96,7 +96,6 @@
                     "AND not reflexiveACL(" (symbol->string reflexname) ", pkt.nwSrc, pkt.tpSrc, pkt.nwProto, pkt.nwDst, pkt.tpDst)"
                     ";\n")]))
   
-
 (define (sexpr-to-flowlog-helper simplified)   
   ;(display "sexpr-to-flowlog >>>")
   ;(pretty-display simplified)

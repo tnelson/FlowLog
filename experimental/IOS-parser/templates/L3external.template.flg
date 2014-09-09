@@ -66,12 +66,32 @@ ON ip_packet(pkt):
     NOT hasLongerPrefixMatch(pkt.locSw, pkt.nwDst, pre, mask)
 
     // no policy route available
-    and @policyroute-pass
+    // used to refer to policyroute-pass, but can just negate
+    and not @policyroute-route
 
+    // output dlsrc and port
     and subnets(ANY, ANY, ANY, new.dlSrc, pkt.locSw, new.locPt)
-    and cached(nexthop, new.dlDst); // MAC addr of nexthop IP
+
+    // must set output dldst, too. don't need to use the cache here. just find the gateway
+    AND allTopology(pkt.locSw, pkt.locPt, nextsw, nextpt)
+    and subnets(ANY, ANY, destgw, new.dlDst, nextsw, nextpt);
+
+  insert (pkt.locSw, pkt.nwSrc, pkt.nwDst, newpt) into testrouter
+    where routes(pkt.locSw, pre, mask, newpt) AND
+      pkt.nwDst IN pre/mask AND
+      NOT hasLongerPrefixMatch(pkt.locSw, pkt.nwDst, pre, mask);
+
+  insert (pkt.locSw, pkt.nwSrc, pkt.nwDst, newpt) into testrouter2
+    where routes(pkt.locSw, pre, mask, newpt) AND
+      pkt.nwDst IN pre/mask;
 
 
+  insert (pkt.locSw, pkt.nwSrc, pkt.nwDst, pre, mask, newpt) into testrouter3
+    where routes(pkt.locSw, pre, mask, newpt);
+
+table testrouter(switchid, ipaddr, ipaddr, portid);
+table testrouter2(switchid, ipaddr, ipaddr, portid);
+table testrouter3 (switchid, ipaddr, ipaddr, ipaddr, int, portid);
 /*******************************************************************************
  *
  * Per-subnet translators: outbound path to nexthop MAC addr where destination
@@ -82,23 +102,18 @@ ON ip_packet(pkt):
  *
  ******************************************************************************/
 
-// TODO(tn) what happens to this block?
 
-ON ip_packet(pkt):
+
+// Packet arrives at TR from router side, need to send out host side
+// TODO(TN): this will not work properly for policy routing
+
+ON ip_packet(pkt) WHERE router_tr(router, pkt.locSw):
   DO forward(new) WHERE
 
     // not in a local subnet for this router
-    // (prevent overlap with L3router.flg)
+    // (prevent overlap with L3router.flg; avoiding universal quantification issue)
     NOT (@dst-local-subnet)
 
-// TODO(tn): test this. seems that we may not need all this extra stuff.
-//  not a local subnet, on translator headed toward host; we have the out-port already
-// so get the in-port from the portmap
-
-    //and subnets(nexthop_subnet, nexthop_mask, ANY, gwmac, router, rport)
-    //and router_tr(router, pkt.locSw)
-    //and nexthop IN nexthop_subnet/nexthop_mask
-    //and cached(nexthop, pkt.dlDst)
-    //and pkt.dlSrc = gwmac
-    //and pkt.nwDst != nexthop // this case is handled by internal routing
+    // router already set the destination MAC, so use that to find the output port
+    and subnets(ANY, ANY, ANY, pkt.dlDst, router, rport)
     and router_portmap(rport, new.locPt, pkt.locPt); // router -> host

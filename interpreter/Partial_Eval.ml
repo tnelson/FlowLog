@@ -1082,7 +1082,7 @@ let respond_to_notification
   ?(full_packet: (int64 * int32 * Packet.packet * int32 option) option = None)
   (notif: event) (from: eventsource): (string list * 'a list) =
   try (* IF THIS FUNCTION RETURNS LWT.T, needs to be try_lwt, not try, otherwise a failure will freeze the program *)
-      write_log "<<< respond_to_notification... (outside mutex) ";
+      write_log (sprintf "<<< respond_to_notification... (outside mutex) for event: %s" (string_of_event p notif));
 
       (* Yes, we need two layers of mutexes to account for the fact that the codebase uses two KINDS of thread-management:
          NetCore (and the general program) uses Lwt. But Thrift uses standard OCaml Threads.

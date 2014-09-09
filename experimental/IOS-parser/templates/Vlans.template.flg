@@ -105,6 +105,7 @@ ON packet(p) WHERE sp_vlans(p.locSw, p.locPt, vlanid) AND
                    router_vlan(rtrid, p.locSw) AND
                    p.dltyp != 0x806 AND // don't do this for arp
                    p.dltyp != 0x1001 AND // don't do for discovery
+                   vlanid != -1 AND
                    p.dlvlan = vlanid: // comes in tagged (tag should be allowed on the incoming interface)
   DO forward(new) WHERE
     sp_vlans(p.locSw, new.locPt, vlanid) AND

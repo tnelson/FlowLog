@@ -499,8 +499,9 @@ module Communication = struct
 	    (*ignore (send_message "jdnfsjdnf(,)." 0);*)
 
         (* FOR IP ADDRESS MASKING: Is Target in the range Addr/Mask? (Lshift+and to mask out host address portion)
-           Remember to flip the mask (i.e., shift by 32-Mask). The mask covers bits we want to _keep_. *)
-	    ignore (send_message "assert((in_ipv4_range(_Target, _Addr, _Mask) :- _X is ((2^32-1) << (32-_Mask)) /\\ _Target, _X is ((2^32-1) << (32-_Mask)) /\\ _Addr))." 0);
+           Remember to flip the mask (i.e., shift by 32-Mask). The mask covers bits we want to _keep_.
+           Since XSB may run in either 64 or 32 bit mode, bitwise-and the addr and target with 32-ones *)
+	    ignore (send_message "assert((in_ipv4_range(_Target, _Addr, _Mask) :- _X is ((2^32-1) << (32-_Mask)) /\\ (_Target /\\ (2^32-1)), _X is ((2^32-1) << (32-_Mask)) /\\ (_Addr /\\ (2^32-1))))." 0);
 
 
 	    (* For every built-in predicate, there may be some helper rules to send: *)

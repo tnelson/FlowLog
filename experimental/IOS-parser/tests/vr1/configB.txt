@@ -32,4 +32,13 @@ interface Vlan2
 interface Vlan3
  ip address 10.5.103.2 255.255.255.0
 
+! need a way for traffic from ge2/1 and ge2/2 to get out to the larger network
+! unfortunately giving them the SVI isn't enough: we also config a gateway via mininet
+! with the IP address of the appropriate SVI. But the rest of the network is not routable
+! from the SVI unless we (1) change the gateway to one of the SVIs on routerA or...
+! go via (one of the) vlans to reach the gateway on A
+! choice of A is arbitrary; could use 10.5.103.1 as well.
+ip route 0.0.0.0 0.0.0.0 10.5.102.1
+
+
 end
