@@ -1,0 +1,13 @@
+hostname vltD
+
+// To A (A uses .1)
+interface GigabitEthernet2/1
+  ip address 192.168.2.2 255.255.255.0
+  ospf cost 5
+
+// To C (C uses .1)
+interface GigabitEthernet2/2
+  ip address 192.168.3.2 255.255.255.0
+  ospf cost 10
+
+end

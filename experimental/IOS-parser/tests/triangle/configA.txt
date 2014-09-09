@@ -1,0 +1,15 @@
+hostname vltA
+
+
+! a physical L3 interface; no vlan
+!// To C
+interface GigabitEthernet1/3
+  ip address 192.168.1.1 255.255.255.0
+  ospf cost 20
+
+!// To D
+interface GigabitEthernet1/4
+  ip address 192.168.2.1 255.255.255.0
+  ospf cost 5
+
+end

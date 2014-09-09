@@ -1,0 +1,1 @@
+./ios2flowlog --path tests/triangle/ configA.txt configC.txt configD.txt
