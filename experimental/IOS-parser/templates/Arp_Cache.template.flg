@@ -44,11 +44,13 @@ TABLE queued(ipaddr, macaddr, ipaddr, switchid, portid);
 /*******************************************************************************
  *
  * Only flood ARP requests from the controller
+ * Only propagate the request if we don't have that addr queued (otherwise could loop!)
  *
  ******************************************************************************/
 
 ON arp_packet(request) WHERE request.dlSrc = 00:00:ca:fe:ca:fe // Controller MAC
-                             and not switches_without_arp(request.locSw):
+                             and not switches_without_arp(request.locSw)
+                             and not cached(request.arp_tpa, ANY):
    DO forward(new) WHERE
      // this will be a vlan sub-router or a subnet switch.
      // for vlan, out physical ports
