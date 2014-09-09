@@ -66,7 +66,7 @@ let doBBquery (qryname: string) (bbip: string) (bbport: string) (args: term list
   Each notification opens a separate, new, connection to the black-box.
 *)
 
-let doBBnotify (ev: event) (bbip: string) (bbport: string) (evfields: (string * typeid) list): unit Lwt.t =
+let doBBnotify (ev: event) (bbip: string) (bbport: string) (evfields: (string * typeid) list): unit =
             let dotted_host = Packet.string_of_ip (nwaddr_of_int_string bbip) in
             let cli = connect ~host:dotted_host (int_of_string bbport) in
             try
@@ -81,10 +81,8 @@ let doBBnotify (ev: event) (bbip: string) (bbport: string) (evfields: (string * 
               cli.bb#notifyMe notif;
               cli.trans#close;
               printf "RPC invocation complete. Socket closed.\n%!";
-              Lwt.return ();
             with | Transport.E (_,what) ->
                      printf "ERROR sending notification: %s\n%!" what;
                      raise (Failure what)
                  | _ -> printf "Unknown problem sending event.\n%!";
-            Lwt.return ();;
 

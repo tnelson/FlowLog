@@ -74,7 +74,7 @@ let run_flowlog (p: flowlog_program): unit Lwt.t =
 
       (* Note use of LWT here! *)
       (* Send the "startup" notification. Enables initialization, etc. in programs *)
-      (respond_to_notification p {typeid="startup"; values=StringMap.empty} IncThrift) >>
+      Lwt.return (respond_to_notification p {typeid="startup"; values=StringMap.empty} IncThrift) >>
 
       (* pick cancels all threads given if one terminates *)
       (* DO NOT attempt to copy ox/frenetic's switch connection detection code here. It will clash with
@@ -86,7 +86,7 @@ let run_flowlog (p: flowlog_program): unit Lwt.t =
    printf "Failure was %s\n%!" x;
    Lwt.return ();;
 
-      (* switch proxy listeners are started later *)
+      (* switch proxy listeners are started later, when some outgoing event causes FL to register a proxy *)
 
 
 let main () =

@@ -178,8 +178,9 @@ let rec switch_listener (prgm: flowlog_program) (swid: switchId) (servicefd: Lwt
             (* may be multiple actions = multi-record problem with events *)
             (*printf "WARNING! ACTIONS IN PACKET_OUT WILL BE IGNORED BY FLOWLOG.\n%!";*)
 
-            respond_to_notification prgm ~full_packet:(make_last_packet swid in_pt pkt None) notif IncCP >>
-            switch_listener prgm swid servicefd
+            Lwt_mutex.with_lock controller_mutex (fun () ->
+              ignore (respond_to_notification prgm ~full_packet:(make_last_packet swid in_pt pkt None) notif IncCP);
+              switch_listener prgm swid servicefd)
         | _ -> switch_listener prgm swid servicefd)
     | None ->
       printf "recv_from_switch_fd returned None.\n%!";

@@ -908,7 +908,7 @@ let forward_packet (p: flowlog_program) (ev: event) (full_packet: int64 * int32 
       base_action (remove legal_to_modify_packet_fields "locpt"))
       :: !fwd_actions;;
 
-let doSendPacketIn_ref: (flowlog_program -> event -> string -> string -> (int64 * int32 * Packet.packet * int32 option) -> unit Lwt.t) option ref = ref None;;
+let doSendPacketIn_ref: (flowlog_program -> event -> string -> string -> (int64 * int32 * Packet.packet * int32 option) -> unit) option ref = ref None;;
 
 let emit_packet (p: flowlog_program) (ev: event): unit =
   printf "emitting: %s\n%!" (string_of_event p ev);
@@ -930,7 +930,7 @@ let forward_packet_from_cp (p: flowlog_program) (ev: event) (full_packet: int64 
    (* OpenFlow0x01_Core.payload *)
     guarded_emit_push incsw pt (OpenFlow0x01_Core.NotBuffered (Packet.marshal incpkt));;
 
-let send_event (p: flowlog_program) (ev: event) (ip: string) (pt: string) (full_packet: (int64 * int32 * Packet.packet * int32 option) option): unit Lwt.t =
+let send_event (p: flowlog_program) (ev: event) (ip: string) (pt: string) (full_packet: (int64 * int32 * Packet.packet * int32 option) option): unit =
   printf "sending: %s\n%!" (string_of_event p ev);
   write_log (sprintf ">>> sending: %s\n%!" (string_of_event p ev));
   if is_built_in_packet_typename ev.typeid then
@@ -992,17 +992,17 @@ let prepare_output (p: flowlog_program) (incoming_event: event) (from: eventsour
 
 let execute_output (p: flowlog_program)
                    (full_packet: (int64 * int32 * Packet.packet * int32 option) option)
-                   ((ev, from, spec): event * eventsource * spec_out) : unit Lwt.t =
+                   ((ev, from, spec): event * eventsource * spec_out) : unit =
   match spec with
    | OutForward ->
      (* If "forwarding" a CP packet, we need to provide a new packet out, not a new forwarding action *)
      (match from,full_packet with
-        | IncCP,Some(fp) -> Lwt.return (forward_packet_from_cp p ev fp)
+        | IncCP,Some(fp) -> forward_packet_from_cp p ev fp
         | IncCP,_ -> failwith "forward_packet_from_cp: None given as last packet seen."
-        | IncDP,Some(fp) ->  Lwt.return (forward_packet p ev fp)
+        | IncDP,Some(fp) -> forward_packet p ev fp
         | _ -> failwith "forward_packet: None given as last packet seen.")
-   | OutEmit(_) -> Lwt.return (emit_packet p ev)
-   | OutPrint -> Lwt.return (printf "PRINT RULE FIRED: %s\n%!" (string_of_event p ev))
+   | OutEmit(_) -> emit_packet p ev
+   | OutPrint -> printf "PRINT RULE FIRED: %s\n%!" (string_of_event p ev)
    | OutLoopback -> failwith "loopback unsupported currently"
    | OutSend(_, ip, pt) -> send_event p ev ip pt full_packet;;
 
@@ -1080,8 +1080,8 @@ let lwt_respond_lock = Lwt_mutex.create ();;
 let respond_to_notification
   (p: flowlog_program) ?(suppress_new_policy: bool = false)
   ?(full_packet: (int64 * int32 * Packet.packet * int32 option) option = None)
-  (notif: event) (from: eventsource): (string list * 'a list) Lwt.t =
-  try_lwt (* needs to be this, not try, otherwise a failure will freeze the program *)
+  (notif: event) (from: eventsource): (string list * 'a list) =
+  try
       write_log "<<< respond_to_notification... (outside mutex) ";
 
       (* Yes, we need two layers of mutexes to account for the fact that the codebase uses two KINDS of thread-management:
@@ -1091,8 +1091,8 @@ let respond_to_notification
          If B hits the "real" mutex while A has it locked, the program deadlocks (the "real" thread is running B, and can never
          switch to A). So we give Lwts a chance to yield here. *)
 
-      Lwt_mutex.with_lock lwt_respond_lock
-    (fun () ->
+    (*  Lwt_mutex.with_lock lwt_respond_lock
+    (fun () ->*)
       Mutex.lock xsbmutex;
 
       (* Timer etc. need to be protected by the mutex. *)
@@ -1222,7 +1222,7 @@ let respond_to_notification
 
    (**********************************************************)
    (* Finally actually send output (except forward actions; those just get queued) *)
-    lwt _ = Lwt_list.iter_s (execute_output p full_packet) prepared_output in
+    iter (execute_output p full_packet) prepared_output;
 
     let forward_actions_todo = !fwd_actions in
    (**********************************************************)
@@ -1236,14 +1236,14 @@ let respond_to_notification
     if !global_verbose >= 3 then
       write_log (sprintf "Time to process event completely: %fs\n%!" (Unix.gettimeofday() -. startt));
 
-    Lwt.return (modifications, forward_actions_todo)) (* return tables that may have changed *)
+    (modifications, forward_actions_todo) (* return tables that may have changed *)
 
   with
    | Not_found ->
        Communication.retract_event_and_subevents p notif from;
        Mutex.unlock xsbmutex;
        if !global_verbose > 0 then printf "Nothing to do for this event.\n%!";
-       Lwt.return ([],[])
+       ([],[])
    | exn ->
       begin
         Format.printf "Unexpected exception on event. Event was: %s\n Exception: %s\n----------\n%s\n%!"
