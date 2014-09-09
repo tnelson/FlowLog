@@ -73,25 +73,17 @@ ON ip_packet(pkt):
     and subnets(ANY, ANY, ANY, new.dlSrc, pkt.locSw, new.locPt)
 
     // must set output dldst, too. don't need to use the cache here. just find the gateway
+    // TODO(tn): allTopology has vlan switch ids. need to convert both pkt.locSw->vlan and nextsw -> rtr.
     AND allTopology(pkt.locSw, pkt.locPt, nextsw, nextpt)
     and subnets(ANY, ANY, destgw, new.dlDst, nextsw, nextpt);
 
-  insert (pkt.locSw, pkt.nwSrc, pkt.nwDst, newpt) into testrouter
+  insert (pkt.locSw, pkt.nwSrc, pkt.nwDst, newpt, newdlsrc) into testrouter
     where routes(pkt.locSw, pre, mask, newpt) AND
       pkt.nwDst IN pre/mask AND
-      NOT hasLongerPrefixMatch(pkt.locSw, pkt.nwDst, pre, mask);
-
-  insert (pkt.locSw, pkt.nwSrc, pkt.nwDst, newpt) into testrouter2
-    where routes(pkt.locSw, pre, mask, newpt) AND
-      pkt.nwDst IN pre/mask;
-
-
-  insert (pkt.locSw, pkt.nwSrc, pkt.nwDst, pre, mask, newpt) into testrouter3
-    where routes(pkt.locSw, pre, mask, newpt);
+      NOT hasLongerPrefixMatch(pkt.locSw, pkt.nwDst, pre, mask) and
+      subnets(ANY, ANY, ANY, newdlsrc, pkt.locSw, newpt);
 
 table testrouter(switchid, ipaddr, ipaddr, portid);
-table testrouter2(switchid, ipaddr, ipaddr, portid);
-table testrouter3 (switchid, ipaddr, ipaddr, ipaddr, int, portid);
 /*******************************************************************************
  *
  * Per-subnet translators: outbound path to nexthop MAC addr where destination
