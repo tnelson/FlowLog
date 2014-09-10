@@ -908,7 +908,7 @@ let forward_packet (p: flowlog_program) (ev: event) (full_packet: int64 * int32 
       base_action (remove legal_to_modify_packet_fields "locpt"))
       :: !fwd_actions;;
 
-let doSendPacketIn_ref: (flowlog_program -> event -> string -> string -> (int64 * int32 * Packet.packet * int32 option) -> unit Lwt.t) option ref = ref None;;
+(*let doSendPacketIn_ref: (flowlog_program -> event -> string -> string -> (int64 * int32 * Packet.packet * int32 option) -> unit Lwt.t) option ref = ref None;;*)
 
 let emit_packet (p: flowlog_program) (ev: event): unit =
   printf "emitting: %s\n%!" (string_of_event p ev);
@@ -920,7 +920,7 @@ let emit_packet (p: flowlog_program) (ev: event): unit =
      At the moment, someone can emit_arp with dlTyp = 0x000 or something dumb like that. *)
   guarded_emit_push swid pt (OpenFlow0x01_Core.NotBuffered (marshal_packet ev));;
 
-let forward_packet_from_cp (p: flowlog_program) (ev: event) (full_packet: int64 * int32 * Packet.packet * int32 option): unit =
+(*let forward_packet_from_cp (p: flowlog_program) (ev: event) (full_packet: int64 * int32 * Packet.packet * int32 option): unit =
   printf "forwarding packet from CP: %s\n%!" (string_of_event p ev);
   write_log (sprintf ">>> CP-forward (forward -> emit): %s\n%!" (string_of_event p ev));
   let pt = (nwport_of_string (get_field ev "locpt")) in
@@ -929,17 +929,19 @@ let forward_packet_from_cp (p: flowlog_program) (ev: event) (full_packet: int64 
    (*TODO: change fields besides locsw, locpt *)
    (* OpenFlow0x01_Core.payload *)
     guarded_emit_push incsw pt (OpenFlow0x01_Core.NotBuffered (Packet.marshal incpkt));;
+*)
 
 let send_event (p: flowlog_program) (ev: event) (ip: string) (pt: string) (full_packet: (int64 * int32 * Packet.packet * int32 option) option): unit =
   printf "sending: %s\n%!" (string_of_event p ev);
   write_log (sprintf ">>> sending: %s\n%!" (string_of_event p ev));
   if is_built_in_packet_typename ev.typeid then
-    (match !doSendPacketIn_ref with
+   (* (match !doSendPacketIn_ref with
       | Some(f) ->
         (match full_packet with
           | None -> failwith "Error: send_event as packet_in failed because no orig packet was recorded"
           | Some(fp) -> ignore (f p ev ip pt fp))
-      | None -> failwith "Error: couldn't send packet_in because function not set. Sending on CP not supported at present.")
+      | None -> failwith "Error: couldn't send packet_in because function not set. Sending on CP not supported at present.")*)
+	failwith "sending packets is currently unsupported"
   else
   begin
     let arity = (get_event p ev.typeid).evfields in
@@ -997,8 +999,9 @@ let execute_output (p: flowlog_program)
    | OutForward ->
      (* If "forwarding" a CP packet, we need to provide a new packet out, not a new forwarding action *)
      (match from,full_packet with
-        | IncCP,Some(fp) -> forward_packet_from_cp p ev fp
+        | IncCP,Some(fp) -> failwith "unsupported: packet from CP" (*forward_packet_from_cp p ev fp*)
         | IncCP,_ -> failwith "forward_packet_from_cp: None given as last packet seen."
+
         | IncDP,Some(fp) -> (forward_packet p ev fp)
         | _ -> failwith "forward_packet: None given as last packet seen.")
    | OutEmit(_) -> emit_packet p ev
@@ -1072,7 +1075,7 @@ let get_local_tables_triggered (p: flowlog_program) (sign: bool) (notif: event) 
     (*printf "possibly triggered: %s\n%!" (String.concat ",\n" (map string_of_declaration possibly_triggered));*)
     possibly_triggered;;
 
-let lwt_respond_lock = Lwt_mutex.create ();;
+(*let lwt_respond_lock = Lwt_mutex.create ();;*)
 
 (* Returns list of names of tables that have been modified, plus forwarding actions if any *)
 (* DO NOT PASS suppress_new_policy = true unless it is safe to do so! It was added to prevent a single switch registration from
@@ -1084,6 +1087,9 @@ let respond_to_notification
   try (* IF THIS FUNCTION RETURNS LWT.T, needs to be try_lwt, not try, otherwise a failure will freeze the program *)
       write_log (sprintf "<<< respond_to_notification... (outside mutex) for event: %s" (string_of_event p notif));
 
+      write_log (sprintf "xsb mutex status: %b\n%!" (is_mutex_locked xsbmutex));
+      printf "xsb mutex status: %b\n%!" (is_mutex_locked xsbmutex);
+      printf "current thread ID: %d\n%!" (Thread.id (Thread.self ()));
       (* Yes, we need two layers of mutexes to account for the fact that the codebase uses two KINDS of thread-management:
          NetCore (and the general program) uses Lwt. But Thrift uses standard OCaml Threads.
 
@@ -1222,7 +1228,9 @@ let respond_to_notification
 
    (**********************************************************)
    (* Finally actually send output (except forward actions; those just get queued) *)
+   printf "Queued %d output actions...\n%!" (length prepared_output);
    iter(execute_output p full_packet) prepared_output;
+   printf "Output complete.\n%!";
 
     let forward_actions_todo = !fwd_actions in
    (**********************************************************)
@@ -1427,7 +1435,6 @@ let make_policy_stream (p: flowlog_program)
       (* Parse the packet and send it to XSB. Deal with the results *)
       let notif = (pkt_to_event sw pt pkt) in
         printf "~~~ [Outside mutex] Incoming Notif:\n %s\n%!" (string_of_event p notif);
-        printf "lock status: %b\n%!" (Lwt_mutex.is_locked NetCore_Controller.controller_mutex);
 
         (* respond_to_notification needs to return actions in a thread-safe way.
            So no more using a !fwd_actions ref. ;-) *)

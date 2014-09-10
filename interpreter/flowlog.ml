@@ -12,7 +12,7 @@ open Lwt
 open Flowlog_Parse_Helpers
 open Xsb_Communication
 open Flowlog_Chase
-open Flowlog_Switch_Proxy
+(*open Flowlog_Switch_Proxy*)
 open Flowlog_Builtins
 
 (* Use ExtList.List instead -- provides filter_map, but also tail-recursive combine *)
@@ -61,7 +61,7 @@ let run_flowlog (p: flowlog_program): unit Lwt.t =
   (* Listen for incoming notifications via RPC *)
   Flowlog_Thrift_In.start_listening p;
 
-  try_lwt
+  (try_lwt
 
   (* Start the policy stream *)
   (* >> is from Lwt's Pa_lwt. But you MUST have -syntax camlp4o or it won't be recoginized. *)
@@ -82,9 +82,9 @@ let run_flowlog (p: flowlog_program): unit Lwt.t =
       Lwt.pick [gen_stream; NetCore_Controller.start_controller pkt_stream stream]
 
    with | Failure(x) ->
-   printf "Received failure; exiting LWT.\n%!";
-   printf "Failure was %s\n%!" x;
-   Lwt.return ();;
+     printf "Received failure; exiting LWT.\n%!";
+     printf "Failure was %s\n%!" x;
+     Lwt.return ());;
 
       (* switch proxy listeners are started later, when some outgoing event causes FL to register a proxy *)
 

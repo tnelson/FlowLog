@@ -1161,3 +1161,9 @@ let flvalue_to_xsbable (s: string): string =
     macaddr_to_int_string (Packet.mac_of_string s)
   else
     s;;
+
+let is_mutex_locked (m: Mutex.t): bool =
+  let fresh_lock = Mutex.try_lock m in
+    match fresh_lock with
+      | false -> true (* was already locked *)
+      | true -> Mutex.unlock m; false;; (* was not already locked *)
