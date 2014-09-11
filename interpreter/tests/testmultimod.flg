@@ -8,10 +8,16 @@
 //  DO forward(new) WHERE new.locPt = 2 AND new.dlSrc = ab:ba:ff:ff:ff:ff AND new.dlDst = ab:ba:aa:aa:aa:aa;
 
 
-
 ON ip_packet(p):
   DO forward(new) WHERE new.locPt = 2 AND
+
+    // workaround to force IN_PORT use:
+    // constrain inport explicitly. this rule is not very useful semantically.
+    switch_has_port(p.locSw, p.locPt) and
+
     new.dlSrc = ab:ba:ff:ff:ff:ff AND
     new.dlDst = ab:ba:aa:aa:aa:aa;
+
+
 
 // priority=65535,ip actions=mod_dl_src:ab:ba:ff:ff:ff:ff,mod_dl_dst:ab:ba:aa:aa:aa:aa,output:2

@@ -60,6 +60,13 @@ ON ip_packet(pkt):
     // don't route packets which need NAT'ing (must send them to NAT first: see L3router)
     and NOT @needs-nat-disj
 
+    // WORKAROUND: OF 1.0 requires IN_PORT use, even if inport isn't constrained in OF rule pred.
+    // TODO(tn): modify FL compiler to properly assert IN_PORTs as needed. But for now,
+    // since our routers may need to bounce packets back modified, trick the compiler into constraining inport:
+    // DOWNSIDE TODO(tn): We ought to fix this with more than a workaround since this causes O(#external-subnets^2)
+    // added rules. Something smarter could only add O(#external-subnets) rules by using priorities.
+    and switch_has_port(pkt.locSw, pkt.locPt)
+
     and routes(pkt.locSw, pre, mask, new.locPt) AND
     pkt.nwDst IN pre/mask AND
     // special predicate with special compilation "routes" is hard-coded, do not change!
