@@ -1,0 +1,17 @@
+
+// OK
+//ON ip_packet(p) WHERE p.locPt = 1:
+//  DO forward(new) WHERE new.locPt = 2 AND new.dlSrc = ca:fe:ff:ff:ff:ff AND new.dlDst = ca:fe:aa:aa:aa:aa;
+
+// OK---but compiler produces "IN_PORT" here.
+//ON ip_packet(p) WHERE p.locPt = 2:
+//  DO forward(new) WHERE new.locPt = 2 AND new.dlSrc = ab:ba:ff:ff:ff:ff AND new.dlDst = ab:ba:aa:aa:aa:aa;
+
+
+
+ON ip_packet(p):
+  DO forward(new) WHERE new.locPt = 2 AND
+    new.dlSrc = ab:ba:ff:ff:ff:ff AND
+    new.dlDst = ab:ba:aa:aa:aa:aa;
+
+// priority=65535,ip actions=mod_dl_src:ab:ba:ff:ff:ff:ff,mod_dl_dst:ab:ba:aa:aa:aa:aa,output:2
