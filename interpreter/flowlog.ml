@@ -72,6 +72,14 @@ let run_flowlog (p: flowlog_program): unit Lwt.t =
     let (pkt_stream, push_pkt) = Lwt_stream.create () in
     emit_push := Some push_pkt;
 
+    (* See Partial_Eval and SafeEmitQueue *)
+    let rec dequeue_packets_for_emit (): unit Lwt.t =
+      (* Block until something is dequeued *)
+      lwt to_emit = safe_queue#dequeue () in (* "lwt" needed here or the CREATION OF THE THREAD will block. *)
+        iter push_pkt to_emit;
+        printf "In dequeue_packets_for_emit. to_emit length = %d\n%!" (length to_emit);
+        dequeue_packets_for_emit () in
+
       (* Note use of LWT here! *)
       (* Send the "startup" notification. Enables initialization, etc. in programs *)
       Lwt.return (respond_to_notification p {typeid="startup"; values=StringMap.empty} IncThrift) >>
@@ -79,7 +87,7 @@ let run_flowlog (p: flowlog_program): unit Lwt.t =
       (* pick cancels all threads given if one terminates *)
       (* DO NOT attempt to copy ox/frenetic's switch connection detection code here. It will clash with
          Frenetic's. Instead, register a HandleSwitchEvent policy, which gives us a nice clean callback. *)
-      Lwt.pick [gen_stream; NetCore_Controller.start_controller pkt_stream stream]
+      Lwt.pick [dequeue_packets_for_emit (); gen_stream; NetCore_Controller.start_controller pkt_stream stream]
 
    with | Failure(x) ->
      printf "Received failure; exiting LWT.\n%!";
@@ -87,6 +95,7 @@ let run_flowlog (p: flowlog_program): unit Lwt.t =
      Lwt.return ());;
 
       (* switch proxy listeners are started later, when some outgoing event causes FL to register a proxy *)
+
 
 
 let main () =

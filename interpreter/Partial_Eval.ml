@@ -32,10 +32,34 @@ exception ContradictionInPE;;
 (* Not sure why the input can be option. *)
 let emit_push: ((NetCore_Types.switchId * NetCore_Types.portId * OpenFlow0x01_Core.payload) option -> unit) option ref = ref None;;
 
-let guarded_emit_push (swid: switchId) (pt: portId) (payload: OpenFlow0x01_Core.payload): unit =
-  match !emit_push with
-    | None -> printf "Packet stream has not been created yet. Error!\n%!"
-    | Some f -> f (Some (swid,pt,payload));;
+(* The stream in NetCore is not safe to call here; we may be in a separate thread.
+   Lwt_stream push func will call the wakener for the stream immediately.
+
+   We cannot work entirely within LWT to correct this (i.e., wrap the Thread mutex in an Lwt_mutex)
+   as NetCore's packet callback returns actions, not actions in the Lwt.t monad.
+   If respond_to_notification returned an Lwt.t that is *sleeping* (possible if something blocks)
+   then we have no way to get the value out of the monad because it's not yet been computed.
+
+   Therefore: emits that originate from a Thrift thread (eventsource = IncThrift) need to be QUEUED
+   rather than immediately placed into the push function. To avoid polling on the Lwt side, we use
+   a Unix FD to flag the queue is ready for reading.
+
+
+
+    *)
+
+let safe_queue = new SafeEmitQueue.cl_SafeEmitQueue;;
+
+let guarded_emit_push (from:eventsource) (swid: switchId) (pt: portId) (payload: OpenFlow0x01_Core.payload): unit =
+  match from with
+    | IncThrift ->
+      (* Queue the emit (see above)
+         Do not actually place in the LWT stream. *)
+      safe_queue#enqueue (Some (swid, pt, payload));
+    | _ ->
+    (match !emit_push with
+      | None -> printf "Packet stream has not been created yet. Error!\n%!"
+      | Some f -> f (Some (swid,pt,payload)));;
 
 let ms_on_packet_processing = ref 0.;;
 let counter_inc_pkt = ref 0;;
@@ -910,7 +934,7 @@ let forward_packet (p: flowlog_program) (ev: event) (full_packet: int64 * int32 
 
 (*let doSendPacketIn_ref: (flowlog_program -> event -> string -> string -> (int64 * int32 * Packet.packet * int32 option) -> unit Lwt.t) option ref = ref None;;*)
 
-let emit_packet (p: flowlog_program) (ev: event): unit =
+let emit_packet (p: flowlog_program) (from: eventsource) (ev: event): unit =
   printf "emitting: %s\n%!" (string_of_event p ev);
   write_log (sprintf ">>> emitting: %s\n%!" (string_of_event p ev));
   let swid = (Int64.of_string (get_field ev "locsw")) in
@@ -918,7 +942,7 @@ let emit_packet (p: flowlog_program) (ev: event): unit =
 
   (* TODO: confirm dltyp/nwProto etc. are consistent with whatever type of packet we're producing
      At the moment, someone can emit_arp with dlTyp = 0x000 or something dumb like that. *)
-  guarded_emit_push swid pt (OpenFlow0x01_Core.NotBuffered (marshal_packet ev));;
+  guarded_emit_push from swid pt (OpenFlow0x01_Core.NotBuffered (marshal_packet ev));;
 
 (*let forward_packet_from_cp (p: flowlog_program) (ev: event) (full_packet: int64 * int32 * Packet.packet * int32 option): unit =
   printf "forwarding packet from CP: %s\n%!" (string_of_event p ev);
@@ -1004,7 +1028,7 @@ let execute_output (p: flowlog_program)
 
         | IncDP,Some(fp) -> (forward_packet p ev fp)
         | _ -> failwith "forward_packet: None given as last packet seen.")
-   | OutEmit(_) -> emit_packet p ev
+   | OutEmit(_) -> emit_packet p from ev
    | OutPrint -> printf "PRINT RULE FIRED: %s\n%!" (string_of_event p ev)
    | OutLoopback -> failwith "loopback unsupported currently"
    | OutSend(_, ip, pt) -> send_event p ev ip pt full_packet;;
