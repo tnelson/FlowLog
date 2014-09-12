@@ -635,6 +635,14 @@ let add_id_protection_cl (cl: clause): clause =
     | _ -> cl.body) in
       {cl with body = newbody};;
 
+let get_dependencies (cl: clause): string list =
+    fold_left
+      (fun acc atm -> match atm with
+          | FAtom(_, relname, _) when not (mem relname acc) -> relname::acc
+          | _ -> acc)
+      []
+      (get_atoms cl.body);;
+
 let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_program =
   let expanded_ast = expand_includes ast [filename] in
   let ast_stmts = expanded_ast.statements in
@@ -703,12 +711,12 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
             let simplified_clauses = (map simplify_clause clauses) in
 
             (* pre-determine what can be fully compiled. pre-determine weakened versions of other packet-triggered clauses*)
-            let can_fully_compile_simplified, weakened_cannot_compile_pt_clauses, not_fully_compiled_clauses =
-              fold_left (fun (acc_comp, acc_weaken, acc_unweakened) cl ->
+            let can_fully_compile_simplified, weakened_cannot_compile_pt_clauses, not_fully_compiled_clauses,_ =
+              fold_left (fun (acc_comp, acc_weaken, acc_unweakened,count) cl ->
                                    let (inrel, v, t) = trim_packet_from_body cl.body in
                                      (* not packet-triggered or not from data-plane *)
                                      if (v = "") || (mem inrel built_in_cp_packet_input_tables) then
-                                       (acc_comp, acc_weaken, cl::acc_unweakened)
+                                       (acc_comp, acc_weaken, cl::acc_unweakened,count+1)
                                      else
 
                                      (* DP-packet-triggered; may be weakened or unweakened.
@@ -720,14 +728,24 @@ let desugared_program_of_ast (ast: flowlog_ast) (filename : string): flowlog_pro
 
                                         (* fully compilable *)
                                         if fully_compiled then
-                                           ({oldpkt=v; clause={head = cl.head; orig_rule = cl.orig_rule; body = t}} :: acc_comp, acc_weaken, acc_unweakened)
+                                          let newcl2 = {head = cl.head; orig_rule = cl.orig_rule; body = t} in
+                                           ({oldpkt=v;
+                                             dependencies=(get_dependencies newcl2);
+                                             id=(string_of_int count);
+                                             clause=newcl2} :: acc_comp,
+                                            acc_weaken, acc_unweakened, count+1)
 
-                                        (* weakened; needs storing for both compiler and XSB. weakened version should have its trigger removed *)
+                                        (* weakened; needs storing for both compiler and XSB.
+                                           weakened version should have its trigger removed *)
                                         else
-                                         (acc_comp, {oldpkt=v; clause=newcl} :: acc_weaken, cl::acc_unweakened)
+                                         (acc_comp,
+                                          {oldpkt=v;
+                                           dependencies=(get_dependencies newcl);
+                                           id=(string_of_int count);
+                                           clause=newcl} :: acc_weaken, cl::acc_unweakened, count+1)
 
                                      end)
-                          ([],[],[]) simplified_clauses in
+                          ([],[],[],1) simplified_clauses in
 
               printf "\n  Loaded AST. There were %d clauses, \n    %d of which were fully compilable forwarding clauses and\n    %d were weakened pkt-triggered clauses.\n    %d will be given, unweakened, to XSB.\n%!"
                 (length simplified_clauses)

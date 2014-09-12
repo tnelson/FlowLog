@@ -1,0 +1,14 @@
+
+// For testing basic mininet connectivity in Exodus.
+// Loops are bad even here, because will lock up mininet on discovery
+
+TABLE topology(switchid, portid, switchid, portid);
+
+ON switch_port(swpt):
+  do emit(new) where new.locsw = swpt.sw and new.locpt = swpt.pt and
+    new.dlsrc = new.locsw and new.dldst = new.locpt and new.dltyp = 0x1001 and new.dlvlan = -1;
+
+ON packet(p) WHERE p.dltyp = 0x1001:
+  INSERT (p.locSw, p.locPt, p.dlSrc, p.dlDst) INTO topology;
+
+

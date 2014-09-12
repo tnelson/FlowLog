@@ -65,7 +65,7 @@ ON ip_packet(pkt):
     // since our routers may need to bounce packets back modified, trick the compiler into constraining inport:
     // DOWNSIDE TODO(tn): We ought to fix this with more than a workaround since this causes O(#external-subnets^2)
     // added rules. Something smarter could only add O(#external-subnets) rules by using priorities.
-    and switch_has_port(pkt.locSw, pkt.locPt)
+    //and switch_has_port(pkt.locSw, pkt.locPt)
 
     and routes(pkt.locSw, pre, mask, new.locPt) AND
     pkt.nwDst IN pre/mask AND

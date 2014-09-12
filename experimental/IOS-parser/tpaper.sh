@@ -1,0 +1,1 @@
+./ios2flowlog --path tests/paper1/ --conn conns.txt configA.txt configB.txt configC.txt configD.txt ext.txt

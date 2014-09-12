@@ -10,6 +10,7 @@ interface out_corp
   ip access-group 201 out
   ip address 10.200.1.1 255.255.0.0
   ip nat inside
+  ospf cost 6
 
 ! TODO: require reflect X to appear before evaluate X
 ! or the parser will not properly add
@@ -26,7 +27,7 @@ ip access-list extended 201
 ! applied to INTERNET SIDE on INGRESS
 ! allow return traffic AND allow anyone but blacklisted to access 10.200.1.4
 ip access-list extended 101
-  deny ip host 10.100.100.100
+  deny ip host 10.100.100.100 any
   permit ip any host 10.200.1.4
   evaluate returnflow
   deny any

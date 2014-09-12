@@ -52,16 +52,8 @@ interface GigabitEthernet1/4
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-! a pair of LAN ports with no subnet
-interface FastEthernet0/1
-  switchport
-  switchport access vlan 4
-  switchport mode access
-
-interface FastEthernet0/2
-  switchport
-  switchport access vlan 4
-  switchport mode access
+! Default:
+ip route 0.0.0.0 0.0.0.0 192.168.2.2
 
 
 end

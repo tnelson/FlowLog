@@ -36,7 +36,7 @@ interface Vlan3
 ! unfortunately giving them the SVI isn't enough: we also config a gateway via mininet
 ! with the IP address of the appropriate SVI. But the rest of the network is not routable
 ! from the SVI unless we (1) change the gateway to one of the SVIs on routerA or...
-! go via (one of the) vlans to reach the gateway on A
+! What we do: go via L2 hop on one of the vlans to reach the gateway on A
 ! choice of A is arbitrary; could use 10.5.103.1 as well.
 ip route 0.0.0.0 0.0.0.0 10.5.102.1
 

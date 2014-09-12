@@ -609,6 +609,8 @@
 
 ;; number symbl symbol symbol address<%> (listof any) IOS-config% -> IOS-config%
 (define (parse-ip-named-access-list4 line name disposition protocol src-addr line-tokens config)
+  (when (empty? line-tokens)
+    (printf "Warning: badly formatted line: ~a: ~a ~a ~a ~a~n" line name disposition protocol (send src-addr text)))
   (cond [(single-address? (first line-tokens))
          (if (eqv? protocol 'ip)
              (send config

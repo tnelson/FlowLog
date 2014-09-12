@@ -959,7 +959,11 @@ let string_of_astdeclaration (d: astdecl): string =
     iter (fun cl -> printf "clause: %s\n%!" (string_of_clause ~verbose:Verbose cl)) p.clauses;;
 
   let string_of_triggered_clause ?(verbose: bool = false) (cl: triggered_clause): string =
-    "TRIGGER: "^cl.oldpkt^" "^(string_of_clause cl.clause);;
+    sprintf "TRIGGERED %s: (oldpkt=%s)\n%s\nDependencies: %s\n"
+      cl.id
+      cl.oldpkt
+      (string_of_clause cl.clause)
+      (string_of_list "," identity cl.dependencies);;
 
 (******************************************************************************)
 (* Infer types of terms. Used largely for rule-scope variables in the Alloy translator. *)

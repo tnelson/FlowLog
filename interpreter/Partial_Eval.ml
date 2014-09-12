@@ -208,16 +208,37 @@ let rec substitute_for_join (eqs: formula list) (othsubfs: formula list): formul
 
 (*************************************************************************)
 
-let pe_helper_cache = ref FmlaMap.empty;;
+
+
+(* ~~~ Store the PE result broken into a list of lists representing DISJ of CONJS of atoms.
+	   Stage 1, since it's going to do substitution, needs this broken out, not as the final fmla.
+	   Stage 2, on the other hand, passes over negative formulas, which have already been maximally
+	   substituted. So using the full fmla here will save on rebuilding lists/fmlas.
+*)
+let pe_helper_cache: (formula list list) FmlaMap.t ref = ref FmlaMap.empty;;
+let pe_neg_cache: formula FmlaMap.t ref = ref FmlaMap.empty;;
+
+(* Don't re-PE clauses that have no altered dependencies.
+
+   This would be much cleaner as a field of triggered_clause, but
+   then the PE functions would need to return a new flowlog_program, and
+   so would respond_to_notification; worse, the program has already been
+   passed to the Thrift thread... *)
+let pe_clause_cache: (pred * action * srule) list StringMap.t ref = ref StringMap.empty;;
+
+(* For profiling and debugging info *)
 let count_pe_cache_hits = ref 0;;
 let count_pe_cache_misses = ref 0;;
+let count_pe_neg_cache_hits = ref 0;;
+let count_pe_neg_cache_misses = ref 0;;
 let count_clauses_pe = ref 0;;
 let count_disjuncts_pe = ref 0;;
 let count_unique_disjuncts_pe = ref 0;;
 
 (* Assumes only positive subformulas!
-    Returns list of lists, each inner list represents a conjunction *)
-let partial_evaluation_helper (positive_f: formula): formula list list =
+    Returns list of lists, each inner list represents a conjunction
+    and the formula that is the disj of the conjs of that list *)
+let partial_evaluation_helper (positive_f: formula): (formula list list) =
   (* Within a single PE cycle, the state won't change. So avoid repetitive calls to get_state.
      ^ This optimization is more important than it seems, since clauses are split before negative fmlas get PE'd now. *)
   if FmlaMap.mem positive_f !pe_helper_cache then
@@ -230,23 +251,26 @@ let partial_evaluation_helper (positive_f: formula): formula list list =
   begin
     if !global_verbose >= 6 then write_log (sprintf "Formula was a cache MISS for PE: %s" (string_of_formula positive_f));
     if !global_verbose >= 1 then count_pe_cache_misses :=  !count_pe_cache_misses + 1;
-  (* Consider formulas like: seqpt(PUBLICIP,0x11,X) -- need to remove constants from tlargs before reassembling equalities *)
-  let terms_used_no_constants_or_any = get_terms (fun t -> not (is_ANY_term t) && match t with | TConst(_) -> false | _ -> true) positive_f in
 
-  let xsbresults = Communication.get_state ~compiler:true positive_f in
-    let conjuncts = map
-      (fun tl ->
-           if !global_verbose >= 4 then
-            printf "Reassembling an XSB equality for formula %s. tl=%s; terms_used_no_constants_or_any=%s\n%!"
-                   (string_of_formula positive_f) (String.concat "," (map string_of_term tl)) (String.concat "," (map string_of_term terms_used_no_constants_or_any));
-          (reassemble_xsb_equality terms_used_no_constants_or_any tl))
-      xsbresults in
-    if !global_verbose >= 5 then
-      printf "<< POSITIVE partial evaluation result (converted from xsb) for %s\n    was: %s\n%!"
-             (string_of_formula positive_f)
-             (String.concat "\n" (map (fun fl -> (String.concat "," (map string_of_formula fl))) conjuncts));
-    pe_helper_cache := FmlaMap.add positive_f conjuncts !pe_helper_cache;
-    conjuncts
+    (* Consider formulas like: seqpt(PUBLICIP,0x11,X) -- need to remove constants from tlargs before reassembling equalities *)
+    let terms_used_no_constants_or_any = get_terms (fun t -> not (is_ANY_term t) && match t with | TConst(_) -> false | _ -> true) positive_f in
+
+    let xsbresults = Communication.get_state ~compiler:true positive_f in
+      let conjuncts = map
+        (fun tl ->
+             if !global_verbose >= 4 then
+              printf "Reassembling an XSB equality for formula %s. tl=%s; terms_used_no_constants_or_any=%s\n%!"
+                     (string_of_formula positive_f) (String.concat "," (map string_of_term tl)) (String.concat "," (map string_of_term terms_used_no_constants_or_any));
+            (reassemble_xsb_equality terms_used_no_constants_or_any tl))
+        xsbresults in
+
+        if !global_verbose >= 5 then
+          printf "<< POSITIVE partial evaluation result (converted from xsb) for %s\n    was: %s\n%!"
+                 (string_of_formula positive_f)
+                 (String.concat "\n" (map (fun fl -> (String.concat "," (map string_of_formula fl))) conjuncts));
+
+        pe_helper_cache := FmlaMap.add positive_f conjuncts !pe_helper_cache;
+        conjuncts
   end;;
 
 let stage_2_partial_eval (incpkt: string) (atoms_or_neg: formula list): formula list =
@@ -257,21 +281,46 @@ let stage_2_partial_eval (incpkt: string) (atoms_or_neg: formula list): formula 
 
     (* Kludge... TN *)
     | FNot(FAtom(_,"haslongerprefixmatch",[sw;dst;pre;mask])) ->
-      let xsbresults = Communication.get_state ~compiler:true (FAtom("", "getPossibleLongerPrefixMasks",
-                                                             [sw;pre;mask;TVar("P2");TVar("M2")])) in
-        if !global_verbose > 9 then printf "KLUDGE: haslongerprefixmatch: %s\n%!" (string_of_list_list ";" "," string_of_term xsbresults);
-        let to_negate = map (fun tl -> match tl with
+      (* partial_evaluation_helper will use the cache here; we should too *)
+      let specialfmla = (FAtom("", "getPossibleLongerPrefixMasks", [sw;pre;mask;TVar("P2");TVar("M2")])) in
+      let result =
+        if FmlaMap.mem specialfmla !pe_neg_cache then
+        begin
+          if !global_verbose >= 1 then count_pe_neg_cache_hits := !count_pe_neg_cache_hits + 1;
+          FmlaMap.find specialfmla !pe_neg_cache
+        end
+        else
+        begin
+          if !global_verbose >= 1 then count_pe_neg_cache_misses :=  !count_pe_neg_cache_misses + 1;
+          let xsbresults = Communication.get_state ~compiler:true specialfmla in
+          let to_negate = map (fun tl -> match tl with
             | [p2;m2] -> FIn(dst, p2, m2)
             | _ -> failwith (sprintf "bad haslongerprefixmatch: %s\n%!" (string_of_list "," string_of_term tl)))
-          xsbresults in
-        FNot(build_or to_negate)
-
+            xsbresults in
+            let negated_disjunction = FNot(build_or to_negate) in
+              pe_neg_cache := FmlaMap.add specialfmla negated_disjunction !pe_neg_cache;
+            negated_disjunction
+        end in
+      if !global_verbose > 9 then printf "KLUDGE: haslongerprefixmatch: %s\n%!" (string_of_formula result);
+      result
 
     | FNot(FAtom(_,_,_) as inner) ->
+      (* Note second cache here: negatives can afford to cache the whole result formula *)
+      if FmlaMap.mem inner !pe_neg_cache then
+      begin
+        if !global_verbose >= 1 then count_pe_neg_cache_hits :=  !count_pe_neg_cache_hits + 1;
+        FmlaMap.find inner !pe_neg_cache
+      end
+      else
+      begin
+      	if !global_verbose >= 1 then count_pe_neg_cache_misses :=  !count_pe_neg_cache_misses + 1;
         let peresults = partial_evaluation_helper inner in
         (*write_log (sprintf "s2pe: %s\n%!" (String.concat ", " (map string_of_formula peresults)));*)
-          if (length peresults) < 1 then FTrue
-          else FNot(build_or (map build_and peresults))
+        let result = if (length peresults) < 1 then FTrue
+                     else FNot((build_or (map build_and peresults))) in
+        pe_neg_cache := FmlaMap.add inner result !pe_neg_cache;
+        result
+      end
     | _ -> subf) atoms_or_neg);;
 
 (* Replace state references with constant matrices.
@@ -305,8 +354,8 @@ let partial_evaluation (p: flowlog_program) (incpkt: string) (f: formula): formu
       let positive_conjuncts = partial_evaluation_helper positive_conj in
         (* Hook each positive disj together with the other_formulas. We now have possibly many different clauses.
            ^ Note that this substitution also applies to the additional_positive_subfmlas.  *)
-        let stage_2_lists = filter_map (fun listconj -> substitute_for_join listconj other_formulas) positive_conjuncts in
-          let result_clauses = map (stage_2_partial_eval incpkt) stage_2_lists in
+        let set_of_split_conjunctions = filter_map (fun listconj -> substitute_for_join listconj other_formulas) positive_conjuncts in
+          let result_clauses = map (stage_2_partial_eval incpkt) set_of_split_conjunctions in
           let unique_result_clauses = unique result_clauses in
             if !global_verbose >= 1 then
             begin
@@ -638,36 +687,18 @@ let handle_all_and_port_together (oldpkt: string) (apred: pred) (acts: action_at
    and this reduce the clause to <false>. If the caller wants efficiency, it should pass only packet-triggered clauses. *)
 let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_handler option) (tcl: triggered_clause): (pred * action * srule) list =
     if !global_verbose > 4 then (match callback with
-      | None -> write_log_and_print (sprintf "\n--- Packet triggered clause to netcore (FULL COMPILE) on: \n%s\n%!" (string_of_triggered_clause tcl))
-      | Some(_) -> write_log_and_print (sprintf "\n--- Packet triggered clause to netcore (~CONTROLLER~) on: \n%s\n%!" (string_of_triggered_clause tcl)));
+      | None -> write_log_and_print (sprintf "\n--- Packet triggered clause to netcore (FULL COMPILE) on: \n%s\nCached: %b\n%!" (string_of_triggered_clause tcl) (StringMap.mem tcl.id !pe_clause_cache))
+      | Some(_) -> write_log_and_print (sprintf "\n--- Packet triggered clause to netcore (~CONTROLLER~) on: \n%sCached: %b\n%!" (string_of_triggered_clause tcl) (StringMap.mem tcl.id !pe_clause_cache)));
 
+    (* If cached and still valid, used cached version *)
+    if StringMap.mem tcl.id !pe_clause_cache then
+      StringMap.find tcl.id !pe_clause_cache
+    else
     match tcl.clause.head with
       | FAtom(_, _, headargs) ->
         (* Do partial evaluation. Need to know which terms are of the incoming packet.
           All others can be factored out. ASSUMPTION: the body is a conjunction of atoms. *)
 
-  (*      let pebody = partial_evaluation p tcl.oldpkt tcl.clause.body in
-
-        (* partial eval may insert disjunctions because of multiple tuples to match
-           so we need to pull those disjunctions up and create multiple policies
-           since there may be encircling negation, also need to call nnf *)
-        (* !! Don't need to NNF since no newpkts under negation *)
-
-        (* todo: this is pretty inefficient for large numbers of tuples. do better? *)
-
-        (*let bodies = disj_to_list (disj_to_top (nnf pebody)) in *)
-        let bodies_before_substitute_for_join = disj_to_list (disj_to_top ~ignore_negation:true pebody) in
-
-        if !global_verbose > 5 then
-          write_log (sprintf "bodies before substitute_for_join = %s\n%!" (String.concat "   \n " (map string_of_formula bodies_before_substitute_for_join)));
-
-        (* anything not the old packet is a RESULT variable.
-           Remember that we know this clause is packet-triggered, but
-           we have no constraints on what gets produced. Maybe a bunch of
-           non-packet variables e.g. +R(x, y, z) ... *)
-
-        let bodies = map substitute_for_join bodies_before_substitute_for_join in
-*)
         let startt = Unix.gettimeofday() in
 
         let bodies = partial_evaluation p tcl.oldpkt tcl.clause.body in
@@ -702,7 +733,6 @@ let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_h
                 [(bigpred, [ControllerAction(f)])] in
 
 
-
           (* add context: the rule for this clause*)
           let result = (map (fun (apred, anact) -> (apred, anact, tcl.clause.orig_rule)) unsafe_result) in
 
@@ -719,7 +749,7 @@ let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_h
                              (NetCore_Pretty.string_of_action result_act))) result;
             write_log "\n\n";
           end;
-
+		  pe_clause_cache := StringMap.add tcl.id result !pe_clause_cache;
           result
       | _ -> failwith "pkt_triggered_clause_to_netcore";;
 
@@ -885,10 +915,17 @@ let program_to_netcore (p: flowlog_program) (callback: get_packet_handler): (pol
   (* posn 1: fully compilable packet-triggered.
      posn 2: pre-weakened, non-fully-compilable packet-triggered *)
 
-    (* Clear out the PE helper cache. This is vital! (TODO: make functional) *)
+    (* Clear out the PE caches. This is vital! *)
     pe_helper_cache := FmlaMap.empty;
+    pe_neg_cache := FmlaMap.empty;
+
+    (* The clause cache remains across PE iterations; respond_to_notification clears it as needed *)
+
+    (* reset debug counters*)
     count_pe_cache_hits := 0;
     count_pe_cache_misses := 0;
+    count_pe_neg_cache_hits := 0;
+    count_pe_neg_cache_misses := 0;
     count_clauses_pe := 0;
     count_disjuncts_pe := 0;
     count_unique_disjuncts_pe := 0;
@@ -902,9 +939,13 @@ let program_to_netcore (p: flowlog_program) (callback: get_packet_handler): (pol
     if !global_verbose >= 1 then
     begin
       write_log ("--------------------------- program_to_netcore statistics ---------------------------\n%!");
+      write_log (sprintf "pe_clause_cache size (num of clauses still cached after mods) = %d\n%!" (StringMap.cardinal !pe_clause_cache));
       write_log (sprintf "pe_helper_cache size = %d\n%!" (FmlaMap.cardinal !pe_helper_cache));
+      write_log (sprintf "pe_neg_cache size = %d\n%!" (FmlaMap.cardinal !pe_neg_cache));
       write_log (sprintf "count_pe_cache_hits = %d\n%!" !count_pe_cache_hits);
       write_log (sprintf "count_pe_cache_misses = %d\n%!" !count_pe_cache_misses);
+      write_log (sprintf "count_pe_neg_cache_hits = %d\n%!" !count_pe_neg_cache_hits);
+      write_log (sprintf "count_pe_neg_cache_misses = %d\n%!" !count_pe_neg_cache_misses);
       write_log (sprintf "count_clauses_pe = %d\n%!" !count_clauses_pe);
       write_log (sprintf "count_disjuncts_pe = %d\n%!" !count_disjuncts_pe);
       write_log (sprintf "count_unique_disjuncts_pe = %d\n%!" !count_unique_disjuncts_pe);
@@ -1099,6 +1140,15 @@ let get_local_tables_triggered (p: flowlog_program) (sign: bool) (notif: event) 
     (*printf "possibly triggered: %s\n%!" (String.concat ",\n" (map string_of_declaration possibly_triggered));*)
     possibly_triggered;;
 
+let invalidate_policy_caches (p: flowlog_program) (modifications: string list): unit =
+  (* Invalidate any clause that depends on something we changed.
+     quick and <1000 clauses; don't prematurely optimize *)
+  let invalidate (tcl: triggered_clause): unit =
+    if length (list_intersection tcl.dependencies modifications) > 0 then
+      pe_clause_cache := StringMap.remove tcl.id !pe_clause_cache in
+	iter invalidate p.weakened_cannot_compile_pt_clauses;
+	iter invalidate p.can_fully_compile_to_fwd_clauses;;
+
 (*let lwt_respond_lock = Lwt_mutex.create ();;*)
 
 (* Returns list of names of tables that have been modified, plus forwarding actions if any *)
@@ -1213,6 +1263,9 @@ let respond_to_notification
     let modifications = map atom_to_relname (to_assert @ (subtract to_retract to_assert)) in
     modifications_since_last_policy := modifications @ !modifications_since_last_policy;
    (* Now that all the queries are completed, actually do stuff. *)
+
+   (* invalidate policy caches that depend on relations this update changes *)
+   invalidate_policy_caches p modifications;
 
    (**********************************************************)
    (* UPDATE STATE IN XSB as dictated by +/- results stored before
@@ -1405,8 +1458,13 @@ let make_policy_stream (p: flowlog_program)
       write_log (sprintf "** policy recreation thunk triggered.\n");
       if not notables then
       begin
+        let startt = Unix.gettimeofday() in
         (* Update the policy *)
         let (newfwdpol, newnotifpol, newnotifpred) = program_to_netcore p updateFromPacket in
+
+        if !global_verbose > 2 then
+          write_log (sprintf "Time after program_to_netcore: %fs" (Unix.gettimeofday() -. startt));
+
 
    (*     printf "NEW FWD policy: %s\n%!" (NetCore_Pretty.string_of_pol newfwdpol);
         printf "NEW NOTIF policy: %s\n%!" (NetCore_Pretty.string_of_pol newnotifpol);
@@ -1414,10 +1472,13 @@ let make_policy_stream (p: flowlog_program)
         let newpol = build_total_pol newnotifpred newfwdpol newnotifpol (internal_policy()) in (*Union(Union(newfwdpol, newnotifpol), internal_policy()) in*)
           (* Since can't compare functions, need to use custom comparison *)
 
-          let startt = Unix.gettimeofday() in
+          if !global_verbose > 2 then
+            write_log (sprintf "Time after total pol: %fs" (Unix.gettimeofday() -. startt));
+
+
           let no_update_needed = (safe_compare_pols newpol !last_policy_pushed) in
           if !global_verbose > 2 then
-            write_log (sprintf "Time to compare new and old policy: %fs" (Unix.gettimeofday() -. startt));
+            write_log (sprintf "Time after compare new and old policy: %fs" (Unix.gettimeofday() -. startt));
 
           if not no_update_needed then
           begin
@@ -1437,7 +1498,10 @@ let make_policy_stream (p: flowlog_program)
           begin
             write_log (sprintf "NEW POLICY was the same. Did not push (last was number %d).\n" !counter_pols_pushed);
             printf "NEW POLICY was the same. Did not push (last was number %d).\n%!" !counter_pols_pushed;
-          end
+          end;
+
+          if !global_verbose > 2 then
+            write_log (sprintf "Time to complete trigger_policy_recreation_thunk: %fs" (Unix.gettimeofday() -. startt));
       end
       else
         if notables then printf "\n*** FLOW TABLE COMPILATION DISABLED! ***\n%!";
