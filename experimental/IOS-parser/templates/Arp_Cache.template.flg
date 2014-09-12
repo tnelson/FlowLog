@@ -44,7 +44,8 @@ TABLE queued(ipaddr, macaddr, ipaddr, switchid, portid);
 /*******************************************************************************
  *
  * Only flood ARP requests from the controller
- * Only propagate the request if we don't have that addr already (otherwise could loop!)
+ * Only propagate the request if we don't have that addr already
+ * Only flood along L2 links
  *
  ******************************************************************************/
 
@@ -52,10 +53,10 @@ ON arp_packet(request) WHERE request.dlSrc = 00:00:ca:fe:ca:fe // Controller MAC
                              and not switches_without_arp(request.locSw)
                              and not cached(request.arp_tpa, ANY):
    DO forward(new) WHERE
-     // this will be a vlan sub-router or a subnet switch.
-     // for vlan, out physical ports
-     (router_vlan(ANY, request.locSw) AND p2r(request.locSw, new.locPt, ANY) AND new.locPt != request.locPt) OR
-     // for others, flood forward
+     // this will be a vlan sub-router or a switch.
+     // for vlan subswitches, out other **SWITCHPORTS ON THE SPANNING TREE** (keep the broadcast within this subnet)
+     (router_vlan(ANY, request.locSw) AND spanningTree(request.locSw, new.locPt) AND new.locPt != request.locPt) OR
+     // for others (root switches, subnet switches), flood forward
      (NOT router_vlan(ANY, request.locSw) AND new.locPt != request.locPt);
 
 /*******************************************************************************

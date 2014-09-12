@@ -939,7 +939,6 @@ let program_to_netcore (p: flowlog_program) (callback: get_packet_handler): (pol
     if !global_verbose >= 1 then
     begin
       write_log ("--------------------------- program_to_netcore statistics ---------------------------\n%!");
-      write_log (sprintf "pe_clause_cache size (num of clauses still cached after mods) = %d\n%!" (StringMap.cardinal !pe_clause_cache));
       write_log (sprintf "pe_helper_cache size = %d\n%!" (FmlaMap.cardinal !pe_helper_cache));
       write_log (sprintf "pe_neg_cache size = %d\n%!" (FmlaMap.cardinal !pe_neg_cache));
       write_log (sprintf "count_pe_cache_hits = %d\n%!" !count_pe_cache_hits);
@@ -1143,11 +1142,22 @@ let get_local_tables_triggered (p: flowlog_program) (sign: bool) (notif: event) 
 let invalidate_policy_caches (p: flowlog_program) (modifications: string list): unit =
   (* Invalidate any clause that depends on something we changed.
      quick and <1000 clauses; don't prematurely optimize *)
-  let invalidate (tcl: triggered_clause): unit =
+  let invalidate (count_invalidated: int) (tcl: triggered_clause): int =
     if length (list_intersection tcl.dependencies modifications) > 0 then
-      pe_clause_cache := StringMap.remove tcl.id !pe_clause_cache in
-	iter invalidate p.weakened_cannot_compile_pt_clauses;
-	iter invalidate p.can_fully_compile_to_fwd_clauses;;
+    begin
+      pe_clause_cache := StringMap.remove tcl.id !pe_clause_cache;
+      count_invalidated+1
+    end
+    else count_invalidated in
+
+	let invalidated =
+	(fold_left invalidate 0 p.weakened_cannot_compile_pt_clauses) +
+	(fold_left invalidate 0 p.can_fully_compile_to_fwd_clauses) in
+	if !global_verbose > 1 then
+      write_log (sprintf "pe_clause_cache had %d entries invalidated. %d entries remain. %d total compilable clauses.\n%!"
+      	invalidated
+      	(StringMap.cardinal !pe_clause_cache)
+        ((length p.weakened_cannot_compile_pt_clauses) + (length p.can_fully_compile_to_fwd_clauses)));;
 
 (*let lwt_respond_lock = Lwt_mutex.create ();;*)
 

@@ -258,9 +258,9 @@
 (define (is-virtual-interface? name)
   (string-contains (string-downcase name) "vlan"))
  
-(define (vals->vlan-iface vlanswnum ptnum name)  
+(define (vals->vlan-iface vlanswnum adjrptnum name)  
   (cond [(is-virtual-interface? name)          
-         (string-append "INSERT (0x" vlanswnum "," ptnum "," (first (string-split (string-downcase name) "vlan")) ") INTO virtual_interfaces;\n")]
+         (string-append "INSERT (0x" vlanswnum "," adjrptnum "," (first (string-split (string-downcase name) "vlan")) ") INTO virtual_interfaces;\n")]
         [else ""]))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 

@@ -140,16 +140,20 @@ ON ip_packet(pkt) WHERE subnets(addr, mask, gwip, gwmac, router, rport)
                         and not cached(pkt.nwDst, ANY)
                         and pkt.dlDst != gwmac
                         and pkt.nwDst != gwip
-                        and router_portmap(rport, hside, pkt.locPt): // any router side
+                        and router_portmap(rport, ANY, pkt.locPt): // any router side
 
   INSERT (pkt.nwDst) INTO router_queued;
 
   // Send requests out of every ACL sub-router (avoid burdening the core)
   DO emit_arp(new) WHERE
     not router_queued(pkt.nwDst) and // only send the request once
-    // don't use router_acl(router, new.locSw), since since router is bound in the ON clause above
-    router_acl(ANY, new.locSw) and
-    new.locPt = hside and
+    // don't use router_vlan(router, new.locSw), since since router is bound in the ON clause above
+    router_vlan(ANY, new.locSw) and
+
+    // only send out into the appropriate subnet (convert to physical port number)
+    vr2rr(new.locSw, hside, rport) AND
+    p2r(new.locSw, new.locPt, hside) AND
+
     new.dlDst = ff:ff:ff:ff:ff:ff and
     new.dlSrc = 00:00:ca:fe:ca:fe and // controller mac addr
 

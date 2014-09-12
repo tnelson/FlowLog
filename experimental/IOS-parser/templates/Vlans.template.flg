@@ -12,7 +12,7 @@ TABLE sp_vlans(switchid, portid, int);
 TABLE sp_modes(switchid, portid, string);
 
 // switched virtual interfaces (for inter-vlan traffic)
-// VLAN sub-switch -> routing port id -> vlan id
+// VLAN sub-switch -> *adjusted* routing port id (i.e., the vlan sub-switch port on rtr side) -> vlan id
 TABLE virtual_interfaces(switchid, portid, int);
 
 // for non-vlan interfaces: physicalport -> ROUTER SIDE routing port on same device
@@ -30,8 +30,9 @@ TABLE router_vlan(switchid, switchid);
 // Disregard traffic from (host-side) vlan physical or (router-side) virtual L3-visible
 
 ON packet(p) WHERE router_vlan(ANY,p.locSw) AND // at a vlan sub-switch
-                   NOT sp_vlans(p.locSw, p.locPt, ANY) AND
-                   NOT virtual_interfaces(p.locSw, p.locPt, ANY) AND
+                   NOT sp_vlans(p.locSw, p.locPt, ANY) AND // not coming from vlan host-side
+                   // *** n.b. that the 2nd column of virtual_interfaces is an "adjusted" rpt. See IOS.flg.
+                   NOT virtual_interfaces(p.locSw, p.locPt, ANY) AND // not coming from vlan router-side
                    p.dltyp != 0x1001 AND // don't do for discovery
                    p.dltyp != 0x806: // don't do this for arp
   DO forward(new) WHERE

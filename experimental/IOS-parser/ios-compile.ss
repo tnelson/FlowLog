@@ -202,9 +202,11 @@ namespace-for-template)
          ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
          ; port IDs and NIC MAC addresses
          ; - All interfaces (virtual, switchport, and L3 physical) have a MAC address
-         ; - There are two separate spaces of port IDs:
-         ;   + physical (L3 physical and switchport): these are used by the VLAN sub-router; represent physical connections to subnets 
-         ;   + routing (L3 physical and virtual): used by the internal sub-routers to handle traffic completing a L2 hop and being L3-routed.         
+         ; - There are THREE separate spaces of port IDs:
+         ;   + physical (L3 physical and switchport): these are used by the VLAN sub-router; represent physical connections 
+         ;   +   adjusted routing (L3 physical and virtual): these are also used only on the VLAN sub-router; represent the port numbers for rtr-side ports
+         ;        (cannot use routing port ID here, because # of host-side ports differs)
+         ;   + routing (L3 physical and virtual): ID used on RTR sub-switch. used by the internal sub-routers to handle traffic completing a L2 hop and being L3-routed.         
          
          ; used for mac address; assign in sequence regardless of interface type
          (define macnum (number->string ifindex))
@@ -229,8 +231,7 @@ namespace-for-template)
                  name ridx rnum ifindex rname ospf-cost switchport-mode switchport-vlans physical-ptnum routing-ptnum num-physical-ports) ; DEBUG
       
          (define switchport-mode-inserts (val->spmode vlan-dpid physical-ptnum switchport-mode))
-         (define switchport-vlan-inserts (vals->vlans vlan-dpid physical-ptnum switchport-vlans))                          
-         (define maybe-vlan-interface-inserts (vals->vlan-iface vlan-dpid routing-ptnum name))
+         (define switchport-vlan-inserts (vals->vlans vlan-dpid physical-ptnum switchport-vlans))                                   
          
          ;;;;;;;;;;;;;;;;         
          ; Produce tuples
@@ -326,6 +327,9 @@ namespace-for-template)
               routing-ptnum
               adjusted-routing-ptnum)
       
+      ; remember that virtual_interfaces contains swid, rtr-side port, vlan ID.
+      ; can get router port ID from that via vr2rr relation
+      (define maybe-vlan-interface-inserts (vals->vlan-iface vlan-dpid adjusted-routing-ptnum name))
       (define alias (vals->ifalias rname name physical-ptnum routing-ptnum adjusted-routing-ptnum)) 
       (define ospf-cost-inserts (val->ospf rnum routing-ptnum ospf-cost))                 
            
