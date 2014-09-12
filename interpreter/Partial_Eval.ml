@@ -1530,6 +1530,10 @@ let make_policy_stream (p: flowlog_program)
       counter_inc_pkt := !counter_inc_pkt + 1;
       fwd_actions := []; (* populated by things respond_to_notification calls *)
 
+      (* Hack to speed up NIB: don't push a new policy for every probe packet that
+         arrives. (This will be replaced by proper LLDP and a built-in NIB in Flowlog 2.0.) *)
+      let is_custom_nib_probe = ((Packet.dlTyp pkt) = 0x1001) in
+
       (* Parse the packet and send it to XSB. Deal with the results *)
       let notif = (pkt_to_event sw pt pkt) in
         printf "~~~ [Outside mutex] Incoming Notif:\n %s\n%!" (string_of_event p notif);
@@ -1542,7 +1546,9 @@ let make_policy_stream (p: flowlog_program)
            TODO: WORSE---can't get the fwd_actions_todo without being inside Lwt.t.
               and this callback is fixed by type/netcore reqs to be not inside Lwt.t *)
 
-        let _, fwd_actions_todo = respond_to_notification p ~full_packet:(make_last_packet sw pt pkt buf) notif IncDP in
+        let _, fwd_actions_todo = respond_to_notification p
+                                                          ~suppress_new_policy:is_custom_nib_probe
+                                                          ~full_packet:(make_last_packet sw pt pkt buf) notif IncDP in
 
         if !global_verbose >= 1 then
         begin
