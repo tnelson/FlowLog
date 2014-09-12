@@ -7,7 +7,7 @@
 
 
 EVENT start_timer {seconds: int, id: string};
-EVENT timer_expired {id: int};
+EVENT timer_expired {id: string};
 
 TABLE ucSwTopo(switchid, portid, switchid, portid);
 TABLE ucTree(switchid, portid);

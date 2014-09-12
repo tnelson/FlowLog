@@ -156,7 +156,7 @@ let flow_removed_fields = [
          ("inport",   "portid");
          ("sw",       "switchid");("reason",   "string");
          ("dlsrc",    "macaddr"); ("dldst",    "macaddr");
-         ("dltyp",    "ethtyp");  ("nwproto",  "int");
+         ("dltyp",    "ethtyp");  ("nwproto",  "nwprotocol");
          ("tpsrc",    "tpport");  ("tpdst",    "tpport");
          ("nwsrcaddr","ipaddr");  ("nwdstaddr","ipaddr");
          ("nwsrcmask","int");     ("nwdstmask","int")];;

@@ -43,19 +43,19 @@ TABLE needs_nat(switchid, ipaddr, int);
 //
 // Column values:
 // proto (TCP or UDP), private IP, private tp port, public IP, public tp port
-TABLE ptassign(int, ipaddr, int, ipaddr, int);
+TABLE ptassign(nwprotocol, ipaddr, tpport, ipaddr, tpport);
 
 // Last used port number by sequential increase (per-public IP & proto)
 //
 // Column values:
 // public IP, proto, port number
-TABLE seqpt(ipaddr, int, int);
+TABLE seqpt(ipaddr, nwprotocol, tpport);
 
 // Next port made available by reusing expired port (per-public IP & proto)
 //
 // Column values:
 // public IP, proto, port number
-TABLE reusept(ipaddr, int, int);
+TABLE reusept(ipaddr, nwprotocol, tpport);
 
 /*******************************************************************************
  *
