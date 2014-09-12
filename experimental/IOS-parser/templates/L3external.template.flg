@@ -24,7 +24,7 @@
 // router id, prefix, mask, outport
 REMOTE TABLE routes(switchid, ipaddr, int, portid)
   FROM routes AT 127.0.0.1 9999
-  TIMEOUT 15 seconds;
+  TIMEOUT 25 seconds;
 
 /*******************************************************************************
  *
@@ -93,35 +93,6 @@ ON ip_packet(pkt):
     and p2r(nextvlansw, nextphyspt, n_rsidept)
 
     and subnets(ANY, ANY, ANY, new.dlDst, nextrtr, nextrpt);
-
-// TODO(tn): test and debug the above.
-// issue: multiple copies, one to each gateway on the trunk!
-
-
-  insert (pkt.locSw, pkt.nwSrc, pkt.nwDst, newpt, newdlsrc, currvlsw, currphysport) into testrouter
-    where routes(pkt.locSw, pre, mask, newpt) AND
-      pkt.nwDst IN pre/mask AND
-      NOT hasLongerPrefixMatch(pkt.locSw, pkt.nwDst, pre, mask) and
-      subnets(ANY, ANY, ANY, newdlsrc, pkt.locSw, newpt)
-      and router_vlan(pkt.locSw, currvlsw)
-      and vr2rr(currvlsw, c_rsidept, newpt) // c_rsidept: the router-side port on the vlan switch the new pkt will emerge from
-      and p2r(currvlsw, currphysport, c_rsidept); // currphysport: the host-side port of the vlan switch the new pkt will emerge from;
-
-insert (pkt.locSw, pkt.nwSrc, pkt.nwDst, newpt, newdlsrc) into testrouter2
-    where routes(pkt.locSw, pre, mask, newpt) AND
-      pkt.nwDst IN pre/mask AND
-      NOT hasLongerPrefixMatch(pkt.locSw, pkt.nwDst, pre, mask) and
-      subnets(ANY, ANY, ANY, newdlsrc, pkt.locSw, newpt);
-
-
-table testrouter(switchid, ipaddr, ipaddr, portid, macaddr, switchid, portid);
-table testrouter2(switchid, ipaddr, ipaddr, portid, macaddr);
-
-
-// gets this far (up to alltopo)
-// testrouter(0x100000000002, 10.5.102.3, 192.168.1.5, 3, ca:fe:00:02:00:05, 0x600000000002, 3, 0x600000000001, 5).
-
-
 
 
 

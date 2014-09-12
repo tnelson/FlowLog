@@ -219,6 +219,8 @@ let pe_helper_cache: (formula list list) FmlaMap.t ref = ref FmlaMap.empty;;
 let pe_neg_cache: formula FmlaMap.t ref = ref FmlaMap.empty;;
 
 (* Don't re-PE clauses that have no altered dependencies.
+   Alterations can take place in local tables via RTN
+    but also in remote tables via expire_remote_state_in_xsb.
 
    This would be much cleaner as a field of triggered_clause, but
    then the PE functions would need to return a new flowlog_program, and
@@ -919,7 +921,9 @@ let program_to_netcore (p: flowlog_program) (callback: get_packet_handler): (pol
     pe_helper_cache := FmlaMap.empty;
     pe_neg_cache := FmlaMap.empty;
 
-    (* The clause cache remains across PE iterations; respond_to_notification clears it as needed *)
+    (* The clause cache remains across PE iterations;
+       respond_to_notification (local tables) and
+       expire_remote_state_in_xsb (remote tables) clears it as needed *)
 
     (* reset debug counters*)
     count_pe_cache_hits := 0;
@@ -1081,6 +1085,26 @@ let change_table_how (p: flowlog_program) (toadd: bool) (tbldecl: table_def): fo
     let xsb_results = Communication.get_state (FAtom("", modrelname, varlist)) in
     map (fun tup -> FAtom("", relname, tup)) xsb_results;;
 
+let invalidate_policy_caches (p: flowlog_program) (modifications: string list): unit =
+  (* Invalidate any clause that depends on something we changed.
+     quick and <1000 clauses; don't prematurely optimize *)
+  let invalidate (count_invalidated: int) (tcl: triggered_clause): int =
+    if length (list_intersection tcl.dependencies modifications) > 0 then
+    begin
+      pe_clause_cache := StringMap.remove tcl.id !pe_clause_cache;
+      count_invalidated+1
+    end
+    else count_invalidated in
+
+  let invalidated =
+  (fold_left invalidate 0 p.weakened_cannot_compile_pt_clauses) +
+  (fold_left invalidate 0 p.can_fully_compile_to_fwd_clauses) in
+  if !global_verbose > 1 then
+      write_log (sprintf "pe_clause_cache had %d entries invalidated. %d entries remain. %d total compilable clauses.\n%!"
+        invalidated
+        (StringMap.cardinal !pe_clause_cache)
+        ((length p.weakened_cannot_compile_pt_clauses) + (length p.can_fully_compile_to_fwd_clauses)));;
+
 let expire_remote_state_in_xsb (p: flowlog_program) : unit =
 
   (* The cache is keyed by rel/tuple. So R(X, 1) is a DIFFERENT entry from R(1, X). *)
@@ -1101,6 +1125,7 @@ let expire_remote_state_in_xsb (p: flowlog_program) : unit =
                   if !global_verbose > 1 then printf "REMOTE STATE --- Expiring remote for formula (duration expired): %s\n%!"
                         (string_of_formula keyfmla);
                   remote_cache := FmlaMap.remove keyfmla !remote_cache;
+                  invalidate_policy_caches p [relname]; (* *)
                   iter (fun tup -> Communication.retract_formula (FAtom(modname, relname, tup))) xsb_results
                 end else
                   if !global_verbose > 1 then printf "REMOTE STATE --- Allowing relation to remain: %s %s %s\n%!"
@@ -1113,6 +1138,7 @@ let expire_remote_state_in_xsb (p: flowlog_program) : unit =
                 (* expire everything under this table, every evaluation cycle *)
                 if !global_verbose > 1 then printf "REMOTE STATE --- Expiring remote for formula: %s\n%!" (string_of_formula keyfmla);
                 remote_cache := FmlaMap.remove keyfmla !remote_cache;
+                invalidate_policy_caches p [relname]; (* *)
                 iter (fun tup -> Communication.retract_formula (FAtom(modname, relname, tup))) xsb_results;
               | RefreshTimeout(_,_) -> failwith "expire_remote_state_in_xsb: bad timeout"
           end
@@ -1138,26 +1164,6 @@ let get_local_tables_triggered (p: flowlog_program) (sign: bool) (notif: event) 
   let possibly_triggered = filter (fun def -> mem def.tablename outrelnames) p.tables in
     (*printf "possibly triggered: %s\n%!" (String.concat ",\n" (map string_of_declaration possibly_triggered));*)
     possibly_triggered;;
-
-let invalidate_policy_caches (p: flowlog_program) (modifications: string list): unit =
-  (* Invalidate any clause that depends on something we changed.
-     quick and <1000 clauses; don't prematurely optimize *)
-  let invalidate (count_invalidated: int) (tcl: triggered_clause): int =
-    if length (list_intersection tcl.dependencies modifications) > 0 then
-    begin
-      pe_clause_cache := StringMap.remove tcl.id !pe_clause_cache;
-      count_invalidated+1
-    end
-    else count_invalidated in
-
-	let invalidated =
-	(fold_left invalidate 0 p.weakened_cannot_compile_pt_clauses) +
-	(fold_left invalidate 0 p.can_fully_compile_to_fwd_clauses) in
-	if !global_verbose > 1 then
-      write_log (sprintf "pe_clause_cache had %d entries invalidated. %d entries remain. %d total compilable clauses.\n%!"
-      	invalidated
-      	(StringMap.cardinal !pe_clause_cache)
-        ((length p.weakened_cannot_compile_pt_clauses) + (length p.can_fully_compile_to_fwd_clauses)));;
 
 (*let lwt_respond_lock = Lwt_mutex.create ();;*)
 
