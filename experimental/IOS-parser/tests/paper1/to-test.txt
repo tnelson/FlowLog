@@ -1,0 +1,23 @@
+
+/*
+  Remember: first ping will be lost to source ARPing gateway.
+  second ping will be lost to final router ARPing destination.
+
+*/
+
+// connectivity tests
+
+// vlan to vlan
+host25 ping -c 1  host19 // vlan2 to vlan2
+host25 ping -c 1  host20 // vlan2 to 3 [cross trunk]
+host25 ping -c 1  host26 // vlan2 to 3 [no trunk needed]
+
+// vlan to nonvlan
+
+// use ospf
+host25 ping -c 1 host21 // vlan2 (A) to 192.168.1 (between A and C)
+// use ospf [current bug: need correct gateway on other side of trunk]
+host19 ping -c 1 host21 // vlan2 (B) to 192.168.1 (between A and C)
+
+
+

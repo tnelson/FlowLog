@@ -1,8 +1,0 @@
-table test(int);
-
-on startup(e):
-  insert (1) into test where 192.168.1.5 IN 0.0.0.0/0;
-  insert (2) into test where 1.2.3.4 IN 0.0.0.0/0;
-  insert (3) into test where 192.168.1.5 IN 192.168.1.0/24;
-  insert (-1) into test where 192.168.1.5 IN 192.168.2.0/24;
-

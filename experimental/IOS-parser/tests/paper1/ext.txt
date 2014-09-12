@@ -1,0 +1,47 @@
+hostname ext
+
+interface out_inet
+  ip access-group 101 in
+  ip address 10.100.1.1 255.255.0.0
+  ip nat outside
+
+! EGRESS filter: Activate the RACL *after* NAT has taken effect
+interface out_corp
+  ip access-group 201 out
+  ip address 10.200.1.1 255.255.0.0
+  ip nat inside
+
+! TODO: require reflect X to appear before evaluate X
+! or the parser will not properly add
+
+! applied to INTERNAL SIDE on EGRESS
+! (apply racl to post-nat traffic)
+! internal hosts can do anything but telnet or access a blacklisted host
+ip access-list extended 201
+  deny ip any host 10.100.100.100
+  deny tcp any any eq 23
+  permit tcp host 10.100.1.1 any any reflect returnflow
+  deny any
+
+! applied to INTERNET SIDE on INGRESS
+! allow return traffic AND allow anyone but blacklisted to access 10.200.1.4
+ip access-list extended 101
+  deny ip host 10.100.100.100
+  permit ip any host 10.200.1.4
+  evaluate returnflow
+  deny any
+
+! activate NAT on corporate interface
+ip nat inside source list 1 interface out_corp overload
+
+! default route: send out to ISP router (outside our Exodus configuration)
+ip route 0.0.0.0 0.0.0.0 10.100.1.2
+
+! The subnet out the internal interface is a /16. However
+! only apply NAT to this /24 inside it.
+access-list 1 permit 10.200.1.0 0.0.0.255
+
+end
+
+! TODO: need to give the end command?
+! TODO: comment in middle of block breaks the parser :-(

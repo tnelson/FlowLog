@@ -92,16 +92,4 @@ graph vr1 {
   	label = "int to ext\n(10.100.0.0/16)"
   };
   ext -- sr5
-  int -- sr5
-
-  // int corporate LAN
-  subgraph cluster_subnet6 {
-  	color=blue;
-	h15 -- s6
-    h16 -- s6
-    s6 -- sr6
-  	label = "int lan\n(10.1.0.0/16)"
-  };
-  int -- sr6
-
 }
