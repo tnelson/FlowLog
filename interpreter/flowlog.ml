@@ -66,7 +66,7 @@ let run_flowlog (p: flowlog_program): unit Lwt.t =
   (* Start the policy stream *)
   (* >> is from Lwt's Pa_lwt. But you MUST have -syntax camlp4o or it won't be recoginized. *)
   OpenFlow0x01_Platform.init_with_port !listenPort >>
-    let (trigger_re_policy_func, (gen_stream, stream)) = (make_policy_stream p !notables !reportall) in
+    let (trigger_re_policy_func, (gen_stream, stream), push_pol) = (make_policy_stream p !notables !reportall) in
 
     (* streams for incoming/exiting packets *)
     let (pkt_stream, push_pkt) = Lwt_stream.create () in
@@ -75,10 +75,19 @@ let run_flowlog (p: flowlog_program): unit Lwt.t =
     (* See Partial_Eval and SafeEmitQueue *)
     let rec dequeue_packets_for_emit (): unit Lwt.t =
       (* Block until something is dequeued *)
-      lwt to_emit = safe_queue#dequeue () in (* "lwt" needed here or the CREATION OF THE THREAD will block. *)
+      lwt to_emit = safe_queue#dequeue_emit () in (* "lwt" needed here or the CREATION OF THE THREAD will block. *)
         iter push_pkt to_emit;
         printf "In dequeue_packets_for_emit. to_emit length = %d\n%!" (length to_emit);
         dequeue_packets_for_emit () in
+
+    let rec dequeue_new_policy (): unit Lwt.t =
+      (* Block until something is dequeued *)
+      lwt to_push_maybe = safe_queue#dequeue_pol () in
+        (match to_push_maybe with
+          | Some _ -> push_pol to_push_maybe; (* transfer from RTN queue to Lwt; will now be thread-safe *)
+          | _ -> ());
+        printf "In dequeue_new_policy \n%!";
+        dequeue_new_policy () in
 
       (* Note use of LWT here! *)
       (* Send the "startup" notification. Enables initialization, etc. in programs *)
@@ -87,7 +96,7 @@ let run_flowlog (p: flowlog_program): unit Lwt.t =
       (* pick cancels all threads given if one terminates *)
       (* DO NOT attempt to copy ox/frenetic's switch connection detection code here. It will clash with
          Frenetic's. Instead, register a HandleSwitchEvent policy, which gives us a nice clean callback. *)
-      Lwt.pick [dequeue_packets_for_emit (); gen_stream; NetCore_Controller.start_controller pkt_stream stream]
+      Lwt.pick [gen_stream; NetCore_Controller.start_controller pkt_stream stream; dequeue_packets_for_emit (); (*dequeue_new_policy (); *) ]
 
    with | Failure(x) ->
      printf "Received failure; exiting LWT.\n%!";

@@ -648,17 +648,27 @@ let close_log (): unit =
 let appendall (lsts: 'a list list): 'a list =
   fold_left (fun acc l -> acc @ l) [] lsts;;
 
-let safe_compare_action_atoms (a1: action_atom) (a2: action_atom): bool =
+let safe_compare_action_atoms_int (a1: action_atom) (a2: action_atom): int =
     match (a1, a2) with
-      | (SwitchAction(sa1), SwitchAction(sa2)) -> sa1 = sa2
+      | (SwitchAction(sa1), SwitchAction(sa2)) ->
+        Pervasives.compare sa1 sa2 (* sa1 = sa2*)
           (* VITAL ASSUMPTION: only one callback used here *)
-      | (ControllerAction(_), ControllerAction(_)) -> true
-          (* Same assumption --- separate switch event callback *)
-      | _ -> false;;
+      | (ControllerAction(_), ControllerAction(_)) -> 0
+          (* Same assumption --- separate switch event callback (was false) *)
+      | _ -> 1;;
+
+let safe_compare_actions_int (al1: action) (al2: action): int =
+  if (length al1) > (length al2) then 1 (* first is bigger *)
+  else if (length al2) > (length al1) then -1
+  else fold_left (fun acc v -> if acc <> 0 then acc else v) (* compare by first mismatched action *)
+    0
+    (map2 safe_compare_action_atoms_int al1 al2);;
 
 let safe_compare_actions (al1: action) (al2: action): bool =
   (* same ordering? TODO probably not intended *)
-  (length al1 = length al2) && for_all2 safe_compare_action_atoms al1 al2;;
+  safe_compare_actions_int al1 al2 = 0;;
+
+  (* (length al1 = length al2) && for_all2 safe_compare_action_atoms al1 al2;;*)
 
 let rec gather_predicate_or (pr: pred): pred list =
   match pr with

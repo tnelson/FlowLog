@@ -121,7 +121,7 @@ ON arp_packet(request) WHERE request.arp_op = 1 AND
     not cached(request.arp_tpa, ANY) and
     not queued(request.arp_tpa, ANY, ANY, ANY, ANY) and
     not request.arp_tpa = request.arp_spa and // skip self-requests
-    new.locSw = request.locSw and
+    new.locSw = request.locSw and // same switch
     new.dlDst = request.dlDst and
     new.dlSrc = 00:00:ca:fe:ca:fe and
 
@@ -133,13 +133,16 @@ ON arp_packet(request) WHERE request.arp_op = 1 AND
     new.arp_sha = 00:00:CA:FE:CA:FE and // Controller MAC
     new.arp_spa = 10.10.10.1 and // Controller IP addr (10.10.10.1)
 
-    // positively constrain new.locPt. A valid port, but don't backflow.
-    // restrict which switches this comes from: emit from physical ports of vlans
-    //switch_has_port(new.locSw, new.locPt) AND
-    router_vlan(ANY, new.locSw) AND
-    p2r(new.locSw, new.locPt, ANY) AND
+    // emit from physical ports of vlans
+    // flood forward for non-vlans (already restricted to be switches with ARP, so edge+root switches only)
+    (
+     (router_vlan(ANY, new.locSw) AND p2r(new.locSw, new.locPt, ANY))
+     OR
+     (NOT router_vlan(ANY, new.locSw) AND switch_has_port(new.locSw, new.locPt)) // below protects from backflow
+    )
 
-    (new.locSw != request.locSw OR new.locPt != request.locPt);
+    // no backflow
+    AND new.locPt != request.locPt;
 
   //
   // Bonus: We can cache the source of this ARP request

@@ -55,7 +55,7 @@ let guarded_emit_push (from:eventsource) (swid: switchId) (pt: portId) (payload:
     | IncThrift ->
       (* Queue the emit (see above)
          Do not actually place in the LWT stream. *)
-      safe_queue#enqueue (Some (swid, pt, payload));
+      safe_queue#enqueue_emit (Some (swid, pt, payload));
     | _ ->
     (match !emit_push with
       | None -> printf "Packet stream has not been created yet. Error!\n%!"
@@ -792,7 +792,8 @@ let build_metadata_action_pol (ac: NetCore_Types.action) (ru: srule): NetCore_Ty
       Action(ac);;
 
 
-(* let triplecompcompare tup1 tup2 : int =
+(* Rule out duplicates with sets (logtime membership test) *)
+ let triplecompcompare tup1 tup2 : int =
   let (p1, a1, r1) = tup1 in
   let (p2, a2, r2) = tup2 in
   match smart_compare_preds_int p1 p2 with
@@ -803,10 +804,8 @@ let build_metadata_action_pol (ac: NetCore_Types.action) (ru: srule): NetCore_Ty
              | j when j < 0 -> -1
              | _ -> Pervasives.compare r1 r2;;
 
-
 module TripleCompSet  = Set.Make( struct type t = (pred * action * srule) let compare = triplecompcompare end );;
 
-*)
 (* return the union of policies for each clause *)
 (* Side effect: reads current state in XSB *)
 let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: triggered_clause list) (callback: get_packet_handler option): pol =
@@ -814,7 +813,11 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: triggered_cl
 
   if !global_verbose > 2 then
     write_log (sprintf "Converting clauses to NetCore. %d clauses.\n%!" (length clauses));
-  let pre_unique_pas = appendall (map (pkt_triggered_clause_to_netcore p callback) clauses) in
+
+  let pre_metadata = fold_left (fun acc cl ->
+    let triples = pkt_triggered_clause_to_netcore p callback cl in
+      (fold_left (fun acc2 t -> TripleCompSet.add t acc2) acc triples)) TripleCompSet.empty clauses in
+  (* let pre_unique_pas = appendall (map (pkt_triggered_clause_to_netcore p callback) clauses) in*)
 
   if !global_verbose >= 3 then
     write_log (sprintf "[pkt_triggered_clauses_to_netcore] Time after building NetCore for all these %d clauses: %fs\n%!" (length clauses) (Unix.gettimeofday() -. startt));
@@ -828,22 +831,26 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: triggered_cl
     (fun (ap, ac, r) -> write_log (sprintf "%s %s %s\n" (NetCore_Pretty.string_of_action ac) (NetCore_Pretty.string_of_pred ap) (string_of_rule r)))
     pre_unique_pas;*)
 
-    (* Using a list here and then calling unique afterward would be terribly slow *)
+    (* Using a list here and then calling unique afterward would be terribly slow; convert back to list here *)
 
-    let pre_unique_with_metadata = map (fun (pr, ac, ru) -> (ac, pr, build_metadata_action_pol ac ru)) pre_unique_pas in
+   (* CONCERN: intermediate set will destroy previous ordering; did we depend on that in any way? *)
 
-  if !global_verbose >= 3 then
+    let clause_aps = map (fun (pr, ac, ru) -> (ac, pr, build_metadata_action_pol ac ru)) (TripleCompSet.elements pre_metadata) in
+
+
+ (* if !global_verbose >= 3 then
     write_log (sprintf "[pkt_triggered_clauses_to_netcore] Time after pre_unique_with_metadata: %fs\n%!"  (Unix.gettimeofday() -. startt));
-
+*)
 
   (*iter
     (fun (ac, ap, aa) -> write_log (sprintf "%s %s %s\n" (NetCore_Pretty.string_of_action ac) (NetCore_Pretty.string_of_pred ap) (NetCore_Pretty.string_of_pol aa)))
     pre_unique_with_metadata;*)
 
-    let clause_aps = unique ~cmp:(fun tup1 tup2 ->
+    (*let clause_aps = unique ~cmp:(fun tup1 tup2 ->
                                   let (ac1, pp1, actpol1) = tup1 in
                                   let (ac2, pp2, actpol2) = tup2 in
                                     (safe_compare_pols actpol1 actpol2) && (smart_compare_preds pp1 pp2)) pre_unique_with_metadata in
+*)
 
   if !global_verbose >= 3 then
     write_log (sprintf "[pkt_triggered_clauses_to_netcore] Time after clause_aps: %fs\n%!"  (Unix.gettimeofday() -. startt));
@@ -1548,6 +1555,7 @@ let make_policy_stream (p: flowlog_program)
 
             printf "PUSHING NEW POLICY (number %d)!\n%!" !counter_pols_pushed;
             push (Some newpol);
+            (*safe_queue#enqueue_pol newpol;*)
             last_policy_pushed := newpol;
             printf "PUSHED NEW POLICY!\n%!";
             write_log (sprintf "Pushed new policy (number %d).\n%!" !counter_pols_pushed);
@@ -1644,8 +1652,8 @@ let make_policy_stream (p: flowlog_program)
       printf "INITIAL NOTIF policy is:\n%s\n%!" (NetCore_Pretty.string_of_pol initnotifpol);
       printf "INITIAL NOTIF pred is:\n%s\n%!" (NetCore_Pretty.string_of_pred initnotifpred);
       let initpol = build_total_pol initnotifpred initfwdpol initnotifpol (internal_policy()) in
-        (trigger_policy_recreation_thunk, NetCore_Stream.from_stream initpol policies)
+        (trigger_policy_recreation_thunk, NetCore_Stream.from_stream initpol policies, push)
     end else begin
       let initpol = Union(switch_event_handler_policy, Action([ControllerAction(updateFromPacket)])) in
-        (trigger_policy_recreation_thunk, NetCore_Stream.from_stream initpol policies)
+        (trigger_policy_recreation_thunk, NetCore_Stream.from_stream initpol policies, push)
     end;;

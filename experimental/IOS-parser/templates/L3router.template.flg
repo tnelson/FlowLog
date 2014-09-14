@@ -148,7 +148,7 @@ ON ip_packet(pkt) WHERE subnets(addr, mask, gwip, gwmac, router, rport)
   DO emit_arp(new) WHERE
     not router_queued(pkt.nwDst) and // only send the request once
     // don't use router_vlan(router, new.locSw), since since router is bound in the ON clause above
-    router_vlan(ANY, new.locSw) and
+    router_vlan(router, new.locSw) and // send only out this one subnet
 
     // only send out into the appropriate subnet (convert to physical port number)
     vr2rr(new.locSw, hside, rport) AND
