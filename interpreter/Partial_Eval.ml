@@ -792,12 +792,32 @@ let build_metadata_action_pol (ac: NetCore_Types.action) (ru: srule): NetCore_Ty
       Action(ac);;
 
 
+(* let triplecompcompare tup1 tup2 : int =
+  let (p1, a1, r1) = tup1 in
+  let (p2, a2, r2) = tup2 in
+  match smart_compare_preds_int p1 p2 with
+    | i when i > 0 -> 1
+    | i when i < 0 -> -1
+    | _ -> match safe_compare_actions_int a1 a2 with
+             | j when j > 0 -> 1
+             | j when j < 0 -> -1
+             | _ -> Pervasives.compare r1 r2;;
+
+
+module TripleCompSet  = Set.Make( struct type t = (pred * action * srule) let compare = triplecompcompare end );;
+
+*)
 (* return the union of policies for each clause *)
 (* Side effect: reads current state in XSB *)
 let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: triggered_clause list) (callback: get_packet_handler option): pol =
+  let startt = Unix.gettimeofday() in
+
   if !global_verbose > 2 then
     write_log (sprintf "Converting clauses to NetCore. %d clauses.\n%!" (length clauses));
   let pre_unique_pas = appendall (map (pkt_triggered_clause_to_netcore p callback) clauses) in
+
+  if !global_verbose >= 3 then
+    write_log (sprintf "[pkt_triggered_clauses_to_netcore] Time after building NetCore for all these %d clauses: %fs\n%!" (length clauses) (Unix.gettimeofday() -. startt));
 
   (* First, group these pas into (action, metadata) -> pred list
      Second: unique the pred list.
@@ -808,7 +828,13 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: triggered_cl
     (fun (ap, ac, r) -> write_log (sprintf "%s %s %s\n" (NetCore_Pretty.string_of_action ac) (NetCore_Pretty.string_of_pred ap) (string_of_rule r)))
     pre_unique_pas;*)
 
+    (* Using a list here and then calling unique afterward would be terribly slow *)
+
     let pre_unique_with_metadata = map (fun (pr, ac, ru) -> (ac, pr, build_metadata_action_pol ac ru)) pre_unique_pas in
+
+  if !global_verbose >= 3 then
+    write_log (sprintf "[pkt_triggered_clauses_to_netcore] Time after pre_unique_with_metadata: %fs\n%!"  (Unix.gettimeofday() -. startt));
+
 
   (*iter
     (fun (ac, ap, aa) -> write_log (sprintf "%s %s %s\n" (NetCore_Pretty.string_of_action ac) (NetCore_Pretty.string_of_pred ap) (NetCore_Pretty.string_of_pol aa)))
@@ -818,6 +844,10 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: triggered_cl
                                   let (ac1, pp1, actpol1) = tup1 in
                                   let (ac2, pp2, actpol2) = tup2 in
                                     (safe_compare_pols actpol1 actpol2) && (smart_compare_preds pp1 pp2)) pre_unique_with_metadata in
+
+  if !global_verbose >= 3 then
+    write_log (sprintf "[pkt_triggered_clauses_to_netcore] Time after clause_aps: %fs\n%!"  (Unix.gettimeofday() -. startt));
+
 
 
   (*printf "Done creating clause_pas! %d members.\n%!" (length clause_pas);*)
@@ -849,6 +879,10 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: triggered_cl
                         (filter_map (fun (ac, ap, aa) -> if involves_allports_atom aa then None else Some(ac)) clause_aps) in
       let actionpolswithallports = unique ~cmp:safe_compare_pols
                         (filter_map (fun (ac, ap, aa) -> if (involves_allports_atom aa) then Some(aa) else None) clause_aps) in
+
+  if !global_verbose >= 3 then
+    write_log (sprintf "[pkt_triggered_clauses_to_netcore] Time after non_all_actionsused and actionpolswithallports: %fs\n%!" (Unix.gettimeofday() -. startt));
+
 
       (*printf "actionsued = %s\nactionswithphysicalports = %s\n%!"
        (String.concat ";" (map NetCore_Pretty.string_of_action actionsused))
@@ -934,10 +968,22 @@ let program_to_netcore (p: flowlog_program) (callback: get_packet_handler): (pol
     count_disjuncts_pe := 0;
     count_unique_disjuncts_pe := 0;
 
+    (* profile how much time is spent in PE vs. applicability etc. *)
+    let startt = Unix.gettimeofday() in
+
     let fwd_pol = pkt_triggered_clauses_to_netcore p p.can_fully_compile_to_fwd_clauses None in
+    if !global_verbose >= 3 then
+      write_log (sprintf "[program_to_netcore] Time after building NetCore for fully compilable forward clauses: %fs\n%!" (Unix.gettimeofday() -. startt));
+
     (*let fwd_pred = when_policy_applies_nodrop fwd_pol in*)
     let notif_pol = pkt_triggered_clauses_to_netcore p p.weakened_cannot_compile_pt_clauses (Some callback) in
+    if !global_verbose >= 3 then
+      write_log (sprintf "[program_to_netcore] Time after building NetCore for weakened clauses: %fs\n%!" (Unix.gettimeofday() -. startt));
+
     let notif_pred = when_policy_applies_nodrop notif_pol in
+    if !global_verbose >= 3 then
+      write_log (sprintf "[program_to_netcore] Time after building notif_pred: %fs\n%!" (Unix.gettimeofday() -. startt));
+
     let result = (fwd_pol, notif_pol, notif_pred) in
 
     if !global_verbose >= 1 then
