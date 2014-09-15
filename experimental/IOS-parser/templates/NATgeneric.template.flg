@@ -25,6 +25,8 @@
 //
 // Column values:
 // NAT switch, private phyiscal port, public physical port, public IP
+// TN note: the two port ids seem superfluous now that NAT has just one port.
+//    Don't confuse them for physical or routing port numbers!
 TABLE natconfig(switchid, portid, portid, ipaddr);
 
 // Table of internal subnets which need NAT processing before going to external

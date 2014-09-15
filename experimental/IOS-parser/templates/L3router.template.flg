@@ -79,17 +79,25 @@ ON ip_packet(pkt):
     and new.locPt = 1; // TODO(adf): make magic NAT port configurable?
 
 ///////////////////////////////////////////////////
-// packets destined anywhere (local or not) whose source says they need NATing
+// packets destined anywhere (local or not) that need NATing
 
+// OUTGOING (matches NAT policy) ---> NAT table
 ON ip_packet(pkt):
   DO forward(new) WHERE
     subnets(ANY, ANY, ANY, ANY, pkt.locSw, ANY) // TODO(adf): make a smaller relation?
-
     and @needs-nat-disj
-    //and needs_nat(needs_nat_subnet, needs_nat_mask) // TODO(adf): should this be router-specific?
-    //and (pkt.nwSrc IN needs_nat_subnet/needs_nat_mask)
-
     and new.locPt = 1; // TODO(adf): make magic NAT port configurable?
+
+// INCOMING (directed to a gateway that is running NAT) ---> NAT table
+ON ip_packet(pkt):
+  DO forward(new) WHERE
+    // directed to a gateway
+    subnets(ANY, ANY, pkt.nwDst, ANY, pkt.locSw, pkt.locPt)
+    and router_nat(pkt.locSw, nrtr)
+    // that is a NAT outside addr
+    and natconfig(nrtr, ANY, ANY, pkt.nwDst)
+    and new.locPt = 1; // TODO(adf): make magic NAT port configurable?
+
 
 
 /*******************************************************************************

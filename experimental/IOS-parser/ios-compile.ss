@@ -90,6 +90,9 @@ namespace-for-template)
     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
     ;; Decorrelate and produce rule sets for appropriate policy decisions
 
+    (for-each (lambda (r) (printf "outbound acl rules: ~a~n" r)) (policy '(permit deny) (combine-rules configurations outbound-ACL-rules)))
+    (for-each (lambda (r) (printf "inbound acl rules: ~a~n" r)) (policy '(permit deny) (combine-rules configurations inbound-ACL-rules)))
+    
     (define inboundacl (assoc2 'permit (policy '(permit) (combine-rules configurations inbound-ACL-rules))))
     (define outboundacl (assoc2 'permit (policy '(permit) (combine-rules configurations outbound-ACL-rules))))
     
