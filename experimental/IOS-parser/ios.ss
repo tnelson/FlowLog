@@ -3878,7 +3878,7 @@
                              (portAlias ,(wrapq hostname) ,(wrapq interf) pkt.locPt))))
                    (NAT-interfaces side)))
             (append (NAT-static-translations side) (NAT-dynamic-translations side)))))
-    
+           
     ;; symbol -> (listof rule%)
     ;;   Returns a list of the reverse NAT rules
     (define (NAT-reverse-rules side)

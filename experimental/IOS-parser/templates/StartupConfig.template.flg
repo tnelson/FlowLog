@@ -35,6 +35,7 @@ INCLUDE "@|basename|/Vlans.flg";
 
 
 TABLE routerAlias(string, switchid);
+TABLE portAlias(string, string, portid);
 
 // OSPF outgoing costs
 // switch -> routing port id -> cost

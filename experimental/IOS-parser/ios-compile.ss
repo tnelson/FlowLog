@@ -106,6 +106,7 @@ namespace-for-template)
 
     (define insidenat (assoc2 'translate (policy '(translate) (combine-rules configurations inside-NAT-rules))))
     (define outsidenat (assoc2 'translate (policy '(translate) (combine-rules configurations outside-NAT-rules))))
+        
     
    ;(define local-switch (policy '(forward pass) (combine-rules configurations local-switching-rules)))
    ; (define localswitching-forward (assoc2 'forward local-switch))
@@ -251,10 +252,11 @@ namespace-for-template)
          ;                   (dict-ref dst-local-subnet-for-router rnum))))
 
          ; needs nat?
-         (define needs-nat (if (and nat-side (equal? nat-side 'inside))
-                               (string-append (ifvals->needs-nat nn-for-router rnum rname primnwa primnwm) 
-                                              (ifvals->needs-nat nn-for-router rnum rname secnwa secnwm))
-                               empty))                 
+         ; DISABLED: NAT uses an ACL, so doesn't fit well in a table
+         ;(define needs-nat (if (and nat-side (equal? nat-side 'inside))
+         ;                      (string-append (ifvals->needs-nat nn-for-router rnum rname primnwa primnwm) 
+         ;                                     (ifvals->needs-nat nn-for-router rnum rname secnwa secnwm))
+         ;                      empty))                 
          
          (define acldefn (vals->ifacldefn acl-dpid (string->number routing-ptnum) rname name switchport-mode))
          (define natconfigs (if-pair->natconfig interface-defns nat-side nat-dpid))                                    
@@ -345,7 +347,7 @@ namespace-for-template)
       ; Keep the tuples that are non-#f         
       
       
-      (filter (lambda (x) x) (list "\n" alias p2r prim sec needs-nat acldefn natconfigs
+      (filter (lambda (x) x) (list "\n" alias p2r prim sec acldefn natconfigs
                                    switchport-mode-inserts switchport-vlan-inserts ospf-cost-inserts
                                    maybe-vlan-interface-inserts)))
  
@@ -532,11 +534,17 @@ namespace-for-template)
     ;                                                                 "pkt.locSw" "router"))
     
     ; For embedding policy in FL rule
-    (printf "policyroute-pass: ~a~n" policyroute-pass)
+    ;(printf "policyroute-pass: ~a~n" policyroute-pass)
     (dict-set! router-vars "policyroute-route" (sexpr-to-flowlog policyroute-route #f))
     (dict-set! router-vars "policyroute-pass" (sexpr-to-flowlog policyroute-pass #f))
     
-    (dict-set! router-vars "needs-nat-disj" (build-per-router-fmla-from-hash nn-for-router))         
+        ; todo
+    (dict-set! router-vars "needs-nat-disj" (sexpr-to-flowlog `(or ,@insidenat) #t))
+    
+    ; todo: needs-nat-outbound -- translate which packets back? [which packets go to NAT from outside interfaces?]
+
+    
+    ;(dict-set! router-vars "needs-nat-disj" (build-per-router-fmla-from-hash nn-for-router))         
     (dict-set! router-vars "dst-local-subnet" (build-per-router-fmla-from-hash dst-local-subnet-for-router))
 
     (store (render-template "templates/L3external.template.flg" router-vars)
@@ -557,7 +565,7 @@ namespace-for-template)
     (dict-set! acl-vars "outboundacl-tcp" (sexpr-to-flowlog `(or ,@outboundacl-tcp) #t))
     (dict-set! acl-vars "outboundacl-udp" (sexpr-to-flowlog `(or ,@outboundacl-udp) #t))
     (dict-set! acl-vars "outboundacl-ip" (sexpr-to-flowlog `(or ,@outboundacl-ip) #t))
-
+    
     (dict-set! acl-vars "reflexive-inserts-tcp" "")
     (dict-set! acl-vars "reflexive-inserts-udp" "")
     (define reflexive-insert-tcp-texts (map reflexive-rule-to-flowlog reflexive-tcp))    
@@ -590,7 +598,7 @@ namespace-for-template)
 
     (printf "Template values:~n~n")
     (printf "~ndst-local-subnet: ~a~n" (dict-ref router-vars "dst-local-subnet"))    
-    (printf "~nneeds-nat-disj: ~a~n" (dict-ref router-vars "needs-nat-disj"))
+    (printf "~nneeds-nat-disj: ~a~n" (dict-ref router-vars "needs-nat-disj"))    
     ;(printf "~nnext-hop-fragment: ~a~n" (dict-ref router-vars "nexthop-fragment"))
     ;(printf "~nnext-hop-fragment-for-tr: ~a~n" (dict-ref router-vars "nexthop-fragment-for-tr"))
     (printf "~npolicyroute-route: ~a~n" (dict-ref router-vars "policyroute-route"))
@@ -604,9 +612,10 @@ namespace-for-template)
     (store outsidenat (make-path root-path "OutsideNAT.p"))
     ;(store local-switch (make-path root-path "LocalSwitching.p"))
     ;(store network-switch (make-path root-path "NetworkSwitching.p"))
-    (store static-route (make-path root-path "StaticRoute.p"))
+   ; (store static-route (make-path root-path "StaticRoute.p"))
     (store policy-route (make-path root-path "PolicyRoute.p"))
-    (store default-policy-route (make-path root-path "DefaultPolicyRoute.p"))))
+    ;(store default-policy-route (make-path root-path "DefaultPolicyRoute.p"))
+    ))
 
 ;; string string -> path
 (define (make-path base file)

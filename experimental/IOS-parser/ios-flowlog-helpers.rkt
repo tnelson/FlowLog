@@ -194,11 +194,13 @@
          (string-append "INSERT (" (string-join (list nwa nwm addr gwmac rnum ptnum) ", ") ") INTO subnets;\n"
                         "INSERT (" (string-join (list addr gwmac) ", ") ") INTO cached; // auto\n")]))
 
+; Some duplication of information here, but keeping aclAlias, portAlias, and routerAlias for readability (+ efficiency in prolog)
 (define (vals->ifalias rname iname pnum rnum adjrnum)
-  ;(string-append "INSERT (" (string-join (list (string-append "\"" rname "\"") 
-  ;                                             (string-append "\"" iname "\"") 
-  ;                                             inum) ", ") ") INTO portAlias;\n")
-  (format "// Interface ~v; pnum=~v; rnum=~v; adjusted rnum=~v~n" iname pnum rnum adjrnum))
+  (string-append 
+   (format "// Interface ~v; pnum=~v; rnum=~v; adjusted rnum=~v~n" iname pnum rnum adjrnum)
+   "INSERT (" (string-join (list (string-append "\"" rname "\"") 
+                                 (string-append "\"" iname "\"") 
+                                 rnum) ", ") ") INTO portAlias;\n"))
 
 (define (vals->routertuples rname rnum)
   (string-append "INSERT (" (string-join (list (string-append "\"" rname "\"")                                                    
@@ -305,7 +307,10 @@
          (dict-set! nn-for-router rnum (cons `(and (= pkt.nwSrc ,(string-append nwa "/" nwm))
                                                    (not (= pkt.nwDst ,(string-append nwa "/" nwm))))
                                              (dict-ref nn-for-router rnum)))
-         (string-append "INSERT (" rnum ", " nwa ", " nwm ") INTO needs_nat;\n")]
+         
+         ; no! needs-nat is an ACL, so does not fit well in a table.
+         ;(string-append "INSERT (" rnum ", " nwa ", " nwm ") INTO needs_nat;\n")
+         ]
         [else ""]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
