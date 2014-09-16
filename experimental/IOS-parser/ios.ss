@@ -3782,7 +3782,7 @@
                             ; for each interface, does that interface have an in ACL matching the trigger ID for this reflexive list?
                             (λ (ifname interf)
                               
-                              (printf "~n~nrefl: ~v~n~n" (get-field trigger-ACL-ID ace))
+                             ; (printf "~n~nrefl: ~v~n~n" (get-field trigger-ACL-ID ace))
                               (cond 
                                 ; inbound 
                                 [(equal? (get-field inbound-ACL-ID interf) (get-field trigger-ACL-ID ace))

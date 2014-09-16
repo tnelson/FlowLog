@@ -1,0 +1,8 @@
+
+xterm host2
+python -m SimpleHTTPServer 80
+
+xterm host3
+curl http://10.100.1.3:80
+
+should get a reply. each curl command will create a new nat flow.
