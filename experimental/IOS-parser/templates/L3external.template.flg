@@ -41,7 +41,7 @@ REMOTE TABLE routes(switchid, ipaddr, int, portid)
 ON ip_packet(pkt):
   DO forward(new) WHERE
     // not in a local subnet for this router
-    NOT (@dst-local-subnet)
+    NOT inLocalSubnet(pkt.locSw, pkt.nwDst)
     // don't route packets which need NAT'ing (must send them to NAT first: see L3router)
     and NOT @needs-nat-disj
 
@@ -55,10 +55,8 @@ ON ip_packet(pkt):
 // (no support for default-policy routing)
 ON ip_packet(pkt):
   DO forward(new) WHERE
-    // not in a local subnet for this router
-    NOT (@dst-local-subnet)
     // don't route packets which need NAT'ing (must send them to NAT first: see L3router)
-    and NOT @needs-nat-disj
+    NOT @needs-nat-disj
 
     // WORKAROUND: OF 1.0 requires IN_PORT use, even if inport isn't constrained in OF rule pred.
     // TODO(tn): modify FL compiler to properly assert IN_PORTs as needed. But for now,
@@ -79,6 +77,8 @@ ON ip_packet(pkt):
     // output dlsrc and port
     and subnets(ANY, ANY, ANY, new.dlSrc, pkt.locSw, new.locPt)
 
+    // not in a local subnet for this router
+    and NOT inLocalSubnet(pkt.locSw, pkt.nwDst)
 
     // allTopology has vlan switch ids. need to convert both pkt.locSw->vlan and nextsw -> rtr.
     and router_vlan(pkt.locSw, currvlsw)
@@ -116,7 +116,7 @@ ON ip_packet(pkt) WHERE router_tr(router, pkt.locSw):
 
     // not in a local subnet for this router
     // (prevent overlap with L3router.flg; avoiding universal quantification issue)
-    NOT (@dst-local-subnet)
+    NOT inLocalSubnet(router, pkt.nwDst)
 
     and router_portmap(ANY, new.locPt, pkt.locPt); // router -> host (only one instance of this number in the table)
     // router already set the destination MAC, so use that to find the output port

@@ -50,6 +50,8 @@ let bip_add = { bipid="add";
         bip_prepare = None;
 				bip_compile = None};;
 
+(*********************************************************************************)
+
 (* hasLongerPrefixMatch(p.locSw, pre, mask)
    HARD CODED to use a SPECIFIC table name and arity! *)
 
@@ -74,9 +76,36 @@ let bip_hasLongerPrefixMatch = {bipid = "haslongerprefixmatch";
           bip_compile = Some ()
           }
 
+(*********************************************************************************)
+
+(* inLocalSubnet(p.locSw, p.nwDst)
+   HARD CODED to use a SPECIFIC table name and arity! *)
+
+let bip_in_local_xsb (mode:xsbmode) (tl: term list) : string =
+  match tl with
+    | [sw;dst] ->
+      printf "\nInvoked: inLocalSubnet: %s %s\n%!" (string_of_term sw) (string_of_term dst);
+      sprintf "inLocalSubnet(%s, %s)"
+           (xsb_of_term ~mode:mode sw) (xsb_of_term ~mode:mode dst)
+    | _ -> raise (BIPPrefixException(tl));;
+
+(* getting local subnets is just subnets(_SW, _PRE, _MASK, _,_,_)*)
+let bip_prepare_local_xsb =
+  ["assert((inLocalSubnet(_SW, _DST) :- subnets(_PRE, _MASK, _, _, _SW, _), in_ipv4_range(_DST, _PRE, _MASK)))."];;
+
+let bip_isLocalSubnet = {bipid = "inlocalsubnet";
+          biparity = ["switchid"; "ipaddr"];
+          bipxsb = bip_in_local_xsb;
+          bip_prepare = Some bip_prepare_local_xsb;
+          bip_compile = Some ()
+          }
+
+(*********************************************************************************)
+
 (**************************************)
 let builtin_predicates = [(bip_add.bipid, bip_add);
-                          (bip_hasLongerPrefixMatch.bipid, bip_hasLongerPrefixMatch)];;
+                          (bip_hasLongerPrefixMatch.bipid, bip_hasLongerPrefixMatch);
+                          (bip_isLocalSubnet.bipid, bip_isLocalSubnet)];;
 
 
 let is_built_in (relname: string): bool =

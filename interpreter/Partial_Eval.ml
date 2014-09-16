@@ -306,6 +306,35 @@ let stage_2_partial_eval (incpkt: string) (atoms_or_neg: formula list): formula 
       if !global_verbose > 9 then printf "KLUDGE: haslongerprefixmatch: %s\n%!" (string_of_formula result);
       result
 
+    (* Kludge 2... TN *)
+    (* extra bad: so much duplicated code! *)
+    | FNot(FAtom(_,"inlocalsubnet",[sw;dst])) ->
+      (* partial_evaluation_helper will use the cache here; we should too *)
+      (* note lowercase any *)
+      let specialfmla = (FAtom("", "subnets", [TVar("pre");TVar("mask");TVar("any1");TVar("any2");sw;TVar("any3")])) in
+      let result =
+        if FmlaMap.mem specialfmla !pe_neg_cache then
+        begin
+          if !global_verbose >= 1 then count_pe_neg_cache_hits := !count_pe_neg_cache_hits + 1;
+          FmlaMap.find specialfmla !pe_neg_cache
+        end
+        else
+        begin
+          if !global_verbose >= 1 then count_pe_neg_cache_misses :=  !count_pe_neg_cache_misses + 1;
+          let xsbresults = Communication.get_state ~compiler:true specialfmla in
+          write_log (sprintf "ils for %s %s xsb: %s\n" (string_of_term sw) (string_of_term dst) (string_of_list_list "," ";" string_of_term xsbresults));
+          let to_negate = map (fun tl -> match tl with
+            | [p2;m2] -> FIn(dst, p2, m2)
+            | _ -> failwith (sprintf "bad islocalsubnet: %s\n%!" (string_of_list "," string_of_term tl)))
+            xsbresults in
+            let negated_disjunction = FNot(build_or to_negate) in
+              pe_neg_cache := FmlaMap.add specialfmla negated_disjunction !pe_neg_cache;
+            write_log (sprintf "ils for %s %s negated disj: %s\n" (string_of_term sw) (string_of_term dst) (string_of_formula negated_disjunction));
+            negated_disjunction
+        end in
+      if !global_verbose > 9 then printf "KLUDGE: islocalsubnet: %s\n%!" (string_of_formula result);
+      result
+
     | FNot(FAtom(_,_,_) as inner) ->
       (* Note second cache here: negatives can afford to cache the whole result formula *)
       if FmlaMap.mem inner !pe_neg_cache then
