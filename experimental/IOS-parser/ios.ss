@@ -3773,21 +3773,29 @@
           default-ACL-permit)))
        
     (define/public (reflexive-insert-rules) 
+      (printf "reflexive-insert-rules had ~v reflexive insert rules~n" insert-ACLs)
       (flatten (hash-map insert-ACLs
-                ; this is an ACL guaranteed to have only reflexive ACEs in it
+                ; this is an ACL guaranteed to have only reflexive ACEs in it                         
                 (λ (aclname insertacl)
                   (map (λ (ace) 
                          (hash-map interfaces 
                             ; for each interface, does that interface have an in ACL matching the trigger ID for this reflexive list?
                             (λ (ifname interf)
                               
-                              ;(printf "~v vs ~v~n" (get-field inbound-ACL-ID interf) (get-field trigger-ACL-ID ace))
-                              (cond [(equal? (get-field inbound-ACL-ID interf) (get-field trigger-ACL-ID ace))
+                              (printf "~n~nrefl: ~v~n~n" (get-field trigger-ACL-ID ace))
+                              (cond 
+                                ; inbound 
+                                [(equal? (get-field inbound-ACL-ID interf) (get-field trigger-ACL-ID ace))
                                      (send ace build-insert-rule ;; NOT rule
                                            (send hostname name)
-                                           (send interf text)
-                                           ;`((aclAlias ,(wrapq (build-acl-name (send hostname name) (send interf text))) pkt.locSw pkt.locPt new.locPt)))]
+                                           (send interf text)                                           
                                            `((aclAlias ,(wrapq (build-acl-name (send hostname name) (send interf text))) pkt.locSw pkt.locPt ANY)))]
+                                ; outbound
+                                  [(equal? (get-field outbound-ACL-ID interf) (get-field trigger-ACL-ID ace))
+                                     (send ace build-insert-rule ;; NOT rule
+                                           (send hostname name)
+                                           (send interf text)                                           
+                                           `((aclAlias ,(wrapq (build-acl-name (send hostname name) (send interf text))) pkt.locSw ANY pkt.locPt)))]
                                     [else empty])))
                          ) (send insertacl get-ACEs))))))
     

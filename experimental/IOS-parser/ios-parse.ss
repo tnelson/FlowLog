@@ -521,6 +521,7 @@
 ;; symbol port IOS-config% -> IOS-config%
 (define (parse-ip-named-access-list name input config)
   (let [(line-tokens (tokenize-line (read-line input 'any)))]
+    ;(printf "in parse-ip-named-access-list: ~a; line: ~a; name: ~a~n" line-tokens (line-number input) name)
     (case (first line-tokens)
       [(permit deny) (parse-ip-named-access-list name
                                                  input
@@ -775,6 +776,7 @@
 
 ;; number symbol symbol symbol address<%> port<%> address<%> port<%> (listof any) IOS-config% -> IOS-config%
 (define (parse-ip-named-access-list6 line name disposition protocol src-addr src-port dest-addr dest-port line-tokens config)
+  ;(printf "in parse-ip-named-access-list6: ~a; line: ~a; name: ~a~n" line-tokens line name)
   (cond [(empty? line-tokens)
          (send config
                insert-ACE
@@ -826,6 +828,8 @@
 
 ;; number symbol symbol symbol address<%> port<%> address<%> port<%> symbol (listof any) IOS-config% -> IOS-config%
 (define (parse-ip-named-access-list7 line name disposition protocol src-addr src-port dest-addr dest-port reflect-name line-tokens config)
+  ; ^ For adding ACLs that "reflect"
+  ;(printf "in parse-ip-named-access-list7~n reflect-name: ~a~n" reflect-name)
   (define added-outgoing
     (send config
           insert-ACE
