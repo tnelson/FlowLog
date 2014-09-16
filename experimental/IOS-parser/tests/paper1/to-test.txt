@@ -21,7 +21,9 @@ host21 ping -c 1 10.200.1.4
 
 // NAT/racl
 
-// TODO
+host1 (10.100.1.2): python -m SimpleHTTPServer 80 &
+
+host21 curl http://10.100.1.2:80
 
 
 
