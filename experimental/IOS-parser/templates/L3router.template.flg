@@ -58,18 +58,20 @@ TABLE router_acl(switchid, switchid);
  *
  ******************************************************************************/
 
+// directly attached w/o NAT
 ON ip_packet(pkt):
   DO forward(new) WHERE
     subnets(addr, mask, ANY, new.dlSrc, pkt.locSw, new.locPt)
     and pkt.nwDst IN addr/mask
     // exempt packets which need NAT
-    and NOT @needs-nat-disj
+    and NOT @needs-nat-disj // TODO(tn) too strong
     // exempt packets to the NAT (note positive use of router_nat since 1-1 between rtr & nat)
     and router_nat(pkt.locSw, natid)
     and NOT natconfig(natid, ANY, ANY, pkt.nwDst);
 
 ///////////////////////////////////////////////////
 // on the router, send all NAT-destined traffic (dest = NAT address) to the NAT
+/*
 ON ip_packet(pkt):
   DO forward(new) WHERE
     natconfig(natid, ANY, ANY, pkt.nwDst)
@@ -77,6 +79,7 @@ ON ip_packet(pkt):
     and subnets(ANY, ANY, ANY, ANY, pkt.locSw, ANY) // TODO(adf): make a smaller relation?
     and pkt.locPt != 1
     and new.locPt = 1; // TODO(adf): make magic NAT port configurable?
+*/
 
 ///////////////////////////////////////////////////
 // packets destined anywhere (local or not) that need NATing
@@ -84,9 +87,13 @@ ON ip_packet(pkt):
 // OUTGOING (matches NAT policy) ---> NAT table
 ON ip_packet(pkt):
   DO forward(new) WHERE
-    subnets(ANY, ANY, ANY, ANY, pkt.locSw, ANY) // TODO(adf): make a smaller relation?
+    router_nat(pkt.locSw, natid)
     and @needs-nat-disj
-    and new.locPt = 1; // TODO(adf): make magic NAT port configurable?
+    and pkt.locPt != 1
+    and natconfig(natid, ANY, ANY, natgw) // nat for this router has natgw as an outside addy
+    and subnets(p, m, natgw, ANY, pkt.locSw, wouldpt) // we'd send to the port with that IP (thus out an outside iface)
+    and pkt.nwDst IN p/m
+    and new.locPt = 1;
 
 // INCOMING (directed to a gateway that is running NAT) ---> NAT table
 ON ip_packet(pkt):
@@ -96,7 +103,7 @@ ON ip_packet(pkt):
     and router_nat(pkt.locSw, nrtr)
     // that is a NAT outside addr
     and natconfig(nrtr, ANY, ANY, pkt.nwDst)
-    and new.locPt = 1; // TODO(adf): make magic NAT port configurable?
+    and new.locPt = 1;
 
 
 

@@ -35,8 +35,6 @@ REMOTE TABLE routes(switchid, ipaddr, int, portid)
  ******************************************************************************/
 
 // packets destined to outside whose source does NOT need NATing
-// (NAT is handled by L3router.flg, even for non-local traffic)
-
 // POLICY ROUTING
 ON ip_packet(pkt):
   DO forward(new) WHERE
@@ -95,6 +93,19 @@ ON ip_packet(pkt):
 
     and subnets(ANY, ANY, ANY, new.dlDst, nextrtr, nextrpt);
 
+// TODO(tn): not yet enough; need to say that even if needs-nat-disj holds, route to non-outside ifs normally
+// also todo: limit other NAT rule to outside interface-output
+// NAT for destination not immediately attached
+// need to know: is output interface an "outside"?
+ON ip_packet(pkt):
+  DO forward(new) WHERE
+    @needs-nat-disj
+    and routes(pkt.locSw, pre, mask, nextpt)
+    and pkt.nwDst IN pre/mask
+    and NOT hasLongerPrefixMatch(pkt.locSw, pkt.nwDst, pre, mask)
+    and router_nat(pkt.locSw, natsw) and natconfig(natsw, ANY, ANY, natgw)
+    and subnets(ANY, ANY, natgw, ANY, pkt.locSw, nextpt)
+    and new.locPt = 1;
 
 
 /*******************************************************************************
