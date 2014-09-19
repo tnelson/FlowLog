@@ -53,18 +53,17 @@ ON ip_packet(pkt):
 // (no support for default-policy routing)
 ON ip_packet(pkt):
   DO forward(new) WHERE
-    // don't route packets which need NAT'ing (must send them to NAT first: see L3router)
-    NOT @needs-nat-disj
 
-    // TODO(tn)
     // WORKAROUND: OF 1.0 requires IN_PORT use, even if inport isn't constrained in OF rule pred.
     // TODO(tn): modify FL compiler to properly assert IN_PORTs as needed. But for now,
     // since our routers may need to bounce packets back modified, trick the compiler into constraining inport:
     // DOWNSIDE TODO(tn): We ought to fix this with more than a workaround since this causes O(#external-subnets^2)
     // added rules. Something smarter could only add O(#external-subnets) rules by using priorities.
-    and switch_has_port(pkt.locSw, pkt.locPt)
+    switch_has_port(pkt.locSw, pkt.locPt) and
 
-    and routes(pkt.locSw, pre, mask, new.locPt) AND
+    /////
+    // routing table
+    routes(pkt.locSw, pre, mask, new.locPt) AND
     pkt.nwDst IN pre/mask AND
     // special predicate with special compilation "routes" is hard-coded, do not change!
     NOT hasLongerPrefixMatch(pkt.locSw, pkt.nwDst, pre, mask)
@@ -73,9 +72,16 @@ ON ip_packet(pkt):
     // used to refer to policyroute-pass, but can just negate
     and not @policyroute-route
 
-    // output dlsrc and port
-    and subnets(ANY, ANY, ANY, new.dlSrc, pkt.locSw, new.locPt)
+    // output dlsrc and port (bind output gateway IP for comparison later)
+    and subnets(ANY, ANY, out_gateway_ip, new.dlSrc, pkt.locSw, new.locPt)
 
+    /////
+    // only route packets that don't need natting first
+    // (either they don't match the NAT ACL, or they are not to a "nat outside" interface)
+    and (NOT @needs-nat-disj OR
+         NOT natconfig(natsw, ANY, ANY, out_gateway_ip))
+
+    /////
     // not in a local subnet for this router
     and NOT inLocalSubnet(pkt.locSw, pkt.nwDst)
 
@@ -93,17 +99,15 @@ ON ip_packet(pkt):
 
     and subnets(ANY, ANY, ANY, new.dlDst, nextrtr, nextrpt);
 
-// TODO(tn): not yet enough; need to say that even if needs-nat-disj holds, route to non-outside ifs normally
-// also todo: limit other NAT rule to outside interface-output
-// NAT for destination not immediately attached
-// need to know: is output interface an "outside"?
+// NAT for destination not immediately attached: matches NAT ACL and will be routed to a "nat outside" interface
 ON ip_packet(pkt):
   DO forward(new) WHERE
-    @needs-nat-disj
+    @needs-nat-disj // matches NAT ACL
     and routes(pkt.locSw, pre, mask, nextpt)
     and pkt.nwDst IN pre/mask
     and NOT hasLongerPrefixMatch(pkt.locSw, pkt.nwDst, pre, mask)
-    and router_nat(pkt.locSw, natsw) and natconfig(natsw, ANY, ANY, natgw)
+    and router_nat(pkt.locSw, natsw)
+    and natconfig(natsw, ANY, ANY, natgw) // we will send out a "nat outside" interface (IP = natgw)
     and subnets(ANY, ANY, natgw, ANY, pkt.locSw, nextpt)
     and new.locPt = 1;
 
