@@ -9,15 +9,21 @@
 
 
 ON ip_packet(p):
-  DO forward(new) WHERE new.locPt = 2 AND
-
-    // workaround to force IN_PORT use:
-    // constrain inport explicitly. this rule is not very useful semantically.
-    switch_has_port(p.locSw, p.locPt) and
-
+  DO forward(new) WHERE
+    (new.locPt = 2 OR new.locPt = 3) AND
     new.dlSrc = ab:ba:ff:ff:ff:ff AND
     new.dlDst = ab:ba:aa:aa:aa:aa;
 
 
+/*
 
-// priority=65535,ip actions=mod_dl_src:ab:ba:ff:ff:ff:ff,mod_dl_dst:ab:ba:aa:aa:aa:aa,output:2
+// Expect this on tree,fanout=3,depth=1
+// TODO: note the repeated mods, but at least it is sound
+
+mininet> dpctl dump-flows --rsort
+*** s1 ------------------------------------------------------------------------
+ cookie=0x0, duration=39.473s, table=0, n_packets=0, n_bytes=0, priority=65535,ip,in_port=2 actions=mod_dl_src:ab:ba:ff:ff:ff:ff,mod_dl_dst:ab:ba:aa:aa:aa:aa,IN_PORT,mod_dl_src:ab:ba:ff:ff:ff:ff,mod_dl_dst:ab:ba:aa:aa:aa:aa,output:3
+ cookie=0x0, duration=39.473s, table=0, n_packets=0, n_bytes=0, priority=65535,ip,in_port=3 actions=mod_dl_src:ab:ba:ff:ff:ff:ff,mod_dl_dst:ab:ba:aa:aa:aa:aa,output:2,mod_dl_src:ab:ba:ff:ff:ff:ff,mod_dl_dst:ab:ba:aa:aa:aa:aa,IN_PORT
+ cookie=0x0, duration=39.473s, table=0, n_packets=0, n_bytes=0, priority=65534,ip actions=mod_dl_src:ab:ba:ff:ff:ff:ff,mod_dl_dst:ab:ba:aa:aa:aa:aa,output:2,mod_dl_src:ab:ba:ff:ff:ff:ff,mod_dl_dst:ab:ba:aa:aa:aa:aa,output:3
+ cookie=0x0, duration=39.473s, table=0, n_packets=0, n_bytes=0, priority=65533 actions=drop
+*/

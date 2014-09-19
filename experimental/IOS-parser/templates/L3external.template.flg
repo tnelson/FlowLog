@@ -53,14 +53,6 @@ ON ip_packet(pkt):
 // (no support for default-policy routing)
 ON ip_packet(pkt):
   DO forward(new) WHERE
-
-    // WORKAROUND: OF 1.0 requires IN_PORT use, even if inport isn't constrained in OF rule pred.
-    // TODO(tn): modify FL compiler to properly assert IN_PORTs as needed. But for now,
-    // since our routers may need to bounce packets back modified, trick the compiler into constraining inport:
-    // DOWNSIDE TODO(tn): We ought to fix this with more than a workaround since this causes O(#external-subnets^2)
-    // added rules. Something smarter could only add O(#external-subnets) rules by using priorities.
-    switch_has_port(pkt.locSw, pkt.locPt) and
-
     /////
     // routing table
     routes(pkt.locSw, pre, mask, new.locPt) AND
