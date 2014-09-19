@@ -57,6 +57,7 @@ class FlowlogDemo(object):
       self.globalEdgeSwCount = 0
       self.networksToLaunch = {}
       self.trunkPorts = {}
+      self.gwIPList = []
 
       self.parseArgs()
       lg.setLogLevel('info')
@@ -101,6 +102,11 @@ class FlowlogDemo(object):
       pieces = last_ip.split('.')
       pieces[3] = str(1 + int(pieces[3]))
       next_ip = '.'.join(pieces)
+      # If IP has been used by the gw, find a nother available one
+      if next_ip in self.gwIPList:
+      	pieces = next_ip.split('.')
+      	pieces[3] = str(1 + int(pieces[3]))
+      	next_ip = '.'.join(pieces)
 
       self.subnetHostLastIP[subnetStr(addr, mask)] = next_ip
       return next_ip
@@ -223,8 +229,17 @@ class FlowlogDemo(object):
             r2 = network.getNodeByName(r2_name + '-vlan')
             network.addLink(r1, r2, port1 = r1_portid, port2 = r2_portid, **self.linkopts)
 
+    def getAllGwIP(self, r):
+    	# Get all gw IP
+      	for (i,s) in enumerate(r.subnets):
+      		s.gw = s.gw.encode('ascii', 'ignore')
+        	self.gwIPList.append(s.gw);
+
     def buildNetwork(self, network, routers, create_edge, create_srs):
       self.subnetRootSwitch = defaultdict(lambda: self.nextSubnetRootSwitch(network))
+
+      for router in routers.routers:
+      	self.getAllGwIP(router)
 
       for router in routers.routers:
         self.buildRouter(network, router, create_edge, create_srs)
