@@ -354,6 +354,36 @@ let stage_2_partial_eval (incpkt: string) (atoms_or_neg: formula list): formula 
       end
     | _ -> subf) atoms_or_neg);;
 
+
+(*
+let debug_contains_equal_dlsrc_dldst (p:flowlog_program) (orig_fmla: formula) (positive_conjuncts: formula list list) (incpkt: string) (fl: formula list): unit =
+  let dlsrc_asns = (filter_map (fun f ->
+    match f with
+      | FEquals(TField(v, "dlsrc"), TConst(x))
+      | FEquals(TConst(x), TField(v, "dlsrc")) when v <> incpkt ->
+        Some x
+      | _ -> None)
+    fl) in
+  let dldst_asns = (filter_map (fun f ->
+    match f with
+      | FEquals(TField(v, "dldst"), TConst(x))
+      | FEquals(TConst(x), TField(v, "dldst")) when v <> incpkt ->
+        Some x
+      | _ -> None)
+    fl) in
+  let inters = list_intersection dlsrc_asns dldst_asns in
+    if length inters > 0 then
+    begin
+      printf "@@@ debug_contains_equal_dlsrc_dldst: %s;\n%s\n%!"
+        (String.concat "," inters)
+        (string_of_list ";" string_of_formula fl);
+      printf "orig formula: %s\n%!" (string_of_formula orig_fmla);
+      printf "  positive_conjuncts: %s\n%!" (string_of_list_list ";" "," string_of_formula positive_conjuncts) ;
+      Communication.get_and_print_xsb_state p;
+      exit(100);
+    end;;
+*)
+
 (* Replace state references with constant matrices.
    ASSUMPTION: f is a conjunction of atoms. *)
 (* list of lists: outer list: new clauses; inner list: conjunctions of atoms in the clauses *)
@@ -410,7 +440,10 @@ let partial_evaluation (p: flowlog_program) (incpkt: string) (f: formula): formu
                aclalias(ANY27,PKT__LOCSW,ANY28,ANY29), aclalias(Rtr-loopback1-acl,PKT__LOCSW,PKT__LOCPT,NEW__LOCPT)
               ??? Is this TODO still in effect? ^^^*)
 
+            (*iter (debug_contains_equal_dlsrc_dldst p f positive_conjuncts incpkt) unique_result_clauses;*)
+
             unique_result_clauses;;
+
 
 (***************************************************************************************)
 
@@ -568,6 +601,7 @@ let rec build_unsafe_switch_actions (oldpkt: string) (atoms: formula list): acti
         else port_actions in
 
       let complete_actions = fold_left create_mod_actions port_actions_checked atoms in
+
       complete_actions
     with UnsatisfiableFlag -> [];;
 
@@ -753,6 +787,7 @@ let pkt_triggered_clause_to_netcore (p: flowlog_program) (callback: get_packet_h
             | None -> map (fun abodylist ->
                 let unsafe_pred = build_unsafe_switch_pred tcl.oldpkt abodylist in
                 let unsafe_acts = build_unsafe_switch_actions tcl.oldpkt abodylist in
+
                   (* Need to deal with cases where all-ports and physical(x)
                      coexist. Remember that all-ports FORBIDS input port! *)
 
@@ -1439,6 +1474,8 @@ let respond_to_notification
         Mutex.unlock xsbmutex;
         exit(101);
       end;;
+
+
 
 
 (* Ignore the switch's non-physical ports (pp. 18-19 of OpenFlow 1.0 spec). *)
