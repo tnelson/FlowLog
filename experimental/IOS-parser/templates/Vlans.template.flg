@@ -130,12 +130,13 @@ ON packet(p) WHERE sp_vlans(p.locSw, p.locPt, vlanid) AND
 // INTER-vlan traffic: finishing a L2 hop at some gateway mac
 
 // coming from host side: tag doesn't matter; this L2 journey has ended.
-ON packet(p) WHERE sp_vlans(p.locSw, p.locPt, vlanid) AND
-                   subnets(ANY,ANY,ANY,p.dlDst,rtrid,ANY) AND
-                   router_vlan(rtrid, p.locSw):
+ON packet(p) WHERE sp_vlans(p.locSw, p.locPt, ANY) AND // ANY vlan id
+                   subnets(ANY,ANY,ANY,p.dlDst,rtrid,rtrpt) AND // to a gateway to rtrpt...
+                   router_vlan(rtrid, p.locSw): // for this vlan
   // send up to the ACL and begin the routing process
   DO forward(new) WHERE
-    p2r(p.locSw, p.locPt, new.locPt);
+    p2r(p.locSw, p.locPt, new.locPt) and
+    vr2rr(p.locSw, new.locPt, rtrpt); // to the router port for the gateway (not just any gateway)
 
 // coming from router side: convert back from virtual interface to (possibly multiple) physical switchports
 // (Once has learned the adjacent gateway MACs, will not flood on multiple VLAN physical interfaces.)

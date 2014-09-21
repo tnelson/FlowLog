@@ -283,7 +283,7 @@ exit(1);;
 		(* separate the list into a list of lists *)
 		if (length !answer) > 200000 then
 		begin
-			printf "\nXSB responded with %d terms. Something has possibly gone wrong in query construction (or the database is too large).\nXSB string was: %s\n%!" (length !answer) str;
+			printf "\nXSB responded with %d conjunctions. Something has possibly gone wrong in query construction (or the database is too large).\nXSB string was: %s\n%!" (length !answer) str;
 			exit(1);
 		end;
 
