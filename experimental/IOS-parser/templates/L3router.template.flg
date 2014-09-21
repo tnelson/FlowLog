@@ -125,6 +125,7 @@ ON ip_packet(pkt):
 // Default path: set dlDst based on ARP cache and send to subnet N (port 2N).
 // we receive from port 2N-1. note that subnet N is at port N+1 on the router.
 
+/*
 ON ip_packet(pkt):
   DO forward(new) WHERE
     subnets(addr, mask, gwip, ANY, router, rport)
@@ -145,7 +146,8 @@ ON ip_packet(pkt) WHERE subnets(addr, mask, gwip, gwmac, router, rport)
                         and pkt.nwDst != gwip
                         and router_portmap(rport, ANY, pkt.locPt): // any router side
 
-  INSERT (pkt.nwDst) INTO router_queued;
+//  INSERT (pkt.nwDst) INTO router_queued;
+
 
   // Send requests out of every ACL sub-router (avoid burdening the core)
   DO emit_arp(new) WHERE
@@ -164,7 +166,7 @@ ON ip_packet(pkt) WHERE subnets(addr, mask, gwip, gwmac, router, rport)
     new.arp_tpa = pkt.nwDst and
     new.arp_sha = 00:00:CA:FE:CA:FE and // Controller MAC
     new.arp_spa = 10.10.10.1; // Controller IP addr
-
+*/
 // don't keep in the router queue
 // not strictly needed, but good to clean up
 ON arp_packet(reply) WHERE reply.arp_op = 2 AND router_queued(reply.arp_spa):

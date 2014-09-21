@@ -384,6 +384,33 @@ let debug_contains_equal_dlsrc_dldst (p:flowlog_program) (orig_fmla: formula) (p
     end;;
 *)
 
+(* deal with e.g.: nwdst = 10.1.1.1 and not(nwdst in 192.168.0.0/16 ...)
+   avoid burdening NetCore's compiler.
+   TODO (this will be run for every fully substituted clause, so super inefficient...)
+
+   Context: NetCore's optimizer doesn't always catch situations like the above, and in Exodus
+     those negated disjunctions can get pretty big. So we pass over the substituted clauses before
+     converting them to policies, saving us from an O(n^2) blowup in number of OF rules in the worst case.
+ *)
+let remove_contradictory_nots (fs: formula list): formula list =
+  let ins = fold_left (fun acc eqf -> match eqf with | FIn(tm, TConst(addr), TConst(mask)) -> (tm, (addr, mask))::acc
+                                                     | _ -> acc) [] fs in
+    let rec remove_helper innerf =
+      (match innerf with | FOr(f1, f2) -> FOr(remove_helper f1, remove_helper f2)
+                         | FEquals(tm, TConst(vx))
+                         | FEquals(TConst(vx), tm) when mem_assoc tm ins ->
+                           let a,m = assoc tm ins in
+                             if is_in_ip_range (Int32.of_string vx) (Int32.of_string a) (int_of_string m) then innerf
+                             else
+                             begin
+                               if !global_verbose > 4 then
+                                 write_log (sprintf "remove_contradictory_nots: %s = %s vs. %s/%s" (string_of_term tm) vx a m);
+                               FFalse
+                             end
+                         | _ -> innerf) in
+      map (fun f -> match f with | FNot(innerf) -> FNot(remove_helper innerf) | _ -> f) fs;;
+
+
 (* Replace state references with constant matrices.
    ASSUMPTION: f is a conjunction of atoms. *)
 (* list of lists: outer list: new clauses; inner list: conjunctions of atoms in the clauses *)
@@ -416,8 +443,11 @@ let partial_evaluation (p: flowlog_program) (incpkt: string) (f: formula): formu
         (* Hook each positive disj together with the other_formulas. We now have possibly many different clauses.
            ^ Note that this substitution also applies to the additional_positive_subfmlas.  *)
         let set_of_split_conjunctions = filter_map (fun listconj -> substitute_for_join listconj other_formulas) positive_conjuncts in
+
           let result_clauses = map (stage_2_partial_eval incpkt) set_of_split_conjunctions in
-          let unique_result_clauses = unique result_clauses in
+
+          let unique_result_clauses = unique (map remove_contradictory_nots result_clauses) in
+
             if !global_verbose >= 1 then
             begin
               count_disjuncts_pe := !count_disjuncts_pe + (length result_clauses);
@@ -428,7 +458,7 @@ let partial_evaluation (p: flowlog_program) (incpkt: string) (f: formula): formu
             begin
               if (length result_clauses) <> (length unique_result_clauses) then
               begin
-                write_log (sprintf "PE of clause completed with %d disjuncts; only %d were unique.\n%!" (length result_clauses) (length unique_result_clauses));
+                write_log (sprintf "PE of clause completed with %d disjuncts; only %d were unique after removing contradictory NOTs.\n%!" (length result_clauses) (length unique_result_clauses));
               end
               else
               begin
@@ -690,7 +720,7 @@ let field_to_masked_pattern (fld: string) (aval:string) (maskstr:string): NetCor
       if !global_verbose >= 5 then
         ignore (validate_ordering eqlist);
 
-  (* After PE, should be only equalities and negated equalities. Should be just a conjunction *)
+    (* After PE, should be only equalities and negated equalities. Should be just a conjunction *)
     let predlist = unique (filter_map eq_to_pred eqlist) in
 
     (* MUST be fold_right, to preserve ordering! *)
