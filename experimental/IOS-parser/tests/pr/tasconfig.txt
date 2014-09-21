@@ -1,0 +1,30 @@
+! modified from LISA '10 paper
+! made IP ranges more readable; removed an interface; removed ACLs
+hostname tas
+!
+interface GigabitEthernet0/0
+ ip address 10.232.0.1 255.255.255.0
+ ip policy route-map internet
+!
+interface GigabitEthernet0/1
+ ip address 10.232.8.1 255.255.255.0
+
+! source routing:
+access-list 10 permit 10.100.0.0 0.0.255.255
+access-list 10 permit 10.200.0.0 0.0.255.255
+access-list 20 permit 20.100.0.0 0.0.255.255
+access-list 20 permit 20.200.0.0 0.0.255.255
+!
+! TN: the ID "internet" has two map entries, which are checked in numeric order.
+!     It just so happens that in this case, the ACL ids and the entry ids are the same.
+! If no "match" was specified, then the map would apply to all packets.
+!
+route-map internet permit 10
+match ip address 10
+set ip next-hop 10.232.0.10
+!
+route-map internet permit 20
+match ip address 20
+set ip next-hop 10.232.0.20
+!
+end

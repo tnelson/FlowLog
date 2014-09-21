@@ -1457,14 +1457,14 @@
 (define (parse-route-map-set-IP line name sequence-num line-tokens config)
   (case (first line-tokens)
     [(default) (parse-route-map-set-IP-default line name sequence-num (rest line-tokens) config)]
-    [(nexthop) (parse-route-map-set-IP-nexthop line name sequence-num (rest line-tokens) config)]
+    [(nexthop next-hop) (parse-route-map-set-IP-nexthop line name sequence-num (rest line-tokens) config)]
     [else (warning-unsupported line (first line-tokens) '(default nexthop))
                       config]))
 
 ;; number symbol number (listof any) IOS-config% -> IOS-config%
 (define (parse-route-map-set-IP-default line name sequence-num line-tokens config)
   (case (first line-tokens)
-    [(nexthop) (parse-route-map-set-IP-default-nexthop line name sequence-num (rest line-tokens) config)]
+    [(nexthop next-hop) (parse-route-map-set-IP-default-nexthop line name sequence-num (rest line-tokens) config)]
     [else (warning-unsupported line (first line-tokens) '(nexthop))
                       config]))
 

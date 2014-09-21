@@ -2928,6 +2928,7 @@
     ;; symbol symbol (hashtable symbol ACL%) (listof (listof symbol)) -> (listof rule%)
     ;;   Returns a list of the routing rules that this map contains
     (define/public (routing-rules hostname interf ACLs additional-conditions rule-type)
+      (printf "Route map: ~a. routing-rules. type: ~a~n" ACLs rule-type)
       (send nexthop rules (match-rules hostname interf ACLs additional-conditions rule-type) rule-type))
     
     ;; symbol symbol (hashtable symbol ACL%) (listof (listof symbol)) -> (listof rule%)
@@ -2946,6 +2947,7 @@
     ;; (listof rule%) -> (listof rule%)
     ;;   Returns a list of the rules for this set action
     (define/public (rules match-rules rule-type)
+      (printf "nexthop-gateway match-rules~n")
       (append
        (map (λ (match-rule)
               (list
@@ -2984,6 +2986,7 @@
     ;; (listof rule%) -> (listof rule%)
     ;;   Returns a list of the rules for this set action
     (define/public (rules match-rules)
+      (printf "nexthop-interface match-rules~n")
       (append
        (map (λ (match-rule)
               (list

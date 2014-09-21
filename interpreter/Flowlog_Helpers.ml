@@ -1074,7 +1074,9 @@ let type_inference_of_vars (p: flowlog_program) (start_inferences: TypeIdSet.t T
           | SameAsOnFields ->
             (match (get_trigger p cl) with
               | Some(e,_,_) -> e
-              | None -> failwith ("infer_type_of_vars head no trigger event in clause: "^(string_of_clause cl)))
+              | None ->
+                write_log_and_print ("infer_type_of_vars head no trigger event in clause: "^(string_of_clause ~verbose:Verbose cl));
+                failwith ("infer_type_of_vars head no trigger event in clause: "^(string_of_clause ~verbose:Verbose cl)))
           | _ -> failwith "infer_type_of_vars head AnyFields") in
         let headfieldnames, headfieldtypes = split (outevent.evfields) in
           fold_left add_infer base_body (combine (expand_fields (hd headargs) headfieldnames) headfieldtypes)
