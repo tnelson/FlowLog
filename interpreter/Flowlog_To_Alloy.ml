@@ -107,7 +107,11 @@ type alloy_ontology = {
           let tid = TypeIdSet.choose theset in
           let non_alloy_str = pretty_print_value tid strval in
               (* Replace any dots or colons with underscore *)
-             tid^"_"^(Str.global_replace (Str.regexp "\\.\\|:") "_" non_alloy_str)
+              (* Replace a negative sign with a "neg"*)
+              if tid = "int" then
+                tid^"_"^(Str.global_replace (Str.regexp "-") "neg" non_alloy_str)
+              else
+                tid^"_"^(Str.global_replace (Str.regexp "\\.\\|:") "_" non_alloy_str)
         end
     end
     else

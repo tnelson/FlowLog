@@ -1,0 +1,192 @@
+////////////
+// Vlans template as extracted on 9/22/14
+////////////
+//CHANGES
+
+// Added for verification (declared in other modules)
+TABLE learned(switchid, portid, macaddr);
+TABLE spanningTree(switchid, portid);
+TABLE switchTopology(switchid, portid, switchid, portid);
+//TABLE subnets(ipaddr, int, ipaddr, macaddr, switchid, portid);
+TABLE subnets(macaddr, switchid, portid);
+
+// Reduced size of subnets table: we don't need first 3 columns
+
+////////////
+
+
+/* Exodus VLAN module
+   Handles the VLAN sub-switch (including non-VLAN traffic passing through).
+*/
+
+// Which VLAN ids are associate with which switchports
+// switch -> physical port id -> vlan id
+TABLE sp_vlans(switchid, portid, int);
+
+// Which physical ports are access or trunk ports for VLAN(s)
+// VLAN sub-switch -> physical port id -> mode
+// (note: NOT the router id, the vlan switch id)
+TABLE sp_modes(switchid, portid, string);
+
+// switched virtual interfaces (for inter-vlan traffic)
+// VLAN sub-switch -> *adjusted* routing port id (i.e., the vlan sub-switch port on rtr side) -> vlan id
+TABLE virtual_interfaces(switchid, portid, int);
+
+// for non-vlan interfaces: physicalport -> ROUTER SIDE routing port on same device
+// switchid is the VLAN sub-switch
+TABLE p2r(switchid, portid, portid);
+
+// vlan host side routing port num to router routing port num
+TABLE vr2rr(switchid, portid, portid);
+
+// router switch, vlan switch
+TABLE router_vlan(switchid, switchid);
+
+///////////////////////////////////////////////////////////////////////////////
+// Non-vlan traffic: passthrough in both directions (translate between physical <--> L3-visible)
+// Disregard traffic from (host-side) vlan physical or (router-side) virtual L3-visible
+
+ON packet(p) WHERE router_vlan(ANY,p.locSw) AND // at a vlan sub-switch
+                   NOT sp_vlans(p.locSw, p.locPt, ANY) AND // not coming from vlan host-side
+                   // *** n.b. that the 2nd column of virtual_interfaces is an "adjusted" rpt. See IOS.flg.
+                   NOT virtual_interfaces(p.locSw, p.locPt, ANY) AND // not coming from vlan router-side
+                   p.dltyp != 0x1001 AND // don't do for discovery
+                   p.dltyp != 0x806: // don't do this for arp
+  DO forward(new) WHERE
+  // branching here assumes partition of ports between physical and routing.
+    p2r(p.locSw, p.locPt, new.locPt) OR p2r(p.locSw, new.locPt, p.locPt);
+
+///////////////////////////////////////////////////////////////////////////////
+// Intra-vlan traffic: not to any gateway MAC
+// Tagged and untagged cases
+
+// TODO Language design issue to solve: nested reqs. 4 clauses in this on (and 4 in the next one)
+// TODO helper-sugar would make some of this much easier
+
+ON packet(p) WHERE sp_vlans(p.locSw, p.locPt, vlanid) AND
+                   NOT subnets(p.dlDst,rtrid,ANY) AND
+                   router_vlan(rtrid, p.locSw) AND
+                   p.dltyp != 0x806 AND // don't do this for arp
+                   p.dltyp != 0x1001 AND // don't do for discovery
+                   p.dlvlan = -1: // coming in UNTAGGED
+  DO forward(new) WHERE
+    sp_vlans(p.locSw, new.locPt, vlanid) AND // iface for this vlan
+    p.locPt != new.locPt AND // never backflow
+    (
+    // Spanning tree covers only the switch topology. Need to make sure we send to any (possibly hitherto silent) hosts
+    // (restricted to layer 2, of course!)
+        (NOT learned(p.locSw, ANY, p.dlDst) AND
+          (spanningTree(p.locSw, new.locPt) OR (NOT switchTopology(p.locSw, new.locPt, ANY, ANY) AND
+                                                sp_modes(p.locSw, new.locPt, "access"))))
+        OR learned(p.locSw, new.locPt, p.dlDst)
+    ) AND
+    ((
+      // don't tag if sending out an access port
+      sp_modes(p.locSw, new.locPt, "access")
+    ) OR (
+      sp_modes(p.locSw, new.locPt, "trunk") AND
+      new.dlvlan = vlanid
+    ));
+
+/*
+  Here's a cool debugging technique. Since Flowlog has no printf action (sadness),
+  do debugging-by-logging. Figure out which part of these rules fail us by breaking
+  different parts into different insert statements.
+
+  The FIRST bug here was: I had used p.dlvlan instead of new.dlvlan for trunk mode.
+  The SECOND bug was: spanning tree doesn't send down host ports.
+
+  insert (0) into debugvlan1 where p.dldst = 5;
+  insert (pt) into debugvlan2 where
+    p.dldst = 5 and
+    sp_vlans(p.locSw, pt, vlanid); // iface for this vlan
+  insert (pt, vlanid) into debugvlan3 where
+    p.dldst = 5 and
+    sp_vlans(p.locSw, pt, vlanid) and // iface for this vlan
+    ((
+      // don't tag if sending out an access port
+      sp_modes(p.locSw, pt, "access")
+    ) OR (
+      sp_modes(p.locSw, pt, "trunk")
+    ));
+
+TABLE debugvlan1(portid);
+TABLE debugvlan2(portid);
+TABLE debugvlan3(portid,int);
+
+*/
+
+
+// If comes in tagged, then we need to send for that single vlan
+ON packet(p) WHERE sp_vlans(p.locSw, p.locPt, vlanid) AND
+                   NOT subnets(p.dlDst,rtrid,ANY) AND
+                   router_vlan(rtrid, p.locSw) AND
+                   p.dltyp != 0x806 AND // don't do this for arp
+                   p.dltyp != 0x1001 AND // don't do for discovery
+                   vlanid != -1 AND
+                   p.dlvlan = vlanid: // comes in tagged (tag should be allowed on the incoming interface)
+  DO forward(new) WHERE
+    sp_vlans(p.locSw, new.locPt, vlanid) AND
+    p.locPt != new.locPt AND // never backflow
+    (
+        (NOT learned(p.locSw, ANY, p.dlDst) AND
+          (spanningTree(p.locSw, new.locPt) OR (NOT switchTopology(p.locSw, new.locPt, ANY, ANY) AND
+                                                sp_modes(p.locSw, new.locPt, "access"))))
+        OR learned(p.locSw, new.locPt, p.dlDst)
+    ) AND
+    ((
+      // actively de-tag if sending out an access port
+      sp_modes(p.locSw, new.locPt, "access") AND
+      new.dlvlan = -1
+    ) OR (
+      sp_modes(p.locSw, new.locPt, "trunk") AND
+      new.dlvlan = vlanid
+    ));
+
+///////////////////////////////////////////////////////////////////////////////
+// INTER-vlan traffic: finishing a L2 hop at some gateway mac
+
+// coming from host side: tag doesn't matter; this L2 journey has ended.
+ON packet(p) WHERE sp_vlans(p.locSw, p.locPt, ANY) AND // ANY vlan id
+                   subnets(p.dlDst,rtrid,rtrpt) AND // to a gateway to rtrpt...
+                   router_vlan(rtrid, p.locSw): // for this vlan
+  // send up to the ACL and begin the routing process
+  DO forward(new) WHERE
+    p2r(p.locSw, p.locPt, new.locPt) and
+    vr2rr(p.locSw, new.locPt, rtrpt); // to the router port for the gateway (not just any gateway)
+
+// coming from router side: convert back from virtual interface to (possibly multiple) physical switchports
+// (Once has learned the adjacent gateway MACs, will not flood on multiple VLAN physical interfaces.)
+ON packet(p) WHERE virtual_interfaces(p.locSw, p.locPt, ANY) and
+                   p.dltyp != 0x806: // don't do this for arp:
+  DO forward(new) WHERE
+    p2r(p.locSw, new.locPt, p.locPt) AND
+
+    // apply standard MAC learning resolution here, too. tree+non-topo access ports
+    ((NOT learned(p.locSw, ANY, p.dlDst) AND
+          (spanningTree(p.locSw, new.locPt) OR (NOT switchTopology(p.locSw, new.locPt, ANY, ANY) AND
+                                                sp_modes(p.locSw, new.locPt, "access"))))
+        OR learned(p.locSw, new.locPt, p.dlDst)
+    );
+
+///////////////////////////////////////////////////////////////////////////////
+// Learn MACs for Traffic arriving on switch-ports
+// (Separate from generic MAC learning module since no reason to learn MAC locations for virtual L3 ports)
+
+ON packet(p) WHERE router_vlan(rtrid, p.locSw) AND
+                   sp_modes(p.locSw, p.locPt, ANY) AND
+                   p.dlTyp != 0x1001 AND // not a probe
+
+                                        // Taken from MACL module
+                                        p.dlTyp != 0x0806 and // ARP
+                    p.dlDst != 0x01005e000016 and // IGMP ethernet multicast.
+                                                    // this should be an explicit drop in AppleTV.flg.
+                    //p.dlDst != 0x333300000000 and // more multicasts (the entire 4byte/3byte range is mcast)
+                    //p.dlDst != 0x01005e000000 and
+                    p.dlDst != 0x3333000000fb and // mDNS IPv6 ethernet multicast
+                    p.dlDst != 0x01005e0000fb:    // mDNS IPv4 ethernet multicast
+
+  INSERT (p.locSw, p.locPt, p.dlSrc) INTO learned;
+  DELETE (p.locSw, pt, p.dlSrc) FROM learned WHERE pt != p.locPt;
+
+
