@@ -1,0 +1,1 @@
+./ios2flowlog --path tests/vlan1/ configA.txt configB.txt

@@ -71,6 +71,10 @@ ON packet(p) WHERE sp_vlans(p.locSw, p.locPt, vlanid) AND
                    p.dlvlan = -1: // coming in UNTAGGED
   DO forward(new) WHERE
     sp_vlans(p.locSw, new.locPt, vlanid) AND // iface for this vlan
+
+    // *** AFTER ANALYSIS: note if traffic arrives untagged from trunk,
+    //  we will send out ALL vlans for that trunk (no way to narrow)
+
     p.locPt != new.locPt AND // never backflow
     (
     // Spanning tree covers only the switch topology. Need to make sure we send to any (possibly hitherto silent) hosts
@@ -157,7 +161,7 @@ ON packet(p) WHERE sp_vlans(p.locSw, p.locPt, ANY) AND // ANY vlan id
 
 // coming from router side: convert back from virtual interface to (possibly multiple) physical switchports
 // (Once has learned the adjacent gateway MACs, will not flood on multiple VLAN physical interfaces.)
-ON packet(p) WHERE virtual_interfaces(p.locSw, p.locPt, ANY) and
+ON packet(p) WHERE virtual_interfaces(p.locSw, p.locPt, vlanid) and
                    p.dltyp != 0x806: // don't do this for arp:
   DO forward(new) WHERE
     p2r(p.locSw, new.locPt, p.locPt) AND
@@ -167,7 +171,19 @@ ON packet(p) WHERE virtual_interfaces(p.locSw, p.locPt, ANY) and
           (spanningTree(p.locSw, new.locPt) OR (NOT switchTopology(p.locSw, new.locPt, ANY, ANY) AND
                                                 sp_modes(p.locSw, new.locPt, "access"))))
         OR learned(p.locSw, new.locPt, p.dlDst)
-    );
+    )
+// *** ADDED AFTER ANALYSIS: TAG TRAFFIC OUT ON VIRTUAL INTERFACE
+/// *** note join with vlanid in virtual_interfaces above
+    AND
+    ((
+      // actively de-tag if sending out an access port
+      sp_modes(p.locSw, new.locPt, "access") AND
+      new.dlvlan = -1
+    ) OR (
+      sp_modes(p.locSw, new.locPt, "trunk") AND
+      new.dlvlan = vlanid
+    ))
+    ;
 
 ///////////////////////////////////////////////////////////////////////////////
 // Learn MACs for Traffic arriving on switch-ports
