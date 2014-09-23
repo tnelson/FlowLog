@@ -45,7 +45,12 @@ TABLE needs_nat(switchid, ipaddr, int);
 //
 // Column values:
 // proto (TCP or UDP), private IP, private tp port, public IP, public tp port
-TABLE ptassign(nwprotocol, ipaddr, tpport, ipaddr, tpport);
+//TABLE ptassign(nwprotocol, ipaddr, tpport, ipaddr, tpport);
+
+// *** Refactored for analysis. Arity 5 -> Arity 4
+
+TABLE ptassignTCP(ipaddr, tpport, ipaddr, tpport);
+TABLE ptassignUDP(ipaddr, tpport, ipaddr, tpport);
 
 // Last used port number by sequential increase (per-public IP & proto)
 //
@@ -66,14 +71,14 @@ TABLE reusept(ipaddr, nwprotocol, tpport);
  ******************************************************************************/
 
 // Outgoing traffic
-ON tcp_packet(pkt) WHERE ptassign(0x6, pkt.nwSrc, pkt.tpSrc, ip, pt) AND
+ON tcp_packet(pkt) WHERE ptassignTCP(pkt.nwSrc, pkt.tpSrc, ip, pt) AND
                          not natconfig(pkt.locSw, ANY, ANY, pkt.nwDst): // <-- when publicPt = privatePt
   DO forward(new) WHERE
     natconfig(pkt.locSw, pkt.locPt, new.locPt, ip) AND
     new.nwSrc = ip AND new.tpSrc = pt
     TIMEOUT 120;
 
-ON udp_packet(pkt) WHERE ptassign(0x11, pkt.nwSrc, pkt.tpSrc, ip, pt) AND
+ON udp_packet(pkt) WHERE ptassignUDP(pkt.nwSrc, pkt.tpSrc, ip, pt) AND
                          not natconfig(pkt.locSw, ANY, ANY, pkt.nwDst): // <-- when publicPt = privatePt
   DO forward(new) WHERE
     natconfig(pkt.locSw, pkt.locPt, new.locPt, ip) AND
@@ -81,14 +86,14 @@ ON udp_packet(pkt) WHERE ptassign(0x11, pkt.nwSrc, pkt.tpSrc, ip, pt) AND
     TIMEOUT 120;
 
 // Returning traffic
-ON tcp_packet(pkt) WHERE ptassign(0x6, ip, pt, pkt.nwDst, pkt.tpDst):
+ON tcp_packet(pkt) WHERE ptassignTCP(ip, pt, pkt.nwDst, pkt.tpDst):
   DO forward(new) WHERE
     natconfig(pkt.locSw, new.locPt, pkt.locPt, pkt.nwDst) AND
     new.nwDst = ip AND new.tpDst = pt
     AND pkt.nwSrc != ip // <-- when publicPt = privatePt
     TIMEOUT 120;
 
-ON udp_packet(pkt) WHERE ptassign(0x11, ip, pt, pkt.nwDst, pkt.tpDst):
+ON udp_packet(pkt) WHERE ptassignUDP(ip, pt, pkt.nwDst, pkt.tpDst):
   DO forward(new) WHERE
     natconfig(pkt.locSw, new.locPt, pkt.locPt, pkt.nwDst) AND
     new.nwDst = ip AND new.tpDst = pt
@@ -104,7 +109,7 @@ ON udp_packet(pkt) WHERE ptassign(0x11, ip, pt, pkt.nwDst, pkt.tpDst):
  *
  ******************************************************************************/
 
-ON tcp_packet(pkt) WHERE not ptassign(0x6, pkt.nwSrc, pkt.tpSrc, ANY, ANY) AND
+ON tcp_packet(pkt) WHERE not ptassignTCP(pkt.nwSrc, pkt.tpSrc, ANY, ANY) AND
                          natconfig(pkt.locSw, pkt.locPt, publicLocPt, publicIP) AND // <-- when publicPt != privatePt
                          not natconfig(pkt.locSw, ANY, ANY, pkt.nwDst) AND // <-- when publicPt = privatePt
                          seqpt(publicIP, 0x6, x) AND add(x, 1, publicPt):
@@ -119,10 +124,10 @@ ON tcp_packet(pkt) WHERE not ptassign(0x6, pkt.nwSrc, pkt.tpSrc, ANY, ANY) AND
 
   INSERT (publicIP, 0x6, publicPt) INTO seqpt;
 
-  INSERT (0x6, pkt.nwSrc, pkt.tpSrc, publicIP, publicPt) INTO ptassign;
+  INSERT (pkt.nwSrc, pkt.tpSrc, publicIP, publicPt) INTO ptassignTCP;
 
 
-ON udp_packet(pkt) WHERE not ptassign(0x11, pkt.nwSrc, pkt.tpSrc, ANY, ANY) AND
+ON udp_packet(pkt) WHERE not ptassignUDP(pkt.nwSrc, pkt.tpSrc, ANY, ANY) AND
                          natconfig(pkt.locSw, pkt.locPt, publicLocPt, publicIP) AND // <-- when publicPt != privatePt
                          not natconfig(pkt.locSw, ANY, ANY, pkt.nwDst) AND // <-- when publicPt = privatePt
                          seqpt(publicIP, 0x11, x) AND add(x, 1, publicPt):
@@ -137,7 +142,7 @@ ON udp_packet(pkt) WHERE not ptassign(0x11, pkt.nwSrc, pkt.tpSrc, ANY, ANY) AND
 
   INSERT (publicIP, 0x11, publicPt) INTO seqpt;
 
-  INSERT (0x11, pkt.nwSrc, pkt.tpSrc, publicIP, publicPt) INTO ptassign;
+  INSERT (pkt.nwSrc, pkt.tpSrc, publicIP, publicPt) INTO ptassignUDP;
 
 /*******************************************************************************
  *
@@ -149,20 +154,25 @@ ON udp_packet(pkt) WHERE not ptassign(0x11, pkt.nwSrc, pkt.tpSrc, ANY, ANY) AND
 
 // Outgoing direction -- flow match will have a private IP and private port as
 // the source pair
-ON flow_removed(fr) WHERE natconfig(fr.sw, fr.inPort, ANY, publicIP) and
-                          ptassign(fr.nwProto, fr.nwSrcAddr, fr.tpSrc, publicIP, publicPt)
+ON flow_removed(fr) WHERE natconfig(fr.sw, fr.inPort, ANY, publicIP)
+                          // *** For analysis: we don't need this check anymore, anyway.
+                          //ptassign(fr.nwProto, fr.nwSrcAddr, fr.tpSrc, publicIP, publicPt)
                           and fr.reason = "IdleTimeout":
 
-  DELETE (fr.nwProto, fr.nwSrcAddr, fr.tpSrc, publicIP, publicPt) FROM ptassign;
+  DELETE (fr.nwSrcAddr, fr.tpSrc, publicIP, publicPt) FROM ptassignTCP WHERE fr.nwProto = 0x6;
+  DELETE (fr.nwSrcAddr, fr.tpSrc, publicIP, publicPt) FROM ptassignUDP WHERE fr.nwProto = 0x11;
 
-  INSERT (publicIP, fr.nwProto, publicPt) INTO reusept;
+  INSERT (publicIP, 0x6, publicPt) INTO reusept WHERE fr.nwProto = 0x6 AND ptassignTCP(fr.nwSrcAddr, fr.tpSrc, publicIP, publicPt);
+  INSERT (publicIP, 0x11, publicPt) INTO reusept WHERE fr.nwProto = 0x11 AND ptassignUDP(fr.nwSrcAddr, fr.tpSrc, publicIP, publicPt);
 
 // Returning direction -- flow match will have a NAT's public IP and port as
 // the destination pair
-ON flow_removed(fr) WHERE natconfig(fr.sw, ANY, fr.inPort, fr.nwDstAddr) and
-                          ptassign(fr.nwProto, fr.nwSrcAddr, fr.tpSrc, publicIP, publicPt)
+ON flow_removed(fr) WHERE natconfig(fr.sw, ANY, fr.inPort, fr.nwDstAddr)
+                          //ptassign(fr.nwProto, fr.nwSrcAddr, fr.tpSrc, publicIP, publicPt)
                           and fr.reason = "IdleTimeout":
 
-  DELETE (fr.nwProto, ANY, ANY, fr.nwDstAddr, fr.tpDst) FROM ptassign;
+  DELETE (ANY, ANY, fr.nwDstAddr, fr.tpDst) FROM ptassignTCP WHERE fr.nwProto = 0x6;
+  DELETE (ANY, ANY, fr.nwDstAddr, fr.tpDst) FROM ptassignUDP WHERE fr.nwProto = 0x11;
 
   INSERT (fr.nwDstAddr, fr.nwProto, fr.tpDst) INTO reusept;
+
