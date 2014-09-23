@@ -82,6 +82,7 @@ let rule_uses (p: flowlog_program) (tblname: string): bool =
 
 type alloy_ontology = {
   filename: string;
+  separate_spec: bool;
   constants: (string * typeid) list;
   events_used: (string * event_def) list;
   tables_used: (string * table_def) list;
@@ -161,7 +162,8 @@ type alloy_ontology = {
         (reduce_relation_expr o (stateid^"."^relname) tlargs)
 
       | FAtom("", relname, tlargs) ->
-          (String.concat "->" (map (alloy_of_term o.inferences) tlargs))^" in o/BuiltIns."^relname
+          let onto_prefix = if o.separate_spec then "o/" else "" in
+            (String.concat "->" (map (alloy_of_term o.inferences) tlargs))^" in "^onto_prefix^"BuiltIns."^relname
       | FAtom(modname, relname, tlargs) ->
           (String.concat "->" (map (alloy_of_term o.inferences) tlargs))^" in "^stateid^"."^modname^"_"^relname
       | FAnd(f1, f2) ->
@@ -338,6 +340,7 @@ let program_to_ontology (p: flowlog_program): alloy_ontology =
 
    tables_used=(map (fun tbl -> (tbl.tablename, tbl)) ((get_local_tables p) @ (get_remote_tables p)));
    filename = "";
+   separate_spec = false; (* will set to true later if multiple files *)
    inferences=inferences};;
 
 (* TODO: support table-widening, etc. *)
@@ -386,6 +389,7 @@ let programs_to_ontology (programs: flowlog_program list): alloy_ontology =
   let ontos = map program_to_ontology programs in
     {constants=resolve_constants ontos; events_used=resolve_events ontos; tables_used=resolve_tables ontos;
      filename="";
+     separate_spec=true;
      inferences=(fold_left (fun acc ont -> combine_inferences ont.inferences acc) TermMap.empty ontos)};;
 
 (**********************************************************)
@@ -456,40 +460,38 @@ let alloy_actions (out: out_channel) (o: alloy_ontology) (p: flowlog_program): u
   let event_alloysig_for (increl: string): string =
     "EV"^increl in
 
-  let build_emit_defaults (pf: pred_fragment) (tid: string): string =
+  let build_emit_defaults (pf: pred_fragment) (tid: string): formula =
     let ev_def = get_event p tid in
-    (*let outv = string_of_term (first pf.outargs) in*)
-    let outv = "out0" in
+    let outv = string_of_term (first pf.outargs) in
+    (*let outv = "out0" in*)
     let constrs = filter_map (fun (fname, _) ->
                   try
                     let v = assoc (tid, fname) Flowlog_Packets.defaults_table in
-                      Some (outv^"."^fname^" = "^v)
+                      Some(FEquals(TField(outv, fname),TConst(v)))
                   with Not_found -> None) ev_def.evfields in
-      String.concat " && " constrs in
+      build_and constrs in
 
-  let build_forward_defaults (pf: pred_fragment): string =
+  let build_forward_defaults (pf: pred_fragment): formula =
     let ev_def = get_event p pf.increl in (* use type from "ON" rather than base packet *)
     let outv = String.lowercase (string_of_term (first pf.outargs)) in
     let terms_used = get_terms (fun _ -> true) pf.where in
     let constrs = filter_map (fun (fname, _) ->
                   let target = TField(outv, fname) in (* using correct outv var*)
                   if not (mem target terms_used) then
-                    Some ("out0."^fname^" = "^"ev."^fname)
+                    Some(FEquals(TField(outv, fname),TField(pf.incvar,fname)))
                   else None) ev_def.evfields in
-      String.concat " && " constrs in
+      build_and constrs in
 
 
-  let build_defaults (pf: pred_fragment): string =
+  let build_defaults (pf: pred_fragment): formula =
     match pf.fortable with
-      | Some(_) -> ""
+      | Some(_) -> FTrue
       | None ->
         let out_def = get_outgoing p pf.outrel in
-          let defstr = (match out_def.react with
+          (match out_def.react with
             | OutForward -> (build_forward_defaults pf)
             | OutEmit(tid) -> (build_emit_defaults pf tid)
-            | _ -> "") in
-              if (String.length defstr) == 0 then ""
-              else "&&"^defstr in
+            | _ -> FTrue) in
 
   (* Produce an Alloy constraint (string) for this Flowlog rule (as pred_fragment) *)
   let alloy_of_pred_fragment (stateid: string) (pf : pred_fragment): string =
@@ -535,11 +537,12 @@ let alloy_actions (out: out_channel) (o: alloy_ontology) (p: flowlog_program): u
     let freevarstr = (String.concat " " (make_quantified_decl freevars_signed)) in
 
     (* Finally, should any defaults be added on? (e.g., new.locsw = p.locsw)*)
-    let defaultsstr = build_defaults pf in
+    let defaultsfmla = (substitute_terms (build_defaults pf) to_substitute) in
 
       (* Final pred fragment Alloy: *)
-      Format.sprintf "\n  (@[ev in %s%s@] && @[(%s %s)@]\n      && @[%s@])"
-        evtypename defaultsstr
+      Format.sprintf "\n  (@[ev in %s && %s@] && @[(%s %s)@]\n      && @[%s@])"
+        evtypename
+        (alloy_of_formula o stateid defaultsfmla)
         freevarstr
         (alloy_of_formula o stateid substituted)
 
@@ -559,19 +562,28 @@ let alloy_actions (out: out_channel) (o: alloy_ontology) (p: flowlog_program): u
             (map make_rule (unique (map (fun cl -> cl.orig_rule) p.clauses))) in
 
   (* out3: Macaddr *)
-  let build_arg_decls (outrel: string) (pfl: pred_fragment): string =
+  let build_arg_decls (outrel: string) (pfl: pred_fragment) (useincrel: bool): string =
     match pfl.fortable with
       | None ->
-        (sprintf "out0: %s" (event_alloysig_for (outspec_type (get_outgoing p outrel).react)))
+        (sprintf "out0: %s" (event_alloysig_for (outspec_type (get_outgoing p outrel).react pfl.increl useincrel)))
       | Some(orig_rel) ->
         let tarity = ((get_table p orig_rel).tablearity) in
           (String.concat ", " (mapi (fun i t -> sprintf "out%d : %s" i (typestr_to_alloy (nth tarity i)))
                                     pfl.outargs)) in
+
+  (* out3 *)
+  let build_arg_vector (pfl: pred_fragment): string =
+    match pfl.fortable with
+      | None ->
+        "out0"
+      | Some(orig_rel) ->
+          (String.concat ", " (mapi (fun i t -> sprintf "out%d" i) pfl.outargs)) in
+
   (* out3 in Macaddr *)
   let build_arg_force (outrel: string) (pfl: pred_fragment): string =
     match pfl.fortable with
       | None ->
-        (sprintf "out0 in %s" (event_alloysig_for (outspec_type (get_outgoing p outrel).react)))
+        (sprintf "out0 in %s" (event_alloysig_for (outspec_type (get_outgoing p outrel).react pfl.increl true)))
       | Some(orig_rel) ->
         let tarity = ((get_table p orig_rel).tablearity) in
           (String.concat " && " (mapi (fun i t -> sprintf "out%d in %s" i (typestr_to_alloy (nth tarity i)))
@@ -581,17 +593,23 @@ let alloy_actions (out: out_channel) (o: alloy_ontology) (p: flowlog_program): u
   (* Convert each outrel (e.g., "forward", "emit") to an Alloy pred declaration string*)
   let rulestrs =
     StringMap.fold (fun outrel (pfls:pred_fragment list) acc ->
-                   (* Give a type to the result. Since the pfls should be for the same output, just use the hd. *)
-                   let thisargdecls = build_arg_decls outrel (hd pfls) in
 
-                   (* Type annotations get ignored by Alloy (Appendix B.6.4)*)
-                   let thisargforce = build_arg_force outrel (hd pfls) in
+                    let pred_decls, invocations = split (mapi (fun i pfl ->
+                      let thisargdecls = build_arg_decls outrel pfl true in
+                      let thisargvector = build_arg_vector pfl in
+                      (* Type annotations get ignored by Alloy (Appendix B.6.4)*)
+                      let thisargforce = build_arg_force outrel pfl in
+                      let pred_decl = sprintf "pred %s_%d[st: State, ev: Event, %s] {\n %s && (%s)\n}\n"
+                                        outrel i thisargdecls thisargforce
+                                        (alloy_of_pred_fragment "st" pfl) in
+                      let invocation = sprintf "%s_%d[st,ev,%s]" outrel i thisargvector in
+                        (pred_decl, invocation)) pfls) in
 
-                   let thispred = sprintf "pred %s[st: State, ev: Event, %s] {\n %s && (%s)\n}\n"
+                   let thispred = sprintf "pred %s[st: State, ev: Event, %s] {\n %s\n}\n%s\n"
                                     outrel
-                                    thisargdecls
-                                    thisargforce
-                                    (String.concat " ||\n" (map (alloy_of_pred_fragment "st") pfls)) in
+                                    (build_arg_decls outrel (hd pfls) false)
+                                    (String.concat " ||\n" invocations)
+                                    (String.concat "\n" pred_decls) in
                    StringMap.add outrel thispred acc)
                    outrel_to_rules
                    StringMap.empty in

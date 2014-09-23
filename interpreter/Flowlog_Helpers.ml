@@ -912,11 +912,11 @@ let string_of_astdeclaration (d: astdecl): string =
       | ASTDeclOut(tname, arg) -> "OUTGOING "^tname^" "^(string_of_outgoing_fields arg);
       | ASTDeclEvent(evname, argdecls) -> "EVENT "^evname^" "^(String.concat "," (map string_of_field_decl argdecls));;
 
-
-  let outspec_type (spec:spec_out) =
+  (* used for Alloy conversion *)
+  let outspec_type (spec:spec_out) (inrel: string) (useincrel: bool) =
     match spec with
-      | OutForward -> "packet"
-      | OutEmit(typ) -> "packet"
+      | OutForward -> if useincrel then inrel else "packet"
+      | OutEmit(typ) -> typ
       | OutPrint -> "print"
       | OutLoopback -> "loopback"
       | OutSend(evtype, ip, pt) -> evtype;;
