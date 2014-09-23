@@ -23,6 +23,14 @@
   */
 
 
+// Added for verification (declared in other modules)
+TABLE router_vlan(switchid, switchid);
+TABLE spanningTree(switchid, portid);
+TABLE switchTopology(switchid, portid, switchid, portid);
+TABLE p2r(switchid, portid, portid);
+TABLE sp_modes(switchid, portid, string);
+
+
 TABLE switches_without_arp(switchid);
 
 /*******************************************************************************
