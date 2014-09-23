@@ -41,7 +41,7 @@ fact assumptions {
 	}
 }
 
-// possible error: pkt can enter and exit same interface, if cfg is bad
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 assert outTrunkTagged 
 {
@@ -51,6 +51,7 @@ assert outTrunkTagged
 		implies
 		pout.dlvlan != C_int_neg1
 }
+check outTrunkTagged
 
 // ISSUE:
 // in from VI; out trunk. still -1? Yes, because the VI -> host-side forgets to tag.
@@ -63,4 +64,17 @@ assert outTrunkTagged
 // (really, should be an error if a packet arrives untagged from a trunk)
 // ^^ Actually this isn't quite right. What else to do but send on ALL vlans for that trunk?
 
-check outTrunkTagged
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+assert outIntra_UseTagIfTagged
+{
+	all s: State, pin, pout: EVpacket | 
+		(vlans/outpolicy[s, pin, pout] and  // policy fwds thusly
+		 pin.locpt in s.sp_vlans[pin.locsw].FLInt and // in from vlan physical
+		 pout.locpt in s.sp_vlans[pout.locsw].FLInt and // out vlan physical (together w/ above = intra)
+		 pin.dlvlan != C_int_neg1) // comes in tagged
+		implies
+          pin.dlvlan in s.sp_vlans[pout.locsw, pout.locpt] // out on a trunk or access for that tag			
+} 
+check outIntra_UseTagIfTagged for 4 
+
