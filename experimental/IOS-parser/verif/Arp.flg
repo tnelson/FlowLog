@@ -105,6 +105,8 @@ ON arp_packet(request) WHERE request.arp_op = 1 AND
   // or it is a self-request, then emit reply:
   //
 
+// *** Analysis points out that the XOR may not be what we want here.
+//   If we have a row in the cache for such a malformed request, the proper reply won't be sent.
   DO emit_arp(new) WHERE
     (cached(request.arp_tpa, new.arp_sha) XOR // XOR: don't dup packets when also cached
      (request.arp_tpa = request.arp_spa and

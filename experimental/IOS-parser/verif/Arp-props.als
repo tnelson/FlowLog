@@ -19,6 +19,13 @@ fact assumptions {
 //		some C_string_trunk 
 		some C_string_access
 
+
+		// ARP packets are forced to have ARP ethtyp (this could be produced by the compiler)
+		EVarp_packet.dltyp = C_ethtyp_arp
+		// Never cache the controller address
+		no s.cached[C_ipaddr_10_10_10_1]
+		no s.cached.C_macaddr_00_00_ca_fe_ca_fe
+
 	}
 }
 
@@ -35,3 +42,41 @@ assert outKnownNeverRequested
 check outKnownNeverRequested
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+assert outKnownReplyAndNoQueued
+{
+	all s: State, pin: EVarp_packet | 
+		(pin.arp_op = C_int_1 and // ARP request incoming
+         pin.arp_tpa in s.cached.Macaddr) // known     
+		implies
+		{
+			// unbounded universal issue just saying "some pout : ..."
+			// instead say: if you've created the right packet in your scenario, it's sent
+			(all pout: EVarp_packet | {				
+				pout.arp_op = C_int_2
+				pout.arp_spa = pin.arp_tpa
+				pout.arp_tha = pin.arp_sha
+				pout.arp_tpa = pin.arp_spa
+				pout.dltyp = pin.dltyp
+				pout.dldst = pin.dlsrc
+				pout.dlsrc = pout.arp_sha
+				pout.locsw = pin.locsw
+				pout.locpt = pin.locpt
+				pout.dlvlan = pin.dlvlan
+				pin.locsw not in s.switches_without_arp
+				pin.arp_sha != C_macaddr_00_00_ca_fe_ca_fe
+				pin.dlsrc != C_macaddr_00_00_ca_fe_ca_fe
+				pin.arp_spa != C_ipaddr_10_10_10_1
+				pout.arp_sha = s.cached[pin.arp_tpa]
+				pin.arp_tpa != pin.arp_spa // not a senseless query; needed because of XOR
+
+			}
+			implies arp/outpolicy[s, pin, pout])
+
+			no { x:Ipaddr, y:Macaddr, z:Ipaddr | plus_queuedrequests[s, pin, x,y,z] }			 
+		}
+}
+check outKnownReplyAndNoQueued
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
