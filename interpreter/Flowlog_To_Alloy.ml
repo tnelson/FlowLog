@@ -168,7 +168,7 @@ type alloy_ontology = {
         (Format.sprintf "(@[%s@] && @[%s@])"
           (alloy_of_formula o stateid f1)
           (alloy_of_formula o stateid f2))
-      | FOr(f1, f2) -> (alloy_of_formula o stateid f1) ^ " || "^ (alloy_of_formula o stateid f2)
+      | FOr(f1, f2) -> "("^(alloy_of_formula o stateid f1) ^ " || "^ (alloy_of_formula o stateid f2)^")"
 
 
 (**********************************************************)
