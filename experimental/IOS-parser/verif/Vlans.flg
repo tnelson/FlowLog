@@ -87,6 +87,7 @@ ON packet(p) WHERE sp_vlans(p.locSw, p.locPt, vlanid) AND
     ((
       // don't tag if sending out an access port
       sp_modes(p.locSw, new.locPt, "access")
+      AND new.dlvlan = -1 // *** CONCESSION TO ANALYSIS; FL->Alloy will place defaults at rule-level, and so underconstrain if use OR w/ diff fields
     ) OR (
       sp_modes(p.locSw, new.locPt, "trunk") AND
       new.dlvlan = vlanid

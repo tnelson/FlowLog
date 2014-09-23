@@ -66,6 +66,22 @@ check outTrunkTagged
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// TODO: Required concession to analyzer: explicit "no change" for dlvlan field
+// This is because the FL->Alloy converter underconstrains ORs; defaults are only
+// produced at the RULE level, not the CLAUSE level.
+
+assert outAccessUntagged
+{
+	all s: State, pin, pout: EVpacket | 
+		(vlans/outpolicy[s, pin, pout] and  // policy fwds thusly
+          s.sp_modes[pout.locsw, pout.locpt] = C_string_access) // out on an access port
+		implies
+		pout.dlvlan = C_int_neg1 // untagged
+}
+check outAccessUntagged
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 assert outIntra_UseTagIfTagged
 {
 	all s: State, pin, pout: EVpacket | 
