@@ -1129,6 +1129,8 @@ let get_program_var_counts (p: flowlog_program): vars_count_report =
       let ntqvs_ext, ntqvs_uni = get_non_trigger_quantified_vars p cl in
       let infers = type_inference_of_vars p TermMap.empty cl in
 
+      printf "clause: %s\n%!" (string_of_clause cl);
+
       let add_counts (m: int StringMap.t) (tlst: term list) =
           fold_left (fun acc t ->
             let typename = if (TermMap.mem t infers) then
@@ -1140,6 +1142,7 @@ let get_program_var_counts (p: flowlog_program): vars_count_report =
                   (hd (TypeIdSet.elements foundset))
             end
             else "unknown" in
+              printf "add_counts: term=%s; type=%s\n%!" (string_of_term t) typename;
               let previous = if (StringMap.mem typename m) then (StringMap.find typename m) else 0 in
                 (StringMap.add typename (previous+1) m)) m tlst in
 

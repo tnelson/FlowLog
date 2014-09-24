@@ -19,6 +19,16 @@ open Unix
 let alloy_filename (flfn: string): string =
   (Filename.chop_extension flfn)^".als";;
 
+let typestr_to_alloy (fldtype: string): string =
+  match fldtype with
+  | "string" -> "FLString"
+  | "int" -> "FLInt"
+  | _ -> String.capitalize fldtype;;
+
+let string_of_bounds (prefix: string) (m: int StringMap.t): string =
+  sprintf "0 but %s %s" prefix (String.concat "," (StringMap.fold (fun k v acc -> (sprintf "%d %s" v (typestr_to_alloy k))::acc) m []));;
+
+
 (**********************************************************)
 (* Some boilerplate (packets, etc.) *)
 
@@ -187,12 +197,6 @@ let assemble_needed_events (p: flowlog_program) (ev_def: event_def): event_def l
   let supers = built_in_supertypes ev_def.eventname in
     printf "DEBUG: assembling needed events for %s. Got %s\n%!" ev_def.eventname (String.concat "," supers);
     map (get_event p) supers;;
-
-let typestr_to_alloy (fldtype: string): string =
-  match fldtype with
-  | "string" -> "FLString"
-  | "int" -> "FLInt"
-  | _ -> String.capitalize fldtype;;
 
 
 let get_bottom_fields (o: alloy_ontology) (ev: event_def) =
@@ -715,6 +719,12 @@ let write_as_alloy (p: flowlog_program) (fn: string) (merged_ontology: alloy_ont
             fprintf out "open %s as o\n" o.filename;
             o) in
 
+       let (pvs: vars_count_report) = (get_program_var_counts p) in
+       let (sevc: int StringMap.t) = (single_event_ceilings ontology) in
+        printf "PVS: %s\n%!" (string_of_varcount pvs);
+        printf "SEVC: %s\n%!" (string_of_bounds "" sevc);
+
+
     	alloy_actions out ontology p;
     	alloy_transition out p ontology;
       alloy_outpolicy out p;
@@ -858,9 +868,6 @@ let addbounds (m1: int StringMap.t) (m2: int StringMap.t): int StringMap.t =
       | true -> StringMap.add k ((StringMap.find k acc)+v) acc
       | false -> StringMap.add k v acc)
     m1 m2;;
-
-let string_of_bounds (prefix: string) (m: int StringMap.t): string =
-  sprintf "0 but %s %s" prefix (String.concat "," (StringMap.fold (fun k v acc -> (sprintf "%d %s" v (typestr_to_alloy k))::acc) m []));;
 
 (******************************************************************)
 let cpo_bounds_string (p1: flowlog_program) (p2: flowlog_program) (ontol: alloy_ontology): string =

@@ -51,7 +51,9 @@ assert outTrunkTagged
 		implies
 		pout.dlvlan != C_int_neg1
 }
-check outTrunkTagged
+check outTrunkTagged for 5
+// for 6: 83 atoms; arity 4 is too much
+// for 5 is doable (~10sec, no counterexs)
 
 // ISSUE:
 // in from VI; out trunk. still -1? Yes, because the VI -> host-side forgets to tag.
@@ -82,6 +84,7 @@ check outAccessUntagged
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// coming in tagged, will send out only interfaces with that tag. (weak isolation)
 assert outIntra_UseTagIfTagged
 {
 	all s: State, pin, pout: EVpacket | 
