@@ -16,8 +16,13 @@ fact assumptions {
 		all sw: Switchid | lone s.natconfig[sw][Portid][Portid]		
 	}
 
-	// The add built-in is total and functional for TPports+1
-	all pt : Tpport | one BuiltIns.add[pt][C_1]
+	// Want: The add built-in is total and functional for TPports+1
+    // But stating that every Tpport has one after it is problematic for term-counting (induces a function)
+	// Instead, say that there is at MOST one success for all ports, and force existence only for fields of packets
+  	all pt : EVtcp_packet.tpsrc + EVtcp_packet.tpdst + EVudp_packet.tpsrc + EVudp_packet.tpdst  | 
+		{one BuiltIns.add[pt][C_1]  }
+	all pt : Tpport | lone BuiltIns.add[pt][C_1]
+
 	// Only increments, only Tpports
 	BuiltIns.add in (Tpport -> C_1 -> Tpport)
 
@@ -38,6 +43,8 @@ pred IPFAssign[s: State] {
 		lone s.ptassignudp[ip][pt]
 	}
 }
+
+// TODO injectivity!
 
 pred PFunctionalSeq[s: State] {	
 	// For every NAT-configured gateway and L4 protocol
@@ -93,9 +100,40 @@ assert outNATFlipped {
 }
 
 check outNATFlipped
+for 5 but 1 State, 2 Event, 2 Switchid, 3 Portid, 10 Tpport, 2 Nwprotocol, 4 Macaddr, 5 Ipaddr, 2 FLInt, 2 Ethtyp
+// TODO ^ RUN w/ new bounds
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // For sanity checking
 run {some s, s': State, pin: EVpacket | 
 		nat/transition[s, pin, s']} 
+
+
+// for 2x event (w/ assumptions +(2*2); w/ outpolicy variables):
+//for 5 but 1 State, 2 Event, 2 Switchid, 3 Portid, 10 Tpport, 2 Nwprotocol, 4 Macaddr, 5 Ipaddr, 2 FLInt, 2 Ethtyp
+// + mod from queries?
+
+// for 1x event (w/ assumptions +2)  TODO: TRANSITION VARS
+// for 5 but 2 State, 1 Event, 1 Switchid, 1, Portid, 4 Tpport, 1 NwProtocol, 2 Macaddr, 2 Ipaddr, 1 FLInt, 1 Ethtyp
+
+/*
+  CEILINGS
+
+  Single event ceiling: 1 Switchid,1 Portid,2 Macaddr,2 Ipaddr,2 Tpport, 1 FLInt,1 Ethtyp, 1 Nwprotocol
+
+  2 queries have 2x state, 1x Event
+  1 has 2x Event, 1x State (double ceiling)
+
+  Positive references to outpolicy and transition only. Only single references for outpolicy.
+    (Transition necessitates possibly multiple references)
+
+  for outpolicy: 1 ip, 2 tpport, 1 portid
+
+  for transition: TODO
+
+  from assumptions: +2 Tpport for every Event
+
+*/
+
+
