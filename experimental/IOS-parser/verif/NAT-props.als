@@ -30,14 +30,12 @@ fact assumptions {
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// tcp only
-pred IPFAssign[s: State] {
-  // ip tcp ip tcp
 
+pred IPFAssign[s: State] {
 	all ip: Ipaddr, pt: Tpport | {
 		// lone: partial function. at most one row left for each original ip/pt combo
-		lone s.ptassigntcp[ip][pt]	
-		
+		lone s.ptassigntcp[ip][pt]			
+		lone s.ptassignudp[ip][pt]
 	}
 }
 
@@ -52,13 +50,49 @@ assert indInjectivePartialFunction
 {
 	all s, s': State, pin: EVpacket | 
 		(nat/transition[s, pin, s'] and // transition state thusly
-		  IPFAssign[s] and PFunctionalSeq[s]) 
+		  IPFAssign[s] and PFunctionalSeq[s] ) // "good" prestate
 		implies
-		(IPFAssign[s'] and PFunctionalSeq[s'])
+		(IPFAssign[s'] and PFunctionalSeq[s'] ) // "good" post-state
 }
 check indInjectivePartialFunction
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Confirm inductive property used in outNATFlipped below
+
+assert indNoGWtoGWFlows {
+	all s, s': State, pin: EVpacket | 
+		(nat/transition[s, pin, s'] and // transition state thusly
+		 pin.nwsrc not in s.natconfig[pin.locsw][Portid][Portid]  and // not coming from a local gateway (odd situation)
+		 noSameAddressAssigns[s]) // good prestate
+		implies noSameAddressAssigns[s'] // good poststate
+}
+check indNoGWtoGWFlows
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// "good state" requirement: no wonky flows already established where the original src is the same gateway
+pred noSameAddressAssigns[s: State] {
+	no iden & select13[s.ptassigntcp.Tpport]
+	no iden & select13[s.ptassignudp.Tpport]
+}
+
+// We're reasoning about packets on the NAT sub-switch. If a packet arrives, it needs
+// to be NATted or de-NATted. Confirm that passing through always flips UDP/TCP traffic.
+assert outNATFlipped {
+	all s: State, pin, pout: EVip_packet | 
+	let localnatgateways = s.natconfig[pin.locsw][Portid][Portid] | // maybe a chain of NAT boxes
+		(nat/outpolicy[s, pin, pout] and  // packet passes through
+		 noSameAddressAssigns[s] and
+          (pin.nwproto in C_nwprotocol_6+C_nwprotocol_17) ) // packet is TCP or UDP
+         implies 
+		{
+			pin.nwdst in localnatgateways implies pout.nwdst not in localnatgateways // translate returning traffic to orig ip DST
+			pin.nwdst not in localnatgateways implies pout.nwsrc in localnatgateways // translate outgoing traffic to new ip SRC
+		 }
+}
+
+check outNATFlipped
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
