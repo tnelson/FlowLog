@@ -376,7 +376,7 @@ namespace-for-template)
       (define vlan-access-interface-defns (filter (lambda (ifd) (equal? 'access (ifacedef-switchport-mode ifd))) interface-defns))
       (define vlan-trunk-interface-defns (filter (lambda (ifd) (equal? 'access (ifacedef-switchport-mode ifd))) interface-defns))
       (define vlan-ids (remove-duplicates (flatten (foldl (lambda (ifd acc) (cons (ifacedef-switchport-vlans ifd) acc)) '() (append vlan-access-interface-defns vlan-trunk-interface-defns)))))
-      (printf "VLANs used on interfaces: ~v~n" vlan-ids)
+      ;(printf "VLANs used on interfaces: ~v~n" vlan-ids)
       (printf "Router had ~v access and ~v trunk VLAN interfaces. Total vlans: ~v~n" (length vlan-access-interface-defns) (length vlan-trunk-interface-defns) (length vlan-ids))     
       
             

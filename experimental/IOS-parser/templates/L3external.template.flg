@@ -119,13 +119,22 @@ ON ip_packet(pkt):
 // Packet arrives at TR from router side, need to send out host side
 // TODO(TN): this will not work properly for policy routing
 
+// Not *quite* perfect. Ideally we'd say NOT inLocalSubnet(router, pkt.nwDst), but the compiler
+// is not optimizing that---giving us quadratic blowup when it isn't needed.
+// Instead, consider that this is an externally-routed packet IFF the dlDst is a non-local gateway
+//   Concerned that this won't work well with an external network. - TN (TODO)
 
 ON ip_packet(pkt) WHERE router_tr(router, pkt.locSw):
   DO forward(new) WHERE
 
     // not in a local subnet for this router
     // (prevent overlap with L3router.flg; avoiding universal quantification issue)
-    NOT inLocalSubnet(router, pkt.nwDst)
+    //NOT inLocalSubnet(router, pkt.nwDst)
+
+    // idea; doesn't go through (TODO)
+    // We've got a layer-2 destination that is a non-local gateway
+    subnets(ANY, ANY, ANY, pkt.dlDst, router2, ANY)
+    and router != router2
 
     and router_portmap(ANY, new.locPt, pkt.locPt); // router -> host (only one instance of this number in the table)
     // router already set the destination MAC, so use that to find the output port

@@ -166,8 +166,9 @@ class FlowlogDemo(object):
         network.addLink(translator, router, port1=outPt, port2=rtrPt,
                         **self.linkopts)
 
-        if not create_srs:
-          continue
+
+      if not create_srs:
+        return # Don't create anything
 
       for p in r.ports:
         # Not a vlan tag
@@ -236,7 +237,8 @@ class FlowlogDemo(object):
         	self.gwIPList.append(s.gw);
 
     def buildNetwork(self, network, routers, create_edge, create_srs):
-      self.subnetRootSwitch = defaultdict(lambda: self.nextSubnetRootSwitch(network))
+      if create_srs:
+        self.subnetRootSwitch = defaultdict(lambda: self.nextSubnetRootSwitch(network))
 
       for router in routers.routers:
       	self.getAllGwIP(router)
