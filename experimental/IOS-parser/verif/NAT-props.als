@@ -101,7 +101,7 @@ assert outNATFlipped {
 
 check outNATFlipped
 for 5 but 1 State, 2 Event, 2 Switchid, 3 Portid, 10 Tpport, 2 Nwprotocol, 4 Macaddr, 5 Ipaddr, 2 FLInt, 2 Ethtyp
-// TODO ^ RUN w/ new bounds
+// no counterexample; translation took 236 seconds (solve in <4 sec)
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

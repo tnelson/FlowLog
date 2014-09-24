@@ -90,8 +90,8 @@ namespace-for-template)
     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
     ;; Decorrelate and produce rule sets for appropriate policy decisions
 
-    (for-each (lambda (r) (printf "outbound acl rules: ~a~n" r)) (policy '(permit deny) (combine-rules configurations outbound-ACL-rules)))
-    (for-each (lambda (r) (printf "inbound acl rules: ~a~n" r)) (policy '(permit deny) (combine-rules configurations inbound-ACL-rules)))
+    ;(for-each (lambda (r) (printf "outbound acl rules: ~a~n" r)) (policy '(permit deny) (combine-rules configurations outbound-ACL-rules)))
+    ;(for-each (lambda (r) (printf "inbound acl rules: ~a~n" r)) (policy '(permit deny) (combine-rules configurations inbound-ACL-rules)))
     
     (define inboundacl (assoc2 'permit (policy '(permit) (combine-rules configurations inbound-ACL-rules))))
     (define outboundacl (assoc2 'permit (policy '(permit) (combine-rules configurations outbound-ACL-rules))))
@@ -231,8 +231,8 @@ namespace-for-template)
                                      [else "0"]))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
          
-         (printf "if name=~v; ridx=~v; rnum=~v; ifindex=~v; rname=~v; cost=~v mode=~v vlans=~v ppt=~v rpt=~v (total physical ports=~v)~n"
-                 name ridx rnum ifindex rname ospf-cost switchport-mode switchport-vlans physical-ptnum routing-ptnum num-physical-ports) ; DEBUG
+        ; (printf "if name=~v; ridx=~v; rnum=~v; ifindex=~v; rname=~v; cost=~v mode=~v vlans=~v ppt=~v rpt=~v (total physical ports=~v)~n"
+        ;         name ridx rnum ifindex rname ospf-cost switchport-mode switchport-vlans physical-ptnum routing-ptnum num-physical-ports) ; DEBUG
       
          (define switchport-mode-inserts (val->spmode vlan-dpid physical-ptnum switchport-mode))
          (define switchport-vlan-inserts (vals->vlans vlan-dpid physical-ptnum switchport-vlans))                                   
@@ -326,11 +326,11 @@ namespace-for-template)
 
       ; not safe to just look at the unboxed last physical port used (may not be done with all physicals yet)
       (define adjusted-routing-ptnum (->string (+ (string->number routing-ptnum) (- num-physical-ports 1))))
-      (printf "Processing port. Physical: ~a. Get-phys: ~a. Routing: ~a. Incr routing by # physical: ~a~n" 
-              physical-ptnum
-              (get-physical-portnums name interface-defns)
-              routing-ptnum
-              adjusted-routing-ptnum)
+     ; (printf "Processing port. Physical: ~a. Get-phys: ~a. Routing: ~a. Incr routing by # physical: ~a~n" 
+     ;         physical-ptnum
+     ;         (get-physical-portnums name interface-defns)
+     ;         routing-ptnum
+     ;         adjusted-routing-ptnum)
       
       ; remember that virtual_interfaces contains swid, rtr-side port, vlan ID.
       ; can get router port ID from that via vr2rr relation
@@ -369,8 +369,16 @@ namespace-for-template)
       
       ; Filter out interfaces that extract-ifs returns #f for. (for instance, ifs with no subnet)      
       (define unfiltered-interface-defns (hash-map interfaces extract-ifs))
-      (define interface-defns (filter (lambda (i) i) unfiltered-interface-defns))
-      (printf "Processed ~v interfaces; ~v had subnets and will be handled.~n" (length unfiltered-interface-defns) (length interface-defns)) ; DEBUG     
+      (define interface-defns (filter (lambda (i) i) unfiltered-interface-defns))      
+      (printf "Processed ~v interfaces; ~v had subnets and will be handled.~n" (length unfiltered-interface-defns) (length interface-defns))   
+      
+      ;switchport-mode, switchport-vlans
+      (define vlan-access-interface-defns (filter (lambda (ifd) (equal? 'access (ifacedef-switchport-mode ifd))) interface-defns))
+      (define vlan-trunk-interface-defns (filter (lambda (ifd) (equal? 'access (ifacedef-switchport-mode ifd))) interface-defns))
+      (define vlan-ids (remove-duplicates (flatten (foldl (lambda (ifd acc) (cons (ifacedef-switchport-vlans ifd) acc)) '() (append vlan-access-interface-defns vlan-trunk-interface-defns)))))
+      (printf "VLANs used on interfaces: ~v~n" vlan-ids)
+      (printf "Router had ~v access and ~v trunk VLAN interfaces. Total vlans: ~v~n" (length vlan-access-interface-defns) (length vlan-trunk-interface-defns) (length vlan-ids))     
+      
             
       ; reset per router
       (set-box! last-physicalpt-used 0)
@@ -600,12 +608,12 @@ namespace-for-template)
     (copy-with-basename "NIB")
 
     (printf "Template values:~n~n")
-    (printf "~ndst-local-subnet: ~a~n" (dict-ref router-vars "dst-local-subnet"))    
+   ; (printf "~ndst-local-subnet: ~a~n" (dict-ref router-vars "dst-local-subnet"))    
     (printf "~nneeds-nat-disj: ~a~n" (dict-ref router-vars "needs-nat-disj"))    
     ;(printf "~nnext-hop-fragment: ~a~n" (dict-ref router-vars "nexthop-fragment"))
     ;(printf "~nnext-hop-fragment-for-tr: ~a~n" (dict-ref router-vars "nexthop-fragment-for-tr"))
-    (printf "~npolicyroute-route: ~a~n" (dict-ref router-vars "policyroute-route"))
-    (printf "~npolicyroute-pass: ~a~n" (dict-ref router-vars "policyroute-pass"))
+   ; (printf "~npolicyroute-route: ~a~n" (dict-ref router-vars "policyroute-route"))
+   ; (printf "~npolicyroute-pass: ~a~n" (dict-ref router-vars "policyroute-pass"))
     
     ; For debugging purposes:
     (store inboundacl (make-path root-path "InboundACL.p"))
