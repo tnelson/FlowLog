@@ -169,8 +169,11 @@ ON ip_packet(pkt) WHERE subnets(addr, mask, gwip, gwmac, router, rport)
 
 // don't keep in the router queue
 // not strictly needed, but good to clean up
-ON arp_packet(reply) WHERE reply.arp_op = 2 AND router_queued(reply.arp_spa):
+ON arp_packet(reply) WHERE reply.arp_op = 2
+    AND router_queued(reply.arp_spa)
+    AND NOT switches_without_arp(reply.locSw):
   DELETE (reply.arp_spa) FROM router_queued;
+
  // TODO(tn): here is where we'd unqueue the packet and send with appropriate MAC
 
 // with the above physically wired translators, we are trying to achieve
