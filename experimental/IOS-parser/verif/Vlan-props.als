@@ -51,9 +51,11 @@ assert outTrunkTagged
 		implies
 		pout.dlvlan != C_int_neg1
 }
-check outTrunkTagged for 5
+//check outTrunkTagged for 5
 // for 6: 83 atoms; arity 4 is too much
 // for 5 is doable (~10sec, no counterexs)
+check outTrunkTagged for 3 but 1 State, 2 Event, 3 Switchid, 3 Portid, 4 Macaddr, 4 FLInt, 2 Ethtyp, 2 FLString
+
 
 // ISSUE:
 // in from VI; out trunk. still -1? Yes, because the VI -> host-side forgets to tag.
@@ -80,8 +82,8 @@ assert outAccessUntagged
 		implies
 		pout.dlvlan = C_int_neg1 // untagged
 }
-check outAccessUntagged
-
+//check outAccessUntagged
+check outAccessUntagged for 3 but 1 State, 2 Event, 3 Switchid, 3 Portid, 4 Macaddr, 4 FLInt, 2 Ethtyp, 2 FLString
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // coming in tagged, will send out only interfaces with that tag. (weak isolation)
@@ -95,5 +97,17 @@ assert outIntra_UseTagIfTagged
 		implies
           pin.dlvlan in s.sp_vlans[pout.locsw, pout.locpt] // out on a trunk or access for that tag			
 } 
-check outIntra_UseTagIfTagged for 4 
+//check outIntra_UseTagIfTagged for 4 
+check outIntra_UseTagIfTagged for 3 but 1 State, 2 Event, 3 Switchid, 3 Portid, 4 Macaddr, 4 FLInt, 2 Ethtyp, 2 FLString
 
+
+/*
+  CEILINGS
+
+  Single event ceiling: 1 Switchid, 1 Portid, 2 Macaddr, 1 FLInt, 1 Ethtyp
+  Each of these 3 queries have 2 Events, 1 State. Multiply Ceiling by 2, and then add program-vars.
+  +2 FLString for the assumptions (force "access" and "trunk" to exist)
+
+  Since these queries call positive outpolicy only, and for only one output packet, it suffices to take the ceiling 
+  of all individual action rules: 1 switchid, 1 portid, 1 FLint (for vlan id).
+*/

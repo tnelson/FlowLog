@@ -40,6 +40,7 @@ assert outKnownNeverRequested
 		pout.arp_op = C_int_2 // only ever reply
 }
 check outKnownNeverRequested
+for 5 but 1 State, 2 Event, 3 Switchid, 3 Portid, 9 Macaddr, 4 Ipaddr, 4 FLInt, 2 Ethtyp, 1 FLString
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -77,6 +78,23 @@ assert outKnownReplyAndNoQueued
 		}
 }
 check outKnownReplyAndNoQueued
+for 5 but 1 State, 2 Event, 3 Switchid, 3 Portid, 9 Macaddr, 4 Ipaddr, 4 FLInt, 2 Ethtyp, 1 FLString
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+/*
+  CEILINGS
+
+  Single event ceiling: 1 Switchid,1 Portid,4 Macaddr,2 Ipaddr,2 FLInt,1 Ethtyp
+
+  Each of these 3 queries have 2 Events, 1 State. Multiply Ceiling by 2, and then add program-vars.
+  +1 FLString for the assumptions (force "access" to exist)
+  + Also need 2 Ipaddr, 1 Macaddr for the secondary part of outKnownReplyAndNoQueued [only this one]
+
+  Since these queries call positive outpolicy only, and for only one output packet, it suffices to take the ceiling 
+  of all individual action rules [ignoring negatives since we don't negate or have priorities over the rules]: 
+
+  1 Switchid, 1 Portid, [forward/emit only, not insert/delete; not needed]
+*/
 
