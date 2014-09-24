@@ -33,7 +33,8 @@ TABLE natconfig(switchid, portid, portid, ipaddr);
 //
 // Column values:
 // router DPID, private subnet addr, private subnet mask
-TABLE needs_nat(switchid, ipaddr, int);
+// *** Analysis: UNUSED
+//TABLE needs_nat(switchid, ipaddr, int);
 
 /*******************************************************************************
  *
@@ -62,7 +63,11 @@ TABLE seqpt(ipaddr, nwprotocol, tpport);
 //
 // Column values:
 // public IP, proto, port number
-TABLE reusept(ipaddr, nwprotocol, tpport);
+// *** Analysis: unused
+//TABLE reusept(ipaddr, nwprotocol, tpport);
+
+
+// *** Analysis: looks like this module assumes just one outside interface per router?
 
 /*******************************************************************************
  *
@@ -122,6 +127,9 @@ ON tcp_packet(pkt) WHERE not ptassignTCP(pkt.nwSrc, pkt.tpSrc, ANY, ANY) AND
 
   DELETE (publicIP, 0x6, ANY) FROM seqpt;
 
+  // *** analysis observation: module originally built before INCREMENT operator made this stuff easier
+  // *** so seqpt holds last used; immediate increment
+
   INSERT (publicIP, 0x6, publicPt) INTO seqpt;
 
   INSERT (pkt.nwSrc, pkt.tpSrc, publicIP, publicPt) INTO ptassignTCP;
@@ -152,6 +160,10 @@ ON udp_packet(pkt) WHERE not ptassignUDP(pkt.nwSrc, pkt.tpSrc, ANY, ANY) AND
  *
  ******************************************************************************/
 
+// *** removed for analysis: we aren't dealing with these in properties
+// ...and the program doesn't USE "reusept" anyway.
+/*
+
 // Outgoing direction -- flow match will have a private IP and private port as
 // the source pair
 ON flow_removed(fr) WHERE natconfig(fr.sw, fr.inPort, ANY, publicIP)
@@ -175,4 +187,4 @@ ON flow_removed(fr) WHERE natconfig(fr.sw, ANY, fr.inPort, fr.nwDstAddr)
   DELETE (ANY, ANY, fr.nwDstAddr, fr.tpDst) FROM ptassignUDP WHERE fr.nwProto = 0x11;
 
   INSERT (fr.nwDstAddr, fr.nwProto, fr.tpDst) INTO reusept;
-
+*/
