@@ -66,7 +66,7 @@ pred PFRevised_Counterex {
 run PFRevised_Counterex 
 	for 3 but 1 State, 1 Event, 
 		1 Switchid,2 Portid,2 Macaddr,5 Ipaddr,6 Tpport, 2 FLInt,1 Ethtyp, 1 Nwprotocol
-// tested: removed add1 from new port assignment, so will re-use
+// tested: removed restriction on already being mapped, and found scenario
 
 
 pred IPFAssign[s: State] {
@@ -84,7 +84,20 @@ pred IPFAssign[s: State] {
 */
 }
 
-// TODO injectivity!
+// TODO injectivity! *** [does not pass due to insufficient axioms]
+// a violation of injectivity is what? some new row, sharing the final 2? that can happen if seq/add are off.
+pred InjRevised_Counterex {
+	some s: State, ev: Event, newippriv, ippub, oldippriv: Ipaddr, newptpriv, ptpub, oldptpriv: Tpport | {
+		plus_ptassigntcp[s, ev, newippriv,newptpriv, ippub, ptpub] // adding new tuple
+		(oldippriv != newippriv or oldptpriv != newptpriv)  // something differs across old sources
+		ptpub in s.ptassigntcp[oldippriv, oldptpriv, ippub] // public pt and ip used was already used by some other source
+	}
+}
+
+// + event ceiling + 3 Ipaddr, 3 Tpport (from property) + [variables from plus_ptassigntcp: 1 Portid, 1 Tpport, 1 FLInt ]
+run InjRevised_Counterex 
+	for 3 but 1 State, 1 Event, 
+		1 Switchid,2 Portid,2 Macaddr,5 Ipaddr,6 Tpport, 2 FLInt,1 Ethtyp, 1 Nwprotocol
 
 pred PFunctionalSeq[s: State] {	
 	// For every NAT-configured gateway and L4 protocol
