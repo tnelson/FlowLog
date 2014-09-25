@@ -26,8 +26,20 @@ fact assumptions {
 	// Only increments, only Tpports
 	BuiltIns.add in (Tpport -> C_1 -> Tpport)
 
-	// add has no length 1 cycles
+	// add has no length 0 cycles
 	no (select13[BuiltIns.add] & iden)
+	// and no length 1 cycles [enough to guarantee safe increment for ONE event
+	all pt1,pt2: Tpport | pt1 not in select13[BuiltIns.add][pt2] or pt2 not in select13[BuiltIns.add][pt1]
+
+	// next port to use is always bigger than any used (assume no wraparound)
+	// Suffices to say that the NEXT is never equal to any used; limited no wraparound 
+	// Safe for TC because we say "if there *is* any next, then..."
+/*	all pt, pt' : Tpport | 
+		pt' in BuildIns.add[pt][C_1] implies {
+			
+		}
+*/
+// ^^ what if chain of 2 in current state?
 
 	// NOTE: Nothing forces add to behave like a true successor function. It may have cycles, etc.
 	// Good enough for analysis so far. If we need more axioms, we can add them.
@@ -37,11 +49,18 @@ fact assumptions {
 
 
 pred IPFAssign[s: State] {
-	all ip: Ipaddr, pt: Tpport | {
+/*	all ip: Ipaddr, pt: Tpport | {
 		// lone: partial function. at most one row left for each original ip/pt combo
 		lone s.ptassigntcp[ip][pt]			
 		lone s.ptassignudp[ip][pt]
 	}
+*/
+	// injectivity: for every new port used, there is at most one original pair
+	all pt: Tpport | {
+		lone s.ptassigntcp.pt
+	//	lone s.ptassignudp.pt
+	}
+
 }
 
 // TODO injectivity!
