@@ -48,19 +48,40 @@ fact assumptions {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
+// Verify only functionality for paper; bounds
+// established **manually**:
+// Find a single addition to the state, such that it overlaps an existing row and violates
+// the functionality property. This is safe because it existentially makes room for the pre-existing
+// state. 
+
+pred PFRevised_Counterex {
+	some s: State, ev: Event, ip1, ip2, ip3: Ipaddr, pt1, pt2, pt3: Tpport | {
+		plus_ptassigntcp[s, ev, ip1, pt1, ip2, pt2] // adding new tuple
+		(ip3 != ip2 or pt3 != pt2)  // something differs in new tuple
+		pt3 in s.ptassigntcp[ip1, pt1, ip3] // already had old tuple
+	}
+}
+
+// + event ceiling + 3 Ipaddr, 3 Tpport (from property) + [variables from plus_ptassigntcp: 1 Portid, 1 Tpport, 1 FLInt ]
+run PFRevised_Counterex 
+	for 3 but 1 State, 1 Event, 
+		1 Switchid,2 Portid,2 Macaddr,5 Ipaddr,6 Tpport, 2 FLInt,1 Ethtyp, 1 Nwprotocol
+// tested: removed add1 from new port assignment, so will re-use
+
+
 pred IPFAssign[s: State] {
-/*	all ip: Ipaddr, pt: Tpport | {
+	all ip: Ipaddr, pt: Tpport | {
 		// lone: partial function. at most one row left for each original ip/pt combo
 		lone s.ptassigntcp[ip][pt]			
 		lone s.ptassignudp[ip][pt]
 	}
-*/
-	// injectivity: for every new port used, there is at most one original pair
-	all pt: Tpport | {
-		lone s.ptassigntcp.pt
-	//	lone s.ptassignudp.pt
-	}
 
+	// injectivity: for every new port used, there is at most one original pair
+/*	all pt: Tpport | {
+		lone s.ptassigntcp.pt
+		lone s.ptassignudp.pt
+	}
+*/
 }
 
 // TODO injectivity!
@@ -81,7 +102,8 @@ assert indInjectivePartialFunction
 		(IPFAssign[s'] and PFunctionalSeq[s'] ) // "good" post-state
 }
 check indInjectivePartialFunction
-
+// wrong bound: TODO
+for 5 but 2 State, 2 Event, 2 Switchid, 3 Portid, 10 Tpport, 2 Nwprotocol, 4 Macaddr, 5 Ipaddr, 2 FLInt, 2 Ethtyp
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Confirm inductive property used in outNATFlipped below

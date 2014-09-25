@@ -114,7 +114,10 @@ ON udp_packet(pkt) WHERE ptassignUDP(ip, pt, pkt.nwDst, pkt.tpDst):
  *
  ******************************************************************************/
 
+
 ON tcp_packet(pkt) WHERE not ptassignTCP(pkt.nwSrc, pkt.tpSrc, ANY, ANY) AND
+// *** TEST For analysis: functional property fails if we don't add first:
+//ON tcp_packet(pkt) WHERE
                          natconfig(pkt.locSw, pkt.locPt, publicLocPt, publicIP) AND // <-- when publicPt != privatePt
                          not natconfig(pkt.locSw, ANY, ANY, pkt.nwDst) AND // <-- when publicPt = privatePt
                          seqpt(publicIP, 0x6, x) AND add(x, 1, publicPt):
