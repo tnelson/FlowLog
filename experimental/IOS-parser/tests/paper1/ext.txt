@@ -21,7 +21,7 @@ interface out_corp
 ip access-list extended 201
   deny ip any host 10.100.100.100
   deny tcp any any eq 23
-  permit tcp host 10.100.1.1 any eq 80 reflect returnflow
+  permit tcp host 10.100.1.1 any reflect returnflow
   deny any
 
 ! applied to INTERNET SIDE on INGRESS
