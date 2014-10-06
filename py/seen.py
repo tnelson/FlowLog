@@ -30,7 +30,7 @@ class LoggerSwitch (object):
       msg.actions.append(of.ofp_action_output(port = of.OFPP_FLOOD))
       self.connection.send(msg)
 
-    #install_nomore()
+    install_nomore()
     do_flood()
 
     log.info("switch "+str(self.connection.dpid)+" received " + str(packet))
