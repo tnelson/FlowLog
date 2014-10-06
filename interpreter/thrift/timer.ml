@@ -15,6 +15,7 @@ open Thrift
 open Flowlog_rpc_types
 open Thread
 open Printf
+open Unix
 
 let timer_port = 9091;;
 
@@ -39,8 +40,7 @@ let connect ~host port =
   let proto = new TBinaryProtocol.t tx in
   let fl = new FlowLogInterpreter.client proto proto in
     tx#opn;
-    { trans = tx ; proto = proto; fl = fl}
-;;
+    { trans = tx ; proto = proto; fl = fl};;
 
 let send_notif notif =
     let cli = connect ~host:"127.0.0.1" 9090 in
@@ -48,7 +48,7 @@ let send_notif notif =
       cli.fl#notifyMe notif;
       cli.trans#close;
     with Transport.E (_,what) ->
-      Printf.printf "ERROR: %s\n" what ; flush stdout
+      Printf.printf "ERROR: %s\n" what ; flush Pervasives.stdout
 
 class bb_handler =
 object (self)
@@ -93,14 +93,9 @@ object (self)
           printf "...but did not contain well-formed fields.\n%!";
       end
 
-  method doQuery qry =
-    let relname = (sod (sod qry)#get_relName) in
-    let args = (sod (sod qry)#get_arguments) in
-
-    let rep = new queryReply in
-    if relname = "time" then
-    begin
-      Printf.printf "handling time query\n%!";
+  (********************************************************************************)
+  method private get_time rep args =
+    Printf.printf "handling time query\n%!";
       (* need to return a QueryReply. s/b only one argument. if it's a variable,
          return the value. if it's a constant, compare. e.g. if time=10,
          time(X) should return {[10]}. But time(3) should return {}. time(10) would return {[10]}.
@@ -126,10 +121,56 @@ object (self)
 
         printf "sending result: {%s}\n%!" (string_of_list ";" (fun tup -> (string_of_list "," (fun x->x) tup)) (sod (rep#get_result)));
         rep
-    end
-    else if relname = "nonce" then
-    begin
-      Printf.printf "handling nonce query\n%!";
+
+  method private get_clock rep args =
+    Printf.printf "handling clock-time query\n%!";
+
+      let thetime = Unix.time() in
+      let localtime = Unix.localtime thetime in
+      if (List.length args) != 2 then
+      begin
+        rep#set_exception_code "1";
+        rep#set_exception_message "Timer.clock expects two arguments: (time-element, value) e.g. (hr24, X).";
+        rep#set_result [];
+        rep
+      end
+      else
+      begin
+        let telement = (List.hd args) in
+        let tvalueterm = (List.hd (List.tl args)) in
+        let tvalue = (match telement with
+          | "hr24" -> string_of_int localtime.tm_hour
+          | "hr12" -> string_of_int (localtime.tm_hour mod 12)
+          | "min" -> string_of_int localtime.tm_min
+          | "sec" -> string_of_int localtime.tm_sec
+          | "mday" -> string_of_int localtime.tm_mday
+          | "mon" -> string_of_int localtime.tm_mon
+          | "year" -> string_of_int localtime.tm_year
+          | "wday" -> string_of_int localtime.tm_wday
+          | "yday" -> string_of_int localtime.tm_yday
+          | "isdst" -> string_of_bool localtime.tm_isdst
+          | _ ->
+            rep#set_exception_code "1";
+            rep#set_exception_message "Unknown time element name. Should be, e.g., hr24.";
+            rep#set_result [];
+            "") in
+
+        if tvalueterm = (String.capitalize tvalueterm) then
+        begin
+          rep#set_result [[telement;tvalue]]
+        end
+        else if tvalueterm = tvalue then
+        begin
+          (* for constant, only return a tuple of it's equal to the current time. *)
+          rep#set_result [[telement;tvalue]]
+        end;
+
+        printf "sending result: {%s}\n%!" (string_of_list ";" (fun tup -> (string_of_list "," (fun x->x) tup)) (sod (rep#get_result)));
+        rep
+      end
+
+  method private get_nonce rep args =
+    Printf.printf "handling nonce query\n%!";
       (* this nonce is not secure.
          it's also sequential...
          it's not even guaranteed unique.
@@ -153,18 +194,24 @@ object (self)
           (* for constant *)
           rep#set_result [[nonce]]
         end;
-
         rep
 
-    end
-    else
-    begin
-      Printf.printf "invalid query relation %s\n%!" relname;
-      rep#set_exception_code "2";
-      rep#set_exception_message "Timer only supports a single query relation: 'time'.";
-      rep#set_result [];
-      rep
-    end
+  (********************************************************************************)
+  method doQuery qry =
+    let relname = (sod (sod qry)#get_relName) in
+    let args = (sod (sod qry)#get_arguments) in
+
+    let rep = new queryReply in
+    match relname with
+      | "time" -> self#get_time rep args
+      | "nonce" -> self#get_nonce rep args
+      | "clock" -> self#get_clock rep args
+      | _ ->
+        Printf.printf "invalid query relation %s\n%!" relname;
+        rep#set_exception_code "2";
+        rep#set_exception_message "Timer only supports a single query relation: 'time'.";
+        rep#set_result [];
+        rep
 end
 
 let dobb () =

@@ -1,0 +1,17 @@
+
+REMOTE TABLE clocktime(string, int)
+  FROM clock AT 127.0.0.1:9091
+  TIMEOUT 1 seconds; // must be "seconds" not "second"
+
+EVENT push {};
+
+TABLE recorded_sec(int);
+TABLE recorded_min(int);
+
+ON push(e):
+  // sec, min, hr12, hr24, mday, mon, year, yday, wday, isdst
+  INSERT (x) INTO recorded_sec WHERE
+    clocktime("sec", x);
+  INSERT (x) INTO recorded_min WHERE
+    clocktime("min", x);
+
