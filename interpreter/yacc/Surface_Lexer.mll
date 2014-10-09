@@ -73,6 +73,8 @@ rule token = parse
 
   | "any" { any_counter := !any_counter+1; NAME("any"^(string_of_int !any_counter)) }
 
+  | '"'['.''/''\\''a'-'z''A'-'Z''_''0'-'9''-'':']+'"' as id { QUOTED_IDENTIFIER(id) }
+
   (* Every numeric string not in standard decimal format gets converted here. *)
   | ['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9']"."['0'-'9']?['0'-'9']?['0'-'9'] as dotted_ip
     { NUMBER(nwaddr_to_int_string (Packet.ip_of_string dotted_ip))}
@@ -92,8 +94,6 @@ rule token = parse
   | ['a'-'z''A'-'Z''_''0'-'9''-']+ as name
     { Printf.printf "Bad identifier: %s. Cannot use dashes. Use underscore instead.\n%!" name;
       token lexbuf; }
-
-  | '"'['.''/''\\''a'-'z''A'-'Z''_''0'-'9''-']+'"' as id { QUOTED_IDENTIFIER(id) }
 
   | _ as c { Printf.printf "Unknown character: %c\n" c; token lexbuf;}
 and commenting = parse

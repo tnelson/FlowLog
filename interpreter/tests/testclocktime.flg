@@ -3,6 +3,10 @@ REMOTE TABLE clocktime(string, int)
   FROM clock AT 127.0.0.1:9091
   TIMEOUT 1 seconds; // must be "seconds" not "second"
 
+EVENT note {sec: int, min: int};
+OUTGOING note_out(note) THEN
+  SEND TO 127.0.0.1:20000;
+
 EVENT push {};
 
 TABLE recorded_sec(int);
@@ -14,4 +18,6 @@ ON push(e):
     clocktime("sec", x);
   INSERT (x) INTO recorded_min WHERE
     clocktime("min", x);
+
+  DO note_out(n) WHERE clocktime("sec", n.sec) AND clocktime("min", n.min);
 

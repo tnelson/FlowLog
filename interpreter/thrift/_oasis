@@ -38,3 +38,9 @@ Executable Police
   CompiledObject: best
   BuildDepends: thrift, flowlog_thrift, threads
 
+Executable Placeholder
+  Path: .
+  MainIs: placeholder.ml
+  Build$: true
+  CompiledObject: best
+  BuildDepends: thrift, flowlog_thrift, threads

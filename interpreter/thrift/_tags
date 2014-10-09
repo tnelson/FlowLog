@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: e96079101db877c1d1f0a94ae4751163)
+# DO NOT EDIT (digest: 9ee2715e5743ed19805051e280eb4d00)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -31,6 +31,10 @@
 <police_tipline.{native,byte}>: pkg_threads
 <police_tipline.{native,byte}>: pkg_thrift
 <police_tipline.{native,byte}>: use_flowlog_thrift
+# Executable Placeholder
+<placeholder.{native,byte}>: pkg_threads
+<placeholder.{native,byte}>: pkg_thrift
+<placeholder.{native,byte}>: use_flowlog_thrift
 <*.ml{,i}>: pkg_threads
 <*.ml{,i}>: pkg_thrift
 <*.ml{,i}>: use_flowlog_thrift
