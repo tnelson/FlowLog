@@ -56,42 +56,68 @@ object (self)
 
   val counter: int ref = ref 0;
 
+  method private start_timer values =
+    (* case-sensitive. But Flowlog's parser downcases everything. So fields are always lowercase.*)
+    let timer_id = (Hashtbl.find values "id") in
+    let seconds = int_of_string (Hashtbl.find values "seconds") in
+       ignore (Thread.create (fun x ->
+                              Printf.printf "Starting timer for id=%s. seconds=%d.\n%!" timer_id seconds;
+                              Unix.sleep seconds;
+                              let reply = new notification in
+                              let tbl = (Hashtbl.create 2) in
+                              reply#set_notificationType "timer_expired";
+                              Hashtbl.add tbl "id" timer_id;
+                              reply#set_values tbl;
+                              send_notif reply;
+                              Printf.printf "Sent timer for id=%s.\n%!" timer_id) 0)
+
+  method private set_alarm values =
+    (* case-sensitive. But Flowlog's parser downcases everything. So fields are always lowercase.*)
+    let timer_id = (Hashtbl.find values "id") in
+    let sec = int_of_string (Hashtbl.find values "sec") in
+    let min = int_of_string (Hashtbl.find values "min") in
+    let hr24 = int_of_string (Hashtbl.find values "hr24") in
+    let t = Unix.time() in
+    let localtime = Unix.localtime t in
+    let alarmtime, _ = Unix.mktime {tm_sec=sec;tm_min=min;tm_hour=hr24;
+                                    tm_mday=localtime.tm_mday;tm_mon=localtime.tm_mon;tm_year=localtime.tm_year;
+                                    tm_wday=localtime.tm_wday;tm_yday=localtime.tm_yday;tm_isdst=localtime.tm_isdst} in
+    let delay = int_of_float (alarmtime -. t) in
+       ignore (Thread.create (fun x ->
+                              Printf.printf "Starting alarm for id=%s. %d:%d:%d. Delay = %d\n%!" timer_id hr24 min sec delay;
+                              Unix.sleep delay;
+                              let reply = new notification in
+                              let tbl = (Hashtbl.create 4) in
+                              reply#set_notificationType "alarm_expired";
+                              Hashtbl.add tbl "id" timer_id;
+                              Hashtbl.add tbl "sec" (Hashtbl.find values "sec");
+                              Hashtbl.add tbl "min" (Hashtbl.find values "min");
+                              Hashtbl.add tbl "hr24" (Hashtbl.find values "hr24");
+                              reply#set_values tbl;
+                              send_notif reply;
+                              Printf.printf "Sent alarm expiration for id=%s.\n%!" timer_id) 0)
+
   method notifyMe notif =
     let ntype = sod ((sod notif)#get_notificationType) in
     let values = sod ((sod notif)#get_values) in
       Printf.printf "received notification. type=%s\n%!" ntype;
-      (* <>, not != *)
-      if ntype <> "start_timer" then
-      begin
+      try
+      (match ntype with
+        | "start_timer" -> self#start_timer values
+        | "set_alarm" -> self#set_alarm values
+        | _ ->
         let reply = new notification in
         let tbl = (Hashtbl.create 2) in
-        (* TODO: abstract this out *)
           reply#set_notificationType "exception";
           Hashtbl.add tbl "sender" "Timer";
-          Hashtbl.add tbl "message" "Timer supports only start_timer notifications.";
+          Hashtbl.add tbl "message" "Unknown notification type.";
           reply#set_values tbl;
           send_notif reply;
-          Printf.printf "Sent exception.\n%!";
-      end
-      else
-      begin
-        try
-        (* case-sensitive. But Flowlog's parser downcases everything. So fields are always lowercase.*)
-          let timer_id = (Hashtbl.find values "id") in
-          let seconds = int_of_string (Hashtbl.find values "seconds") in
-          ignore (Thread.create (fun x ->
-                                  Printf.printf "Starting timer for id=%s. seconds=%d.\n%!" timer_id seconds;
-                                  Unix.sleep seconds;
-                                  let reply = new notification in
-                                  let tbl = (Hashtbl.create 2) in
-                                  reply#set_notificationType "timer_expired";
-                                  Hashtbl.add tbl "id" timer_id;
-                                  reply#set_values tbl;
-                                  send_notif reply;
-                                  Printf.printf "Sent timer for id=%s.\n%!" timer_id) 0);
-        with Not_found ->
-          printf "...but did not contain well-formed fields.\n%!";
-      end
+          Printf.printf "Sent exception.\n%!")
+
+      with Not_found ->
+          printf "...but did not contain well-formed fields.\n%!"
+
 
   (********************************************************************************)
   method private get_time rep args =

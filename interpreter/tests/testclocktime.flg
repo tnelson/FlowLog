@@ -9,6 +9,13 @@ OUTGOING note_out(note) THEN
 
 EVENT push {};
 
+// limitation:
+// 1-day scope. timer service assumes LATER TIME in THIS DAY
+// so cannot wrap around yet
+EVENT set_alarm {id: string, sec: int, min: int, hr24:int};
+OUTGOING set_alarm_out(set_alarm) THEN
+  SEND TO 127.0.0.1:9091;
+
 TABLE recorded_sec(int);
 TABLE recorded_min(int);
 
@@ -21,3 +28,9 @@ ON push(e):
 
   DO note_out(n) WHERE clocktime("sec", n.sec) AND clocktime("min", n.min);
 
+  // do nothing with this expiration (yet)
+  DO set_alarm_out(al) WHERE al.id = "test" and alarmsettings(al.hr24, al.min, al.sec );
+
+TABLE alarmsettings(int, int, int);
+ON startup(e):
+  insert (16, 12, 0) into alarmsettings;
