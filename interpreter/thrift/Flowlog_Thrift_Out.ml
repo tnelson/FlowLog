@@ -79,6 +79,7 @@ let doBBnotify (ev: event) (bbip: string) (bbport: string) (evfields: (string * 
               Hashtbl.iter (fun k v -> printf "    %s -> %s\n%!" k v) tbl;
               printf "Making RPC invocation...\n%!";
               cli.bb#notifyMe notif;
+              printf "RPC invocation complete. Closing socket...\n%!";
               cli.trans#close;
               printf "RPC invocation complete. Socket closed.\n%!";
             with | Transport.E (_,what) ->
