@@ -60,9 +60,11 @@ object (self)
     (* case-sensitive. But Flowlog's parser downcases everything. So fields are always lowercase.*)
     let timer_id = (Hashtbl.find values "id") in
     let seconds = int_of_string (Hashtbl.find values "seconds") in
+    let milliseconds = int_of_string (Hashtbl.find values "ms") in
        ignore (Thread.create (fun x ->
-                              Printf.printf "Starting timer for id=%s. seconds=%d.\n%!" timer_id seconds;
-                              Unix.sleep seconds;
+                              Printf.printf "Starting timer for id=%s. seconds=%d. milliseconds=%d\n%!" timer_id seconds milliseconds;
+                             (* Unix.sleep seconds; (* Need millisecond granularity instead *) *)
+                              Thread.delay (float_of_int seconds +. (float_of_int milliseconds /. 1000.0));
                               let reply = new notification in
                               let tbl = (Hashtbl.create 2) in
                               reply#set_notificationType "timer_expired";

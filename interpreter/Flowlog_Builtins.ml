@@ -27,6 +27,7 @@ type builtin_predicate = { (* ID must be lowercase *)
    any other numeric type, like tpport or macaddr. *)
 
 exception BIPAddException of term list;;
+exception BIPLTException of term list;;
 exception BIPPrefixException of term list;;
 
 (* FAtom("", "add", ...) -->
@@ -49,6 +50,22 @@ let bip_add = { bipid="add";
 				bipxsb = bip_add_xsb;
         bip_prepare = None;
 				bip_compile = None};;
+
+(*********************************************************************************)
+
+let bip_lt_xsb (mode:xsbmode) (tl: term list): string =
+  match tl with
+    | [t1; t2] ->
+      (*printf "%s %s %s\n%!" (string_of_term t1) (string_of_term t2) (string_of_term t3);*)
+      sprintf "(%s < %s)"
+           (xsb_of_term ~mode:mode t1) (xsb_of_term ~mode:mode t2)
+    | _ -> raise (BIPLTException(tl));;
+
+let bip_lessthan = { bipid="lessthan";
+        biparity = ["int"; "int"];
+        bipxsb = bip_lt_xsb;
+        bip_prepare = None;
+        bip_compile = None};;
 
 (*********************************************************************************)
 
@@ -105,7 +122,8 @@ let bip_isLocalSubnet = {bipid = "inlocalsubnet";
 (**************************************)
 let builtin_predicates = [(bip_add.bipid, bip_add);
                           (bip_hasLongerPrefixMatch.bipid, bip_hasLongerPrefixMatch);
-                          (bip_isLocalSubnet.bipid, bip_isLocalSubnet)];;
+                          (bip_isLocalSubnet.bipid, bip_isLocalSubnet);
+                          (bip_lessthan.bipid, bip_lessthan)];;
 
 
 let is_built_in (relname: string): bool =

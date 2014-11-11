@@ -10,6 +10,7 @@ class LoggerSwitch (object):
   def __init__ (self, connection):
     self.connection = connection
     self.seenTable = set()
+    print "...", connection
     connection.addListeners(self)
 
   def _handle_PacketIn (self, event):
