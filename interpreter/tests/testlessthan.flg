@@ -1,0 +1,20 @@
+
+
+ON packet(p) WHERE lessthan(p.dlSrc,5):
+  DO forward(new) where p.locPt != new.locPt;
+
+TABLE timerlen(int);
+
+EVENT start_timer {seconds: int, ms:int, id: string};
+EVENT timer_expired {id: string};
+OUTGOING start_timer_out(start_timer) THEN
+  SEND TO 127.0.0.1 9091;
+
+ON startup(e):
+  DO start_timer_out(t) WHERE t.id = "test" and t.seconds = 0 and t.ms = 100;
+  INSERT (500) into timerlen;
+
+ON timer_expired(tex):
+  DO start_timer_out(t) WHERE t.id = "test" and t.seconds = 0 and timerlen(old) and add(old, 100, t.ms);
+  INSERT (x) into timerlen WHERE timerlen(y) AND add(y, 100, x);
+  DELETE(x) from timerlen; // don't forget this, or you'll get multiple timers at once
