@@ -21,6 +21,7 @@ open ExtList.List
 (* usage message *)
 let usage = Printf.sprintf "Usage: %s
                              [-alloy]
+                             [-core <spec file>]
                              [-verbose <n>]
                              [-reportall]
                              [-notables]
@@ -32,6 +33,7 @@ let cimpreach = ref false;;
 let notables = ref false;;
 let reportall = ref false;;
 let depend = ref false;;
+let core = ref "";;
 let args = ref [];;
 
 let speclist = [
@@ -45,6 +47,7 @@ let speclist = [
   (* Not calling this "reactive" because reactive still implies sending table entries. *)
   ("-notables", Arg.Unit (fun () -> notables := true), ": send everything to controller");
   ("-unsafe", Arg.Unit (fun () -> global_unsafe := true), ": allow switches to outpace controller");
+  ("-core", Arg.String (fun fn -> core := fn), ": Spark Core specification file name");
   ];;
 
 let listenPort = ref 6633;;
@@ -105,7 +108,11 @@ let run_flowlog (p: flowlog_program): unit Lwt.t =
 
       (* switch proxy listeners are started later, when some outgoing event causes FL to register a proxy *)
 
-
+let process_core_if_any program =
+  match !core with
+    | "" -> program
+    | _ -> {program with statements=program.statements} (* TODO(Brett): replace this with parsing !core and producing new AST *)
+;;
 
 let main () =
   let collect arg = args := !args @ [arg] in
@@ -129,7 +136,9 @@ let main () =
 
   printf "Loading %s\n%!" filename;
   let ast = read_ast filename in
-  let program = (desugared_program_of_ast ast filename) in
+    (* Add core spec to program *)
+    let enhanced_ast = process_core_if_any ast in
+    let program = (desugared_program_of_ast enhanced_ast filename) in
     printf "-----------\n%!";
 
     (* CP packet in/out currently unsupported *)
@@ -175,6 +184,7 @@ let main () =
         if !notables then printf "\n*** FLOW TABLE COMPILATION DISABLED! ***\n%!";
         Lwt_main.at_exit (fun () -> return (printf "LWT exiting~\n%!") );
         at_exit (fun () -> (printf "Ocaml exiting~\n%!"));
+
         Lwt_main.run (run_flowlog program);
         (*Lwt_main.run (Lwt.catch (fun () -> (run_flowlog program)) (fun exn -> Lwt.return (printf "SDFGASDGFASDFASDF\n\n\n\n\n\n\n%!")));     *)
 
