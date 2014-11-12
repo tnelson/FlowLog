@@ -56,22 +56,38 @@ object (self)
 
   val counter: int ref = ref 0;
 
+  method private get_optional_str values key =
+    match Hashtbl.mem values key with
+      | true -> Hashtbl.find values key
+      | false -> ""
+
+  method private get_optional_int values key =
+    match Hashtbl.mem values key with
+      | true -> Hashtbl.find values key
+      | false -> "0"
+
+
   method private start_timer values =
     (* case-sensitive. But Flowlog's parser downcases everything. So fields are always lowercase.*)
     let timer_id = (Hashtbl.find values "id") in
+
+    (* OPTIONAL FIELD: id2. *)
+    (* TODO: somewhat kludgey. what if we need id3? etc. etc. *)
+    let timer_id2 = (self#get_optional_str values "id2") in
     let seconds = int_of_string (Hashtbl.find values "seconds") in
-    let milliseconds = int_of_string (Hashtbl.find values "ms") in
+    let milliseconds = int_of_string (self#get_optional_int values "ms") in
        ignore (Thread.create (fun x ->
-                              Printf.printf "Starting timer for id=%s. seconds=%d. milliseconds=%d\n%!" timer_id seconds milliseconds;
+                              Printf.printf "Starting timer for id=%s/%s. seconds=%d. milliseconds=%d\n%!" timer_id timer_id2 seconds milliseconds;
                              (* Unix.sleep seconds; (* Need millisecond granularity instead *) *)
                               Thread.delay (float_of_int seconds +. (float_of_int milliseconds /. 1000.0));
                               let reply = new notification in
                               let tbl = (Hashtbl.create 2) in
                               reply#set_notificationType "timer_expired";
                               Hashtbl.add tbl "id" timer_id;
+                              Hashtbl.add tbl "id2" timer_id2;
                               reply#set_values tbl;
                               send_notif reply;
-                              Printf.printf "Sent timer for id=%s.\n%!" timer_id) 0)
+                              Printf.printf "Sent timer for id=%s/%s.\n%!" timer_id timer_id2) 0)
 
   method private set_alarm values =
     (* case-sensitive. But Flowlog's parser downcases everything. So fields are always lowercase.*)
@@ -103,6 +119,7 @@ object (self)
     let ntype = sod ((sod notif)#get_notificationType) in
     let values = sod ((sod notif)#get_values) in
       Printf.printf "received notification. type=%s\n%!" ntype;
+      Hashtbl.iter (fun k v -> printf "key: %s, value: %s\n%!" k v) values;
       try
       (match ntype with
         | "start_timer" -> self#start_timer values
