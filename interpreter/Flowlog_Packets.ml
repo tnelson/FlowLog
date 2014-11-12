@@ -244,9 +244,11 @@ let build_flavor_reacts (flav: packet_flavor): sreactive list =
 let built_in_decls = [DeclInc(switch_reg_relname, "switch_port");
                       DeclInc(switch_down_relname, "switch_down");
                       DeclInc(startup_relname, "startup");
+                      DeclInc("corestartup", "corestartup");
                       DeclInc("flow_removed", "flow_removed");
                       DeclOut("forward", SameAsOnFields);
                       DeclEvent("startup", []);
+                      DeclEvent("corestartup", []);
                       DeclEvent("switch_port", swpt_fields);
                       DeclEvent("switch_down", swdown_fields);
                       DeclEvent("flow_removed", flow_removed_fields)]
@@ -256,6 +258,7 @@ let built_in_reacts = [ ReactInc("switch_port", IncDP, switch_reg_relname);
                         ReactInc("switch_down", IncDP, switch_down_relname);
                         ReactInc("flow_removed", IncDP, "flow_removed");
                         ReactInc("startup", IncThrift, startup_relname);
+                        ReactInc("corestartup", IncThrift, "corestartup");
                         ReactOut("forward", SameAsOnFields, OutForward);
                       ] @ flatten (map build_flavor_reacts packet_flavors);;
 
