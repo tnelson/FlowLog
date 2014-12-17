@@ -120,6 +120,7 @@ let bip_isLocalSubnet = {bipid = "inlocalsubnet";
 (*********************************************************************************)
 
 (**************************************)
+(* WARNING: when adding new built-in, also add it to Flowlog_Helpers.get_non_field_head_vars_generated_by_builtins *)
 let builtin_predicates = [(bip_add.bipid, bip_add);
                           (bip_hasLongerPrefixMatch.bipid, bip_hasLongerPrefixMatch);
                           (bip_isLocalSubnet.bipid, bip_isLocalSubnet);
