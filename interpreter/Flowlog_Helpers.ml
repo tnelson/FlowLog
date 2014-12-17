@@ -1160,6 +1160,8 @@ let get_program_var_counts (p: flowlog_program): vars_count_report =
         (string_of_list "," string_of_term builtin_generated_vars_e)
         (string_of_list "," string_of_term builtin_generated_vars_u);
 
+      (* Adding the list of ordinary terms (e.g., existentially quantified variables, or ANYs) and
+         generated terms (e.g., vars in the clause head that are bound by "add" *)
       let add_counts (m: int StringMap.t) (tlst: term list) (gentlst: term list): int StringMap.t =
           fold_left (fun acc t ->
             let typename = if (TermMap.mem t infers) then
