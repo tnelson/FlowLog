@@ -1006,6 +1006,20 @@ let get_non_trigger_quantified_vars (p: flowlog_program) (cl:clause): (term list
       ([],[])
       signed_free;;
 
+(* add(1, 2, x) should generate
+   add(1, x, 3) should also
+   add(1, 2, new.locSw) should not
+
+   Non-field is a conservative appx. Because could have add(1,2,x) and x=p.dlSrc
+*)
+let get_non_field_vars_generated_by_builtins (p: flowlog_program) (cl:clause): (term list * term list) =
+  let ats = get_atoms_with_sign cl.body in
+    fold_left (fun acc (atom, sign) -> match atom with
+        | FAtom(_, relname, args) when generated_builtin relname ->
+          fold_left (fun acc2 t -> match t with | TVar(x) -> t::acc2) acc args
+        | _ -> acc) ([],[]) ats;;
+
+
 let get_plus_or_minus_relname (relname: string): string =
   if starts_with relname plus_prefix then
     (String.sub relname ((String.length plus_prefix)+1) ((String.length relname) - (String.length plus_prefix) -1))
@@ -1123,13 +1137,17 @@ let type_inference_of_vars (p: flowlog_program) (start_inferences: TypeIdSet.t T
     extend_by_equalities base;;
 
 (******************************************************)
-(* Count the number of quantified vars in the program, indexed by type and quantifier *)
+(* Count the number of quantified vars in the program, indexed by type and quantifier
+   Also detect term-generating builtins, like add, and count the implicit quantifier. *)
 let get_program_var_counts (p: flowlog_program): vars_count_report =
   fold_left (fun acc cl ->
       let ntqvs_ext, ntqvs_uni = get_non_trigger_quantified_vars p cl in
       let infers = type_inference_of_vars p TermMap.empty cl in
 
-      printf "clause: %s\n%!" (string_of_clause cl);
+      printf "getting var counts for clause: %s\n%!" (string_of_clause cl);
+
+      (* Free, non-trigger variables that appear in builtin *)
+      let builtin_generated_vars = get_positive_builtin_generator_atoms cl.body in
 
       let add_counts (m: int StringMap.t) (tlst: term list) =
           fold_left (fun acc t ->

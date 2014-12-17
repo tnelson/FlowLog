@@ -55,6 +55,7 @@ sig Tpport {} // transport-layer port (TCP or UDP) number
 sig FLString {}
 sig FLInt{}
 
+// May require custom facts, e.g., that there are no cycles
 one sig BuiltIns {
    add: ((Tpport+FLInt+Portid)->(Tpport+FLInt+Portid))-> (Tpport+FLInt+Portid)
 

@@ -1,0 +1,9 @@
+// Test for counting in presence of add
+// add acts as a generator, requiring an introduction of a new <X> whenever it is used
+//
+
+
+table r(int, int);
+
+on packet(p):
+	insert (p.dlvlan, x) into r where add(p.dlvlan, 1, x);
