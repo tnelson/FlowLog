@@ -307,7 +307,7 @@ let program_to_ontology (p: flowlog_program): alloy_ontology =
   let inferences = fold_left (fun acc cl -> type_inference_of_vars p acc cl) TermMap.empty p.clauses in
 
   TermMap.iter (fun k v ->
-      printf "Infered for %s: " (string_of_term k);
+      printf "Inferred for %s: " (string_of_term k);
       TypeIdSet.iter (fun t -> printf "%s " t) v;
       printf "\n%!")
     inferences;
@@ -722,8 +722,8 @@ let write_as_alloy (p: flowlog_program) (fn: string) (merged_ontology: alloy_ont
 
        let (pvs: vars_count_report) = (get_program_var_counts p) in
        let (sevc: int StringMap.t) = (single_event_ceilings ontology) in
-        printf "PVS: %s\n%!" (string_of_varcount pvs);
-        printf "SEVC: %s\n%!" (string_of_bounds "" sevc);
+        printf "Program variable counts: %s\n%!" (string_of_varcount pvs);
+        printf "Single event ceiling: %s\n%!" (string_of_bounds "" sevc);
 
 
     	alloy_actions out ontology p;
@@ -865,9 +865,10 @@ let mulbounds (m: int StringMap.t) (mul: int): int StringMap.t =
 let addbounds (m1: int StringMap.t) (m2: int StringMap.t): int StringMap.t =
   (* note the ordering in the fold function. m2 serves as the initial acc. *)
   StringMap.fold (fun k v acc ->
+    printf "addbounds, handling k=%s\n%!" k;
     match StringMap.mem k acc with
       | true -> StringMap.add k ((StringMap.find k acc)+v) acc
-      | false -> StringMap.add k v acc)
+      | false -> printf "addbounds. not present: %s. adding...\n%!"; StringMap.add k v acc)
     m1 m2;;
 
 (******************************************************************)
@@ -913,15 +914,27 @@ let cst_bounds_string (p1: flowlog_program) (p2: flowlog_program) (ontol: alloy_
 
 let default_reach_length = 2;; (* not counting startup *)
 
+(* TODO: add constants *)
+
+let count_constants_by_type (o: alloy_ontology): int StringMap.t =
+  fold_left
+    (fun acc (_, tname) ->
+      if StringMap.mem tname acc then StringMap.add tname (StringMap.find tname acc +1) acc
+      else StringMap.add tname 1 acc)
+    StringMap.empty
+    o.constants;; (* string*typeid list *)
+
 let rcst_bounds_string (ontol: alloy_ontology): string =
   let (ceilings: int StringMap.t) = (single_event_ceilings ontol) in
-  let final = (mulbounds ceilings default_reach_length) in
+  let (constant_counts: int StringMap.t) = (count_constants_by_type ontol) in
+  let final = addbounds (mulbounds ceilings default_reach_length) constant_counts in
   string_of_bounds (sprintf "%d State, %d Event, %d seq, 4 int, "
       (default_reach_length+2) (default_reach_length+1) (default_reach_length+1)) final;;
 
 let rcpo_bounds_string (ontol: alloy_ontology): string =
   let (ceilings: int StringMap.t) = (single_event_ceilings ontol) in
-  let final = (mulbounds ceilings default_reach_length) in
+  let (constant_counts: int StringMap.t) = (count_constants_by_type ontol) in
+  let final = addbounds (mulbounds ceilings default_reach_length) constant_counts in
   string_of_bounds (sprintf "%d State, %d Event, %d seq, 4 int, "
       (default_reach_length+2) (default_reach_length+1) (default_reach_length+1)) final;;
 
@@ -1092,10 +1105,8 @@ run reachCSTLast for %s
 
   /// ^^ Warning: there are no OSEPL guarantees for reachability-aware predicates!
   /// It is possible to generate bounds for individual steps, but beyond 1 or 2 states
-  /// either scales poorly or pushes us over Alloy's MAXINT limitations. Instead, pick
-  /// a reasonable bound: here enough for 4 TCP packets. Since existential values
-  /// in the state have to come from an event (modulo var declarations) this should
-  /// be a complete check up to 3 states (2 steps)
+  /// scales poorly or pushes us over Alloy's MAXINT limitations. Instead, pick
+  /// a reasonable bound: here, automatically generated enough atoms for 3 steps, including startup.
 
 \n%!"
   ofn

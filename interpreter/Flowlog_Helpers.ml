@@ -95,6 +95,11 @@ let is_variable_term (t: term): bool =
     | TVar(x) -> true
     | _ -> false;;
 
+let is_constant_term (t: term): bool =
+  match t with
+    | TConst(x) -> true
+    | _ -> false;;
+
 let is_dltyp_assign (f: formula): bool =
   match f with
     | FEquals(TField(_, "dltyp"), TConst(_))
