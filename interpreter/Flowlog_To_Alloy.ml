@@ -868,7 +868,7 @@ let addbounds (m1: int StringMap.t) (m2: int StringMap.t): int StringMap.t =
     printf "addbounds, handling k=%s in m2\n%!" k;
     match StringMap.mem k acc with
       | true -> StringMap.add k ((StringMap.find k acc)+v) acc
-      | false -> printf "addbounds. not present: %s. adding...\n%!"; StringMap.add k v acc)
+      | false -> StringMap.add k v acc)
     m1 m2;;
 
 let printbounds (m: int StringMap.t): unit =
@@ -931,12 +931,16 @@ let count_constants_by_type (o: alloy_ontology): int StringMap.t =
     StringMap.empty
     o.constants;; (* string*typeid list *)
 
+(* Reach-aware CST doesn't use transition[] to final state, so don't need an "end state"
+   However, for CPO, we do need an extra event for the output event in contention.
+     # events = length(pre-event trace) + trigger event + differing output event *)
+
 let rcst_bounds_string (ontol: alloy_ontology): string =
   let (ceilings: int StringMap.t) = (single_event_ceilings ontol) in
   let (constant_counts: int StringMap.t) = (count_constants_by_type ontol) in
   let final = addbounds (mulbounds ceilings default_reach_length) constant_counts in
   let boundsstr = string_of_bounds (sprintf "%d State, %d Event, %d seq, 4 int, "
-      (default_reach_length+2) (default_reach_length+1) (default_reach_length+1)) final in
+      (default_reach_length+1) (default_reach_length+2) (default_reach_length+2)) final in
     sprintf "%s\n// Single-Event Ceiling: %s\n// From constants: %s\n"
       boundsstr (string_of_bounds "" ceilings) (string_of_bounds "" constant_counts);;
 
@@ -945,7 +949,7 @@ let rcpo_bounds_string (ontol: alloy_ontology): string =
   let (constant_counts: int StringMap.t) = (count_constants_by_type ontol) in
   let final = addbounds (mulbounds ceilings default_reach_length) constant_counts in
   let boundsstr = string_of_bounds (sprintf "%d State, %d Event, %d seq, 4 int, "
-      (default_reach_length+2) (default_reach_length+1) (default_reach_length+1)) final in
+      (default_reach_length+1) (default_reach_length+1) (default_reach_length+1)) final in
     sprintf "%s\n// Single-Event Ceiling: %s\n// From constants: %s\n"
       boundsstr (string_of_bounds "" ceilings) (string_of_bounds "" constant_counts);;
 
