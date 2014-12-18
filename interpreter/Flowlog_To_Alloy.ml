@@ -865,11 +865,15 @@ let mulbounds (m: int StringMap.t) (mul: int): int StringMap.t =
 let addbounds (m1: int StringMap.t) (m2: int StringMap.t): int StringMap.t =
   (* note the ordering in the fold function. m2 serves as the initial acc. *)
   StringMap.fold (fun k v acc ->
-    printf "addbounds, handling k=%s\n%!" k;
+    printf "addbounds, handling k=%s in m2\n%!" k;
     match StringMap.mem k acc with
       | true -> StringMap.add k ((StringMap.find k acc)+v) acc
       | false -> printf "addbounds. not present: %s. adding...\n%!"; StringMap.add k v acc)
     m1 m2;;
+
+let printbounds (m: int StringMap.t): unit =
+  StringMap.iter (fun k v -> printf "in map: %s -> %d\n%!" k v) m;
+  printf "------\n%!";;
 
 (******************************************************************)
 let cpo_bounds_string (p1: flowlog_program) (p2: flowlog_program) (ontol: alloy_ontology): string =
@@ -883,7 +887,7 @@ let cpo_bounds_string (p1: flowlog_program) (p2: flowlog_program) (ontol: alloy_
 
   (* Need 2 events! *)
   let final = (addbounds (addbounds (addbounds (addbounds (mulbounds ceilings 2) p1ext) p2ext) p1uni) p2uni) in
-  string_of_bounds "1 State, 2 Event," final;;
+    string_of_bounds "1 State, 2 Event," final;;
 
 let cst_bounds_string (p1: flowlog_program) (p2: flowlog_program) (ontol: alloy_ontology): string =
   let (p1vs: vars_count_report) = (get_program_var_counts p1) in
@@ -894,7 +898,7 @@ let cst_bounds_string (p1: flowlog_program) (p2: flowlog_program) (ontol: alloy_
 
   (* Need 3 States, but only one Event. *)
   let final = (addbounds (addbounds ceilings p1ext) p2ext) in
-  string_of_bounds "3 State, 1 Event," final;;
+    (string_of_bounds "3 State, 1 Event," final);;
 
 (* seq must be max sequence length (max of bounds on events and states). must also have enough ints for the indices
    ints are 2s-complement, so the default 3 int only gets you {-4, -3, -2, -1, 0, 1, 2, 3} *)
@@ -917,10 +921,13 @@ let default_reach_length = 2;; (* not counting startup *)
 (* TODO: add constants *)
 
 let count_constants_by_type (o: alloy_ontology): int StringMap.t =
+  (* The ontology's typenames are already converted to Alloy,
+     but the ceilings have not yet been. Normalize so we don't overlap. *)
   fold_left
     (fun acc (_, tname) ->
-      if StringMap.mem tname acc then StringMap.add tname (StringMap.find tname acc +1) acc
-      else StringMap.add tname 1 acc)
+      let typetname = String.lowercase tname in
+      if StringMap.mem typetname acc then StringMap.add typetname (StringMap.find typetname acc +1) acc
+      else StringMap.add typetname 1 acc)
     StringMap.empty
     o.constants;; (* string*typeid list *)
 
@@ -928,15 +935,19 @@ let rcst_bounds_string (ontol: alloy_ontology): string =
   let (ceilings: int StringMap.t) = (single_event_ceilings ontol) in
   let (constant_counts: int StringMap.t) = (count_constants_by_type ontol) in
   let final = addbounds (mulbounds ceilings default_reach_length) constant_counts in
-  string_of_bounds (sprintf "%d State, %d Event, %d seq, 4 int, "
-      (default_reach_length+2) (default_reach_length+1) (default_reach_length+1)) final;;
+  let boundsstr = string_of_bounds (sprintf "%d State, %d Event, %d seq, 4 int, "
+      (default_reach_length+2) (default_reach_length+1) (default_reach_length+1)) final in
+    sprintf "%s\n// Single-Event Ceiling: %s\n// From constants: %s\n"
+      boundsstr (string_of_bounds "" ceilings) (string_of_bounds "" constant_counts);;
 
 let rcpo_bounds_string (ontol: alloy_ontology): string =
   let (ceilings: int StringMap.t) = (single_event_ceilings ontol) in
   let (constant_counts: int StringMap.t) = (count_constants_by_type ontol) in
   let final = addbounds (mulbounds ceilings default_reach_length) constant_counts in
-  string_of_bounds (sprintf "%d State, %d Event, %d seq, 4 int, "
-      (default_reach_length+2) (default_reach_length+1) (default_reach_length+1)) final;;
+  let boundsstr = string_of_bounds (sprintf "%d State, %d Event, %d seq, 4 int, "
+      (default_reach_length+2) (default_reach_length+1) (default_reach_length+1)) final in
+    sprintf "%s\n// Single-Event Ceiling: %s\n// From constants: %s\n"
+      boundsstr (string_of_bounds "" ceilings) (string_of_bounds "" constant_counts);;
 
 
 (*******************************************************************************************)
