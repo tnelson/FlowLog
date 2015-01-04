@@ -1,0 +1,31 @@
+/*
+	MAC Learning equipped with timeouts. Removed mobility support for brevity.
+		TN Dec 2014
+
+	The challenge here is synchronizing the controller's state (which proactively generates rules)
+	with whatever an expiration means. In this case, we catch the timeout notification from the switch
+	and remove the appropriate row from the learned table.
+
+	This is an imperfect, leaky abstraction because our tierless program is now aware of the supposedly
+	invisible, lower tier.
+*/
+
+TABLE learned(switchid, portid, macaddr);
+
+ON packet(pkt):
+	INSERT (pkt.locSw, pkt.locPt, pkt.dlSrc) INTO learned;
+
+	DO forward(new) WHERE
+		learned(pkt.locSw, new.locPt, pkt.dlDst)
+		TIMEOUT 5; // current TIMEOUT syntax supports seconds only
+
+    DO forward(new) WHERE
+    	NOT learned(pkt.locSw, ANY, pkt.dlDst) AND
+     	pkt.locPt != new.locPt
+    	TIMEOUT 5;
+
+// the flow_removed event contains only fields for the predicate of the rule, not the actions it takes
+// for more fields, see Flowlog_Packets.ml line ~155.
+
+ON flow_removed(flexp) WHERE flexp.reason = "IdleTimeout":
+	DELETE (flexp.sw, ANY, flexp.dldst) FROM learned; // may need tweaking: what if dldst is a wildcard?
