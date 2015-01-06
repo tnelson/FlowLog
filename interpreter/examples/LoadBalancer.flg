@@ -1,0 +1,52 @@
+/*
+	Per-flow, round-robin flow-balancer
+
+	Configure via the load_balancing relation.
+	Flows that are decided already are in the lb_state relation.
+	Alternations in the lb_alt relation.
+
+	Assumption: flows can be fully identified by (mac src, mac dst) pairs.
+
+	Language limitation: can't just list outgoing port candidates in the config
+	  and pick the "next" one every time. Can't pick an arbitrary element or the smallest one!
+	  Instead, only allow fixed number of options.
+
+*/
+
+// Configure load-balancer: switch, incoming port, outgoing ports x2
+TABLE load_balancing(switchid, portid, portid, portid);
+
+// Current state of load-balancer
+TABLE lb_state(switchid, macaddr, macaddr, portid); // established assignments
+TABLE lb_alt(switchid, portid, portid); // what port was last used?
+
+ON startup(e):
+	INSERT (1, 1, 2, 3) INTO load_balancing;
+
+/////////////////////////////////////////
+
+// Arrival for established flow (both directions)
+ON packet(p):
+	DO forward(new) where lb_state(p.locSw, p.dlSrc, p.dlDst, new.locPt);
+	DO forward(new) where lb_state(p.locSw, p.dlDst, p.dlSrc, new.locPt);
+
+// Unestablished flow (in either direction)
+// Must be on a configured "in" port or will be dropped
+ON packet(p) where not lb_state(p.locSw, p.dlSrc, p.dlDst, ANY) and
+                   not lb_state(p.locSw, p.dlDst, p.dlSrc, ANY) and
+                   load_balancing(p.locSw, p.locPt, opt1, opt2) and
+
+                   // This is an awfully ugly way to write a let statement...
+                   ((NOT lb_alt(p.locSw, p.locPt, opt1) and choice = opt1)
+                   OR
+                    (NOT lb_alt(p.locSw, p.locPt, opt2) and choice = opt2)):
+
+    DO forward(new) where new.locPt = choice;
+
+    INSERT (p.locSw, p.dlSrc, p.dlDst, choice) INTO lb_state; // established flow ->
+    INSERT (p.locSw, p.dlDst, p.dlSrc, choice) INTO lb_state; // established flow <-
+
+    INSERT (p.locSw, p.locPt, choice) INTO lb_alt; // round-robin
+    DELETE (p.locSw, p.locPt, ANY) FROM lb_alt;
+
+/////////////////////////////////////////
