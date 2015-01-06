@@ -331,13 +331,15 @@ let well_formed_rule (p: flowlog_program) (r: srule): unit =
         with Not_found -> raise (UndeclaredTable relname));;
 
 let simplify_clause (cl: clause): clause =
-  let newbody = minimize_variables cl.body in
+  (* Don't substitute out variables that are needed in the head! *)
+  let newbody = minimize_variables ~exempt:(get_head_vars cl) cl.body in
+  let result = {head = cl.head; orig_rule = cl.orig_rule; body = newbody} in
   if !global_verbose > 4 then
   begin
-    write_log_and_print (sprintf "simplifying clause: %s\n" (string_of_clause cl));
-    write_log_and_print (sprintf "new body will be: %s\n" (string_of_formula newbody));
+    write_log_and_print (sprintf "\n---------\nsimplifying clause: %s\n" (string_of_clause cl));
+    write_log_and_print (sprintf "new clause: %s\n" (string_of_clause result));
   end;
-  {head = cl.head; orig_rule = cl.orig_rule; body = newbody};;
+  result;;
 
 let well_formed_reacts (reacts: sreactive list): unit =
   ignore (fold_left (fun acc react ->

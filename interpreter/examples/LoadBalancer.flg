@@ -20,6 +20,9 @@ TABLE load_balancing(switchid, portid, portid, portid);
 TABLE lb_state(switchid, macaddr, macaddr, portid); // established assignments
 TABLE lb_alt(switchid, portid, portid); // what port was last used?
 
+/////////////////////////////////////////
+// sudo mn --arp --mac --controller=remote --topo=tree,depth=1,fanout=3
+
 ON startup(e):
 	INSERT (1, 1, 2, 3) INTO load_balancing;
 
