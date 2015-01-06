@@ -25,6 +25,7 @@ TABLE lb_alt(switchid, portid, portid); // what port was last used?
 
 ON startup(e):
 	INSERT (1, 1, 2, 3) INTO load_balancing;
+	INSERT (1, 1, 2) INTO lb_alt; // EDIT
 
 /////////////////////////////////////////
 
