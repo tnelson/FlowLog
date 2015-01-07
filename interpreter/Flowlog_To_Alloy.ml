@@ -110,6 +110,7 @@ type alloy_ontology = {
       | _ -> failwith (sprintf "add_freevar_sym: %s" (string_of_term v));;
 
   let format_constant_for_alloy (infers: TypeIdSet.t TermMap.t) (t: term) (strval: string): string =
+    (*printf "formatting for alloy: %s %s.\n%!" (string_of_term t) strval;*)
     if TermMap.mem t infers then
     begin
       let theset = TermMap.find t infers in
@@ -118,6 +119,7 @@ type alloy_ontology = {
         begin
           let tid = TypeIdSet.choose theset in
           let non_alloy_str = pretty_print_value tid strval in
+            (*printf "tid: %s; non_alloy_str: %s\n%!" tid non_alloy_str;*)
               (* Replace any dots or colons with underscore *)
               (* Replace a negative sign with a "neg"*)
               if tid = "int" then
@@ -127,7 +129,13 @@ type alloy_ontology = {
         end
     end
     else
-      strval;;
+    begin
+      (* We may get constants from defaults due to emit. So make an effort to format them properly here. *)
+      if (Str.string_match (Str.regexp "^-.*") strval 0) then
+        (Str.global_replace (Str.regexp "-") "neg" strval)
+      else
+        strval
+    end;;
 
   let alloy_of_term (infers: TypeIdSet.t TermMap.t) ?(any: bool = true) (t: term): string =
     match t with
@@ -414,7 +422,7 @@ pred <outrel>[st: State, <incvar>: <reactive of increl>, <outarg0> :univ, <outar
    It is roughly analogous to a Flowlog rule. Pred fragments for the same table will be combined
    into a single Alloy pred. *)
 type pred_fragment = {fortable: string option; outrel: string; increl: string; incvar: string;
-                      outargs: term list; where: formula};;
+                      outargs: term list; where: formula; ontol: alloy_ontology};;
 
 
 let alloy_actions (out: out_channel) (o: alloy_ontology) (p: flowlog_program): unit =
@@ -422,15 +430,15 @@ let alloy_actions (out: out_channel) (o: alloy_ontology) (p: flowlog_program): u
   let make_rule (r: srule): pred_fragment =
     match r.action with
       | ADelete(outrel, outargs, where) ->
-        {fortable=Some(outrel);  outrel = (minus_prefix^"_"^outrel); outargs = outargs; where = where; increl = r.onrel; incvar = r.onvar}
+        {fortable=Some(outrel);  outrel = (minus_prefix^"_"^outrel); outargs = outargs; where = where; increl = r.onrel; incvar = r.onvar; ontol=o}
       | AInsert(outrel, outargs, where) ->
-        {fortable=Some(outrel);  outrel = (plus_prefix^"_"^outrel);  outargs = outargs; where = where; increl = r.onrel; incvar = r.onvar}
+        {fortable=Some(outrel);  outrel = (plus_prefix^"_"^outrel);  outargs = outargs; where = where; increl = r.onrel; incvar = r.onvar; ontol=o}
       | ADo(outrel, outargs, where) ->
-        {fortable=None; outrel = outrel;                    outargs = outargs; where = where; increl = r.onrel; incvar = r.onvar}
+        {fortable=None; outrel = outrel;                    outargs = outargs; where = where; increl = r.onrel; incvar = r.onvar; ontol=o}
       | AForward(pkt, where, tout) ->
-        {fortable=None; outrel = "forward";                 outargs = [pkt]; where = where; increl = r.onrel; incvar = r.onvar}
+        {fortable=None; outrel = "forward";                 outargs = [pkt]; where = where; increl = r.onrel; incvar = r.onvar; ontol=o}
       | AStash(pkt, where, until, thens) ->
-        {fortable=None; outrel = "stash";                   outargs = [pkt]; where = where; increl = r.onrel; incvar = r.onvar}
+        {fortable=None; outrel = "stash";                   outargs = [pkt]; where = where; increl = r.onrel; incvar = r.onvar; ontol=o}
   in
 
   let outarg_to_poss_equality (evrestricted: string) (i: int) (outarg: term): string =
@@ -467,23 +475,27 @@ let alloy_actions (out: out_channel) (o: alloy_ontology) (p: flowlog_program): u
 
   let build_emit_defaults (pf: pred_fragment) (tid: string): formula =
     let ev_def = get_event p tid in
-    let outv = string_of_term (first pf.outargs) in
-    (*let outv = "out0" in*)
+    let outv = String.lowercase (alloy_of_term pf.ontol.inferences (first pf.outargs)) in
+    let terms_used = get_terms (fun _ -> true) pf.where in
     let constrs = filter_map (fun (fname, _) ->
-                  try
-                    let v = assoc (tid, fname) Flowlog_Packets.defaults_table in
-                      Some(FEquals(TField(outv, fname),TConst(v)))
-                  with Not_found -> None) ev_def.evfields in
+                  let target = TField(outv, fname) in
+                  if (mem target terms_used) then None (* don't force default on terms used! *)
+                  else
+                    try
+                      let v = assoc (tid, fname) Flowlog_Packets.defaults_table in
+                        let formatted_const = format_constant_for_alloy pf.ontol.inferences (TConst(v)) v in
+                        Some(FEquals(TField(outv, fname),TConst(formatted_const)))
+                    with Not_found -> None) ev_def.evfields in
       build_and constrs in
 
   let build_forward_defaults (pf: pred_fragment): formula =
     let ev_def = get_event p pf.increl in (* use type from "ON" rather than base packet *)
-    let outv = String.lowercase (string_of_term (first pf.outargs)) in
+    let outv = String.lowercase (alloy_of_term pf.ontol.inferences (first pf.outargs)) in
     let terms_used = get_terms (fun _ -> true) pf.where in
     let constrs = filter_map (fun (fname, _) ->
                   let target = TField(outv, fname) in (* using correct outv var*)
                   if not (mem target terms_used) then
-                    Some(FEquals(TField(outv, fname),TField(pf.incvar,fname)))
+                    Some(FEquals(TField(outv, fname), TField(pf.incvar,fname)))
                   else None) ev_def.evfields in
       build_and constrs in
 
@@ -512,6 +524,8 @@ let alloy_actions (out: out_channel) (o: alloy_ontology) (p: flowlog_program): u
     let freevars_signed = get_terms_with_sign
       (function | TVar(x) as t -> not (mem t quantified_vars) | _ -> false) true pf.where in
 
+    printf "alloy_of_pred_fragment with increl %s; where: %s\n%!" pf.increl (string_of_formula pf.where);
+
     printf "freevars: %s\n%!"
       (string_of_list ";" (fun (t, s) -> (string_of_term t)^":"^(string_of_bool s)) freevars_signed);
 
@@ -534,7 +548,10 @@ let alloy_actions (out: out_channel) (o: alloy_ontology) (p: flowlog_program): u
         to_substitute);
 
     let substituted = (substitute_terms pf.where to_substitute) in
-    (*printf "alloy of formula: %s\n%!" (string_of_formula substituted);*)
+    let newoutargs = (map (fun t -> if mem_assoc t to_substitute then assoc t to_substitute else t) pf.outargs) in
+    let newpf = {pf with where = substituted; outargs = newoutargs} in
+
+    printf "result of substitution: %s\n%!" (string_of_formula substituted);
 
     (* If the free var is an ANY, be careful how to bind it.
        If it is an ANY that appears within a negation, must be ALL not EXISTS *)
@@ -542,7 +559,7 @@ let alloy_actions (out: out_channel) (o: alloy_ontology) (p: flowlog_program): u
     let freevarstr = (String.concat " " (make_quantified_decl freevars_signed)) in
 
     (* Finally, should any defaults be added on? (e.g., new.locsw = p.locsw)*)
-    let defaultsfmla = (substitute_terms (build_defaults pf) to_substitute) in
+    let defaultsfmla = (substitute_terms (build_defaults newpf) to_substitute) in
 
       (* Final pred fragment Alloy: *)
       Format.sprintf "\n  (@[ev in %s && %s@] && @[(%s %s)@]\n      && @[%s@])"
@@ -604,6 +621,7 @@ let alloy_actions (out: out_channel) (o: alloy_ontology) (p: flowlog_program): u
                       let thisargvector = build_arg_vector pfl in
                       (* Type annotations get ignored by Alloy (Appendix B.6.4)*)
                       let thisargforce = build_arg_force outrel pfl in
+                      printf "thisargforce: %s\n%!" thisargforce;
                       let pred_decl = sprintf "pred %s_%d[st: State, ev: Event, %s] {\n %s && (%s)\n}\n"
                                         outrel i thisargdecls thisargforce
                                         (alloy_of_pred_fragment "st" pfl) in
@@ -615,6 +633,7 @@ let alloy_actions (out: out_channel) (o: alloy_ontology) (p: flowlog_program): u
                                     (build_arg_decls outrel (hd pfls) false)
                                     (String.concat " ||\n" invocations)
                                     (String.concat "\n" pred_decls) in
+                   printf "TP: %s\n%!" thispred;
                    StringMap.add outrel thispred acc)
                    outrel_to_rules
                    StringMap.empty in

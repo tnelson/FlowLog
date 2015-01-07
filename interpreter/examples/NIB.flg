@@ -7,7 +7,7 @@
 
 
 EVENT start_timer {seconds: int, id: string};
-EVENT timer_expired {id: int};
+EVENT timer_expired {id: string};
 EVENT down_alert {sw1: switchid, pt1: portid, sw2: switchid, pt2: portid};
 
 TABLE ucST(switchid, portid, switchid, portid);
