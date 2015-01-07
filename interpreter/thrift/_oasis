@@ -29,7 +29,7 @@ Executable Timer
   MainIs: timer.ml
   Build$: true
   CompiledObject: best
-  BuildDepends: thrift, flowlog_thrift, threads
+  BuildDepends: thrift, flowlog_thrift, threads, extlib
 
 Executable Police
   Path: .

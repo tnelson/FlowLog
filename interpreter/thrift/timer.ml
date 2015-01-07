@@ -16,6 +16,7 @@ open Flowlog_rpc_types
 open Thread
 open Printf
 open Unix
+open ExtList.List
 
 let timer_port = 9091;;
 
@@ -56,6 +57,8 @@ object (self)
 
   val counter: int ref = ref 0;
 
+  val timer_thread_ids: (string * Thread.t) list ref = ref [];
+
   method private get_optional_str values key =
     match Hashtbl.mem values key with
       | true -> Hashtbl.find values key
@@ -66,6 +69,40 @@ object (self)
       | true -> Hashtbl.find values key
       | false -> "0"
 
+  method private create_timer_thread timer_id timer_id2 seconds milliseconds =
+       let new_thread_id = (Thread.create (fun x ->
+                              Printf.printf "Starting timer for id=%s/%s. seconds=%d. milliseconds=%d\n%!" timer_id timer_id2 seconds milliseconds;
+                             (* Unix.sleep seconds; (* Need millisecond granularity instead *) *)
+                              Thread.delay (float_of_int seconds +. (float_of_int milliseconds /. 1000.0));
+                              let reply = new notification in
+                              let tbl = (Hashtbl.create 2) in
+                              reply#set_notificationType "timer_expired";
+                              Hashtbl.add tbl "id" timer_id;
+                              Hashtbl.add tbl "id2" timer_id2;
+                              reply#set_values tbl;
+                              send_notif reply;
+                              Printf.printf "Sent timer for id=%s/%s.\n%!" timer_id timer_id2) 0) in
+         timer_thread_ids := (timer_id,new_thread_id)::!timer_thread_ids
+
+  method private reset_timer values =
+    let timer_id = (Hashtbl.find values "id") in
+    let timer_id2 = (self#get_optional_str values "id2") in (* kludge *)
+    let seconds = int_of_string (Hashtbl.find values "seconds") in
+    let milliseconds = int_of_string (self#get_optional_int values "ms") in
+
+      (* note that id2 is NOT used as an index here! Really we need 2 different events, one that
+         preserves id2 (because it's not an identifier, it's a tag!) and one that treats id2 as a
+         part of the timer's identifier. TODO. - TN *)
+
+      if mem_assoc timer_id !timer_thread_ids then
+      begin
+        Thread.kill (assoc timer_id !timer_thread_ids);
+        self#create_timer_thread timer_id timer_id2 seconds milliseconds
+      end
+      else
+      begin
+        self#create_timer_thread timer_id timer_id2 seconds milliseconds
+      end
 
   method private start_timer values =
     (* case-sensitive. But Flowlog's parser downcases everything. So fields are always lowercase.*)
@@ -124,6 +161,7 @@ object (self)
       (match ntype with
         | "start_timer" -> self#start_timer values
         | "set_alarm" -> self#set_alarm values
+        | "reset_timer" -> self#reset_timer values
         | _ ->
         let reply = new notification in
         let tbl = (Hashtbl.create 2) in
