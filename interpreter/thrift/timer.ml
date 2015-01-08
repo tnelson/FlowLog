@@ -74,15 +74,25 @@ object (self)
                               Printf.printf "Starting timer for id=%s/%s. seconds=%d. milliseconds=%d\n%!" timer_id timer_id2 seconds milliseconds;
                              (* Unix.sleep seconds; (* Need millisecond granularity instead *) *)
                               Thread.delay (float_of_int seconds +. (float_of_int milliseconds /. 1000.0));
-                              let reply = new notification in
-                              let tbl = (Hashtbl.create 2) in
-                              reply#set_notificationType "timer_expired";
-                              Hashtbl.add tbl "id" timer_id;
-                              Hashtbl.add tbl "id2" timer_id2;
-                              reply#set_values tbl;
-                              send_notif reply;
-                              Printf.printf "Sent timer for id=%s/%s.\n%!" timer_id timer_id2) 0) in
-         timer_thread_ids := (timer_id,new_thread_id)::!timer_thread_ids
+
+                              (* Outdated *)
+                              if (mem_assoc timer_id !timer_thread_ids) && not ((assoc timer_id !timer_thread_ids) = Thread.self()) then
+                              begin
+                                printf "Outdated thread for %s terminated.\n%!" timer_id;
+                              end
+                              else
+                              begin
+                                let reply = new notification in
+                                let tbl = (Hashtbl.create 2) in
+                                reply#set_notificationType "timer_expired";
+                                Hashtbl.add tbl "id" timer_id;
+                                Hashtbl.add tbl "id2" timer_id2;
+                                reply#set_values tbl;
+                                send_notif reply;
+                                Printf.printf "Sent timer for id=%s/%s.\n%!" timer_id timer_id2
+                              end) 0) in
+         timer_thread_ids := (timer_id,new_thread_id)::!timer_thread_ids;
+         iter (fun (s,t) -> printf "Have thread for: %s\n%!" s ) !timer_thread_ids
 
   method private reset_timer values =
     let timer_id = (Hashtbl.find values "id") in
@@ -96,7 +106,9 @@ object (self)
 
       if mem_assoc timer_id !timer_thread_ids then
       begin
-        Thread.kill (assoc timer_id !timer_thread_ids);
+        (* allow the old thread to continue execution (there may be compatability problems with native code)
+           but replace the thread ID in the list, so that the old thread will know it's outdated *)
+        timer_thread_ids := remove_assoc timer_id !timer_thread_ids;
         self#create_timer_thread timer_id timer_id2 seconds milliseconds
       end
       else
@@ -314,17 +326,6 @@ let dobb () =
     Printf.printf "Starting listener (in main thread; this should block)...\n%!";
     server#serve;
 ;;
-
-let timer_expire id  =
-    Printf.printf "timer expired. sending notification\n%!";
-    let notif = new notification in
-      notif#set_notificationType "timer";
-      let tbl = (Hashtbl.create 1) in
-        Hashtbl.add tbl "id" id;
-        notif#set_values tbl;
-        send_notif notif;
-        Printf.printf "notification sent\n%!";;
-
 
 dobb();;
 
