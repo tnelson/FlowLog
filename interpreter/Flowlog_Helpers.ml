@@ -1195,7 +1195,11 @@ let get_program_var_counts ?(include_head_vars : bool = true) ?(ceilings_only : 
         let local_ceiling = (add_counts StringMap.empty tlst gentlst) in (* build count for THIS clause only (start empty) *)
           fold_left (fun acc (typename,current) ->
             let previous = if (StringMap.mem typename acc) then (StringMap.find typename acc) else 0 in
-              if previous < current then (StringMap.add typename current acc)
+              if previous < current then
+              begin
+                printf "ceiling_counts increasing %s to %d.\n%!" typename current;
+                (StringMap.add typename current acc)
+              end
               else acc)
             m (StringMap.bindings local_ceiling) in
 
