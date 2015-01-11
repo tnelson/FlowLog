@@ -993,6 +993,11 @@ let get_trigger (p: flowlog_program) (cl: clause): (event_def * string * term li
     None
     (get_atoms cl.body);;
 
+let is_delete_clause (cl: clause): bool =
+  match cl.orig_rule.action with
+    | ADelete(_,_,_) -> true
+    | _ -> false;;
+
 module TypeIdSet = Set.Make(struct type t = string let compare = Pervasives.compare end);;
 module TermMap = Map.Make(struct type t = term let compare = Pervasives.compare end);;
 
@@ -1010,10 +1015,16 @@ let get_non_trigger_quantified_terms (p: flowlog_program) ?(include_head_vars: b
       (function | TVar(x) as t -> not (mem t to_exclude)
                 | TConst(x) as t -> include_consts && not (mem t to_exclude)
                 | _ -> false) true
-        (* AND only for convenience here; just want terms for the head too. *)
+        (* FAnd constructor only for convenience here; just want terms for the head too. *)
         (FAnd(cl.head, cl.body)) in
     fold_left (fun (acce, acca) (term, sign) ->
-        if sign then (term::acce, acca) else (acce, term::acca))
+      (* unnecessary extra: we're already extracting terms from the head positively above *)
+(*        (* In a REMOVE clause, if a head-var appears negatively, still counts as existential!
+            This is because we don't require safety in the core syntax for removes; there's an *implied*
+            constraint that the tuple is already there. *)
+        if is_delete_clause cl && not sign then (term::acce, term::acca)
+        else *) if sign then (term::acce, acca)
+        else (acce, term::acca))
       ([],[])
       signed_free;;
 
@@ -1166,10 +1177,8 @@ let get_program_var_counts (p: flowlog_program) : vars_count_report =
   let counted_already: (srule * term) list ref = ref [] in
 
   fold_left (fun acc cl ->
-    (* count vars in head of clause if delete/insert
-        but wait, this is unnecessary for _vars_; will be used in body. *)
-      (*let include_head_vars = (match cl.orig_rule.action with | ADelete(_,_,_) | AInsert(_,_,_) -> true | _ -> false) in*)
-      let include_head_vars = false in
+      (* count vars in head of clause if delete/insert; otherwise ignore (because head var for a DO is an event; will be counted separately) *)
+      let include_head_vars = (match cl.orig_rule.action with | ADelete(_,_,_) | AInsert(_,_,_) -> true | _ -> false) in
       let ntqvs_ext, ntqvs_uni = get_non_trigger_quantified_terms p ~include_consts:true ~include_head_vars:include_head_vars cl in
       let infers = type_inference_of_vars p TermMap.empty cl in
 
