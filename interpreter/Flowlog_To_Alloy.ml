@@ -896,6 +896,17 @@ let printbounds (m: int StringMap.t): unit =
   printf "------\n%!";;
 
 (******************************************************************)
+let makeceiling (b1: int StringMap.t) (b2: int StringMap.t): int StringMap.t =
+  (* note the ordering in the fold function. m2 serves as the initial acc. *)
+  StringMap.fold (fun k v acc ->
+    printf "makeceiling, handling k=%s\n%!" k;
+    match StringMap.mem k acc with
+      | true ->
+        if (StringMap.find k acc) < v then StringMap.add k v acc (* new value is bigger; replace *)
+        else acc (* old value is at least as big; keep *)
+      | false -> StringMap.add k v acc) (* no old value; replace *)
+    b1 b2;;
+
 let cpo_bounds_string (p1: flowlog_program) (p2: flowlog_program) (ontol: alloy_ontology): string =
   let (p1vs: vars_count_report) = (get_program_var_counts p1) in
   let (p2vs: vars_count_report) = (get_program_var_counts p2) in
@@ -904,9 +915,9 @@ let cpo_bounds_string (p1: flowlog_program) (p2: flowlog_program) (ontol: alloy_
   let (p2ext: int StringMap.t) = p2vs.action_qvars_ext in
   let (p1uni: int StringMap.t) = p1vs.action_qvars_uni in
   let (p2uni: int StringMap.t) = p2vs.action_qvars_uni in
-
-  (* Need 2 events! *)
-  let final = (addbounds (addbounds (addbounds (addbounds (mulbounds ceilings 2) p1ext) p2ext) p1uni) p2uni) in
+  let maxvars = makeceiling (addbounds p1ext p2uni) (addbounds p2ext p1uni) in
+  (* Need 2 events, and bounds to allow for any E1+U2 or E2+U1. *)
+  let final = (addbounds (mulbounds ceilings 2) maxvars) in
     string_of_bounds "1 State, 2 Event," final;;
 
 let cst_bounds_string (p1: flowlog_program) (p2: flowlog_program) (ontol: alloy_ontology): string =
@@ -915,9 +926,11 @@ let cst_bounds_string (p1: flowlog_program) (p2: flowlog_program) (ontol: alloy_
   let (ceilings: int StringMap.t) = (single_event_ceilings ontol) in
   let (p1ext: int StringMap.t) = p1vs.transition_qvars_ext in
   let (p2ext: int StringMap.t) = p2vs.transition_qvars_ext in
-
-  (* Need 3 States, but only one Event. *)
-  let final = (addbounds (addbounds ceilings p1ext) p2ext) in
+  let (p1uni: int StringMap.t) = p1vs.transition_qvars_uni in
+  let (p2uni: int StringMap.t) = p2vs.transition_qvars_uni in
+  let maxvars = makeceiling (addbounds p1ext p2uni) (addbounds p2ext p1uni) in
+  (* Need 3 States, but only one Event. Need bounds to allow for any E1+U2 or E2+U1. *)
+  let final = (addbounds ceilings maxvars) in
     (string_of_bounds "3 State, 1 Event," final);;
 
 (* seq must be max sequence length (max of bounds on events and states). must also have enough ints for the indices
