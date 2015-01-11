@@ -220,6 +220,7 @@ let get_bottom_fields (o: alloy_ontology) (ev: event_def) =
 
 (* Return a map from basic types to integers that give a bound
    for representing the fields of an arbitrary event *)
+(* CAVEAT: if smuggling values cross-type (ala NIB), need to manually adjust bounds *)
 let single_event_ceilings (o: alloy_ontology): (int) StringMap.t =
   let count_ceiling (e: event_def): (int) StringMap.t =
     fold_left (fun acc (fldname, t) ->
