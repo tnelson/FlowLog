@@ -895,12 +895,17 @@ let printbounds (m: int StringMap.t): unit =
   StringMap.iter (fun k v -> printf "in map: %s -> %d\n%!" k v) m;
   printf "------\n%!";;
 
+let printbounds_headwise (m: int StringMap.t StringMap.t): unit =
+  StringMap.iter (fun k v -> printf "relname: %s ->\n%!" k; printbounds v) m;
+  printf "========\n%!";;
+
 (******************************************************************)
 let makeceiling (b1: int StringMap.t) (b2: int StringMap.t): int StringMap.t =
   (* note the ordering in the fold function. m2 serves as the initial acc. *)
   StringMap.fold (fun k v acc ->
     printf "makeceiling, handling k=%s\n%!" k;
     printbounds acc;
+    printf "-----\n%!";
     match StringMap.mem k acc with
       | true ->
         if (StringMap.find k acc) < v then StringMap.add k v acc (* new value is bigger; replace *)
@@ -912,7 +917,9 @@ let makeceiling (b1: int StringMap.t) (b2: int StringMap.t): int StringMap.t =
    Want to take the max for any types used by relation names for this analysis (cpo=no plus/minus included, etc.)*)
 let resolve_head_ceiling (cpo: bool) (vs: int StringMap.t StringMap.t): int StringMap.t =
   (* first, filter actions vs. transitions *)
-  let important_vs = StringMap.filter (fun k _ -> ((starts_with k plus_prefix) || (starts_with k minus_prefix)) && not cpo) vs in
+  let important_vs = StringMap.filter (fun k _ ->
+      let is_transition_rel = ((starts_with k plus_prefix) || (starts_with k minus_prefix)) in
+        (is_transition_rel && not cpo) || (not is_transition_rel && cpo)) vs in
   (* now combine! The key of this entire process is that we're now free to do MAX for both exists and univ sides
      even though univ side will be /\ together. This is because disparate heads can't affect each other. *)
     fold_left (fun acc (relname,count) -> (makeceiling count acc))
@@ -923,16 +930,19 @@ let map_keys (m: 'a StringMap.t): string list =
   fold_left (fun acc (k,_) -> k::acc) [] (StringMap.bindings m);;
 
 (* add the two programs' bounds within each head relation *)
-let mergebounds_headwise (ceil: bool) (b1: int StringMap.t StringMap.t) (b2: int StringMap.t StringMap.t): int StringMap.t StringMap.t =
+let mergebounds_headwise (mergefun: int StringMap.t -> int StringMap.t -> int StringMap.t) (b1: int StringMap.t StringMap.t) (b2: int StringMap.t StringMap.t): int StringMap.t StringMap.t =
   let keys = unique ((map_keys b1)@(map_keys b2)) in
     fold_left (fun acc k ->
-        let b1m = if StringMap.mem k b1 then StringMap.find k b1 else StringMap.empty in
+        printf "mergebounds_headwise: %s\n%!" k; (* for a relname *)
+        let b1m = if StringMap.mem k b1 then StringMap.find k b1 else StringMap.empty in (* get bounds for this relname *)
         let b2m = if StringMap.mem k b2 then StringMap.find k b2 else StringMap.empty in
-        let result = if ceil then makeceiling b1m b2m else addbounds b1m b2m in
+        let result = mergefun b1m b2m in
+          printf "result bounds for merge:\n%!";
+          printbounds result;
           StringMap.add k result acc)
       StringMap.empty keys;;
-let makeceiling_headwise b1 b2 = mergebounds_headwise true b1 b2;;
-let addbounds_headwise b1 b2 = mergebounds_headwise false b1 b2;;
+let makeceiling_headwise b1 b2 = mergebounds_headwise makeceiling b1 b2;;
+let addbounds_headwise b1 b2 = mergebounds_headwise addbounds b1 b2;;
 
 (* Go from relname -> type->int,type->int to relname->type->int, relname->type->int*)
 let extract_ea (c: vars_count_report): (int StringMap.t StringMap.t * int StringMap.t StringMap.t) =
@@ -948,6 +958,8 @@ let cpo_bounds_string (p1: flowlog_program) (p2: flowlog_program) (ontol: alloy_
   let p1ext, p1uni = extract_ea p1vs in (* rel->type->int *)
   let p2ext, p2uni = extract_ea p2vs in
   let maxvars_per_head = makeceiling_headwise (addbounds_headwise p1ext p2uni) (addbounds_headwise p2ext p1uni) in
+  (*printf "xxxxx\n%!";
+  printbounds_headwise maxvars_per_head;*)
   let maxvars = resolve_head_ceiling true maxvars_per_head in
   (* Need 2 events, and bounds to allow for any E1+U2 or E2+U1. *)
   let final = (addbounds (mulbounds ceilings 2) maxvars) in
