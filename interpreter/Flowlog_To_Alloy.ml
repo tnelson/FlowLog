@@ -908,24 +908,47 @@ let makeceiling (b1: int StringMap.t) (b2: int StringMap.t): int StringMap.t =
       | false -> StringMap.add k v acc) (* no old value; replace *)
     b1 b2;;
 
-(* We have a big map from head relation names to (map from types to ints, map from types to ints)
+(* We have a big map from head relation names to map from types to ints
    Want to take the max for any types used by relation names for this analysis (cpo=no plus/minus included, etc.)*)
-let resolve_head_ceiling (cpo: bool) (vs: vars_count_report): int StringMap.t * int StringMap.t =
+let resolve_head_ceiling (cpo: bool) (vs: int StringMap.t StringMap.t): int StringMap.t =
   (* first, filter actions vs. transitions *)
   let important_vs = StringMap.filter (fun k _ -> ((starts_with k plus_prefix) || (starts_with k minus_prefix)) && not cpo) vs in
   (* now combine! The key of this entire process is that we're now free to do MAX for both exists and univ sides
      even though univ side will be /\ together. This is because disparate heads can't affect each other. *)
-    fold_left (fun (acce, accu) (relname,(counte, countu)) -> (makeceiling counte acce, makeceiling countu accu))
-     (StringMap.empty, StringMap.empty)
+    fold_left (fun acc (relname,count) -> (makeceiling count acc))
+     StringMap.empty
      (StringMap.bindings important_vs);;
+
+let map_keys (m: 'a StringMap.t): string list =
+  fold_left (fun acc (k,_) -> k::acc) [] (StringMap.bindings m);;
+
+(* add the two programs' bounds within each head relation *)
+let mergebounds_headwise (ceil: bool) (b1: int StringMap.t StringMap.t) (b2: int StringMap.t StringMap.t): int StringMap.t StringMap.t =
+  let keys = unique ((map_keys b1)@(map_keys b2)) in
+    fold_left (fun acc k ->
+        let b1m = if StringMap.mem k b1 then StringMap.find k b1 else StringMap.empty in
+        let b2m = if StringMap.mem k b2 then StringMap.find k b2 else StringMap.empty in
+        let result = if ceil then makeceiling b1m b2m else addbounds b1m b2m in
+          StringMap.add k result acc)
+      StringMap.empty keys;;
+let makeceiling_headwise b1 b2 = mergebounds_headwise true b1 b2;;
+let addbounds_headwise b1 b2 = mergebounds_headwise false b1 b2;;
+
+(* Go from relname -> type->int,type->int to relname->type->int, relname->type->int*)
+let extract_ea (c: vars_count_report): (int StringMap.t StringMap.t * int StringMap.t StringMap.t) =
+  fold_left (fun (acce, accu) (k,(ve,vu)) -> (* for each relname *)
+     (StringMap.add k ve acce, StringMap.add k vu accu))
+   (StringMap.empty, StringMap.empty)
+   (StringMap.bindings c);;
 
 let cpo_bounds_string (p1: flowlog_program) (p2: flowlog_program) (ontol: alloy_ontology): string =
   let (p1vs: vars_count_report) = (get_program_var_counts p1) in
   let (p2vs: vars_count_report) = (get_program_var_counts p2) in
   let (ceilings: int StringMap.t) = (single_event_ceilings ontol) in
-  let p1ext, p1uni = resolve_head_ceiling true p1vs in
-  let p2ext, p2uni = resolve_head_ceiling true p2vs in
-  let maxvars = makeceiling (addbounds p1ext p2uni) (addbounds p2ext p1uni) in
+  let p1ext, p1uni = extract_ea p1vs in (* rel->type->int *)
+  let p2ext, p2uni = extract_ea p2vs in
+  let maxvars_per_head = makeceiling_headwise (addbounds_headwise p1ext p2uni) (addbounds_headwise p2ext p1uni) in
+  let maxvars = resolve_head_ceiling true maxvars_per_head in
   (* Need 2 events, and bounds to allow for any E1+U2 or E2+U1. *)
   let final = (addbounds (mulbounds ceilings 2) maxvars) in
     string_of_bounds "1 State, 2 Event," final;;
@@ -934,9 +957,11 @@ let cst_bounds_string (p1: flowlog_program) (p2: flowlog_program) (ontol: alloy_
   let (p1vs: vars_count_report) = (get_program_var_counts p1) in
   let (p2vs: vars_count_report) = (get_program_var_counts p2) in
   let (ceilings: int StringMap.t) = (single_event_ceilings ontol) in
-  let p1ext, p1uni = resolve_head_ceiling false p1vs in
-  let p2ext, p2uni = resolve_head_ceiling false p2vs in
-  let maxvars = makeceiling (addbounds p1ext p2uni) (addbounds p2ext p1uni) in
+  let p1ext, p1uni = extract_ea p1vs in (* rel->type->int *)
+  let p2ext, p2uni = extract_ea p2vs in
+  let maxvars_per_head = makeceiling_headwise (addbounds_headwise p1ext p2uni) (addbounds_headwise p2ext p1uni) in
+  let maxvars = resolve_head_ceiling false maxvars_per_head in
+
   printf "!!!!!\n%!";
   printbounds maxvars;
   (* Need 3 States, but only one Event. Need bounds to allow for any E1+U2 or E2+U1. *)
