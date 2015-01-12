@@ -1056,20 +1056,14 @@ let get_plus_or_minus_relname (relname: string): string =
   else failwith "get_plus_or_minus_relname";;
 
 
-(* Could be extended to be more fine grained. For now, just say how many variables there are in the program
-   per type, and separated by "action" and "transition" clauses. *)
-type vars_count_report = {action_qvars_ext: int StringMap.t;
-                          transition_qvars_ext: int StringMap.t;
-                          action_qvars_uni: int StringMap.t;
-                          transition_qvars_uni: int StringMap.t};;
+type vars_count_report = (int StringMap.t * int StringMap.t) StringMap.t;;
 
 let string_of_varcount (c: vars_count_report): string =
-  let process k v acc = acc^(sprintf "%s: %d " k v) in
-    (sprintf "Actions E:\n%s\nTransitions E:\n%s\nActions U:\n%s\nTransitions U:\n%s\n"
-      (StringMap.fold process c.action_qvars_ext "")
-      (StringMap.fold process c.transition_qvars_ext "")
-      (StringMap.fold process c.action_qvars_uni "")
-      (StringMap.fold process c.transition_qvars_uni ""));;
+  let process k v acc2 = sprintf "%s %s: %d" acc2 k v in
+    StringMap.fold (fun (k:string) (ve,vu) (acc:string) ->
+        sprintf "%s\n%s -> |E %s |U %s.\n" acc k (StringMap.fold process ve "") (StringMap.fold process vu ""))
+     c
+     "";;
 
 exception TypeInference of term;;
 let type_inference_of_vars (p: flowlog_program) (start_inferences: TypeIdSet.t TermMap.t) (cl: clause): TypeIdSet.t TermMap.t =
@@ -1247,6 +1241,7 @@ let get_program_var_counts (p: flowlog_program) : vars_count_report =
 
 
         (* This clause needs to add such-and-such many variables to the counter*)
+        (*
         match cl.head with
           | FAtom(_,relname,_) when (starts_with relname plus_prefix) || (starts_with relname minus_prefix) ->
             {acc with transition_qvars_ext=ceiling_counts acc.transition_qvars_ext ntqvs_ext builtin_generated_vars_e;
@@ -1254,10 +1249,18 @@ let get_program_var_counts (p: flowlog_program) : vars_count_report =
           | _ ->
             {acc with action_qvars_ext=ceiling_counts acc.action_qvars_ext ntqvs_ext builtin_generated_vars_e;
                       action_qvars_uni=add_counts acc.action_qvars_uni ntqvs_uni_filtered builtin_generated_vars_u_filtered})
-
-    (* Folding the above over all the clauses, starting with no terms *)
-    {action_qvars_ext=StringMap.empty; transition_qvars_ext=StringMap.empty;
-     action_qvars_uni=StringMap.empty; transition_qvars_uni=StringMap.empty}
+*)
+      match cl.head with
+          | FAtom(_,relname,_) ->
+            (* initialize if needed, otherwise our count for this head relname so far *)
+            let acc_this_head_ext,acc_this_head_uni =
+                  if StringMap.mem relname acc then StringMap.find relname acc else (StringMap.empty,StringMap.empty) in
+            let new_ext = ceiling_counts acc_this_head_ext ntqvs_ext builtin_generated_vars_e in
+            let new_uni = add_counts acc_this_head_uni ntqvs_uni_filtered builtin_generated_vars_u_filtered in
+              StringMap.add relname (new_ext, new_uni) acc
+          | _ -> failwith "get_program_var_counts: bad clause head. expected atomic fmla in head")
+    (* Folding the above over all the clauses, starting with no terms/no head relations *)
+    StringMap.empty
     p.clauses;;
 
 let combine_inferences (i1: TypeIdSet.t TermMap.t) (i2: TypeIdSet.t TermMap.t): TypeIdSet.t TermMap.t =

@@ -900,6 +900,7 @@ let makeceiling (b1: int StringMap.t) (b2: int StringMap.t): int StringMap.t =
   (* note the ordering in the fold function. m2 serves as the initial acc. *)
   StringMap.fold (fun k v acc ->
     printf "makeceiling, handling k=%s\n%!" k;
+    printbounds acc;
     match StringMap.mem k acc with
       | true ->
         if (StringMap.find k acc) < v then StringMap.add k v acc (* new value is bigger; replace *)
@@ -907,14 +908,23 @@ let makeceiling (b1: int StringMap.t) (b2: int StringMap.t): int StringMap.t =
       | false -> StringMap.add k v acc) (* no old value; replace *)
     b1 b2;;
 
+(* We have a big map from head relation names to (map from types to ints, map from types to ints)
+   Want to take the max for any types used by relation names for this analysis (cpo=no plus/minus included, etc.)*)
+let resolve_head_ceiling (cpo: bool) (vs: vars_count_report): int StringMap.t * int StringMap.t =
+  (* first, filter actions vs. transitions *)
+  let important_vs = StringMap.filter (fun k _ -> ((starts_with k plus_prefix) || (starts_with k minus_prefix)) && not cpo) vs in
+  (* now combine! The key of this entire process is that we're now free to do MAX for both exists and univ sides
+     even though univ side will be /\ together. This is because disparate heads can't affect each other. *)
+    fold_left (fun (acce, accu) (relname,(counte, countu)) -> (makeceiling counte acce, makeceiling countu accu))
+     (StringMap.empty, StringMap.empty)
+     (StringMap.bindings important_vs);;
+
 let cpo_bounds_string (p1: flowlog_program) (p2: flowlog_program) (ontol: alloy_ontology): string =
   let (p1vs: vars_count_report) = (get_program_var_counts p1) in
   let (p2vs: vars_count_report) = (get_program_var_counts p2) in
   let (ceilings: int StringMap.t) = (single_event_ceilings ontol) in
-  let (p1ext: int StringMap.t) = p1vs.action_qvars_ext in
-  let (p2ext: int StringMap.t) = p2vs.action_qvars_ext in
-  let (p1uni: int StringMap.t) = p1vs.action_qvars_uni in
-  let (p2uni: int StringMap.t) = p2vs.action_qvars_uni in
+  let p1ext, p1uni = resolve_head_ceiling true p1vs in
+  let p2ext, p2uni = resolve_head_ceiling true p2vs in
   let maxvars = makeceiling (addbounds p1ext p2uni) (addbounds p2ext p1uni) in
   (* Need 2 events, and bounds to allow for any E1+U2 or E2+U1. *)
   let final = (addbounds (mulbounds ceilings 2) maxvars) in
@@ -924,11 +934,11 @@ let cst_bounds_string (p1: flowlog_program) (p2: flowlog_program) (ontol: alloy_
   let (p1vs: vars_count_report) = (get_program_var_counts p1) in
   let (p2vs: vars_count_report) = (get_program_var_counts p2) in
   let (ceilings: int StringMap.t) = (single_event_ceilings ontol) in
-  let (p1ext: int StringMap.t) = p1vs.transition_qvars_ext in
-  let (p2ext: int StringMap.t) = p2vs.transition_qvars_ext in
-  let (p1uni: int StringMap.t) = p1vs.transition_qvars_uni in
-  let (p2uni: int StringMap.t) = p2vs.transition_qvars_uni in
+  let p1ext, p1uni = resolve_head_ceiling false p1vs in
+  let p2ext, p2uni = resolve_head_ceiling false p2vs in
   let maxvars = makeceiling (addbounds p1ext p2uni) (addbounds p2ext p1uni) in
+  printf "!!!!!\n%!";
+  printbounds maxvars;
   (* Need 3 States, but only one Event. Need bounds to allow for any E1+U2 or E2+U1. *)
   let final = (addbounds ceilings maxvars) in
     (string_of_bounds "3 State, 1 Event," final);;
