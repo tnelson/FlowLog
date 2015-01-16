@@ -904,7 +904,6 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: triggered_cl
   (*iter
     (fun (ac, ap, aa) -> write_log (sprintf "%s %s %s\n" (NetCore_Pretty.string_of_action ac) (NetCore_Pretty.string_of_pred ap) (NetCore_Pretty.string_of_pol aa)))
     pre_unique_with_metadata;*)
-*)
 
   if !global_verbose >= 3 then
     write_log (sprintf "[pkt_triggered_clauses_to_netcore] Time after clause_aps: %fs\n%!"  (Unix.gettimeofday() -. startt));
