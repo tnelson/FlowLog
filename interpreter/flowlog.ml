@@ -15,8 +15,6 @@ open Flowlog_Chase
 (*open Flowlog_Switch_Proxy*)
 open Flowlog_Builtins
 
-open Flowlog_SMT (* experimental! *)
-
 (* Use ExtList.List instead -- provides filter_map, but also tail-recursive combine *)
 open ExtList.List
 

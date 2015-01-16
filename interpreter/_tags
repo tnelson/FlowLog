@@ -1,4 +1,3 @@
 true : package(lwt), package(oUnit), package(extlib), package(netcore), package(str), package(packet), package(openflow), package(thrift), thread
 true : package(yojson)
-true : package(Z3)
 true : syntax(camlp4o -lwt-debug), package(lwt.syntax)
