@@ -11,8 +11,6 @@ open Flowlog_To_Alloy
 open Lwt
 open Flowlog_Parse_Helpers
 open Xsb_Communication
-open Flowlog_Chase
-(*open Flowlog_Switch_Proxy*)
 open Flowlog_Builtins
 
 (* Use ExtList.List instead -- provides filter_map, but also tail-recursive combine *)
@@ -21,6 +19,9 @@ open ExtList.List
 (* usage message *)
 let usage = Printf.sprintf "Usage: %s
                              [-alloy]
+                             [-cimp]
+                             [-cimpreach]
+                             [-depend]
                              [-core <spec file>]
                              [-verbose <n>]
                              [-reportall]
@@ -28,7 +29,6 @@ let usage = Printf.sprintf "Usage: %s
                              file.flg" (Filename.basename Sys.argv.(0));;
 let alloy = ref false;;
 let cimp = ref false;;
-let cimpuniform = ref false;;
 let cimpreach = ref false;;
 let notables = ref false;;
 let reportall = ref false;;
@@ -40,7 +40,6 @@ let speclist = [
   ("-verbose", Arg.Int (fun lvl -> global_verbose := lvl), ": set level of debug output");
   ("-alloy", Arg.Unit (fun () -> alloy := true), ": convert (single file) to Alloy");
   ("-cimp", Arg.Unit (fun () -> cimp := true), ": convert multiple files to Alloy and compare their semantics");
-  ("-cimpuniform", Arg.Unit (fun () -> cimpuniform := true), ": [EXPERIMENTAL] change impact via uniform containment");
   ("-cimpreach", Arg.Unit (fun () -> cimpreach := true), ": change impact via Alloy, plus bounded reachability check");
   ("-depend", Arg.Unit (fun () -> depend := true), ": [EXPERIMENTAL] output a JSON dependency graph");
   ("-reportall", Arg.Unit (fun () -> reportall := true), ": report all packets. WARNING: VERY SLOW!");
@@ -83,14 +82,14 @@ let run_flowlog (p: flowlog_program): unit Lwt.t =
         printf "In dequeue_packets_for_emit. to_emit length = %d\n%!" (length to_emit);
         dequeue_packets_for_emit () in
 
-    let rec dequeue_new_policy (): unit Lwt.t =
+    (*let rec dequeue_new_policy (): unit Lwt.t =
       (* Block until something is dequeued *)
       lwt to_push_maybe = safe_queue#dequeue_pol () in
         (match to_push_maybe with
           | Some _ -> push_pol to_push_maybe; (* transfer from RTN queue to Lwt; will now be thread-safe *)
           | _ -> ());
         printf "In dequeue_new_policy \n%!";
-        dequeue_new_policy () in
+        dequeue_new_policy () in*)
 
       (* Note use of LWT here! *)
       (* Send the "startup" notification. Enables initialization, etc. in programs *)
@@ -120,7 +119,7 @@ let main () =
   let _ = Arg.parse speclist collect usage in
   let filename = try hd !args with exn -> raise (Failure "Input a .flg file name.") in
 
-  if (!global_unsafe && (!notables || !cimpuniform || !cimpreach || !cimp || !alloy || !depend)) then
+  if (!global_unsafe && (!notables || !cimpreach || !cimp || !alloy || !depend)) then
   begin
     printf "Invalid combination of -unsafe and other flags.\n%!";
     exit(0);
@@ -162,15 +161,6 @@ let main () =
           other_filenames) in
         write_as_alloy_change_impact ((program,(alloy_filename filename))::other_asts)
                                      !cimpreach
-    end
-    (**********************************)
-    else if !cimpuniform then
-    begin
-      let filename2 = try hd (tl !args) with exn -> raise (Failure "Input a second .flg file name for use with change-impact.") in
-      let ast2 = read_ast filename2 in
-      let program2 = (desugared_program_of_ast ast2 filename2) in
-      let results = build_chase_equivalence program program2 in
-        printf "LACKING: %s\n%!" (String.concat ";\n " (map string_of_pmodel results));
     end
     (**********************************)
     (* ACTUALLY RUN THE PROGRAM HERE *)
