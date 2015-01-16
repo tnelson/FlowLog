@@ -13,7 +13,7 @@ open Flowlog_Parse_Helpers
 open Xsb_Communication
 open Flowlog_Builtins
 
-(* Use ExtList.List instead -- provides filter_map, but also tail-recursive combine *)
+(* Provides filter_map, but also tail-recursive combine *)
 open ExtList.List
 
 (* usage message *)
@@ -82,15 +82,6 @@ let run_flowlog (p: flowlog_program): unit Lwt.t =
         printf "In dequeue_packets_for_emit. to_emit length = %d\n%!" (length to_emit);
         dequeue_packets_for_emit () in
 
-    (*let rec dequeue_new_policy (): unit Lwt.t =
-      (* Block until something is dequeued *)
-      lwt to_push_maybe = safe_queue#dequeue_pol () in
-        (match to_push_maybe with
-          | Some _ -> push_pol to_push_maybe; (* transfer from RTN queue to Lwt; will now be thread-safe *)
-          | _ -> ());
-        printf "In dequeue_new_policy \n%!";
-        dequeue_new_policy () in*)
-
       (* Note use of LWT here! *)
       (* Send the "startup" notification. Enables initialization, etc. in programs *)
       Lwt.return (respond_to_notification p {typeid="startup"; values=StringMap.empty} IncThrift) >>
@@ -105,8 +96,6 @@ let run_flowlog (p: flowlog_program): unit Lwt.t =
      printf "Received failure; exiting LWT.\n%!";
      printf "Failure was %s\n%!" x;
      Lwt.return ());;
-
-      (* switch proxy listeners are started later, when some outgoing event causes FL to register a proxy *)
 
 let process_core_if_any program =
   match !core with
@@ -141,9 +130,6 @@ let main () =
     let program = (desugared_program_of_ast enhanced_ast filename) in
     printf "-----------\n%!";
 
-    (* CP packet in/out currently unsupported *)
-    (* doSendPacketIn_ref := Some doSendPacketIn;*)
-
     (**********************************)
     if !alloy then
     begin
@@ -177,7 +163,6 @@ let main () =
         at_exit (fun () -> (printf "Ocaml exiting~\n%!"));
 
         Lwt_main.run (run_flowlog program);
-        (*Lwt_main.run (Lwt.catch (fun () -> (run_flowlog program)) (fun exn -> Lwt.return (printf "SDFGASDGFASDFASDF\n\n\n\n\n\n\n%!")));     *)
 
         printf "LWT Terminated!\n%!";
       with

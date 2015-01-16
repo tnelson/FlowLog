@@ -29,7 +29,6 @@ let modifications_since_last_policy = ref [];;
 exception ContradictionInPE;;
 
 (* Push function for packet stream. Used to emit rather than forward. *)
-(* Not sure why the input can be option. *)
 let emit_push: ((NetCore_Types.switchId * NetCore_Types.portId * OpenFlow0x01_Core.payload) option -> unit) option ref = ref None;;
 
 (* The stream in NetCore is not safe to call here; we may be in a separate thread.
@@ -43,11 +42,7 @@ let emit_push: ((NetCore_Types.switchId * NetCore_Types.portId * OpenFlow0x01_Co
    Therefore: emits that originate from a Thrift thread (eventsource = IncThrift) need to be QUEUED
    rather than immediately placed into the push function. To avoid polling on the Lwt side, we use
    a Unix FD to flag the queue is ready for reading.
-
-
-
-    *)
-
+*)
 let safe_queue = new SafeEmitQueue.cl_SafeEmitQueue;;
 
 let guarded_emit_push (from:eventsource) (swid: switchId) (pt: portId) (payload: OpenFlow0x01_Core.payload): unit =
@@ -144,9 +139,9 @@ let rec substitute_for_join (eqs: formula list) (othsubfs: formula list): formul
                                     begin
                                       (*write_log (sprintf "contradiction in PE (subfmla=%s):\n v=%s had=%s got=%s\n%!"
                                         (string_of_formula subf) (string_of_term v) (string_of_term (assoc v acc)) (string_of_term c));*)
+
                                       (* Without this exception, we will try to substitute below and end up with, e.g. FEquals(5,7) *)
                                       raise ContradictionInPE
-                                      (* failwith ("contradictory assignment to "^(string_of_term v)^": "^(string_of_term (assoc v acc))^" versus"^(string_of_term c))*)
                                     end
                                     else
                                       (v, c) :: acc
@@ -353,36 +348,6 @@ let stage_2_partial_eval (incpkt: string) (atoms_or_neg: formula list): formula 
         result
       end
     | _ -> subf) atoms_or_neg);;
-
-
-(*
-let debug_contains_equal_dlsrc_dldst (p:flowlog_program) (orig_fmla: formula) (positive_conjuncts: formula list list) (incpkt: string) (fl: formula list): unit =
-  let dlsrc_asns = (filter_map (fun f ->
-    match f with
-      | FEquals(TField(v, "dlsrc"), TConst(x))
-      | FEquals(TConst(x), TField(v, "dlsrc")) when v <> incpkt ->
-        Some x
-      | _ -> None)
-    fl) in
-  let dldst_asns = (filter_map (fun f ->
-    match f with
-      | FEquals(TField(v, "dldst"), TConst(x))
-      | FEquals(TConst(x), TField(v, "dldst")) when v <> incpkt ->
-        Some x
-      | _ -> None)
-    fl) in
-  let inters = list_intersection dlsrc_asns dldst_asns in
-    if length inters > 0 then
-    begin
-      printf "@@@ debug_contains_equal_dlsrc_dldst: %s;\n%s\n%!"
-        (String.concat "," inters)
-        (string_of_list ";" string_of_formula fl);
-      printf "orig formula: %s\n%!" (string_of_formula orig_fmla);
-      printf "  positive_conjuncts: %s\n%!" (string_of_list_list ";" "," string_of_formula positive_conjuncts) ;
-      Communication.get_and_print_xsb_state p;
-      exit(100);
-    end;;
-*)
 
 (* deal with e.g.: nwdst = 10.1.1.1 and not(nwdst in 192.168.0.0/16 ...)
    avoid burdening NetCore's compiler.
@@ -939,11 +904,6 @@ let pkt_triggered_clauses_to_netcore (p: flowlog_program) (clauses: triggered_cl
   (*iter
     (fun (ac, ap, aa) -> write_log (sprintf "%s %s %s\n" (NetCore_Pretty.string_of_action ac) (NetCore_Pretty.string_of_pred ap) (NetCore_Pretty.string_of_pol aa)))
     pre_unique_with_metadata;*)
-
-    (*let clause_aps = unique ~cmp:(fun tup1 tup2 ->
-                                  let (ac1, pp1, actpol1) = tup1 in
-                                  let (ac2, pp2, actpol2) = tup2 in
-                                    (safe_compare_pols actpol1 actpol2) && (smart_compare_preds pp1 pp2)) pre_unique_with_metadata in
 *)
 
   if !global_verbose >= 3 then
@@ -1135,28 +1095,11 @@ let emit_packet (p: flowlog_program) (from: eventsource) (ev: event): unit =
      At the moment, someone can emit_arp with dlTyp = 0x000 or something dumb like that. *)
   guarded_emit_push from swid pt (OpenFlow0x01_Core.NotBuffered (marshal_packet ev));;
 
-(*let forward_packet_from_cp (p: flowlog_program) (ev: event) (full_packet: int64 * int32 * Packet.packet * int32 option): unit =
-  printf "forwarding packet from CP: %s\n%!" (string_of_event p ev);
-  write_log (sprintf ">>> CP-forward (forward -> emit): %s\n%!" (string_of_event p ev));
-  let pt = (nwport_of_string (get_field ev "locpt")) in
-   let incsw, incpt, incpkt, incbuffid = full_packet in
-
-   (*TODO: change fields besides locsw, locpt *)
-   (* OpenFlow0x01_Core.payload *)
-    guarded_emit_push incsw pt (OpenFlow0x01_Core.NotBuffered (Packet.marshal incpkt));;
-*)
-
 let send_event (p: flowlog_program) (ev: event) (ip: string) (pt: string) (full_packet: (int64 * int32 * Packet.packet * int32 option) option): unit =
   printf "sending: %s\n%!" (string_of_event p ev);
   write_log (sprintf ">>> sending: %s\n%!" (string_of_event p ev));
   if is_built_in_packet_typename ev.typeid then
-   (* (match !doSendPacketIn_ref with
-      | Some(f) ->
-        (match full_packet with
-          | None -> failwith "Error: send_event as packet_in failed because no orig packet was recorded"
-          | Some(fp) -> ignore (f p ev ip pt fp))
-      | None -> failwith "Error: couldn't send packet_in because function not set. Sending on CP not supported at present.")*)
-	failwith "sending packets is currently unsupported"
+  	failwith "sending packets is currently unsupported"
   else
   begin
     let arity = (get_event p ev.typeid).evfields in
@@ -1312,8 +1255,6 @@ let get_local_tables_triggered (p: flowlog_program) (sign: bool) (notif: event) 
     (*printf "possibly triggered: %s\n%!" (String.concat ",\n" (map string_of_declaration possibly_triggered));*)
     possibly_triggered;;
 
-(*let lwt_respond_lock = Lwt_mutex.create ();;*)
-
 (* Returns list of names of tables that have been modified, plus forwarding actions if any *)
 (* DO NOT PASS suppress_new_policy = true unless it is safe to do so! It was added to prevent a single switch registration from
    rebuilding the policy once for each new port. *)
@@ -1325,35 +1266,18 @@ let respond_to_notification
       write_log (sprintf "<<< respond_to_notification... (outside mutex) for event: %s" (string_of_event p notif));
 
       write_log (sprintf "xsb mutex status: %b\n%!" (is_mutex_locked xsbmutex));
-      printf "xsb mutex status: %b\n%!" (is_mutex_locked xsbmutex);
-      printf "current thread ID: %d\n%!" (Thread.id (Thread.self ()));
-      (* Yes, we need two layers of mutexes to account for the fact that the codebase uses two KINDS of thread-management:
-         NetCore (and the general program) uses Lwt. But Thrift uses standard OCaml Threads.
+      (*printf "xsb mutex status: %b\n%!" (is_mutex_locked xsbmutex);
+      printf "current thread ID: %d\n%!" (Thread.id (Thread.self ()));*)
 
-         Suppose Lwt A is dealing with a dataplane packet, but meanwhile Lwt B, a switch-proxy listener, receives a packet_out.
-         If B hits the "real" mutex while A has it locked, the program deadlocks (the "real" thread is running B, and can never
-         switch to A). So we give Lwts a chance to yield here. *)
-
-    (*  Lwt_mutex.with_lock lwt_respond_lock
-    (fun () ->*)
       Mutex.lock xsbmutex;
 
       (* Timer etc. need to be protected by the mutex. *)
       let startt = Unix.gettimeofday() in
       counter_inc_all := !counter_inc_all + 1;
 
-
       (* announce nature of event being processed inside the mutex, for maintaing sanity when reading the log*)
       write_log "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<";
       write_log (sprintf "<<< incoming: %s" (string_of_event p notif));
-
-
-      (* TN: Not sure if Lwt_mutex locks work for *all* Lwt threads in the process, or merely all Lwt threads in the OCaml thread.
-         If the latter, this double-lock isn't enough to protect us if more than one OC thread splits via Lwt. If A1 locks, B1 and B2
-         will both get stopped at the OC mutex, and nothing will prevent them from executing simultaneously once A1 unlocks.
-
-         At the moment, only the main network thread splits via Lwt, so the above scenario shouldn't occur. *)
-
 
   (*printf "~~~~ RESPONDING TO NOTIFICATION ABOVE ~~~~~~~~~~~~~~~~~~~\n%!";*)
 
@@ -1484,9 +1408,8 @@ let respond_to_notification
     if !global_verbose >= 3 then
       write_log (sprintf "Time to process event completely: %fs\n%!" (Unix.gettimeofday() -. startt));
 
+    (* return tables that may have changed and forward actions to be taken *)
     (modifications, forward_actions_todo)
-(* ) *)
-(* return tables that may have changed *)
 
   with
    | Not_found ->
@@ -1504,9 +1427,6 @@ let respond_to_notification
         Mutex.unlock xsbmutex;
         exit(101);
       end;;
-
-
-
 
 (* Ignore the switch's non-physical ports (pp. 18-19 of OpenFlow 1.0 spec). *)
 let ofpp_max_port = nwport_of_string "0xff00";;
@@ -1631,10 +1551,10 @@ let make_policy_stream (p: flowlog_program)
           write_log (sprintf "Time after program_to_netcore: %fs" (Unix.gettimeofday() -. startt));
 
 
-   (*     printf "NEW FWD policy: %s\n%!" (NetCore_Pretty.string_of_pol newfwdpol);
+   (*   printf "NEW FWD policy: %s\n%!" (NetCore_Pretty.string_of_pol newfwdpol);
         printf "NEW NOTIF policy: %s\n%!" (NetCore_Pretty.string_of_pol newnotifpol);
      *)
-        let newpol = build_total_pol newnotifpred newfwdpol newnotifpol (internal_policy()) in (*Union(Union(newfwdpol, newnotifpol), internal_policy()) in*)
+        let newpol = build_total_pol newnotifpred newfwdpol newnotifpol (internal_policy()) in
           (* Since can't compare functions, need to use custom comparison *)
 
           if !global_verbose > 2 then
@@ -1651,7 +1571,6 @@ let make_policy_stream (p: flowlog_program)
 
             printf "PUSHING NEW POLICY (number %d)!\n%!" !counter_pols_pushed;
             push (Some newpol);
-            (*safe_queue#enqueue_pol newpol;*)
             last_policy_pushed := newpol;
             printf "PUSHED NEW POLICY!\n%!";
             write_log (sprintf "Pushed new policy (number %d).\n%!" !counter_pols_pushed);
@@ -1671,7 +1590,7 @@ let make_policy_stream (p: flowlog_program)
       end
       else
         if notables then printf "\n*** FLOW TABLE COMPILATION DISABLED! ***\n%!";
-        (*DO NOT CALL THIS: push None*)
+        (*DO NOT CALL push None*)
     and
 
     (* The callback to be invoked when the policy says to send pkt to controller *)
