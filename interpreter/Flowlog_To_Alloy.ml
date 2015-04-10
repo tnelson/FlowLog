@@ -657,6 +657,23 @@ let build_table_transition (p: flowlog_program) (tbl : table_def): string =
       sprintf "  st2.%s = (st1.%s\n            %s)\n            %s"
               tbl.tablename tbl.tablename minus_expr plus_expr;;
 
+let build_after_pred (p: flowlog_program) (tbl: table_def): string =
+    let tupdvec = (String.concat "," (mapi  (fun i typ -> sprintf "tup%d: %s" i (typestr_to_alloy typ)) tbl.tablearity)) in
+    let tupavec = (String.concat "," (init (length tbl.tablearity) (fun i -> sprintf "tup%d" i))) in
+    let tuparrvec = (String.concat "->" (init (length tbl.tablearity) (fun i -> sprintf "tup%d" i))) in
+    
+    let not_minus_expr = if minus_rule_exists p tbl.tablename then 
+                        sprintf "(%s) in st1.%s && not %s_%s[st1, ev, %s]" 
+                                tuparrvec tbl.tablename minus_prefix tbl.tablename tupavec
+                     else "false[]" in
+    let plus_expr =  if plus_rule_exists p tbl.tablename then 
+                        sprintf "%s_%s[st1, ev, %s]" 
+                                plus_prefix tbl.tablename tupavec
+                     else "false[]" in
+      sprintf "pred afterEvent_%s[st1: State, ev: Event, %s] {\n (%s) ||\n %s \n}"
+              tbl.tablename tupdvec not_minus_expr plus_expr;;
+
+
 (* same as build_table_transition, but constructs change-impact strings *)
 let build_prestate_table_compare (p1: flowlog_program) (p2: flowlog_program) (_,tbl : string * table_def): string option =
     let tupdvec = (String.concat "," (mapi (fun i typ -> sprintf "tup%d: %s" i (typestr_to_alloy typ)) tbl.tablearity)) in
@@ -698,7 +715,8 @@ let build_prestate_table_compare (p1: flowlog_program) (p2: flowlog_program) (_,
 let alloy_transition (out: out_channel) (p: flowlog_program) (ont: alloy_ontology): unit =
     fprintf out "pred transition[st1: State, ev: Event, st2: State] { \n%!";
     fprintf out "%s\n%!" (String.concat " &&\n\n" (map (build_table_transition p) (map (fun (a,b) -> b) ont.tables_used)));
-    fprintf out "}\n\n%!";;
+    fprintf out "}\n\n%!";
+    fprintf out "%s\n" (String.concat "\n" (map (build_after_pred p) (map (fun (a,b) -> b) ont.tables_used)));;
 
 let alloy_outpolicy (out: out_channel) (p: flowlog_program): unit =
   let alloy_out_difference (d: outgoing_def): string option =
@@ -746,11 +764,11 @@ let write_as_alloy (p: flowlog_program) (fn: string) (merged_ontology: alloy_ont
         printf "Single event ceiling: %s\n%!" (string_of_bounds "" sevc);
 
 
-    	alloy_actions out ontology p;
-    	alloy_transition out p ontology;
+      alloy_actions out ontology p;
+      alloy_transition out p ontology;
       alloy_outpolicy out p;
       alloy_boilerplate_pred out;
-		  close_out out;
+      close_out out;
       printf "~~~ Finished compiling %s to Alloy. ~~~\n%!" fn;;
 
 (**********************************************************)
